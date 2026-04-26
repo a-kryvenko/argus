@@ -1,0 +1,55 @@
+# Proprietary part
+apps/api-private/*
+!apps/api-private/.gitkeep
+
+data/*
+!data/.gitkeep
+
+vendor/*
+!vendor/.gitkeep
+
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Python
+.venv
+__pycache__
+*.egg-info
+.pytest_cache
+profile_default/
+ipython_config.py
+
+# Jupyter
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Local env files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Testing
+coverage
+
+# Turbo
+.turbo
+
+# Vercel
+.vercel
+
+# Build Outputs
+.next/
+out/
+build
+dist
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+*.pem

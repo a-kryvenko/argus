@@ -1,0 +1,9 @@
+[project]
+name = "clio"
+version = "0.1.0"
+description = "Part of Argus Sunwatch designed for getting historical solar observations data"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.setuptools.package-dir]
+"" = "src"

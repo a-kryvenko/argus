@@ -1,0 +1,7 @@
+[project]
+name = "intelligence-core"
+version = "0.1.0"
+dependencies = ["numpy>=1.26", "pydantic>=2.7"]
+
+[tool.setuptools.package-dir]
+"" = "src"

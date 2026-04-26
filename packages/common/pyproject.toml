@@ -1,0 +1,7 @@
+[project]
+name = "common"
+version = "0.1.0"
+dependencies = ["pydantic>=2.7"]
+
+[tool.setuptools.package-dir]
+"" = "src"

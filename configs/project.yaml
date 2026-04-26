@@ -1,0 +1,80 @@
+project:
+  name: argus-sunwatch
+
+paths:
+  repo_root: .
+  data_root: data
+  raw_root: data/raw
+  processed_root: data/processed
+  features_root: data/features
+  artifacts_root: data/artifacts
+
+runtime:
+  python: python
+  api_module: api_public.main:app
+  api_port: 8000
+  api_host: 127.0.0.1
+  api_pythonpath:
+    - apps/api-public/src
+
+forecast:
+  history_hours: 48
+  forecast_hours: 96
+  embedding_lag_hours: 96
+  max_embedding_age_hours: 24
+  require_embeddings: true
+
+surya:
+  enabled: true
+  vendor_root: vendor/surya
+  example_subdir: downstream_examples/solar_wind_forcasting
+  config_path: vendor/surya/downstream_examples/solar_wind_forcasting/config_infer.yaml
+  checkpoint_path: vendor/surya/downstream_examples/solar_wind_forcasting/assets/solar_wind_weights.pth
+  pretrained_path: vendor/surya/downstream_examples/solar_wind_forcasting/assets/surya.366m.v1.pt
+  scalers_path: vendor/surya/downstream_examples/solar_wind_forcasting/assets/scalers.yaml
+  output_path: data/features/surya/surya_embeddings.npz
+  device: cpu
+  num_samples: 8
+
+sources:
+  omni:
+    enabled: true
+    start: 20260313 #YYYYMMDD
+    end: 20260313
+    out: data/raw/omni/omni_2024.parquet
+  dscovr:
+    enabled: true
+    range: 7d
+    out: data/raw/dscovr/dscovr_7d.parquet
+  sdo:
+    enabled: true
+    email: mr.blackkrab@gmail.com
+    timestamps_csv: data/processed/forecast_timeseries.csv
+    out_dir: data/raw/sdo
+    manifest_out: data/raw/sdo/manifest.parquet
+
+outputs:
+  merged_csv: data/processed/forecast_timeseries.csv
+  forecast_dataset_npz: data/processed/forecast_dataset.npz
+  forecast_scalers_yaml: data/artifacts/forecast/scalers.yaml
+  smoke_payload_json: data/processed/forecast_smoke_payload.json
+
+checks:
+  imports:
+    core:
+      - yaml
+      - pandas
+      - numpy
+      - requests
+      - pyarrow
+    surya:
+      - xarray
+      - h5py
+      - astropy
+      - sunpy
+      - drms
+      - timm
+      - einops
+      - huggingface_hub
+      - torch
+      - torchvision

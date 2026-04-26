@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "surya-adapter"
+version = "0.1.0"
+description = "Argus Sunwatch adapter layer around vendor Surya"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyyaml>=6.0",
+  "torch>=2.3",
+  "astropy>=6.1",
+  "tqdm>=4.66",
+  "surya",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.uv.sources]
+surya = { path = "../../vendor/surya", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]

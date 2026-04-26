@@ -1,0 +1,65 @@
+[project]
+name = "argus-sunwatch"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    # core
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "scipy",
+    "pyyaml",
+    "tqdm",
+    "matplotlib",
+    # API
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    # ML
+    "torch",
+    "torchvision",
+    "timm",
+    "einops",
+    # Surya / scientific
+    "xarray",
+    "netcdf4",
+    "h5py",
+    "astropy",
+    "sunpy",
+    "drms",
+    # utils
+    "requests",
+    # optional but used in Surya
+    "huggingface_hub",
+    "peft",
+    "surya-adapter",
+    "common",
+    "forecast-core",
+    "python-dotenv>=1.2.2",
+    "h5netcdf>=1.8.1",
+    "hdf5plugin>=6.0.0",
+    "clio",
+]
+
+[dependency-groups]
+dev = [
+  "jupyter>=1.1.1",
+  "pytest",
+]
+
+[tool.uv.sources]
+surya-adapter = { workspace = true }
+common = { workspace = true }
+forecast-core = { workspace = true }
+clio = { workspace = true, editable = true }
+
+[tool.uv.workspace]
+members = [
+    "packages/surya-adapter",
+    "packages/common",
+    "packages/forecast-core",
+    "packages/clio",
+]

@@ -1,0 +1,14 @@
+[project]
+name = "forecast-core"
+version = "0.1.0"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.2",
+  "pyyaml>=6.0",
+  "torch>=2.3",
+  "scikit-learn>=1.5",
+  "matplotlib>=3.9",
+]
+
+[tool.setuptools.package-dir]
+"" = "src"

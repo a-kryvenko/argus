@@ -1,0 +1,37 @@
+model:
+  embed_dim: 1280
+  solar_proj_dim: 256
+  history_input_dim: 5
+  history_hidden_dim: 128
+  history_proj_dim: 128
+  context_input_dim: 7
+  context_proj_dim: 64
+  fusion_dim: 256
+  lead_dim: 16
+  head_hidden_dim: 128
+  depth: 2
+  num_heads: 4
+  mlp_ratio: 4.0
+  dropout: 0.1
+  output_steps: 96
+  output_features: 4
+  num_regimes: 4
+
+data:
+  train_npz: data/processed/forecast/train.npz
+  valid_npz: data/processed/forecast/valid.npz
+  scaler_path: data/artifacts/forecast/scalers.yaml
+
+training:
+  batch_size: 64
+  num_workers: 0
+  lr: 1.0e-4
+  weight_decay: 5.0e-5
+  max_epochs: 20
+  warmup_epochs: 2
+  grad_clip: 1.0
+  loss_weights: [0.7, 0.7, 2.0, 1.0]
+  checkpoint_path: data/artifacts/forecast/checkpoints/best.pt
+
+inference:
+  regime_names: [quiet, recurrent, transient, mixed]

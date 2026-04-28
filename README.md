@@ -110,13 +110,6 @@ It **should not be used as the sole basis for operational decisions** in critica
 
 ---
 
-## License
-
-Forecasting components are publicly available under a **non-commercial license**.
-Commercial usage requires explicit permission from the project owner.
-
----
-
 ## Author
 
 Andriy Kryvenko

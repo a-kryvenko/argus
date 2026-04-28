@@ -35,3 +35,9 @@ uv run python scripts/manage.py forecast-smoke
 
 All operator-facing paths are controlled by `configs/project.yaml`.
 Low-level scripts remain internal implementation details.
+
+# Api server startup
+
+```bash
+pnpm turbo run dev
+```

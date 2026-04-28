@@ -6,8 +6,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 
 from app.core.config import settings
-from core.predictor import Predictor
-from core.cache import set_forecast, get_forecast
+from app.core.predictor import Predictor
+from app.core.cache import set_forecast, get_forecast
 from app.routers.public import router as public_router
 from app.routers.auth import router as auth_router
 
@@ -17,9 +17,8 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _predictor
-    print(f"[{settings.APP_NAME}] Starting on {settings.DEVICE}...")
 
-    _predictor = Predictor(device=settings.DEVICE)
+    _predictor = Predictor()
 
     # Initial forecast
     if _predictor:

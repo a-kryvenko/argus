@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from core.auth import create_access_token
+from common.auth import create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

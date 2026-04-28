@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from core.cache import get_forecast
+from app.core.cache import get_forecast
 
 router = APIRouter(prefix="/api", tags=["public"])
 

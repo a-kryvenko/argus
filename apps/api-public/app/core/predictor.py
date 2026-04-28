@@ -1,7 +1,6 @@
-import torch
-from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any
+import random
 
 class Predictor:
     def __init__(self, device: str = "cuda"):
@@ -16,15 +15,31 @@ class Predictor:
 
         # Generate realistic placeholders
         base_speed = 410
+        base_density = 2
+        base_bz = 0
+        forecast = []
+        for t in timestamps:
+            r_v = random.randrange(-20, 20)
+            r_d = (random.random()) * 3
+            r_bz = (random.random()) * 5 - 2.5
+            forecast.append({
+                "timestamp": t,
+                "V": base_speed + r_v,
+                "N": base_density + r_d,
+                "BZ": base_bz + r_bz,
+                "KP": 3
+            })
+        
         return {
             "forecast_generated_at": now.isoformat() + "Z",
             "model": "Surya-1.0 (placeholder - ready for real inference)",
             "note": "Backend is stable. Real Surya inference will be added later.",
-            "timestamps": timestamps,
-            "solar_wind_speed_kms": [base_speed + int(60 * (i / 24) + (i % 12) * 2.5) for i in range(hours)],
-            "proton_density_cm3": [3.8 + (i % 15) * 0.35 for i in range(hours)],
-            "IMF_Bz_nT": [-1.8 if i % 5 == 0 else -3.5 for i in range(hours)],
-            "Kp_index": [1.8 + (i % 12) * 0.28 for i in range(hours)],
+            "variables": {
+                "V": "Solar wind speed near L1 Lagrange Point",
+                "N": "Proton density near L1 Lagrange Point",
+                "Bz": "Magnetic field azimuth"
+            },
+            "forecast": forecast,
             "lead_time_hours": min(hours, 96),
             "confidence": 0.82
         }

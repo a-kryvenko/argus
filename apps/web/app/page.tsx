@@ -29,12 +29,8 @@ export default function PublicForecast() {
     return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-xl text-zinc-400">Forecast loading...</div>;
   }
 
-  const chartData = forecast.timestamps.map((ts: string, i: number) => ({
-    time: new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' }),
-    speed: Math.round(forecast.solar_wind_speed_kms[i]),
-    bz: forecast.IMF_Bz_nT[i],
-    kp: Number(forecast.Kp_index[i].toFixed(1)),
-  }));
+  //ts["timestamp"]: new Date(ts["timestamp"]).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' }),
+  const chartData = forecast.forecast;
 
   const latest = chartData[0];
   const isStormRisk = latest.bz < -5;
@@ -58,7 +54,7 @@ export default function PublicForecast() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-12">
             <div className="bg-zinc-900 rounded-3xl p-6">
               <p className="text-zinc-400 text-sm">Solar Wind Speed</p>
-              <p className="text-5xl font-semibold mt-3">{latest.speed} <span className="text-2xl">km/s</span></p>
+              <p className="text-5xl font-semibold mt-3">{latest.V} <span className="text-2xl">km/s</span></p>
             </div>
 
             <div className={`rounded-3xl p-6 ${isStormRisk ? 'bg-red-950 border border-red-500/50' : isModerateRisk ? 'bg-yellow-950 border border-yellow-500/50' : 'bg-zinc-900'}`}>
@@ -71,7 +67,7 @@ export default function PublicForecast() {
 
             <div className="bg-zinc-900 rounded-3xl p-6">
               <p className="text-zinc-400 text-sm">Kp-index</p>
-              <p className="text-5xl font-semibold mt-3">{latest.kp}</p>
+              <p className="text-5xl font-semibold mt-3">{latest.KP}</p>
             </div>
 
             <div className="bg-zinc-900 rounded-3xl p-6">
@@ -88,7 +84,7 @@ export default function PublicForecast() {
                 <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis 
-                    dataKey="time" 
+                    dataKey="timestamp" 
                     tick={{ fontSize: 11, fill: '#71717a' }}
                   />
                   <YAxis
@@ -108,7 +104,7 @@ export default function PublicForecast() {
                   />
                   <Line 
                     type="natural" 
-                    dataKey="speed" 
+                    dataKey="V" 
                     stroke="#f97316" 
                     strokeWidth={3.5} 
                     dot={false}
@@ -124,7 +120,7 @@ export default function PublicForecast() {
                 <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis 
-                    dataKey="time" 
+                    dataKey="timestamp" 
                     tick={{ fontSize: 11, fill: '#71717a' }}
                   />
                   <YAxis
@@ -144,7 +140,7 @@ export default function PublicForecast() {
                   />
                   <Line 
                     type="natural" 
-                    dataKey="bz" 
+                    dataKey="BZ" 
                     stroke="#f87171" 
                     strokeWidth={3.5} 
                     dot={false}

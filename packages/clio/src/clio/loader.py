@@ -19,8 +19,9 @@ def load_historical(
     
     rng = pd.date_range(start=start, end=end, freq="h")
 
+    observations_path = output_dir / "historical.csv"
+
     df = pd.DataFrame({"timestamp": rng})
     omni = fetch_omni(start_rounded, end_rounded)
-    
     
     

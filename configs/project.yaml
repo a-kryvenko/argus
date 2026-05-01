@@ -48,7 +48,7 @@ sources:
     out: data/raw/dscovr/dscovr_7d.parquet
   sdo:
     enabled: true
-    email: mr.blackkrab@gmail.com
+    email: ${SDO_EMAIL}
     timestamps_csv: data/processed/forecast_timeseries.csv
     out_dir: data/raw/sdo
     manifest_out: data/raw/sdo/manifest.parquet

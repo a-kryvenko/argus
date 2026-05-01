@@ -2,15 +2,13 @@
 name = "argus-api-public"
 version = "0.1.0"
 dependencies = [
-  "apscheduler",
   "pydantic",
   "pydantic-settings",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "pydantic>=2.7",
   "forecast-core",
-  "common",
-  "jwt"
+  "common"
 ]
 
 [tool.uv.sources]

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, HttpUrl
+from pydantic import BaseModel, ConfigDict, FilePath
 from typing import List
 import datetime
 
@@ -15,7 +15,7 @@ class SensorData(BaseModel):
 class Image(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    path: HttpUrl
+    path: FilePath
 
 class AIAImages(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -41,7 +41,7 @@ class HMIImages(BaseModel):
 class RawObservationDataPoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    timestamp: datetime
+    timestamp: datetime.datetime
     sensors: SensorData
     aia: AIAImages
     hmi: HMIImages

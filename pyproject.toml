@@ -42,6 +42,7 @@ dependencies = [
     "h5netcdf>=1.8.1",
     "hdf5plugin>=6.0.0",
     "clio",
+    "opencv-python>=4.13.0.92",
 ]
 
 [dependency-groups]

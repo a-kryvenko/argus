@@ -17,8 +17,6 @@ def _create_forecast():
     now = datetime.utcnow()
     
     observation = get_observation()
-    print(observation)
-    exit()
 
     # Generate response
     base_density = 2

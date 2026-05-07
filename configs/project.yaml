@@ -24,18 +24,6 @@ forecast:
   max_embedding_age_hours: 24
   require_embeddings: true
 
-surya:
-  enabled: true
-  vendor_root: vendor/surya
-  example_subdir: downstream_examples/solar_wind_forcasting
-  config_path: vendor/surya/downstream_examples/solar_wind_forcasting/config_infer.yaml
-  checkpoint_path: vendor/surya/downstream_examples/solar_wind_forcasting/assets/solar_wind_weights.pth
-  pretrained_path: vendor/surya/downstream_examples/solar_wind_forcasting/assets/surya.366m.v1.pt
-  scalers_path: vendor/surya/downstream_examples/solar_wind_forcasting/assets/scalers.yaml
-  output_path: data/features/surya/surya_embeddings.npz
-  device: cpu
-  num_samples: 8
-
 sources:
   omni:
     enabled: true

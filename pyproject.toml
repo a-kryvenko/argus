@@ -1,7 +1,7 @@
 [project]
 name = "argus-sunwatch"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12.11"
 
 dependencies = [
     # core
@@ -43,6 +43,10 @@ dependencies = [
     "hdf5plugin>=6.0.0",
     "clio",
     "opencv-python>=4.13.0.92",
+    "lightgbm>=4.6.0",
+    "joblib>=1.5.3",
+    "scikit-learn>=1.8.0",
+    "huxt>=5.0.2",
 ]
 
 [dependency-groups]

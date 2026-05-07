@@ -49,7 +49,8 @@ DEFAULT_VARS = {
     "BZ_GSM": {"id": 16, "title": "BZ, nT (GSM)"},
     "V": {"id": 24, "title": "SW Plasma Speed, km/s"},
     "N": {"id": 23, "title": "SW Proton Density, N/cm^3"},
-    "T": {"id": 22, "title": "SW Plasma Temperature, K"}
+    "T": {"id": 22, "title": "SW Plasma Temperature, K"},
+    "KP_10": {"id": 38, "title": "Kp*10 Index"}
 }
 
 def _parse_omni_text(text: str) -> pd.DataFrame:
@@ -98,7 +99,11 @@ def _parse_omni_text(text: str) -> pd.DataFrame:
         mask = (df[c].abs() >= 9_999) & (df[c].abs() <= 10_000)
         df.loc[mask, c] = pd.NA
 
-    return df[["timestamp", "BX_GSM", "BY_GSM", "BZ_GSM", "V", "N", "T"]]
+    df = df.dropna(subset=["timestamp"])
+    df = df.sort_values("timestamp")
+    df = df.drop_duplicates(subset=["timestamp"], keep="last")
+
+    return df[["timestamp", "BX_GSM", "BY_GSM", "BZ_GSM", "V", "N", "T", "KP_10"]]
 
 
 def fetch_omni(start: datetime, end: datetime) -> pd.DataFrame:

@@ -5,6 +5,9 @@ apps/api-private/*
 data/*
 !data/.gitkeep
 
+models/
+reports/
+
 vendor/*
 !vendor/.gitkeep
 

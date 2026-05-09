@@ -5,12 +5,12 @@ import datetime
 class SensorData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     
-    Bx: float
-    By: float
-    Bz: float
-    V: float
-    N: float
-    T: float
+    bx: float
+    by: float
+    bz: float
+    v: float
+    n: float
+    t: float
 
 class Image(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -1,39 +1,16 @@
 import argparse
 from pathlib import Path
 from datetime import datetime, timezone
-from clio.dataloaders.omniloader import fetch_omni
 
-import pandas as pd
-import numpy as np
+from clio.dataloaders.omniloader import fetch_omni
+from common.adapters import observations_to_dataframe
 
 def _fetch_omni(output: Path, start: datetime, end: datetime):
     if output.is_file():
+        print(f"File {output} aldready exists, download skipped")
         return
-    
-    df = fetch_omni(start=start, end=end)
 
-    out = pd.DataFrame()
-    out["time"] = df["timestamp"]
-    out["v_obs"] = df["V"]
-    out["n_obs"] = df["N"]
-    out["bz_obs"] = df["BZ_GSM"]
-
-    # Approximate total IMF magnitude from available GSM/GSE components.
-    # Good enough for v1 context feature.
-    out["bt_obs"] = np.sqrt(
-        df["BX_GSM"] ** 2 +
-        df["BY_GSM"] ** 2 +
-        df["BZ_GSM"] ** 2
-    )
-
-    out["kp"] = df["KP_10"]
-
-    out["temperature"] = df["T"]
-
-    out = out[["time", "v_obs", "n_obs", "bz_obs", "bt_obs", "kp", "temperature"]]
-    out = out.dropna(subset=["time", "v_obs"])
-    out = out.sort_values("time")
-
+    out = observations_to_dataframe(fetch_omni(start=start, end=end))
     out.to_csv(output, index=False)
 
 def main():
@@ -56,7 +33,7 @@ def main():
         "--out",
         type=Path,
         help="output file name",
-        default=Path("./data/historical/omni.csv")
+        default=Path("./data/raw/omni.csv")
     )
     
     args = parser.parse_args()

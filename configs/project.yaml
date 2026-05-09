@@ -2,12 +2,13 @@ project:
   name: argus-sunwatch
 
 paths:
-  repo_root: .
-  data_root: data
-  raw_root: data/raw
-  processed_root: data/processed
-  features_root: data/features
-  artifacts_root: data/artifacts
+  wind_forecast: reports/wind_forecast.csv
+
+models:
+  wind: models/speed_lgbm.joblib
+  wind_quantile: models/speed_quantile_models.joblib
+  wind_quantile_calibration: models/lead_hour_interval_calibration.csv
+  events: models/events_lgbm.joblib
 
 runtime:
   python: python
@@ -16,13 +17,6 @@ runtime:
   api_host: 127.0.0.1
   api_pythonpath:
     - apps/api-public/src
-
-forecast:
-  history_hours: 48
-  forecast_hours: 96
-  embedding_lag_hours: 96
-  max_embedding_age_hours: 24
-  require_embeddings: true
 
 sources:
   omni:
@@ -46,23 +40,3 @@ outputs:
   forecast_dataset_npz: data/processed/forecast_dataset.npz
   forecast_scalers_yaml: data/artifacts/forecast/scalers.yaml
   smoke_payload_json: data/processed/forecast_smoke_payload.json
-
-checks:
-  imports:
-    core:
-      - yaml
-      - pandas
-      - numpy
-      - requests
-      - pyarrow
-    surya:
-      - xarray
-      - h5py
-      - astropy
-      - sunpy
-      - drms
-      - timm
-      - einops
-      - huggingface_hub
-      - torch
-      - torchvision

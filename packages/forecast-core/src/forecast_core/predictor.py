@@ -1,54 +1,30 @@
-from datetime import datetime
-from surya_adapter.wind.solar_wind import forecast as wind_forecast
-import random
-from forecast_core.data_pipelines.live import get_observation
+import pandas as pd
+from pathlib import Path
 
-_live_forecast = None
+from forecast_core.inference.forecast_service import ForecastInferenceService
+from common.config import get_config
+from common.adapters import forecast_to_dataframe, forecast_from_dataframe
+from common.schema import Forecast
+from forecast_core.data_pipelines.live import get_live_observations
 
-def forecast():
-    global _live_forecast
+def get_forecast() -> Forecast:
+    config = get_config()
 
-    if _live_forecast is None:
-        _live_forecast = _create_forecast()
+    forecast_path = config.workdir / config.project_config["paths"]["wind_forecast"]
+
+    if not forecast_path.is_file():
+        df = _create_forecast(forecast_path)
+    else:
+        df = pd.read_csv(forecast_path, parse_dates=["issue_time", "valid_time"])
     
-    return _live_forecast
+    return forecast_from_dataframe(df)
 
-def _create_forecast():
-    now = datetime.utcnow()
-    
-    observation = get_observation()
+def _create_forecast(output_path: Path) -> pd.DataFrame:
+    forecast_service = ForecastInferenceService()
 
-    # Generate response
-    base_density = 2
-    base_bz = 0
-    forecast = []
-    forecast_result = wind_forecast(
-        observation=observation,
-        output_dir="data/forecast",
-        device="cpu"
-    )
-    for row in forecast_result.rows:
-        r_d = (random.random()) * 3
-        r_bz = (random.random()) * 5 - 2.5
-        forecast.append({
-            "timestamp": row["target_timestamp"],
-            "V": row["V"],
-            "N": base_density + r_d,
-            "BZ": base_bz + r_bz,
-            "KP": 3
-        })
-        
-    return {
-        "forecast_generated_at": now.isoformat() + "Z",
-        "model": "Surya",
-        "note": "Backend is stable. Real forecast for N, BZ and KP will be added later",
-        "variables": {
-            "V": "Solar wind speed near L1 Lagrange Point, Surya forecast",
-            "N": "Proton density near L1 Lagrange Point",
-            "Bz": "Magnetic field azimuth"
-        },
-        "forecast": forecast,
-        "confidence": 0.82
-    }
+    forecast = forecast_service.predict(get_live_observations())
 
-forecast()
+    df = forecast_to_dataframe(forecast)
+    df.to_csv(output_path, index=False)
+
+    return df

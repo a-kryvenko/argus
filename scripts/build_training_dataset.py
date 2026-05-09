@@ -4,83 +4,12 @@ from pathlib import Path
 
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
+
+from forecast_core.data_pipelines.feature_building import build_features, BASE_FEATURE_COLUMNS
 
 SOLAR_ROTATION_DAYS = 27.2753
 MAX_LEAD_HOURS = 96
-SOLAR_ROTATION_DAYS = 27.2753
-
-BASE_FEATURE_COLUMNS = [
-    "v_obs",
-    "n_obs",
-    "bz_obs",
-    "bt_obs",
-    "kp",
-
-    "v_persist_1h",
-    "v_persist_6h",
-    "v_persist_24h",
-    "v_persist_27d",
-
-    "delta_v_1h_6h",
-    "delta_v_1h_24h",
-    "delta_v_24h_27d",
-
-    "abs_bz",
-    "southward_bz",
-
-    "issue_sin_27d",
-    "issue_cos_27d",
-]
-
-def _build_features(source: Path) -> pd.DataFrame:
-    df = pd.read_csv(source, parse_dates=["time"])
-    
-    df = df.set_index("time").sort_index()
-    full_index = pd.date_range(df.index.min(), df.index.max(), freq="1h", tz="UTC")
-    df = df.reindex(full_index)
-    df.index.name = "issue_time"
-    
-
-    # Persistence features.
-    df["v_persist_1h"] = df["v_obs"].shift(1)
-    df["v_persist_6h"] = df["v_obs"].shift(6)
-    df["v_persist_24h"] = df["v_obs"].shift(24)
-    df["v_persist_27d"] = df["v_obs"].shift(27 * 24)
-
-    # Persistence deltas.
-    df["delta_v_1h_6h"] = df["v_persist_1h"] - df["v_persist_6h"]
-    df["delta_v_1h_24h"] = df["v_persist_1h"] - df["v_persist_24h"]
-    df["delta_v_24h_27d"] = df["v_persist_24h"] - df["v_persist_27d"]
-
-    # Plasma context at issue_time.
-    df["abs_bz"] = df["bz_obs"].abs()
-    df["southward_bz"] = np.maximum(0.0, -df["bz_obs"])
-
-    # Solar rotation phase at issue_time.
-    unix_hours = df.index.view("int64") / 1e9 / 3600.0
-    period_hours = SOLAR_ROTATION_DAYS * 24.0
-
-    df["issue_sin_27d"] = np.sin(2.0 * np.pi * unix_hours / period_hours)
-    df["issue_cos_27d"] = np.cos(2.0 * np.pi * unix_hours / period_hours)
-
-    df = df.reset_index()
-
-    keep = ["issue_time"] + BASE_FEATURE_COLUMNS
-
-    df = df[keep]
-
-    # For training rows, persistence must exist.
-    df = df.dropna(
-        subset=[
-            "v_obs",
-            "v_persist_1h",
-            "v_persist_6h",
-            "v_persist_24h",
-            "v_persist_27d",
-        ]
-    )
-
-    return df
 
 def _build_dataset(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -97,7 +26,7 @@ def _build_dataset(df: pd.DataFrame) -> pd.DataFrame:
 
     rows = []
 
-    for _, row in df.iterrows():
+    for _, row in tqdm(df.iterrows(), total=len(df)):
 
         issue_time = row["issue_time"]
 
@@ -118,7 +47,6 @@ def _build_dataset(df: pd.DataFrame) -> pd.DataFrame:
                 "target_v": float(target_v),
             }
 
-            # Copy issue-time features.
             for col in BASE_FEATURE_COLUMNS:
                 sample[col] = row[col]
 
@@ -139,7 +67,6 @@ def _build_dataset(df: pd.DataFrame) -> pd.DataFrame:
             sample["target_high_speed_500"] = int(target_v >= 500)
             sample["target_high_speed_600"] = int(target_v >= 600)
             sample["target_high_speed_700"] = int(target_v >= 700)
-            sample["target_high_speed_800"] = int(target_v >= 800)
 
             rows.append(sample)
 
@@ -160,24 +87,28 @@ def main():
         "--input",
         type=Path,
         help="omniweb observations file, csv",
-        default=Path("./data/historical/omni.csv")
+        default=Path("./data/raw/omni.csv")
     )
     parser.add_argument(
         "--output",
         type=Path,
         help="output file",
-        default=Path("./data/historical/omni_processed.csv")
+        default=Path("./data/processed/omni_features.csv")
     )
     
     args = parser.parse_args()
 
-    df = _build_features(
-        source=args.input
-    )
+    print("Reading raw observations file...")
+    df = pd.read_csv(args.input, parse_dates=["issue_time"])
 
+    print("Building extra features...")
+    df = build_features(df)
+
+    print("Building training set with 96-hours samples...")
     df = _build_dataset(df)
 
     df.to_csv(args.output, index=False)
+    print("Done!")
 
 if __name__ == "__main__":
     main()

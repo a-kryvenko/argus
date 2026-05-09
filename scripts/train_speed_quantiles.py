@@ -9,29 +9,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
+from forecast_core.data_pipelines.feature_building import BASE_FEATURE_COLUMNS
+
 
 FEATURE_COLUMNS = [
     "lead_hours",
     "lead_norm",
-
-    "v_obs",
-    "n_obs",
-    "bz_obs",
-    "bt_obs",
-    "kp",
-
-    "v_persist_1h",
-    "v_persist_6h",
-    "v_persist_24h",
-    "v_persist_27d",
-
-    "delta_v_1h_6h",
-    "delta_v_1h_24h",
-    "delta_v_24h_27d",
-
-    "abs_bz",
-    "southward_bz",
-]
+] + BASE_FEATURE_COLUMNS
 
 
 QUANTILES = {
@@ -323,7 +307,7 @@ def main() -> None:
         args.model_out,
     )
 
-    valid.to_csv(args.predictions_out, index=False)
+    valid_cal.to_csv(args.predictions_out, index=False)
     metrics.to_csv(args.metrics_out, index=False)
     metrics_by_lead.to_csv(args.metrics_by_lead_out, index=False)
 

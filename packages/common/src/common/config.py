@@ -12,6 +12,7 @@ class _CommonConfig(BaseSettings):
     data_root: Path
     config_root: Path
     project_config: Dict
+    models: Dict
 
 def get_config() -> _CommonConfig:
     global _config

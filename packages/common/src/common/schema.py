@@ -1,19 +1,41 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+from typing import List
 
-class Forecast(BaseModel):
+class ObservationPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    
+    issue_time: datetime
+    bx: float
+    by: float
+    bz: float
+    v: float
+    n: float
+    t: float
+    kp: float
+
+class Observation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    points: List[ObservationPoint]
+
+class ForecastPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid_time: datetime
+    lead_hours: int
     mean_v: float
-    std_v: float
-    p10_v: float
-    p50_v: float
-    p90_v: float
+    p_10_v: float
+    p_50_v: float
+    p_90_v: float
     prob_v_gt_450: float
     prob_v_gt_500: float
     prob_v_gt_600: float
     prob_v_gt_700: float
-    prob_v_gt_800: float
-    kp_risk_proxy: float
+    kp_risk: float
 
-class ForecastPoint(BaseModel):
-    timestamp: datetime
-    forecast: Forecast
+class Forecast(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    issue_time: datetime
+    points: List[ForecastPoint]

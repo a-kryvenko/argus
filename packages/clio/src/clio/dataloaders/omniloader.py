@@ -4,6 +4,8 @@ import pandas as pd
 import requests
 import datetime
 
+from common.schema import Observation, ObservationPoint
+
 """
 https://omniweb.gsfc.nasa.gov/html/overview.html
 
@@ -92,6 +94,8 @@ def _parse_omni_text(text: str) -> pd.DataFrame:
         + pd.to_timedelta(df["hr"].astype(int), unit="h")
     )
     df["timestamp"] = ts
+    df = df.set_index("timestamp", drop=False)
+
     df = df.drop(columns=["year", "doy", "hr"])
 
     # OMNI missing observations are large numbers like 9999.9 or 9999.99
@@ -99,14 +103,13 @@ def _parse_omni_text(text: str) -> pd.DataFrame:
         mask = (df[c].abs() >= 9_999) & (df[c].abs() <= 10_000)
         df.loc[mask, c] = pd.NA
 
-    df = df.dropna(subset=["timestamp"])
-    df = df.sort_values("timestamp")
-    df = df.drop_duplicates(subset=["timestamp"], keep="last")
+    df = df.sort_index()
+    df = df.resample('1h').mean()
 
     return df[["timestamp", "BX_GSM", "BY_GSM", "BZ_GSM", "V", "N", "T", "KP_10"]]
 
 
-def fetch_omni(start: datetime, end: datetime) -> pd.DataFrame:
+def fetch_omni(start: datetime, end: datetime) -> Observation:
     start_day = start.strftime("%Y%m%d")
     end_day = end.strftime("%Y%m%d")
 
@@ -130,4 +133,19 @@ def fetch_omni(start: datetime, end: datetime) -> pd.DataFrame:
 
     mask = (omni_records["timestamp"] >= start) & (omni_records["timestamp"] <= end)
 
-    return omni_records.loc[mask]
+    omni_records = omni_records.loc[mask]
+
+    points = []
+    for _, record in omni_records.iterrows():
+        points.append(ObservationPoint(
+            issue_time=record["timestamp"].to_pydatetime(),
+            bx=record["BX_GSM"],
+            by=record["BY_GSM"],
+            bz=record["BZ_GSM"],
+            v=record["V"],
+            n=record["N"],
+            t=record["T"],
+            kp=(record["KP_10"]) / 10
+        ))
+    
+    return Observation(points=points)

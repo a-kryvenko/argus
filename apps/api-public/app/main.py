@@ -1,14 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
 from app.routers.auth import router as auth_router
 
-from forecast_core.predictor import forecast
+from forecast_core.predictor import get_forecast
+from common.config import get_config
+
+config = get_config()
 
 app = FastAPI(
-    title=settings.APP_NAME,
-    debug=settings.DEBUG
+    title="ARGUS SUNWATCH Public API",
+    debug=config.debug
 )
 
 app.add_middleware(
@@ -21,9 +23,9 @@ app.add_middleware(
 
 app.include_router(auth_router)
 
-@app.get("/api/forecast/solar-wind")
+@app.get("/api/forecast")
 async def get_solar_wind(hours: int = 96):
-    f = forecast()
+    f = get_forecast()
 
     if not f:
         return {"error": "Forecast not ready yet. Please wait."}
@@ -32,7 +34,7 @@ async def get_solar_wind(hours: int = 96):
 
 @app.get("/health")
 async def health():
-    f = forecast()
+    f = get_forecast()
 
     return {
         "status": "ok",

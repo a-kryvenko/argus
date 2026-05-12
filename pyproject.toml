@@ -35,7 +35,6 @@ dependencies = [
     # optional but used in Surya
     "huggingface_hub",
     "peft",
-    "surya-adapter",
     "common",
     "forecast-core",
     "python-dotenv>=1.2.2",
@@ -56,7 +55,6 @@ dev = [
 ]
 
 [tool.uv.sources]
-surya-adapter = { workspace = true }
 common = { workspace = true }
 forecast-core = { workspace = true }
 clio = { workspace = true, editable = true }

@@ -8,6 +8,7 @@ dependencies = [
   "torch>=2.3",
   "scikit-learn>=1.5",
   "matplotlib>=3.9",
+  "cdflib>=1.1.0"
 ]
 
 [tool.setuptools.package-dir]

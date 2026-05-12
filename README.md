@@ -33,6 +33,10 @@ The project focuses on building a **decision-support framework** that combines r
 
 ---
 
+> Disclaimer: The project is in development. Some features are not yet working, and the forecast accuracy is moderate.
+
+---
+
 ## System Architecture
 
 1. Data Ingestion Layer
@@ -42,8 +46,7 @@ The project focuses on building a **decision-support framework** that combines r
             [jsoc](https://jsoc1.stanford.edu/data/) (AIA, HMI)
     1. Live data sources:
         - [Deep Space Climate Observatory](https://epic.gsfc.nasa.gov/) - provide monitoring of Bx, By, Bz, V (Solar Wind), N (Density), T (Plasma temperature) in L1 Lagrange point. Data accessed wia [NOAA](https://services.swpc.noaa.gov/json/)
-        - [Solar Dynamics Observatory](https://data.nasa.gov/dataset/solar-dynamics-observatory) - provide solar observations. Data are loaded wia 
-            [jsoc](https://jsoc1.stanford.edu/data/) (AIA, HMI)
+        - [Solar Dynamics Observatory](https://data.nasa.gov/dataset/solar-dynamics-observatory) - [jsoc](https://jsoc1.stanford.edu/data/) API is not reliable for live data, because of time delay up to 4 days. So data loaded as is directly from server
 1. Processing Layer
     - Normalize data
     - combine sensors data with solar observations

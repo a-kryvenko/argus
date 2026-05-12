@@ -8,11 +8,11 @@ from typing import Dict
 _config = None
 
 class _CommonConfig(BaseSettings):
+    debug: bool
     workdir: Path 
     data_root: Path
     config_root: Path
     project_config: Dict
-    models: Dict
 
 def get_config() -> _CommonConfig:
     global _config
@@ -35,6 +35,7 @@ def get_config() -> _CommonConfig:
         expanded = os.path.expandvars(raw)
     
         _config = _CommonConfig(
+            debug=os.getenv("DEBUG") and (os.getenv("DEBUG") == "true" or os.getenv("DEBUG") == "True"),
             workdir=workdir,
             data_root= workdir / "data",
             config_root=config_root,

@@ -7,7 +7,7 @@ import joblib
 
 from common.config import get_config
 from common.schema import Observation, Forecast, ForecastPoint
-from common.adapters import observations_to_dataframe
+from common.adapters import observations_to_dataframe, forecast_from_dataframe
 
 from forecast_core.data_pipelines.feature_building import build_features, BASE_FEATURE_COLUMNS
 
@@ -35,52 +35,20 @@ class ForecastInferenceService:
         frame = self._forecast_wind_speed(frame)
         frame = self._forecast_events(frame)
 
-        points = []
+        frame["kp_risk"] = 0
 
-        for _, row in frame.iterrows():
-            point = {
-                "lead_hours": int(row["lead_hours"]),
-                "valid_time": pd.Timestamp(row["valid_time"]).isoformat(),
-                "speed_q10": float(row["speed_q10"]),
-                "speed_q50": float(row["speed_q50"]),
-                "speed_q90": float(row["speed_q90"]),
-                "skill_regime": self._skill_regime(int(row["lead_hours"])),
-            }
+        return forecast_from_dataframe(frame)
 
-            for threshold in EVENT_THRESHOLDS:
-                col = f"prob_v_ge_{threshold}"
-                if col in frame.columns:
-                    point[col] = float(row[col])
-
-            points.append(ForecastPoint(
-                lead_hours=point["lead_hours"],
-                valid_time=point["valid_time"],
-                mean_v=point["speed_q50"],
-                p_10_v=point["speed_q10"],
-                p_50_v=point["speed_q50"],
-                p_90_v=point["speed_q90"],
-                prob_v_gt_450=point["prob_v_ge_450"],
-                prob_v_gt_500=point["prob_v_ge_500"],
-                prob_v_gt_600=point["prob_v_ge_600"],
-                prob_v_gt_700=point["prob_v_ge_700"],
-                kp_risk=0
-            ))
-
-        return Forecast(
-            issue_time=issue_time,
-            points=points
-        )
-
-    def _prepare_frame(self, observatrions: Observation, issue_time: datetime) -> pd.DataFrame:
+    def _prepare_frame(self, observations: Observation, issue_time: datetime) -> pd.DataFrame:
         forecast_start_time = issue_time - timedelta(minutes=issue_time.minute, seconds=issue_time.second)
 
-        df = observations_to_dataframe(observatrions)
+        df = observations_to_dataframe(observations)
         df = build_features(df)
 
         last_row = df.iloc[[-1]].copy()
 
         frame = pd.concat([last_row] * 96, ignore_index=True)
-        frame["lead_hours"] = range(1, 97),
+        frame["lead_hours"] = range(1, 97)
         frame["valid_time"] = forecast_start_time + pd.to_timedelta(
             frame["lead_hours"], unit="h"
         )
@@ -103,9 +71,9 @@ class ForecastInferenceService:
             ]),
             axis=0,
         )
-        frame["pred_q10"] = ordered[0]
-        frame["pred_q50"] = ordered[1]
-        frame["pred_q90"] = ordered[2]
+        frame["p_10_v"] = ordered[0]
+        frame["p_50_v"] = ordered[1]
+        frame["p_90_v"] = ordered[2]
 
         calibration = pd.read_csv(self.quantile_calibreations_path)
         frame = self._apply_interval_calibration(frame, calibration)
@@ -117,7 +85,7 @@ class ForecastInferenceService:
         event_models = event_bundle["models"]
 
         for threshold, model in event_models.items():
-            frame[f"prob_v_ge_{threshold}"] = model.predict_proba(
+            frame[f"prob_v_gt_{threshold}"] = model.predict_proba(
                 frame[FORECAST_FEATURE_COLUMNS]
             )[:, 1]
         

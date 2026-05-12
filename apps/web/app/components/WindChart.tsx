@@ -20,7 +20,11 @@ export default function WindChart({ data }) {
             }
           />
 
-          <YAxis />
+          <YAxis
+            type="number"
+            domain={[150, 700]}
+            allowDataOverflow={true}
+          />
 
           <Tooltip
             labelFormatter={(label) =>

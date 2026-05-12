@@ -244,7 +244,11 @@ def main() -> None:
         description="Train probabilistic solar wind speed quantile models."
     )
 
-    parser.add_argument("--dataset", required=True, type=Path)
+    parser.add_argument(
+        "--dataset",
+        required=True,
+        type=Path
+    )
     parser.add_argument(
         "--model-out",
         default=Path("models/speed_quantile_models.joblib"),

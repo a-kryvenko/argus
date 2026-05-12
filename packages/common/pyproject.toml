@@ -3,6 +3,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
     "pydantic>=2.7",
+    "pydantic-settings>2.0.0",
     "pyyaml",
     "jwt"
 ]

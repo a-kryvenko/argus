@@ -20,7 +20,7 @@ export default function ProbabilityStrip({ data, label, keyName }) {
           return (
             <div
               key={i}
-              title={`${d.time} → ${p.toFixed(0)}%`}
+              title={`${d.valid_time} → ${p.toFixed(0)}%`}
               style={{
                 width: "1%",
                 height: 18,

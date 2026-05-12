@@ -13,18 +13,17 @@ def get_forecast() -> Forecast:
     forecast_path = config.workdir / config.project_config["paths"]["wind_forecast"]
 
     if not forecast_path.is_file():
-        df = _create_forecast(forecast_path)
-    else:
-        df = pd.read_csv(forecast_path, parse_dates=["issue_time", "valid_time"])
+        _create_forecast(forecast_path)
+        
+    df = pd.read_csv(forecast_path, parse_dates=["issue_time", "valid_time"])
     
     return forecast_from_dataframe(df)
 
-def _create_forecast(output_path: Path) -> pd.DataFrame:
+def _create_forecast(output_path: Path):
     forecast_service = ForecastInferenceService()
 
     forecast = forecast_service.predict(get_live_observations())
 
     df = forecast_to_dataframe(forecast)
+    df.insert(0, "issue_time", forecast.issue_time)
     df.to_csv(output_path, index=False)
-
-    return df

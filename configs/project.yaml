@@ -8,7 +8,7 @@ models:
   wind: models/speed_lgbm.joblib
   wind_quantile: models/speed_quantile_models.joblib
   wind_quantile_calibration: models/lead_hour_interval_calibration.csv
-  events: models/events_lgbm.joblib
+  events: models/speed_event_models.joblib
 
 runtime:
   python: python

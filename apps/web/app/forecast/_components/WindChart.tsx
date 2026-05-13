@@ -8,8 +8,18 @@ import {
 } from "recharts";
 
 export default function WindChart({ data }) {
+  if (!data || data.length == 0) {
+    return (
+      <div>
+        <h2>Solar Wind Speed</h2>
+        <p>Loading...</p>
+      </div>
+    );
+  }
   return (
     <div style={{ width: "100%", height: 400 }}>
+      <h2>Solar Wind Speed</h2>
+
       <ResponsiveContainer>
         <AreaChart data={data}>
           
@@ -22,11 +32,25 @@ export default function WindChart({ data }) {
 
           <YAxis
             type="number"
-            domain={[150, 700]}
+            domain={[200, 650]}
             allowDataOverflow={true}
           />
 
           <Tooltip
+            cursor={true}
+            animationDuration={0}
+            animationEasing="linear"
+            contentStyle={{
+              backgroundColor: '#18181b',
+              border: '1px solid #3f3f46',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              color: '#e4e4e7',
+              fontSize: '13px',
+              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
+            }}
+            labelStyle={{ color: '#a1a1aa', fontSize: '12px' }}
+            itemStyle={{ color: '#f97316' }}
             labelFormatter={(label) =>
               new Date(label).toISOString()
             }
@@ -55,8 +79,15 @@ export default function WindChart({ data }) {
           <Area
             type="monotone"
             dataKey="median"
-            stroke="#000"
+            stroke="#f97316"
+            strokeWidth={3.5}
             fill="none"
+            activeDot={{ 
+              r: 6, 
+              fill: '#f97316',
+              stroke: '#fff', 
+              strokeWidth: 2 
+            }}
           />
 
         </AreaChart>

@@ -19,7 +19,7 @@ export default function Header() {
           </div>
         </div>
 
-        <nav className="flex items-center gap-8 text-sm">
+        {/* <nav className="flex items-center gap-8 text-sm">
           <Link 
             href="/" 
             className={`hover:text-white transition-colors ${pathname === '/' ? 'text-white font-medium' : 'text-zinc-400'}`}
@@ -33,11 +33,7 @@ export default function Header() {
           >
             Private Dashboard
           </Link>
-        </nav>
-
-        <div className="text-xs text-zinc-500 font-mono">
-          Surya-1.0
-        </div>
+        </nav> */}
       </div>
     </header>
   );

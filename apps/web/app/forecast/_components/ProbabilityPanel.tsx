@@ -1,0 +1,33 @@
+import ProbabilityStrip from "./ProbabilityStrip";
+
+export default function ProbabilityPanel({ data }) {
+    return (
+    <div style={{ marginTop: 30 }}>
+      <h2>Solar Wind Exceedance Probability</h2>
+      
+      {data && data.length > 0 ? (
+        <div style={{padding: "0 0 0 70px"}}>
+          <ProbabilityStrip
+            data={data}
+            label="> 500 km/s"
+            keyName="prob_v_gt_500"
+          />
+
+          <ProbabilityStrip
+            data={data}
+            label="> 600 km/s"
+            keyName="prob_v_gt_600"
+          />
+
+          <ProbabilityStrip
+            data={data}
+            label="> 700 km/s"
+            keyName="prob_v_gt_700"
+          />
+        </div>
+      ) : (
+        <p>Loading...</p>
+      )}
+    </div>
+  );
+}

@@ -30,13 +30,17 @@ async def get_solar_wind(hours: int = 96):
     if not f:
         return {"error": "Forecast not ready yet. Please wait."}
 
-    return f
+    return {
+        "status": "ok",
+        "last_update": f.issue_time,
+        "forecast": f.points
+    }
 
-@app.get("/health")
+@app.get("/api/health")
 async def health():
     f = get_forecast()
 
     return {
         "status": "ok",
-        "last_update": f.get("forecast_generated_at") if f else None
+        "last_update": f.issue_time if f else None
     }

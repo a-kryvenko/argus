@@ -110,6 +110,7 @@ It **should not be used as the sole basis for operational decisions** in critica
 - Enhance visualization dashboard
 - Introduce anomaly detection
 - Refine impact intelligence models
+- Compare accuracy with [helioforecast](https://helioforecast.space/solarwind)
 
 ---
 

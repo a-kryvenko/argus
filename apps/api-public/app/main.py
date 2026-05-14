@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.auth import router as auth_router
+from app.routers.api import router as api_router
 
-from forecast_core.predictor import get_forecast
 from common.config import get_config
 
 config = get_config()
@@ -23,24 +23,4 @@ app.add_middleware(
 
 app.include_router(auth_router)
 
-@app.get("/api/forecast")
-async def get_solar_wind(hours: int = 96):
-    f = get_forecast()
-
-    if not f:
-        return {"error": "Forecast not ready yet. Please wait."}
-
-    return {
-        "status": "ok",
-        "last_update": f.issue_time,
-        "forecast": f.points
-    }
-
-@app.get("/api/health")
-async def health():
-    f = get_forecast()
-
-    return {
-        "status": "ok",
-        "last_update": f.issue_time if f else None
-    }
+app.include_router(api_router)

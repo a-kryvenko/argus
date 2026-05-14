@@ -9,7 +9,8 @@ export default function RiskStrip({ data, label, keyName }) {
     <div style={{ marginBottom: 20 }}>
       <div style={{ marginBottom: 5 }}>{label}</div>
 
-      <div style={{ display: "flex", gap: 2 }}>
+      {data.length > 0 ? (
+        <div style={{ display: "flex", gap: 2 }}>
         {data.map((d, i) => {
           const value = d[keyName]; // 0–1
 
@@ -32,6 +33,11 @@ export default function RiskStrip({ data, label, keyName }) {
           );
         })}
       </div>
+      ) : (
+        <div style={{ height: 30, width: "100%", backgroundColor: "#313131"}}></div>
+      )}
+
+      
     </div>
   );
 }

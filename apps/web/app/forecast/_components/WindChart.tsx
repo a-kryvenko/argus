@@ -1,10 +1,11 @@
 import {
-  AreaChart,
-  Area,
+  CartesianGrid,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
+  LineChart
 } from "recharts";
 
 export default function WindChart({ data }) {
@@ -21,20 +22,24 @@ export default function WindChart({ data }) {
       <h2>Solar Wind Speed</h2>
 
       <ResponsiveContainer>
-        <AreaChart data={data}>
-          
+        <LineChart data={data}>
+
           <XAxis
             dataKey="time"
             tickFormatter={(t) =>
               new Date(t).toISOString().slice(11, 16) // HH:mm UTC
             }
           />
-
           <YAxis
             type="number"
-            domain={[200, 650]}
-            allowDataOverflow={true}
+            domain={[
+              dataMin => Math.floor(dataMin / 10) * 10,
+              dataMax => Math.ceil(dataMax / 10) * 10,
+            ]}
+            tickCount={6}
           />
+
+          <CartesianGrid strokeDasharray="3 3" stroke="#212121" />
 
           <Tooltip
             cursor={true}
@@ -57,31 +62,33 @@ export default function WindChart({ data }) {
           />
 
           {/* invisible base */}
-          <Area
+          <Line
             type="monotone"
             dataKey="low"
-            stackId="1"
             stroke="none"
             fill="transparent"
+            dot={false}
+            activeDot={false}
           />
 
           {/* uncertainty band */}
-          <Area
+          {/* <Area
             type="monotone"
             dataKey="range"
             stackId="1"
             stroke="none"
             fill="#8884d8"
             fillOpacity={0.3}
-          />
+          /> */}
 
           {/* median line */}
-          <Area
+          <Line
             type="monotone"
             dataKey="median"
             stroke="#f97316"
             strokeWidth={3.5}
             fill="none"
+            dot={false}
             activeDot={{ 
               r: 6, 
               fill: '#f97316',
@@ -90,7 +97,17 @@ export default function WindChart({ data }) {
             }}
           />
 
-        </AreaChart>
+          {/* invisible base */}
+          <Line
+            type="monotone"
+            dataKey="high"
+            stroke="none"
+            fill="transparent"
+            dot={false}
+            activeDot={false}
+          />
+
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

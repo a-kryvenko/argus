@@ -13,23 +13,29 @@ export default function ProbabilityStrip({ data, label, keyName }) {
         {label}
       </div>
 
-      <div style={{ display: "flex", gap: 2 }}>
-        {data.map((d, i) => {
-          const p = d[keyName] * 100; // convert to %
+      {data && data.length > 0 ? (
+        <div style={{ display: "flex", gap: 2 }}>
+          {data.map((d, i) => {
+            const p = d[keyName] * 100; // convert to %
 
-          return (
-            <div
-              key={i}
-              title={`${d.valid_time} → ${p.toFixed(0)}%`}
-              style={{
-                width: "1%",
-                height: 18,
-                background: getColor(p / 100)
-              }}
-            />
-          );
-        })}
-      </div>
+            return (
+              <div
+                key={i}
+                title={`${d.valid_time} → ${p.toFixed(0)}%`}
+                style={{
+                  width: "1%",
+                  height: 18,
+                  background: getColor(p / 100)
+                }}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div style={{ height: 18, width: "100%", backgroundColor: "#313131" }}></div>
+      )}
+
+      
     </div>
   );
 }

@@ -6,7 +6,7 @@ function getColor(p: number) {
   return "#d63031";
 }
 
-export default function ProbabilityStrip({ data, label, keyName }) {
+export default function ProbabilityStrip({ data, label, keyName }: {data: Array<any>, label: string, keyName: string}) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ fontSize: 12, marginBottom: 6 }}>
@@ -21,7 +21,7 @@ export default function ProbabilityStrip({ data, label, keyName }) {
             return (
               <div
                 key={i}
-                title={`${d.valid_time} → ${p.toFixed(0)}%`}
+                title={`${d.valid_time} - ${p.toFixed(0)}%`}
                 style={{
                   width: "1%",
                   height: 18,

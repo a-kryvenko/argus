@@ -1,5 +1,5 @@
-export default function RiskStrip({ data, label, keyName }) {
-  function getRiskColor(v) {
+export default function RiskStrip({ data, label, keyName }: {data: Array<any>, label: string, keyName: string}) {
+  function getRiskColor({v}: {v: number}) {
     if (v < 0.3) return "#2ecc71";   // green
     if (v < 0.6) return "#f1c40f";   // yellow
     if (v < 0.8) return "#e67e22";   // orange
@@ -22,7 +22,7 @@ export default function RiskStrip({ data, label, keyName }) {
           return (
             <div
               key={i}
-              title={`${d.time} → ${Math.round(value * 100)}%`}
+              title={`${d.time} - ${Math.round(value * 100)}%`}
               style={{
                 width: "1%",
                 height: 30,

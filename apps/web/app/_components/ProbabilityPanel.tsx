@@ -1,11 +1,11 @@
 import ProbabilityStrip from "./ProbabilityStrip";
 
-export default function ProbabilityPanel({ data }) {
+export default function ProbabilityPanel({ data }: {data: any}) {
     return (
     <div style={{ marginTop: 30 }}>
       <h2>Solar Wind Exceedance Probability</h2>
       
-      <div style={{padding: "0 0 0 70px"}}>
+      <div>
         <ProbabilityStrip
           data={data}
           label="> 500 km/s"

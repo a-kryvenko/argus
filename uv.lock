@@ -792,6 +792,7 @@ source = { editable = "packages/common" }
 dependencies = [
     { name = "jwt" },
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "pyyaml" },
 ]
 
@@ -799,6 +800,7 @@ dependencies = [
 requires-dist = [
     { name = "jwt" },
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">2.0.0" },
     { name = "pyyaml" },
 ]
 
@@ -1231,6 +1233,7 @@ name = "forecast-core"
 version = "0.1.0"
 source = { editable = "packages/forecast-core" }
 dependencies = [
+    { name = "cdflib" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -1241,6 +1244,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cdflib", specifier = ">=1.1.0" },
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },

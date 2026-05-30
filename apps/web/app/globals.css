@@ -14,6 +14,7 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
+  font-family: Arial;
 }
 
 body {
@@ -31,25 +32,15 @@ a {
   color: inherit;
   text-decoration: none;
 }
-
-.imgDark {
-  display: none;
-}
-
 .container {
   padding: 20px;
-  max-width: 1800px;;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.d-flex {
+    display: flex;;
+}
+.justify-content-center {
+  justify-content: center;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-
-  .imgLight {
-    display: none;
-  }
-  .imgDark {
-    display: unset;
-  }
-}

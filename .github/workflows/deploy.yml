@@ -24,8 +24,8 @@ jobs:
           username: ${{ secrets.DOCKERHUB_LOGIN }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
+      - name: Extract frontend metadata (tags, labels) for Docker
+        id: metaFrontend
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: andriykryvenko/argus-frontend
@@ -37,8 +37,8 @@ jobs:
           context: .
           file: ./.deploy/frontend.Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.metaFrontend.outputs.tags }}
+          labels: ${{ steps.metaFrontend.outputs.labels }}
 
       - name: Generate artifact attestation
         uses: actions/attest@v4
@@ -47,8 +47,8 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
       
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
+      - name: Extract api metadata (tags, labels) for Docker
+        id: metaApi
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: andriykryvenko/argus-forecast
@@ -60,8 +60,8 @@ jobs:
           context: .
           file: ./.deploy/api.Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.metaApi.outputs.tags }}
+          labels: ${{ steps.metaApi.outputs.labels }}
 
       - name: Generate artifact attestation
         uses: actions/attest@v4

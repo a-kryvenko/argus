@@ -71,7 +71,7 @@ jobs:
           push-to-registry: true
 
   upload_code:
-    need: push_to_registry
+    needs: push_to_registry
     name: Upload code to production server
     runs-on: ubuntu-latest
     steps:

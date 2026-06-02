@@ -31,7 +31,7 @@ jobs:
           images: andriykryvenko/argus-frontend
 
       - name: Build and push Frontend Docker image
-        id: push
+        id: pushFrontend
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: .
@@ -44,7 +44,7 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-name: index.docker.io/andriykryvenko/argus-frontend
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.pushFrontend.outputs.digest }}
           push-to-registry: true
       
       - name: Extract api metadata (tags, labels) for Docker
@@ -54,7 +54,7 @@ jobs:
           images: andriykryvenko/argus-forecast
 
       - name: Build and push Public Api Docker image
-        id: push
+        id: pushApi
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: .
@@ -67,7 +67,7 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-name: index.docker.io/andriykryvenko/argus-forecast
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.pushApi.outputs.digest }}
           push-to-registry: true
 
   upload_code:

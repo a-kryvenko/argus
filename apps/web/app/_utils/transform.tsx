@@ -1,5 +1,5 @@
 
-export function prepareChartData(f) {
+export function prepareChartData({f}: {f:Array<any>}) : Array<any> {
   return f.map(d => ({
     time: d.valid_time,
     median: parseInt(d.p_50_v),

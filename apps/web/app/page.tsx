@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 
 import WindChart from "./_components/WindChart";
-import { prepareChartData } from "./_utils/transform.js";
+import { prepareChartData } from "./_utils/transform";
 import ProbabilityPanel from "./_components/ProbabilityPanel";
 import RiskPanel from "./_components/RiskPanel";
 // import { forecast } from "./data/mockData";
@@ -11,7 +11,7 @@ import styles from "./page.module.css"
 
 export default function Forecast() {
   const [forecast, setForecast] = useState<[]>([]);
-  const [chartData, setChartData] = useState<[]>([]);
+  const [chartData, setChartData] = useState<Array<any> | []>([]);
   const [loading, setLoading] = useState(true);
 
   const loadForecast = useCallback(async () => {

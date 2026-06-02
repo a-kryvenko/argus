@@ -1239,7 +1239,6 @@ dependencies = [
     { name = "pandas" },
     { name = "pyyaml" },
     { name = "scikit-learn" },
-    { name = "torch" },
 ]
 
 [package.metadata]
@@ -1250,7 +1249,6 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
-    { name = "torch", specifier = ">=2.3" },
 ]
 
 [[package]]

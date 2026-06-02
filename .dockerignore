@@ -19,7 +19,7 @@ notebooks
 
 .env
 .env.*
-!.env.example
+apps/web/.env
 
 Dockerfile
 docker-compose.yml

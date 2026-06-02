@@ -1,0 +1,67 @@
+logging {
+  level = "info"
+}
+
+prometheus.exporter.unix "host" {
+  rootfs_path = "/host/root"
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+}
+
+prometheus.scrape "host" {
+  targets = prometheus.exporter.unix.host.targets
+
+  forward_to = [
+    prometheus.remote_write.monitoring.receiver,
+  ]
+}
+
+prometheus.remote_write "monitoring" {
+  endpoint {
+    url = sys.env("PROMETHEUS_MONITORING_ENDPOINT")
+
+    basic_auth {
+      username = sys.env("MONITORING_AUTH_USER")
+      password = sys.env("MONITORING_AUTH_PASSWORD")
+    }
+  }
+}
+
+loki.source.file "nginx_access" {
+  targets = [
+    {
+      __path__ = "/var/log/nginx/access.log",
+      job      = "nginx-access",
+      host     = "website-1",
+    },
+  ]
+
+  forward_to = [
+    loki.write.monitoring.receiver,
+  ]
+}
+
+loki.source.file "nginx_error" {
+  targets = [
+    {
+      __path__ = "/var/log/nginx/error.log",
+      job      = "nginx-error",
+      host     = "website-1",
+    },
+  ]
+
+  forward_to = [
+    loki.write.monitoring.receiver,
+  ]
+}
+
+loki.write "monitoring" {
+  endpoint {
+    url = sys.env("LOKI_MONITORING_ENDPOINT")
+
+    basic_auth {
+      username = sys.env("MONITORING_AUTH_USER")
+      password = sys.env("MONITORING_AUTH_PASSWORD")
+    }
+  }
+}

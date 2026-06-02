@@ -1,6 +1,7 @@
 FROM python:3.12-slim
 
-WORKDIR /workspace/app/api/
+RUN mkdir -p /var/www/apps/api-public
+WORKDIR /var/www/apps/api-public
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 

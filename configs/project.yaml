@@ -2,7 +2,8 @@ project:
   name: argus-sunwatch
 
 paths:
-  wind_forecast: reports/wind_forecast.csv
+  wind_forecast: data/wind_forecast.csv
+  forecast_history: data/history
 
 models:
   wind: models/speed_lgbm.joblib

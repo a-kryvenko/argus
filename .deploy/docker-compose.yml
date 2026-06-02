@@ -1,0 +1,90 @@
+services:
+  api:
+    image: andriykryvenko/argus-forecast:latest
+    container_name: argusForecast
+    restart: unless-stopped
+    tty: true
+    expose:
+      - "8000"
+    volumes:
+      - ./.env:/var/www/.env:ro
+      - ./.env.local:/var/www/.env.local:ro
+      - ./configs:/var/www/configs:ro
+      - ./models:/var/www/models
+      - ./data:/var/www/data
+      - ./log/api:/var/www/log
+    networks:
+      application:
+  
+  frontend:
+    image: andriykryvenko/argus-frontend:latest
+    container_name: argusFrontend
+    restart: unless-stopped
+    tty: true
+    expose:
+      - "3000"
+    volumes:
+      - ./.env:/var/www/.env:ro
+      - ./.env.local:/var/www/.env.local:ro
+      - ./.env.local:/var/www/apps/web/.env:ro
+      - ./log/frontend:/var/www/log
+    depends_on:
+      - api
+    networks:
+      application:
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: argusNginx
+    restart: unless-stopped
+    tty: true
+    expose:
+      - "80"
+    volumes:
+      - ./log/nginx:/var/www/log
+      - ./nginx/default.conf:/etc/nginx/includes/default.conf
+      - ./nginx/templates/http.conf.template:/etc/nginx/templates/website.conf.template
+    environment:
+      - HOSTNAME=${APP_NAME}
+      - APP_NAME=${APP_NAME}
+      - VIRTUAL_HOST=${APP_NAME}
+    depends_on:
+      - frontend
+      - api
+    networks:
+      nginx-proxy-network:
+      frontserver:
+      application:
+          aliases:
+            - ${APP_NAME}
+  
+  alloy:
+    image: grafana/alloy:latest
+    container_name: argusAlloy
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+
+       # Host metrics
+      - /:/host/root:ro,rslave
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+
+      # Logs
+      - ./log/nginx:/var/log/nginx:ro
+
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+
+networks:
+  nginx-proxy-network:
+    external: true
+  frontserver:
+    driver: bridge
+  application:
+    driver: bridge

@@ -8,7 +8,6 @@ services:
       - "8000"
     volumes:
       - ./.env:/var/www/.env:ro
-      - ./.env.local:/var/www/.env.local:ro
       - ./configs:/var/www/configs:ro
       - ./models:/var/www/models
       - ./data:/var/www/data
@@ -25,8 +24,7 @@ services:
       - "3000"
     volumes:
       - ./.env:/var/www/.env:ro
-      - ./.env.local:/var/www/.env.local:ro
-      - ./.env.local:/var/www/apps/web/.env:ro
+      - ./.env:/var/www/apps/web/.env:ro
       - ./log/frontend:/var/www/log
     depends_on:
       - api
@@ -65,6 +63,11 @@ services:
     tty: true
     ports:
       - "12345:12345"
+    environment:
+      - LOKI_MONITORING_ENDPOINT=${LOKI_MONITORING_ENDPOINT}
+      - PROMETHEUS_MONITORING_ENDPOINT=${PROMETHEUS_MONITORING_ENDPOINT}
+      - MONITORING_AUTH_USER=${MONITORING_AUTH_USER}
+      - MONITORING_AUTH_PASSWORD=${MONITORING_AUTH_PASSWORD}
     volumes:
       - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
 

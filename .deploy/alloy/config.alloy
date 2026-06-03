@@ -9,11 +9,24 @@ prometheus.exporter.unix "host" {
 }
 
 prometheus.scrape "host" {
-  targets = prometheus.exporter.unix.host.targets
+  targets    = prometheus.exporter.unix.host.targets
+  forward_to = [prometheus.relabel.instance.receiver]
+}
 
-  forward_to = [
-    prometheus.remote_write.monitoring.receiver,
-  ]
+prometheus.relabel "instance" {
+  forward_to = [prometheus.remote_write.monitoring.receiver]
+
+  rule {
+    action       = "replace"
+    target_label = "instance"
+    replacement  = "argus-web"
+  }
+
+  rule {
+    action       = "replace"
+    target_label = "nodename"
+    replacement  = "argus"
+  }
 }
 
 prometheus.remote_write "monitoring" {
@@ -32,7 +45,8 @@ loki.source.file "nginx_access" {
     {
       __path__ = "/var/log/nginx/access.log",
       job      = "nginx-access",
-      host     = "website-1",
+      instance  = "argus",
+      host      = "argus",
     },
   ]
 
@@ -46,7 +60,8 @@ loki.source.file "nginx_error" {
     {
       __path__ = "/var/log/nginx/error.log",
       job      = "nginx-error",
-      host     = "website-1",
+      instance  = "argus",
+      host      = "argus",
     },
   ]
 

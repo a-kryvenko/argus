@@ -6,8 +6,8 @@ dependencies = [
   "pandas>=2.2",
   "pyyaml>=6.0",
   "scikit-learn>=1.5",
-  "matplotlib>=3.9",
-  "cdflib>=1.1.0"
+  "cdflib>=1.1.0",
+  "lightgbm>=4.6.0",
 ]
 
 [tool.setuptools.package-dir]

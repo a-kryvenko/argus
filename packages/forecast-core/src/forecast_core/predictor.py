@@ -30,8 +30,7 @@ def refresh_forecast():
     forecast_path_tmp = config.workdir / (config.project_config["paths"]["wind_forecast"] + ".tmp")
     forecast_history = config.workdir / config.project_config["paths"]["forecast_history"]
 
-    if not forecast_history.is_dir():
-        os.mkdir(forecast_history)
+    os.makedirs(forecast_history, exist_ok=True)
 
     if forecast_path.is_file():
         new_name = "_"

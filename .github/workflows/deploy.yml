@@ -85,7 +85,7 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           source: ".deploy/docker-compose.yml,.deploy/nginx,.deploy/alloy,.deploy/nginx-proxy-up.sh,configs"
           target: "/var/www"
-          strip_components: 1
+      
       
       - name: Restart production containers
         uses: appleboy/ssh-action@v1.2.0
@@ -100,6 +100,8 @@ jobs:
             mkdir -p log/api
             mkdir -p data
             mkdir -p models
+            mv ./.deploy/* .
+            rmdir ./.deploy
 
             docker compose pull
             docker compose up -d --remove-orphans

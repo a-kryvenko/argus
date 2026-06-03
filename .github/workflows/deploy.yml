@@ -95,14 +95,16 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           script: |
             cd /var/www
-            mkdir -p log/nginx
-            mkdir -p log/frontend
-            mkdir -p log/api
-            mkdir -p data
-            mkdir -p models
-            mv ./.deploy/* .
-            rmdir ./.deploy
+            mkdir -p log/nginx log/frontend log/api data models nginx nginx/templates alloy configs
+            mv ./.deploy/docker-compose.yml ./
+            mv ./.deploy/nginx-proxy-up.sh ./
+            mv ./.deploy/nginx/default.conf ./nginx/
+            mv ./.deploy/nginx/templates/http.conf.template ./nginx/templates/
+            mv ./.deploy/alloy/config.alloy ./alloy/
+            rm -rf ./.deploy
 
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
+
+            echo '0 * * * * docker compose run --rm --name forecastRefresh api uv run app/refresh_forecast.py' | crontab -

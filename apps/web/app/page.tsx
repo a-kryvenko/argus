@@ -18,7 +18,7 @@ export default function Forecast() {
     try {
       setLoading(true);
 
-      const response = await fetch(process.env.NEXT_PUBLIC_API_POINT || "" + "/api/forecast");
+      const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/forecast");
 
       if (!response.ok) {
         throw new Error("Failed to fetch forecast");

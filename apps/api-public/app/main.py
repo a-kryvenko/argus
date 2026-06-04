@@ -1,17 +1,51 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+import sentry_sdk
 
 from app.routers.auth import router as auth_router
 from app.routers.api import router as api_router
 
 from common.config import get_config
 
+import os
+
 config = get_config()
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_COLLECT_POINT"),
+    send_default_pii=True,
+)
 
 app = FastAPI(
     title="ARGUS SUNWATCH Public API",
     debug=config.debug
 )
+
+if not config.debug:
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        sentry_sdk.capture_exception(exc)
+
+        return JSONResponse(
+            content={
+                "status": "error",
+                "error": "Something went wrong..."
+            },
+            status_code=500,
+        )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        content={
+            "status": "error",
+            "error": exc.detail
+        },
+        status_code=exc.status_code,
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,3 +58,4 @@ app.add_middleware(
 app.include_router(auth_router)
 
 app.include_router(api_router)
+

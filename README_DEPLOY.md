@@ -1,9 +1,17 @@
-- copy .env to .env.local
-- set variables
-- install docker and docker-compose
+# Deployment
 
-```bash
-./infra/docker/nginx-proxy-up.sh
+Deployment is completely automated and created on top of dockerhub and github actions.
 
-docker-compose up -d
-```
+Process step by step:
+
+1. new tag `git tag -a "v...` published to git repository
+1. github actions executed:
+    - build frontend image
+    - push frontend image to dockerhub
+    - build api image
+    - push api image to dockerhub
+    - connect to production server
+    - upload some repository artifacts to server
+    - pull docker images
+    - restart containers
+    - cleanup

@@ -18,7 +18,7 @@ export default function Forecast() {
     try {
       setLoading(true);
 
-      const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/forecast");
+      const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/forecast/all");
 
       if (!response.ok) {
         throw new Error("Failed to fetch forecast");
@@ -41,16 +41,18 @@ export default function Forecast() {
   }, [loadForecast])
 
   return (
-    <div className={styles.forecast}>
-      <div style={{padding: "0 0 0 70px"}}>
+    <div className="container">
+      <div className={styles.forecast}>
+        <div style={{padding: "0 0 0 70px"}}>
 
-        <RiskPanel data={forecast} />
+          {/* <RiskPanel data={forecast} /> */}
 
-        <ProbabilityPanel data={forecast} />
+          <ProbabilityPanel data={forecast} />
 
+        </div>
+        
+        <WindChart data={chartData} />
       </div>
-      
-      <WindChart data={chartData} />
     </div>
   );
 }

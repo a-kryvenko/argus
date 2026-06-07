@@ -7,11 +7,20 @@ import os
 
 from forecast_core.inference.forecast_service import ForecastInferenceService
 from common.config import get_config
-from common.adapters import forecast_to_dataframe, forecast_from_dataframe
+from common.adapters import forecast_to_dataframe, full_forecast_from_dataframe, wind_speed_forecast_from_dataframe, wind_threshold_forecast_from_dataframe
 from common.schema import Forecast
 from forecast_core.data_pipelines.live import get_live_observations
 
-def get_forecast() -> Forecast:
+def get_full_forecast() -> Forecast:
+    return full_forecast_from_dataframe(_get_forecast_df())
+
+def get_wind_speed_forecast() -> Forecast:
+    return wind_speed_forecast_from_dataframe(_get_forecast_df())
+
+def get_wind_threshold_forecast() -> Forecast:
+    return wind_threshold_forecast_from_dataframe(_get_forecast_df())
+
+def _get_forecast_df() -> pd.DataFrame:
     config = get_config()
 
     forecast_path = config.workdir / config.project_config["paths"]["wind_forecast"]
@@ -19,9 +28,7 @@ def get_forecast() -> Forecast:
     if not forecast_path.is_file():
         _create_forecast(forecast_path)
         
-    df = pd.read_csv(forecast_path, parse_dates=["issue_time", "valid_time"])
-    
-    return forecast_from_dataframe(df)
+    return pd.read_csv(forecast_path, parse_dates=["issue_time", "valid_time"])
 
 def refresh_forecast():
     config = get_config()

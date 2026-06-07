@@ -34,8 +34,30 @@ class ForecastPoint(BaseModel):
     prob_v_gt_700: float
     kp_risk: float
 
+class WindSpeedForecastPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid_time: datetime
+    lead_hours: int
+    mean_v: float
+    p_10_v: float
+    p_50_v: float
+    p_90_v: float
+
+class WindThresholdForecastPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid_time: datetime
+    lead_hours: int
+    prob_v_gt_450: float
+    prob_v_gt_500: float
+    prob_v_gt_600: float
+    prob_v_gt_700: float
+
 class Forecast(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     issue_time: datetime
-    points: List[ForecastPoint]
+    points: List[ForecastPoint|WindSpeedForecastPoint|WindThresholdForecastPoint]
+
+

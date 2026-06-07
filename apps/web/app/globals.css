@@ -33,7 +33,7 @@ a {
   text-decoration: none;
 }
 .container {
-  padding: 20px;
+  padding: 0 20px;
   max-width: 1600px;
   margin: 0 auto;
 }
@@ -43,4 +43,14 @@ a {
 .justify-content-center {
   justify-content: center;
 }
-
+.justify-content-between {
+  justify-content: space-between;
+}
+.justify-content-end {
+  justify-content: end;
+}
+.container {
+  width: 1600px;
+  max-width: 90%;
+  margin: 0 auto;
+}

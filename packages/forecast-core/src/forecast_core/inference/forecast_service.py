@@ -7,7 +7,7 @@ import joblib
 
 from common.config import get_config
 from common.schema import Observation, Forecast
-from common.adapters import observations_to_dataframe, forecast_from_dataframe
+from common.adapters import observations_to_dataframe, full_forecast_from_dataframe
 
 from forecast_core.data_pipelines.feature_building import build_features, BASE_FEATURE_COLUMNS
 
@@ -37,7 +37,7 @@ class ForecastInferenceService:
 
         frame["kp_risk"] = 0
 
-        return forecast_from_dataframe(frame)
+        return full_forecast_from_dataframe(frame)
 
     def _prepare_frame(self, observations: Observation, issue_time: datetime) -> pd.DataFrame:
         forecast_start_time = issue_time - timedelta(minutes=issue_time.minute, seconds=issue_time.second)

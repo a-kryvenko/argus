@@ -6,7 +6,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import sentry_sdk
 
 from app.routers.auth import router as auth_router
-from app.routers.api import router as api_router
+from app.routers.forecast import router as forecast_router
+#from app.routers.metrics import router as metrics_router
 
 from common.config import get_config
 
@@ -21,7 +22,8 @@ sentry_sdk.init(
 
 app = FastAPI(
     title="ARGUS SUNWATCH Public API",
-    debug=config.debug
+    debug=config.debug,
+    docs_url="/api/docs"
 )
 
 if not config.debug:
@@ -55,7 +57,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router)
+# app.include_router(auth_router)
 
-app.include_router(api_router)
+app.include_router(forecast_router)
+# app.include_router(metrics_router)
 

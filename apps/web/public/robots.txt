@@ -1,0 +1,5 @@
+Allow:
+/
+/api/forecast
+/metrics
+/help

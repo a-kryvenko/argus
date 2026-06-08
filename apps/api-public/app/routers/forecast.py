@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from forecast_core.predictor import get_full_forecast, get_wind_speed_forecast, get_wind_threshold_forecast
 
-router = APIRouter(prefix="/api/forecast", tags=["forecast"])
+router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 @router.get("/all")
 def full_forecast():

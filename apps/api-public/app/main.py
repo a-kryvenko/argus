@@ -23,7 +23,7 @@ sentry_sdk.init(
 app = FastAPI(
     title="ARGUS SUNWATCH Public API",
     debug=config.debug,
-    docs_url="/api/docs"
+    root_path="/api"
 )
 
 if not config.debug:

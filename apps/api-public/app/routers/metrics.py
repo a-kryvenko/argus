@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from forecast_core.predictor import get_forecast
 
-router = APIRouter(prefix="/api/metrics", tags=["metrics"])
+router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 @router.get("/all")
 def get_full_forecast_metrics():

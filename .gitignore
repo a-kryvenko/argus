@@ -8,6 +8,9 @@ data/*
 models/
 reports/
 
+metrics/*
+!metrics/.gitkeep
+
 vendor/*
 !vendor/.gitkeep
 

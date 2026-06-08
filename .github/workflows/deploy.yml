@@ -95,7 +95,7 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           script: |
             cd /var/www
-            mkdir -p log/nginx log/frontend log/api data models nginx nginx/templates alloy configs
+            mkdir -p log/nginx log/frontend log/api data models metrics nginx nginx/templates alloy configs
             mv ./.deploy/docker-compose.yml ./
             mv ./.deploy/nginx-proxy-up.sh ./
             mv ./.deploy/nginx/default.conf ./nginx/

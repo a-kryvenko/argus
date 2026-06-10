@@ -69,11 +69,18 @@ The project focuses on building a **decision-support framework** that combines r
 
 ```JSON
 {
-  "timestamp": "2026-03-30T12:00:00Z",
-  "solar_activity_level": "Elevated",
-  "risk_score": "Medium",
-  "recommended_action": "Monitor grid stability and prepare mitigation procedures"
-}
+    "valid_time": "2026-06-02T19:00:00.979417Z",
+    "lead_hours": 1,
+    "mean_v": 388.42530806514,
+    "p_10_v": 375.187925180342,
+    "p_50_v": 388.42530806514,
+    "p_90_v": 397.381630752102,
+    "prob_v_gt_450": 0.0863068688670829,
+    "prob_v_gt_500": 0.0104562737642585,
+    "prob_v_gt_600": 0.0025300442757748,
+    "prob_v_gt_700": 0.0003081664098613,
+    "kp_risk": 0
+},
 ```
 
 ---

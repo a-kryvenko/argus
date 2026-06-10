@@ -1,43 +1,43 @@
 from fastapi import APIRouter
 
-from forecast_core.predictor import get_forecast
+from app.stats.metrics import wind_speed_metrics, wind_threshold_metrics
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
 @router.get("/all")
 def get_full_forecast_metrics():
-    f = get_forecast()
+    f_s = wind_speed_metrics()
+    f_t = wind_threshold_metrics()
 
-    if not f:
-        return {"error": "Forecast not ready yet. Please wait."}
+    if not f_s or not f_t:
+        return {"error": "Metrics not ready. Please try again later."}
 
     return {
         "status": "ok",
-        "last_update": f.issue_time,
-        "forecast": f.points
+        "wind_speed": f_s,
+        "wind_threshold": f_t
     }
 
 @router.get("/wind-speed")
 def get_wind_speed_metrics():
-    f = get_forecast()
+    f = wind_speed_metrics()
 
     if not f:
-        return {"error": "Forecast not ready yet. Please wait."}
+        return {"error": "Metrics not ready. Please try again later."}
 
     return {
         "status": "ok",
-        "last_update": f.issue_time,
-        "forecast": f.points
+        "response": f
     }
+
 @router.get("/wind-threshold")
 def get_wind_threshold_metrics():
-    f = get_forecast()
+    f = wind_threshold_metrics()
 
     if not f:
-        return {"error": "Forecast not ready yet. Please wait."}
+        return {"error": "Metrics not ready. Please try again later."}
 
     return {
         "status": "ok",
-        "last_update": f.issue_time,
-        "forecast": f.points
+        "response": f
     }

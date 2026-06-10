@@ -18,8 +18,10 @@ body {
 }
 
 body {
-  color: var(--foreground);
   background: var(--background);
+}
+h1, h2, h3, h4, .color-default {
+  color: var(--foreground);
 }
 
 * {
@@ -30,7 +32,6 @@ body {
 
 a {
   color: inherit;
-  text-decoration: none;
 }
 .container {
   padding: 0 20px;

@@ -1234,7 +1234,7 @@ version = "0.1.0"
 source = { editable = "packages/forecast-core" }
 dependencies = [
     { name = "cdflib" },
-    { name = "matplotlib" },
+    { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyyaml" },
@@ -1244,7 +1244,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cdflib", specifier = ">=1.1.0" },
-    { name = "matplotlib", specifier = ">=3.9" },
+    { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pyyaml", specifier = ">=6.0" },

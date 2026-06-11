@@ -1,5 +1,5 @@
 [project]
-name = "argus-api-public"
+name = "argus-api"
 version = "0.1.0"
 dependencies = [
   "requests",

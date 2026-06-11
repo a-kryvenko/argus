@@ -17,11 +17,7 @@
       "cache": false,
       "persistent": true
     },
-    "api-public:dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "api-private:dev": {
+    "api:dev": {
       "cache": false,
       "persistent": true
     }

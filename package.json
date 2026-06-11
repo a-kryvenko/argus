@@ -4,8 +4,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --concurrency 4",
-    "dev:api-public": "turbo run api-public:dev",
-    "dev:api-private": "turbo run api-private:dev",
+    "dev:api": "turbo run api:dev",
     "dev:web": "turbo run dev --filter=web",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",

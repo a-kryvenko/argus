@@ -17,7 +17,7 @@ runtime:
   api_port: 8000
   api_host: 127.0.0.1
   api_pythonpath:
-    - apps/api-public/src
+    - apps/api/src
 
 sources:
   omni:

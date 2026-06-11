@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve()
 for candidate in [ROOT.parents[3] if 'forecast-core' in str(ROOT) else ROOT.parents[2]]:
     sys.path.insert(0, str(candidate / 'packages' / 'forecast-core' / 'src'))
     sys.path.insert(0, str(candidate / 'packages' / 'common' / 'src'))
-    sys.path.insert(0, str(candidate / 'apps' / 'api-public' / 'src'))
+    sys.path.insert(0, str(candidate / 'apps' / 'api' / 'src'))
 
 import numpy as np
 import pandas as pd

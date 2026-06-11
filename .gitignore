@@ -60,3 +60,6 @@ yarn-error.log*
 # Misc
 *.pem
 *.log
+
+# Notebooks
+notebooks/*

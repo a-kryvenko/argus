@@ -61,19 +61,19 @@ class ForecastInferenceService:
         quantile_models = quantile_bundle["models"]
         
         for q_name, model in quantile_models.items():
-            frame[f"pred_{q_name}"] = model.predict(frame[FORECAST_FEATURE_COLUMNS])
+            frame[f"v_{q_name}"] = model.predict(frame[FORECAST_FEATURE_COLUMNS])
         
         ordered = np.sort(
             np.vstack([
-                frame["pred_q10"].to_numpy(),
-                frame["pred_q50"].to_numpy(),
-                frame["pred_q90"].to_numpy(),
+                frame["v_q10"].to_numpy(),
+                frame["v_q50"].to_numpy(),
+                frame["v_q90"].to_numpy(),
             ]),
             axis=0,
         )
-        frame["p_10_v"] = ordered[0]
-        frame["p_50_v"] = ordered[1]
-        frame["p_90_v"] = ordered[2]
+        frame["v_q10"] = ordered[0]
+        frame["v_q50"] = ordered[1]
+        frame["v_q90"] = ordered[2]
 
         calibration = pd.read_csv(self.quantile_calibreations_path)
         frame = self._apply_interval_calibration(frame, calibration)
@@ -85,7 +85,7 @@ class ForecastInferenceService:
         event_models = event_bundle["models"]
 
         for threshold, model in event_models.items():
-            frame[f"prob_v_gt_{threshold}"] = model.predict_proba(
+            frame[f"p_v_ge_{threshold}"] = model.predict_proba(
                 frame[FORECAST_FEATURE_COLUMNS]
             )[:, 1]
         
@@ -100,16 +100,16 @@ class ForecastInferenceService:
 
         out["scale"] = out["scale"].fillna(1.0)
 
-        out["speed_q50"] = out["pred_q50"]
+        out["speed_q50"] = out["v_q50"]
 
-        out["speed_q10"] = (
-            out["pred_q50"]
-            - out["scale"] * (out["pred_q50"] - out["pred_q10"])
+        out["v_q10"] = (
+            out["v_q50"]
+            - out["scale"] * (out["v_q50"] - out["v_q10"])
         )
 
-        out["speed_q90"] = (
-            out["pred_q50"]
-            + out["scale"] * (out["pred_q90"] - out["pred_q50"])
+        out["v_q90"] = (
+            out["v_q50"]
+            + out["scale"] * (out["v_q90"] - out["v_q50"])
         )
 
         return out

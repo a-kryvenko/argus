@@ -36,7 +36,7 @@ dependencies = [
     "huggingface_hub",
     "peft",
     "common",
-    "forecast-core",
+    "forecast",
     "python-dotenv>=1.2.2",
     "h5netcdf>=1.8.1",
     "hdf5plugin>=6.0.0",
@@ -56,13 +56,13 @@ dev = [
 
 [tool.uv.sources]
 common = { workspace = true }
-forecast-core = { workspace = true }
+forecast = { workspace = true }
 clio = { workspace = true, editable = true }
 
 [tool.uv.workspace]
 members = [
     "packages/surya-adapter",
     "packages/common",
-    "packages/forecast-core",
+    "packages/forecast",
     "packages/clio",
 ]

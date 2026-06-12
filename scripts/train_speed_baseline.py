@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
-from forecast_core.data_pipelines.feature_building import BASE_FEATURE_COLUMNS
+from forecast.data_pipelines.feature_building import BASE_FEATURE_COLUMNS
 
 
 FEATURE_COLUMNS = [
@@ -144,12 +144,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--model-out",
-        default=Path("models/speed_lgbm.joblib"),
+        default=Path("data/models/speed_lgbm.joblib"),
         type=Path,
     )
     parser.add_argument(
         "--metrics-out",
-        default=Path("reports/speed_baseline_metrics_by_lead.csv"),
+        default=Path("data/reports/speed_baseline_metrics_by_lead.csv"),
         type=Path,
     )
     parser.add_argument(

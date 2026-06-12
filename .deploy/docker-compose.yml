@@ -9,9 +9,8 @@ services:
     volumes:
       - ./.env:/var/www/.env:ro
       - ./configs:/var/www/configs:ro
-      - ./models:/var/www/models
-      - ./metrics:/var/www/metrics
       - ./data:/var/www/data
+      - ./ext_packages/forecast-core:/var/www/packages/forecast-core
       - ./log/api:/var/www/log
     networks:
       application:

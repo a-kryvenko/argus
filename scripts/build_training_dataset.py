@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from forecast_core.data_pipelines.feature_building import build_features, BASE_FEATURE_COLUMNS
+from forecast.data_pipelines.feature_building import build_features, BASE_FEATURE_COLUMNS
 
 SOLAR_ROTATION_DAYS = 27.2753
 MAX_LEAD_HOURS = 96

@@ -36,7 +36,7 @@ def main():
     )
     parser.add_argument(
         "--model-out",
-        default=Path("models/speed_events.joblib"),
+        default=Path("data/models/speed_events.joblib"),
         type=Path
     )
 

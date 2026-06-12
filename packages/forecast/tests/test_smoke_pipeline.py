@@ -4,8 +4,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve()
-for candidate in [ROOT.parents[3] if 'forecast-core' in str(ROOT) else ROOT.parents[2]]:
-    sys.path.insert(0, str(candidate / 'packages' / 'forecast-core' / 'src'))
+for candidate in [ROOT.parents[3] if 'forecast' in str(ROOT) else ROOT.parents[2]]:
+    sys.path.insert(0, str(candidate / 'packages' / 'forecast' / 'src'))
     sys.path.insert(0, str(candidate / 'packages' / 'common' / 'src'))
     sys.path.insert(0, str(candidate / 'apps' / 'api' / 'src'))
 
@@ -14,11 +14,11 @@ import pandas as pd
 import torch
 import yaml
 
-from forecast_core.data_pipelines.omni_dscovr_sdo.compute_scalers import compute_scalers_from_dataset
-from forecast_core.data_pipelines.omni_dscovr_sdo.prepare_dataset import DatasetBuilder
-from forecast_core.data_pipelines.omni_dscovr_sdo.scalers import ForecastScalers
-from forecast_core.models.forecast_model import ForecastModel
-from forecast_core.solar_encoder.embedding_loader import EmbeddingStore
+from forecast.data_pipelines.omni_dscovr_sdo.compute_scalers import compute_scalers_from_dataset
+from forecast.data_pipelines.omni_dscovr_sdo.prepare_dataset import DatasetBuilder
+from forecast.data_pipelines.omni_dscovr_sdo.scalers import ForecastScalers
+from forecast.models.forecast_model import ForecastModel
+from forecast.solar_encoder.embedding_loader import EmbeddingStore
 
 
 def _make_synthetic_df() -> pd.DataFrame:
@@ -77,7 +77,7 @@ def test_model_forward_smoke(tmp_path: Path) -> None:
     dataset = builder.build(df)
 
     scalers = _write_scalers(dataset, tmp_path / 'scalers.yaml')
-    config = yaml.safe_load(Path('packages/forecast-core/configs/forecast/inference.yaml').read_text())
+    config = yaml.safe_load(Path('packages/forecast/configs/forecast/inference.yaml').read_text())
     config['model']['output_steps'] = 12
 
     model = ForecastModel(config)

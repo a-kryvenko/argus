@@ -1,15 +1,7 @@
-# Proprietary part
-apps/api-private/*
-!apps/api-private/.gitkeep
+deploy.sh
 
 data/*
 !data/.gitkeep
-
-models/
-reports/
-
-metrics/*
-!metrics/.gitkeep
 
 vendor/*
 !vendor/.gitkeep

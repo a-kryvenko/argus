@@ -5,14 +5,18 @@ from common.config import get_config
 def wind_speed_metrics():
     config = get_config()
 
-    df = pd.read_csv(config.workdir / "metrics/wind_speed_by_lead.csv")
+    p = config.workdir / config.project_config["metrics"]["solar_wind_speed"]
+
+    df = pd.read_csv(p)
 
     return df.to_dict('records')
 
 def wind_threshold_metrics():
     config = get_config()
 
-    df = pd.read_csv(config.workdir / "metrics/wind_threshold_by_lead.csv")
+    p = config.workdir / config.project_config["metrics"]["solar_wind_probability"]
+
+    df = pd.read_csv(p)
 
     reframed_df = (
         df.pivot(

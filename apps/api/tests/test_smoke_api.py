@@ -4,8 +4,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve()
-for candidate in [ROOT.parents[3] if 'forecast-core' in str(ROOT) else ROOT.parents[2]]:
-    sys.path.insert(0, str(candidate / 'packages' / 'forecast-core' / 'src'))
+for candidate in [ROOT.parents[3] if 'forecast' in str(ROOT) else ROOT.parents[2]]:
+    sys.path.insert(0, str(candidate / 'packages' / 'forecast' / 'src'))
     sys.path.insert(0, str(candidate / 'packages' / 'common' / 'src'))
     sys.path.insert(0, str(candidate / 'apps' / 'api' / 'src'))
 
@@ -16,8 +16,8 @@ from fastapi.testclient import TestClient
 
 from api_public.main import app
 from api_public.services.forecast_service import ForecastService
-from forecast_core.data_pipelines.omni_dscovr_sdo.compute_scalers import compute_scalers_from_dataset
-from forecast_core.data_pipelines.omni_dscovr_sdo.prepare_dataset import DatasetBuilder
+from forecast.data_pipelines.omni_dscovr_sdo.compute_scalers import compute_scalers_from_dataset
+from forecast.data_pipelines.omni_dscovr_sdo.prepare_dataset import DatasetBuilder
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -44,7 +44,7 @@ def test_forecast_endpoint_smoke(tmp_path: Path, monkeypatch) -> None:
     builder = DatasetBuilder(history_hours=24, forecast_hours=12, embed_dim=1280)
     dataset = builder.build(df)
 
-    config = yaml.safe_load((REPO_ROOT / 'packages' / 'forecast-core' / 'configs' / 'forecast' / 'inference.yaml').read_text())
+    config = yaml.safe_load((REPO_ROOT / 'packages' / 'forecast' / 'configs' / 'forecast' / 'inference.yaml').read_text())
     config['model']['output_steps'] = 12
     config_path = tmp_path / 'inference.yaml'
     config_path.write_text(yaml.safe_dump(config, sort_keys=False))

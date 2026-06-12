@@ -12,7 +12,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY apps/api/pyproject.toml apps/api/uv.lock ./
 
 COPY packages/common ./../../packages/common
-COPY packages/forecast-core ./../../packages/forecast-core
+COPY packages/forecast ./../../packages/forecast
 
 RUN uv sync --frozen --no-cache
 

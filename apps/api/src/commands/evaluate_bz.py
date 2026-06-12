@@ -1,4 +1,3 @@
-from forecast_core.predictor import refresh_forecast
 import sentry_sdk
 
 from common.config import get_config
@@ -14,7 +13,7 @@ sentry_sdk.init(
 
 def main():
     try:
-        refresh_forecast()
+        pass
     except Exception as exc:
         sentry_sdk.capture_exception(exc)
 

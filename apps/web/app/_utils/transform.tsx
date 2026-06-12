@@ -1,9 +1,18 @@
 
-export function prepareChartData(f: Array<any>) : Array<any> {
+export function prepareWindChartData(f: Array<any>) : Array<any> {
   return f.map(d => ({
     time: d.valid_time,
-    median: parseInt(d.p_50_v),
-    low: parseInt(d.p_10_v),
-    high: parseInt(d.p_90_v),
+    median: parseInt(d.v_q50),
+    low: parseInt(d.v_q10),
+    high: parseInt(d.v_q90),
+  }));
+}
+
+export function prepareProbabilitiesData(f: Array<any>) : Array<any> {
+  return f.map(d => ({
+    time: d.valid_time,
+    p_450: parseInt(d.p_v_ge_450),
+    p_500: parseInt(d.p_v_ge_500),
+    p_600: parseInt(d.p_v_ge_600),
   }));
 }

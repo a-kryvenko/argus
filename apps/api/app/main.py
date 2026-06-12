@@ -6,8 +6,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import sentry_sdk
 
 from app.routers.auth import router as auth_router
-from app.routers.forecast import router as forecast_router
-from app.routers.metrics import router as metrics_router
+from app.routers.public.forecast import router as public_forecast_router
+from app.routers.public.metrics import router as metrics_router
+from app.routers.public.observations import router as observations_router
+from app.routers.private.forecast import router as private_forecast_router
+from app.routers.private.probability import router as private_probability_router
+from app.routers.private.risk import router as private_risk_router
+from app.routers.private.model import router as private_model_router
+
 
 from common.config import get_config
 
@@ -15,7 +21,8 @@ import os
 
 config = get_config()
 
-sentry_sdk.init(
+if not config.debug:
+    sentry_sdk.init(
     dsn=os.getenv("SENTRY_COLLECT_POINT"),
     send_default_pii=True,
 )
@@ -23,7 +30,7 @@ sentry_sdk.init(
 app = FastAPI(
     title="ARGUS SUNWATCH Public API",
     debug=config.debug,
-    root_path="/api"
+    root_path="/api/v1"
 )
 
 if not config.debug:
@@ -59,6 +66,11 @@ app.add_middleware(
 
 # app.include_router(auth_router)
 
-app.include_router(forecast_router)
+app.include_router(public_forecast_router)
 app.include_router(metrics_router)
+app.include_router(observations_router)
 
+app.include_router(private_forecast_router)
+app.include_router(private_probability_router)
+app.include_router(private_risk_router)
+app.include_router(private_model_router)

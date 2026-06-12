@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.stats.metrics import wind_speed_metrics, wind_threshold_metrics
 
-router = APIRouter(prefix="/metrics", tags=["metrics"])
+router = APIRouter(prefix="/public/metrics", tags=["metrics"])
 
 @router.get("/all")
 def get_full_forecast_metrics():

@@ -74,16 +74,6 @@ export default function WindChart({ data }: {data: any}) {
               activeDot={false}
             />
 
-            {/* uncertainty band */}
-            {/* <Area
-              type="monotone"
-              dataKey="range"
-              stackId="1"
-              stroke="none"
-              fill="#8884d8"
-              fillOpacity={0.3}
-            /> */}
-
             {/* median line */}
             <Line
               type="monotone"

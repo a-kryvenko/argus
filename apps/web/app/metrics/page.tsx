@@ -14,7 +14,7 @@ export default function metricsPage()
         try {
           setLoading(true);
     
-          const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/metrics/all");
+          const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/v1/public/metrics/all");
     
           if (!response.ok) {
             throw new Error("Failed to fetch metrics");

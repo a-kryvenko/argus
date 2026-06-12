@@ -1,0 +1,24 @@
+models:
+  wind:
+    active_version: wind-lgbm-q-v4
+    artifact: data/forecasts/solar-wind/latest.csv
+    metrics: data/metrics/solar-wind/latest.json
+    updated_at: "2026-06-11T08:00:00Z"
+
+  bz:
+    active_version: bz-prob-lgbm-v1
+    artifact: data/forecasts/bz/latest.csv
+    metrics: data/metrics/bz/latest.json
+    updated_at: "2026-06-11T08:00:00Z"
+  
+  imf:
+    active_version: imf-lgbm-q-v1
+    artifact: data/forecasts/imf/latest.csv
+    metrics: data/metrics/imf/latest.json
+    updated_at: "2026-06-11T08:00:00Z"
+
+  kp:
+    active_version: kp-prob-v1
+    artifact: data/forecasts/kp/latest.csv
+    metrics: data/metrics/kp/latest.json
+    updated_at: "2026-06-11T08:00:00Z"

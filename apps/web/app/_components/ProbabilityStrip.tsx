@@ -21,7 +21,7 @@ export default function ProbabilityStrip({ data, label, keyName }: {data: Array<
             return (
               <div
                 key={i}
-                title={`${d.valid_time} - ${p.toFixed(0)}%`}
+                title={`${d.time} - ${p.toFixed(0)}%`}
                 style={{
                   width: "1%",
                   height: 18,
@@ -34,8 +34,6 @@ export default function ProbabilityStrip({ data, label, keyName }: {data: Array<
       ) : (
         <div style={{ height: 18, width: "100%", backgroundColor: "#313131" }}></div>
       )}
-
-      
     </div>
   );
 }

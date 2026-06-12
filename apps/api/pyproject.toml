@@ -5,17 +5,19 @@ dependencies = [
   "requests",
   "fastapi>=0.115",
   "uvicorn>=0.30",
-  "forecast-core",
+  "forecast",
   "common",
   "sentry-sdk>=2.61.1",
+  "pydantic>=2.13.4",
+  "pydantic-settings>=2.14.1",
 ]
 
 [tool.uv.sources]
 common = { workspace = true }
-forecast-core = { workspace = true }
+forecast = { workspace = true }
 
 [tool.uv.workspace]
 members = [
     "../../packages/common",
-    "../../packages/forecast-core",
+    "../../packages/forecast",
 ]

@@ -5,20 +5,14 @@ import csv
 import re
 import os
 
-from forecast_core.inference.forecast_service import ForecastInferenceService
+from forecast.inference.forecast_service import ForecastInferenceService
 from common.config import get_config
-from common.adapters import forecast_to_dataframe, full_forecast_from_dataframe, wind_speed_forecast_from_dataframe, wind_threshold_forecast_from_dataframe
+from common.adapters import wind_forecast_to_dataframe, wind_forecast_from_dataframe
 from common.schema import Forecast
-from forecast_core.data_pipelines.live import get_live_observations
+from forecast.data_pipelines.live import get_live_observations
 
-def get_full_forecast() -> Forecast:
-    return full_forecast_from_dataframe(_get_forecast_df())
-
-def get_wind_speed_forecast() -> Forecast:
-    return wind_speed_forecast_from_dataframe(_get_forecast_df())
-
-def get_wind_threshold_forecast() -> Forecast:
-    return wind_threshold_forecast_from_dataframe(_get_forecast_df())
+def wind_forecast() -> Forecast:
+    return wind_forecast_from_dataframe(_get_forecast_df())
 
 def _get_forecast_df() -> pd.DataFrame:
     config = get_config()
@@ -56,10 +50,12 @@ def refresh_forecast():
 
 
 def _create_forecast(output_path: Path):
+    os.makedirs(output_path.parent, exist_ok=True)
+
     forecast_service = ForecastInferenceService()
 
     forecast = forecast_service.predict(get_live_observations())
 
-    df = forecast_to_dataframe(forecast)
+    df = wind_forecast_to_dataframe(forecast)
     df.insert(0, "issue_time", forecast.issue_time)
     df.to_csv(output_path, index=False)

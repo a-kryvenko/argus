@@ -2,14 +2,18 @@ project:
   name: argus-sunwatch
 
 paths:
-  wind_forecast: data/wind_forecast.csv
+  wind_forecast: data/forecast/solar-wind/live.csv
   forecast_history: data/history
 
 models:
-  wind: models/speed_lgbm.joblib
-  wind_quantile: models/speed_quantile_models.joblib
-  wind_quantile_calibration: models/lead_hour_interval_calibration.csv
-  events: models/speed_event_models.joblib
+  wind: data/models/speed_lgbm.joblib
+  wind_quantile: data/models/speed_quantile_models.joblib
+  wind_quantile_calibration: data/models/lead_hour_interval_calibration.csv
+  events: data/models/speed_event_models.joblib
+
+metrics:
+  solar_wind_speed: data/metrics/wind_speed_by_lead.csv
+  solar_wind_probability: data/metrics/wind_threshold_by_lead.csv
 
 runtime:
   python: python

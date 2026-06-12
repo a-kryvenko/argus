@@ -17,6 +17,7 @@ COPY packages/forecast ./../../packages/forecast
 RUN uv sync --frozen --no-cache
 
 COPY apps/api/app ./app
+COPY apps/api/src ./src
 
 EXPOSE 8000
 

@@ -5,6 +5,7 @@ Deployment is completely automated and created on top of dockerhub and github ac
 Process step by step:
 
 1. new tag `git tag -a "v...` published to git repository
+1. call `./deploy.sh` to upload pretrained models and accuracy metrics to production server
 1. github actions executed:
     - build frontend image
     - push frontend image to dockerhub

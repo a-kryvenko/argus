@@ -8,8 +8,8 @@ export default function ProbabilityPanel({ data }: {data: Array<any>}) {
       <div>
         <ProbabilityStrip
           data={data}
-          label="> 450 km/s"
-          keyName="p_450"
+          label=">= 600 km/s"
+          keyName="p_600"
         />
 
         <ProbabilityStrip
@@ -20,9 +20,9 @@ export default function ProbabilityPanel({ data }: {data: Array<any>}) {
 
         <ProbabilityStrip
           data={data}
-          label=">= 600 km/s"
-          keyName="p_600"
-        />
+          label="> 450 km/s"
+          keyName="p_450"
+        />    
       </div>
     </div>
   );

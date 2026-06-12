@@ -9,7 +9,7 @@ function getColor(p: number) {
 export default function ProbabilityStrip({ data, label, keyName }: {data: Array<any>, label: string, keyName: string}) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 12, marginBottom: 6 }}>
+      <div style={{ fontSize: 12, marginBottom: 6 }} className="color-default">
         {label}
       </div>
 

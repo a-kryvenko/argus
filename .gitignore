@@ -54,6 +54,6 @@ yarn-error.log*
 *.log
 
 # Proprietary parts
-notebooks/*
-packages/forecast-core/*
+/notebooks/
+/packages/forecast-core/
 

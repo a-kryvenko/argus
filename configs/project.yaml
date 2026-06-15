@@ -43,5 +43,4 @@ sources:
 outputs:
   merged_csv: data/processed/forecast_timeseries.csv
   forecast_dataset_npz: data/processed/forecast_dataset.npz
-  forecast_scalers_yaml: data/artifacts/forecast/scalers.yaml
   smoke_payload_json: data/processed/forecast_smoke_payload.json

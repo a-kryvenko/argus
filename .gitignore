@@ -53,5 +53,7 @@ yarn-error.log*
 *.pem
 *.log
 
-# Notebooks
+# Proprietary parts
 notebooks/*
+packages/forecast-core/*
+

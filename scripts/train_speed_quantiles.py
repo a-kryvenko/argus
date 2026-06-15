@@ -305,6 +305,7 @@ def main() -> None:
     joblib.dump(
         {
             "models": models,
+            "calibration": calibration,
             "feature_columns": FEATURE_COLUMNS,
             "quantiles": QUANTILES,
         },

@@ -1,5 +1,3 @@
-deploy.sh
-
 data/*
 !data/.gitkeep
 

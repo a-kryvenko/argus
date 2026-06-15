@@ -89,10 +89,14 @@ jobs:
       
       - name: Restart production containers
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
+          envs: DOCKERHUB_LOGIN,DOCKERHUB_TOKEN
           script: |
             cd /var/www
             mkdir -p log/nginx log/frontend log/api data models metrics nginx nginx/templates alloy configs
@@ -102,6 +106,10 @@ jobs:
             mv ./.deploy/nginx/templates/http.conf.template ./nginx/templates/
             mv ./.deploy/alloy/config.alloy ./alloy/
             rm -rf ./.deploy
+
+            echo "$DOCKERHUB_TOKEN" | docker login \
+              --username "$DOCKERHUB_LOGIN" \
+              --password-stdin
 
             docker compose pull
             docker compose up -d --remove-orphans

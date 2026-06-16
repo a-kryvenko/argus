@@ -22,6 +22,7 @@ members = [
     "clio",
     "common",
     "forecast",
+    "forecast-core",
 ]
 
 [[package]]
@@ -1255,6 +1256,11 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
 ]
+
+[[package]]
+name = "forecast-core"
+version = "0.1.0"
+source = { virtual = "packages/forecast-core" }
 
 [[package]]
 name = "fqdn"

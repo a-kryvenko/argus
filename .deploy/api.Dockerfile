@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends libgomp1 git openssh-client \
     && rm -rf /var/lib/apt/lists/*
     
 RUN mkdir -p /var/www/apps/api
@@ -14,7 +14,10 @@ COPY apps/api/pyproject.toml apps/api/uv.lock ./
 COPY packages/common ./../../packages/common
 COPY packages/forecast ./../../packages/forecast
 
-RUN uv sync --frozen --no-cache
+RUN mkdir -p -m 0700 /root/.ssh \
+    && ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+RUN --mount=type=ssh uv sync --frozen --no-cache
 
 COPY apps/api/app ./app
 COPY apps/api/src ./src

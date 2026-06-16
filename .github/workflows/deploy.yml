@@ -53,6 +53,10 @@ jobs:
         with:
           images: andriykryvenko/argus-forecast
 
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+
       - name: Build and push Public Api Docker image
         id: pushApi
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
@@ -62,6 +66,7 @@ jobs:
           push: true
           tags: ${{ steps.metaApi.outputs.tags }}
           labels: ${{ steps.metaApi.outputs.labels }}
+          ssh: default
 
       - name: Generate artifact attestation
         uses: actions/attest@v4

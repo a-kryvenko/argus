@@ -65,4 +65,5 @@ members = [
     "packages/common",
     "packages/forecast",
     "packages/clio",
+    "packages/forecast-core",
 ]

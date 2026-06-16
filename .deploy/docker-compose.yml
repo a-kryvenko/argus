@@ -10,7 +10,6 @@ services:
       - ./.env:/var/www/.env:ro
       - ./configs:/var/www/configs:ro
       - ./data:/var/www/data
-      - ./ext_packages/forecast-core:/var/www/packages/forecast-core
       - ./log/api:/var/www/log
     networks:
       application:

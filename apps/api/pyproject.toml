@@ -16,7 +16,7 @@ dependencies = [
 [tool.uv.sources]
 common = { workspace = true }
 forecast = { workspace = true }
-forecast-core = { git = "ssh://git@github.com:a-kryvenko/argus-forecast-core.git", branch = "master" }
+forecast-core = { git = "ssh://git@github.com/a-kryvenko/argus-forecast-core.git", branch = "master" }
 
 [tool.uv.workspace]
 members = [

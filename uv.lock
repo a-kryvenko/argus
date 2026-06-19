@@ -1240,9 +1240,11 @@ version = "0.1.0"
 source = { editable = "packages/forecast" }
 dependencies = [
     { name = "cdflib" },
+    { name = "joblib" },
     { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pyarrow" },
     { name = "pyyaml" },
     { name = "scikit-learn" },
 ]
@@ -1250,9 +1252,11 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "cdflib", specifier = ">=1.1.0" },
+    { name = "joblib", specifier = ">=1.5.3" },
     { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
+    { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
 ]

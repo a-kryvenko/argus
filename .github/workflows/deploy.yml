@@ -120,4 +120,6 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
-            echo '0 * * * * cd /var/www && docker compose run --rm --name wind_forecast_generator api .venv/bin/python src/commands/generate_wind_forecast.py' | crontab -
+            docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_wind_forecast.py
+
+            echo '0 * * * * cd /var/www && docker compose run --rm --name scheduled_forecast_update api .venv/bin/python src/commands/generate_wind_forecast.py' | crontab -

@@ -1,0 +1,17 @@
+.tooltip {
+    background-color: white;
+    border: 1px solid #e1e1e1;
+    padding: 6px;
+}
+.tooltip__title {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 2px dashed #e1e1e1;
+    font-size: 16px;
+}
+.tooltip__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 14px;
+}

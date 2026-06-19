@@ -8,6 +8,8 @@ dependencies = [
   "scikit-learn>=1.5",
   "cdflib>=1.1.0",
   "lightgbm>=4.6.0",
+  "joblib>=1.5.3",
+  "pyarrow>=24.0.0",
 ]
 
 [tool.setuptools.package-dir]

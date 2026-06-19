@@ -17,12 +17,10 @@ class WindForecastPoint(ForecastPoint):
     p_v_ge_600: float
 
 class KpForecastPoint(ForecastPoint):
-    kp_q10: float
-    kp_q50: float
-    kp_q90: float
-    p_kp_ge_5: float
-    p_kp_ge_6: float
-    p_kp_ge_7: float
+    p_kp_4: float
+    p_kp_5: float
+    p_kp_6: float
+    p_kp_7: float
 
 class BzForecastPoint(ForecastPoint):
     p_bz_lt_0: float

@@ -4,8 +4,8 @@ import numpy as np
 SOLAR_ROTATION_DAYS = 27.2753
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
-    if len(df) <= 27 * 24:
-        raise Exception("Dataset size must be greater than 27 days to have persistant t-27d speed observation")
+    if len(df) <= 6:
+        raise Exception("Dataset size must be greater than 6 hours to have persistant t-6h speed observation")
     
     df["bt"] = np.sqrt(df["bx"]**2 + df["by"]**2 + df["bz"]**2)
     df["southward_bz"] = np.maximum(-df["bz"], 0)

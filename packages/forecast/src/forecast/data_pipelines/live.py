@@ -12,6 +12,9 @@ from common.schema import ObservationPoint, Observation
 
 DSCOVR_2H_PLASMA_BASE_URL = "https://services.swpc.noaa.gov/products/solar-wind/plasma-"
 DSCOVR_2H_MAG_BASE_URL = "https://services.swpc.noaa.gov/products/solar-wind/mag-"
+GONG_MAG_URL = "https://services.swpc.noaa.gov/products/gong/"
+KP_INDEX_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
+SOLAR_CYCLE_INFO_URL = "https://services.swpc.noaa.gov/products/solar-cycle-25-f10-7-predicted-range.json"
 
 COLUMNS = [
     "issue_time",
@@ -20,22 +23,40 @@ COLUMNS = [
     "bz",
     "v",
     "n",
-    "t"
+    "t",
+    "kp"
 ]
 
 def _fetch_latest_observations(endpoint: str) -> pd.DataFrame:
+    df = _fetch_live_mag(endpoint)
+    df = df.merge(_fetch_live_plasma(endpoint), how="left", on="issue_time")
+    df = df.merge(_fetch_live_kp(), how="left", on="issue_time")
+
+    df = df.set_index("issue_time", drop=False)
+    df = df[~df.index.duplicated(keep="last")]
+    df = df.sort_index()
+    df = df.resample("1h").first()
+
+    df = df[COLUMNS]
+
+    return df
+
+def _fetch_live_mag(endpoint: str) -> pd.DataFrame:
     r = requests.get(DSCOVR_2H_MAG_BASE_URL + endpoint)
     r.raise_for_status()
     data = r.json()
 
-    df = pd.DataFrame(data[1:], columns=data[0])
-    df["issue_time"] = pd.to_datetime(df["time_tag"])
-    df["issue_time"] = df["issue_time"].dt.tz_localize("UTC")
+    mag_df = pd.DataFrame(data[1:], columns=data[0])
+    mag_df["issue_time"] = pd.to_datetime(mag_df["time_tag"])
+    mag_df["issue_time"] = mag_df["issue_time"].dt.tz_localize("UTC")
 
-    df["bx"] = pd.to_numeric(df["bx_gsm"])
-    df["by"] = pd.to_numeric(df["by_gsm"])
-    df["bz"] = pd.to_numeric(df["bz_gsm"])
+    mag_df["bx"] = pd.to_numeric(mag_df["bx_gsm"])
+    mag_df["by"] = pd.to_numeric(mag_df["by_gsm"])
+    mag_df["bz"] = pd.to_numeric(mag_df["bz_gsm"])
 
+    return mag_df
+
+def _fetch_live_plasma(endpoint: str) -> pd.DataFrame:
     r = requests.get(DSCOVR_2H_PLASMA_BASE_URL + endpoint)
     r.raise_for_status()
     data = r.json()
@@ -47,16 +68,27 @@ def _fetch_latest_observations(endpoint: str) -> pd.DataFrame:
     plasma_df["v"] = pd.to_numeric(plasma_df["speed"])
     plasma_df["t"] = pd.to_numeric(plasma_df["temperature"])
 
-    df = df.merge(plasma_df, how="left", on="issue_time")
+    return plasma_df
 
-    df = df.set_index("issue_time", drop=False)
-    df = df[~df.index.duplicated(keep="last")]
-    df = df.sort_index()
-    df = df.resample("1h").first()
+def _fetch_live_kp() -> pd.DataFrame:
+    r = requests.get(KP_INDEX_URL)
+    r.raise_for_status()
+    data = r.json()
+    kp_df = pd.DataFrame(data, columns=["time_tag", "Kp"])
+    kp_df["issue_time"] = pd.to_datetime(kp_df["time_tag"])
+    kp_df["issue_time"] = kp_df["issue_time"].dt.tz_localize("UTC")
+    kp_df["kp"] = pd.to_numeric(kp_df["Kp"])
+    kp_df = kp_df[["issue_time", "kp"]]
+    kp_df = kp_df.set_index("issue_time")
 
-    df = df[COLUMNS]
+    kp_df = (
+        kp_df
+        .resample("1h")
+        .interpolate(method="time")
+        .reset_index()
+    )
 
-    return df
+    return kp_df
 
 
 def _get_raw_dataset(raw_dataset_path: Path) -> pd.DataFrame:
@@ -136,6 +168,7 @@ def _download_raw_dataset() -> pd.DataFrame:
             "by": bgse[:, 1],
             "bz": bgse[:, 2],
         })
+        df["issue_time"] = df["issue_time"].dt.tz_localize("UTC")
         return df
 
 
@@ -149,6 +182,7 @@ def _download_raw_dataset() -> pd.DataFrame:
             "n": cdf.varget("Np"),
             "t": cdf.varget("Tpr")
         })
+        df["issue_time"] = df["issue_time"].dt.tz_localize("UTC")
         return df
     
     mag_frames = []
@@ -187,9 +221,12 @@ def _download_raw_dataset() -> pd.DataFrame:
     )
 
     df = swe_df.merge(mag_df, how="left", on="issue_time")
-
-    df = df.dropna(subset=["issue_time"]+COLUMNS)
-    df["issue_time"] = df["issue_time"].dt.tz_localize("UTC")
+    df = df.merge(_fetch_live_kp(), how="left", on="issue_time")
+    df = df.dropna(
+        subset=["issue_time"] + COLUMNS,
+        how="all"
+    )
+    df = df.dropna(subset=["issue_time"])
     df = df.set_index("issue_time", drop=False)
     df = df[~df.index.duplicated(keep="last")]
     df = df.sort_index()
@@ -216,7 +253,7 @@ def get_live_observations() -> Observation:
             v=record["v"],
             n=record["n"],
             t=record["t"],
-            kp=0 # TODO: fil lwith actual values
+            kp=record["kp"]
         ))
     
     return Observation(points=points)

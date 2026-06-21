@@ -12,7 +12,9 @@ export default function Help() {
 
             <h3>API</h3>
             <p>API documentation: <a href="/api/v1/docs">/api/v1/docs</a></p>
-            
+            <br />
+            <br />
+            <p>Contact email: <a href="mailto:krivenko.a.b@gmail.com">krivenko.a.b@gmail.com</a></p>
         </div>
     )
 }

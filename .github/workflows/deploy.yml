@@ -110,6 +110,7 @@ jobs:
             mv ./.deploy/nginx/default.conf ./nginx/
             mv ./.deploy/nginx/templates/http.conf.template ./nginx/templates/
             mv ./.deploy/alloy/config.alloy ./alloy/
+            mv ./.deploy/cronjobs.txt ./
             rm -rf ./.deploy
 
             echo "$DOCKERHUB_TOKEN" | docker login \
@@ -122,4 +123,5 @@ jobs:
 
             docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_wind_forecast.py
 
-            echo '0 * * * * cd /var/www && docker compose run --rm --name scheduled_forecast_update api .venv/bin/python src/commands/generate_wind_forecast.py' | crontab -
+            crontab cronjobs.txt
+            rm cronjobs.txt

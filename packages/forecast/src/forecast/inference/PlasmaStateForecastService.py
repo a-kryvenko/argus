@@ -1,41 +1,35 @@
-from __future__ import annotations
-
-from datetime import datetime, timedelta, timezone
-from typing import Dict
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 import numpy as np
-import joblib
 
-from common.config import get_config
+from common.adapters import plasma_forecast_from_dataframe, observations_to_dataframe
 from common.schema import Observation
-from common.adapters import observations_to_dataframe, plasma_forecast_from_dataframe, kp_forecast_from_dataframe
-
 from forecast.data_pipelines.feature_building import build_features
 
-PLASMA_SPEED_THRESHOLDS = [450, 500, 600, 700]
-KP_THRESHOLD = [4, 5, 6]
+LEAD_HOURS_HORIZON = 120
 
-class ForecastInferenceService:
-    def __init__(self):
-        config = get_config()
+class PlasmaStateForecastService:
+    registry_name: str = "solar_wind_speed"
 
-        self.plasma_speed_model = config.workdir / config.project_config["models"]["plasma_speed"]
-        self.plasma_threshold_model = config.workdir / config.project_config["models"]["plasma_threshold"]
-        self.kp_threshold_model = config.workdir / config.project_config["models"]["kp_threshold"]
+    quantile_models_bundle = None
+    threshold_models_bundle = None
 
-    def predict(self, observations: Observation) -> Dict:
+    def __init__(self, models: dict):
+        self.quantile_models_bundle = models["quantile"]
+        self.threshold_models_bundle = models["threshold"]
+    
+    def forecast_from_df(df):
+        return plasma_forecast_from_dataframe(df)
+    
+    def forecast(self, observations: Observation):
         issue_time = datetime.now(tz=timezone.utc) 
 
         frame = self._prepare_frame(observations=observations, issue_time=issue_time)        
 
         frame = self._forecast_plasma_speed(frame)
         frame = self._forecast_plasma_threshold(frame)
-        frame = self._forecast_kp_threshold(frame)
 
-        return {
-            "plasma": plasma_forecast_from_dataframe(frame),
-            "kp": kp_forecast_from_dataframe(frame)
-        }
+        return PlasmaStateForecastService.forecast_from_df(frame)
 
     def _prepare_frame(self, observations: Observation, issue_time: datetime) -> pd.DataFrame:
         forecast_start_time = issue_time - timedelta(minutes=issue_time.minute, seconds=issue_time.second)
@@ -45,12 +39,12 @@ class ForecastInferenceService:
 
         last_row = df.iloc[[-1]].copy()
 
-        frame = pd.concat([last_row] * 96, ignore_index=True)
-        frame["lead_hours"] = range(1, 97)
+        frame = pd.concat([last_row] * LEAD_HOURS_HORIZON, ignore_index=True)
+        frame["lead_hours"] = range(1, LEAD_HOURS_HORIZON + 1)
         frame["valid_time"] = forecast_start_time + pd.to_timedelta(
             frame["lead_hours"], unit="h"
         )
-        frame["lead_norm"] = frame["lead_hours"] / 96
+        frame["lead_norm"] = frame["lead_hours"] / LEAD_HOURS_HORIZON
 
         def assign_bucket(lead_hours: int) -> str:
             if lead_hours <= 3:
@@ -81,7 +75,7 @@ class ForecastInferenceService:
         return frame
     
     def _forecast_plasma_speed(self, frame: pd.DataFrame) -> pd.DataFrame:
-        model_bundle = joblib.load(self.plasma_speed_model)
+        model_bundle = self.quantile_models_bundle
         calibration = model_bundle["calibration"]
         quantile_models = model_bundle["models"]
         quantile_features = model_bundle["feature_columns"]
@@ -220,7 +214,7 @@ class ForecastInferenceService:
         return frame
     
     def _forecast_plasma_threshold(self, frame: pd.DataFrame) -> pd.DataFrame:
-        event_bundle = joblib.load(self.plasma_threshold_model)
+        event_bundle = self.threshold_models_bundle
         event_models = event_bundle["models"]
         event_features = event_bundle["feature_columns"]
 
@@ -245,31 +239,3 @@ class ForecastInferenceService:
                 frame.loc[mask, col] = 0.0
         
         return frame
-    
-    def _forecast_kp_threshold(self, frame: pd.DataFrame) -> pd.DataFrame:
-        event_bundle = joblib.load(self.kp_threshold_model)
-        event_models = event_bundle["models"]
-        event_features = event_bundle["feature_columns"]
-
-        for threshold, model in event_models.items():
-            col = f"p_kp_{threshold}"
-
-            proba = model.predict_proba(
-                frame[event_features]
-            )
-
-            if 1 in model.classes_:
-                class_1_idx = np.where(model.classes_ == 1)[0][0]
-                frame[col] = proba[:, class_1_idx]
-            else:
-                frame[col] = 0.0
-        
-        return frame
-
-    def _skill_regime(self, lead_hours: int) -> str:
-        if lead_hours <= 24:
-            return "strong"
-        if lead_hours <= 48:
-            return "moderate"
-        return "low"
-        

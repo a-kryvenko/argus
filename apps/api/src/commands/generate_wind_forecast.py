@@ -1,4 +1,7 @@
-from forecast.predictor import refresh_forecast
+from forecast.ForecastDirector import ForecastDirector
+from forecast.inference.PlasmaStateForecastService import PlasmaStateForecastService
+from forecast.inference.KpForecastService import KpForecastService
+
 import sentry_sdk
 
 from common.config import get_config
@@ -15,7 +18,9 @@ if not config.debug:
 
 def main():
     try:
-        refresh_forecast()
+        director = ForecastDirector()
+        director.refresh_forecast(PlasmaStateForecastService)
+        # ForecastDirector.refresh_forecast(KpForecastService)
     except Exception as exc:
         if not config.debug:
             sentry_sdk.capture_exception(exc)

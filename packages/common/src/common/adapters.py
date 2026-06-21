@@ -6,7 +6,10 @@ def observations_to_dataframe(observation: Observation) -> pd.DataFrame:
     return pd.DataFrame([o.model_dump() for o in observation.points])
 
 def forecast_to_dataframe(forecast: Forecast) -> pd.DataFrame:
-    return pd.DataFrame([f.model_dump() for f in forecast.points])
+    df = pd.DataFrame([f.model_dump() for f in forecast.points])
+    df.insert(0, "issue_time", forecast.issue_time)
+    return df
+
 
 def plasma_forecast_from_dataframe(df: pd.DataFrame) -> Forecast:
     points = []

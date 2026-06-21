@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.schemas.response import SuccessResponse, ErrorResponse
+from app.schemas.response import SuccessForecastResponse, ErrorResponse
 from forecast.ForecastDirector import ForecastDirector
 from forecast.inference.PlasmaStateForecastService import PlasmaStateForecastService
 from forecast.inference.KpForecastService import KpForecastService
@@ -15,7 +15,7 @@ def get_wind_forecast():
     if not f:
         return ErrorResponse(error="Forecast not ready yet. Please wait.")
 
-    return SuccessResponse(data=f)
+    return SuccessForecastResponse(data=f)
 
 @router.get("/kp")
 def get_kp_forecast():
@@ -25,4 +25,4 @@ def get_kp_forecast():
     if not f:
         return ErrorResponse(error="Forecast not ready yet. Please wait.")
 
-    return SuccessResponse(data=f)
+    return SuccessForecastResponse(data=f)

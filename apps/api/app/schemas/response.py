@@ -3,9 +3,13 @@ from typing import Literal
 
 from common.schemas.forecast import Forecast
 
-class SuccessResponse(BaseModel):
+class SuccessForecastResponse(BaseModel):
     status: Literal["ok"] = "ok"
     data: Forecast
+
+class SuccessResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    data: dict
 
 class ErrorResponse(BaseModel):
     status: Literal["error"] = "error"

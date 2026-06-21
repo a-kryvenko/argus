@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.schemas.response import SuccessResponse, ErrorResponse
+from app.schemas.response import SuccessForecastResponse, ErrorResponse
 
 router = APIRouter(prefix="/private/probability", tags=["probability"])
 

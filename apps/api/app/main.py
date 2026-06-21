@@ -13,6 +13,7 @@ from app.routers.private.forecast import router as private_forecast_router
 from app.routers.private.probability import router as private_probability_router
 from app.routers.private.risk import router as private_risk_router
 from app.routers.private.model import router as private_model_router
+from app.routers.healthcheck import router as healthcheck_router
 
 
 from common.config import get_config
@@ -65,6 +66,7 @@ app.add_middleware(
 )
 
 # app.include_router(auth_router)
+app.include_router(healthcheck_router)
 
 app.include_router(public_forecast_router)
 app.include_router(metrics_router)

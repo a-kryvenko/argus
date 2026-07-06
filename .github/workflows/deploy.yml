@@ -121,7 +121,7 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
-            docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_wind_forecast.py
+            docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_forecast.py
 
             crontab cronjobs.txt
             rm cronjobs.txt

@@ -7,7 +7,7 @@ dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "forecast",
-  "forecast-core",
+  "forecast-core>=0.1.1",
   "common",
   "sentry-sdk>=2.61.1",
   "pydantic>=2.13.4",

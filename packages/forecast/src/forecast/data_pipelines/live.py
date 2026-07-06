@@ -16,8 +16,7 @@ from urllib.parse import urljoin
 from common.config import get_config
 from common.schema import ObservationPoint, Observation
 
-DSCOVR_2H_PLASMA_BASE_URL = "https://services.swpc.noaa.gov/products/solar-wind/plasma-"
-DSCOVR_2H_MAG_BASE_URL = "https://services.swpc.noaa.gov/products/solar-wind/mag-"
+L1_SENSORS_URL = "https://services.swpc.noaa.gov/products/geospace/propagated-solar-wind"
 GONG_MAG_URL = "https://services.swpc.noaa.gov/products/gong/zqs/"
 KP_INDEX_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 SOLAR_CYCLE_INFO_URL = "https://services.swpc.noaa.gov/products/solar-cycle-25-f10-7-predicted-range.json"
@@ -34,8 +33,7 @@ COLUMNS = [
 ]
 
 def _fetch_latest_observations(endpoint: str) -> pd.DataFrame:
-    df = _fetch_live_mag(endpoint)
-    df = df.merge(_fetch_live_plasma(endpoint), how="left", on="issue_time")
+    df = _fetch_live_sensors(endpoint)
     df = df.merge(_fetch_live_kp(), how="left", on="issue_time")
 
     df = df.set_index("issue_time", drop=False)
@@ -47,34 +45,27 @@ def _fetch_latest_observations(endpoint: str) -> pd.DataFrame:
 
     return df
 
-def _fetch_live_mag(endpoint: str) -> pd.DataFrame:
-    r = requests.get(DSCOVR_2H_MAG_BASE_URL + endpoint)
+def _fetch_live_sensors(endpoint: str) -> pd.DataFrame:
+    r = requests.get(L1_SENSORS_URL + endpoint)
     r.raise_for_status()
     data = r.json()
 
-    mag_df = pd.DataFrame(data[1:], columns=data[0])
-    mag_df["issue_time"] = pd.to_datetime(mag_df["time_tag"])
-    mag_df["issue_time"] = mag_df["issue_time"].dt.tz_localize("UTC")
+    df = pd.DataFrame(data[1:], columns=data[0])
+    df["issue_time"] = pd.to_datetime(df["time_tag"])
 
-    mag_df["bx"] = pd.to_numeric(mag_df["bx_gsm"])
-    mag_df["by"] = pd.to_numeric(mag_df["by_gsm"])
-    mag_df["bz"] = pd.to_numeric(mag_df["bz_gsm"])
+    df["bx"] = pd.to_numeric(df["bx"])
+    df["by"] = pd.to_numeric(df["by"])
+    df["bz"] = pd.to_numeric(df["bz"])
 
-    return mag_df
+    # df["vx"] = pd.to_numeric(df["vx"])
+    # df["vy"] = pd.to_numeric(df["vy"])
+    # df["vz"] = pd.to_numeric(df["vz"])
 
-def _fetch_live_plasma(endpoint: str) -> pd.DataFrame:
-    r = requests.get(DSCOVR_2H_PLASMA_BASE_URL + endpoint)
-    r.raise_for_status()
-    data = r.json()
+    df["n"] = pd.to_numeric(df["density"])
+    df["v"] = pd.to_numeric(df["speed"])
+    df["t"] = pd.to_numeric(df["temperature"])
 
-    plasma_df = pd.DataFrame(data[1:], columns=data[0])
-    plasma_df["issue_time"] = pd.to_datetime(plasma_df["time_tag"])
-    plasma_df["issue_time"] = plasma_df["issue_time"].dt.tz_localize("UTC")
-    plasma_df["n"] = pd.to_numeric(plasma_df["density"])
-    plasma_df["v"] = pd.to_numeric(plasma_df["speed"])
-    plasma_df["t"] = pd.to_numeric(plasma_df["temperature"])
-
-    return plasma_df
+    return df
 
 def _fetch_live_kp() -> pd.DataFrame:
     r = requests.get(KP_INDEX_URL)
@@ -145,18 +136,10 @@ def _get_raw_dataset(raw_dataset_path: Path) -> pd.DataFrame:
     time_delta = now - df.iloc[-1]["issue_time"]
     seconds = time_delta.total_seconds()
 
-    if seconds < 60 * 5:
-        endpoint = "5-minute.json"
-        endpoint = ""
-    elif seconds < 3600 * 2:
-        endpoint = "2-hour.json"
-        endpoint = ""
-    elif seconds < 3600 * 6:
-        endpoint = "6-hour.json"
-    elif seconds < 3600 * 24:
-        endpoint = "1-day.json"
+    if seconds < 3600:
+        endpoint = "-1-hour.json"
     else:
-        endpoint = "7-day.json"
+        endpoint = ".json"
     
     if endpoint != "":
         latest_df = _fetch_latest_observations(endpoint=endpoint)

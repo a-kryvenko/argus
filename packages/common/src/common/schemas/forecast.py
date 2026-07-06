@@ -22,19 +22,14 @@ class KpForecastPoint(ForecastPoint):
     p_kp_6: float
     p_kp_7: float
 
-class BzForecastPoint(ForecastPoint):
-    p_bz_lt_0: float
-    p_bz_lt_minus_5: float
-    p_bz_lt_minus_10: float
-    p_bz_lt_minus_15: float
-    confidence: float
+class HmfForecastPoint(ForecastPoint):
+    p_bt_ge_5: float
+    p_bt_ge_10: float
+    p_bt_ge_15: float
 
-class ImfForecastPoint(ForecastPoint):
-    bt_q10: float
-    bt_q50: float
-    bt_q90: float
-    p_bt_gt_10: float
-    p_bt_gt_15: float
+    p_southward_bz_ge_5: float
+    p_southward_bz_ge_10: float
+    p_southward_bz_ge_15: float
 
 class PlasmaForecastPoint(ForecastPoint):
     n_q10: float
@@ -48,6 +43,6 @@ class Forecast(BaseModel):
 
     issue_time: datetime
     query: Dict = Field(default_factory=dict)
-    points: List[WindForecastPoint|KpForecastPoint|BzForecastPoint|ImfForecastPoint|PlasmaForecastPoint]
+    points: List[WindForecastPoint|KpForecastPoint|HmfForecastPoint|PlasmaForecastPoint]
 
 

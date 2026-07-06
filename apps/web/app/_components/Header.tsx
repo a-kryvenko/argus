@@ -13,6 +13,7 @@ export default function Header() {
         <a href="/">A</a>
         <div className="d-flex justify-content-end">
           <a href="/">Forecast</a>
+          <span>&nbsp;|&nbsp;<a href="/products">Products</a></span>
           <span>&nbsp;|&nbsp;<a href="/metrics">Metrics</a></span>
           <span>&nbsp;|&nbsp;<a href="/api/v1/docs">API</a></span>
           <span>&nbsp;|&nbsp;<a href="/help">Help</a></span>

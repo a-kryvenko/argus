@@ -4,10 +4,18 @@ models:
       quantile: plasma-speed-quantile-lgbm-v1
       threshold: plasma-speed-threshold-lgbm-v1
     forecast_path: data/forecast/solar-wind/live.csv
-    metrics: data/metrics/solar-wind/latest.json
+    metrics: data/metrics/solar-wind
 
   kp:
     active_versions:
       threshold: kp-lgbm-bucket-v1
     forecast_path: data/forecast/kp/live.csv
-    metrics: data/metrics/kp/latest.json
+    metrics: data/metrics/kp
+  
+  hmf:
+    active_versions:
+      southward_bz: bz-lgbm-v1
+      bt: bt-lgbm-v1
+    forecast_path: data/forecast/hmf/live.csv
+    metrics: data/metrics/hmf
+

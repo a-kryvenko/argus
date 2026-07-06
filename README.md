@@ -44,14 +44,15 @@ The project focuses on building a **decision-support framework** that combines r
         - [OMNIWeb](https://omniweb.gsfc.nasa.gov/) - provide Bx, By, Bz, V (Solar Wind), N (Density), T (Plasma temperature) in L1 Lagrange point.
         - [Solar Dynamics Observatory](https://data.nasa.gov/dataset/solar-dynamics-observatory) - provide solar observations. Data are loaded wia 
             [jsoc](https://jsoc1.stanford.edu/data/) (AIA, HMI)
+        - [GONG](https://gong2.nso.edu/archive/patch.pl?menutype=zeroPoint#step2) - provide magnetic field map of the Sun in FITS format
     1. Live data sources:
         - [Deep Space Climate Observatory](https://epic.gsfc.nasa.gov/) - provide monitoring of Bx, By, Bz, V (Solar Wind), N (Density), T (Plasma temperature) in L1 Lagrange point. Data accessed wia [NOAA](https://services.swpc.noaa.gov/json/)
         - [Solar Dynamics Observatory](https://data.nasa.gov/dataset/solar-dynamics-observatory) - [jsoc](https://jsoc1.stanford.edu/data/) API is not reliable for live data, because of time delay up to 4 days. So data loaded as is directly from server
 1. Processing Layer
-    - Normalize data
-    - combine sensors data with solar observations
+    - Normalizing data (resample to 1-hour format, fill up gaps with gradient mean)
+    - combine L1 sensors data with solar observations from [GONG](https://gong.nso.edu/)
 1. Forecasting Layer
-    - Heuristic models (initial phase)
+    - [LGBMClassifier](https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMClassifier.html), [LGBMRegressor](https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMRegressor.html)
     - Machine learning models (finetunned [Surya](https://github.com/NASA-IMPACT/Surya), XGBoost), NYUAD Multimodal Encoder-Decoder, WSA-ENLIL / in-situ + empirical B
     - Risk scoring system
 1. Impact Intelligence Layer (Private)

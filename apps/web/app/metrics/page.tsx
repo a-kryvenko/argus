@@ -1,43 +1,16 @@
-'use client';
-
-import { useEffect, useState, useCallback } from "react";
-import WindSpeedChart from "./_components/WindSpeedChart"
-import WindThresholdChart from "./_components/WindThresholdChart";
-
-export default function metricsPage()
+export default function Metrics()
 {
-    const [windMetrics, setWindMetrics] = useState<[]>([]);
-    const [thresholdMetrics, setThresholdMetrics] = useState<[]>([]);
-    const [loading, setLoading] = useState(true);
-    
-    const loadMetrics = useCallback(async () => {
-        try {
-          setLoading(true);
-    
-          const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/v1/public/metrics/all");
-    
-          if (!response.ok) {
-            throw new Error("Failed to fetch metrics");
-          }
-    
-          const metricsResult = await response.json();
-          setWindMetrics(metricsResult["wind_speed"]);
-          setThresholdMetrics(metricsResult["wind_threshold"]);
-        } catch (err) {
-          console.log(err);
-        } finally {
-          setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        loadMetrics();
-    }, [loadMetrics])
-
     return (
-        <div className="container">
-        <WindSpeedChart data={ windMetrics }/>
-        <WindThresholdChart data={ thresholdMetrics }/>
+        <div className="container color-default">
+            <h1>Metrics</h1>
+            <ul>
+                <li><a href="/metrics/solar-wind">Solar Wind Speed</a></li>
+                <li><a href="/metrics/kp">Kp</a></li>
+                <li><a href="/metrics/hmf">Helio Magnetic Field</a></li>
+                <li><a href="/metrics/southward-bz">Southward Bz</a></li>
+                {/* <li><a href="/products/satelites">Satelites Risk</a></li> */}
+                {/* <li><a href="/products/power-grid">Power Grid Risk</a></li> */}
+            </ul>
         </div>
-    );
+    )
 }

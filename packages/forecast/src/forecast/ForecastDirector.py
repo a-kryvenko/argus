@@ -36,7 +36,7 @@ class ForecastDirector:
         
         return forecast_service_name.forecast_from_df(df)
     
-    def refresh_forecast(self, forecast_service_name):
+    def refresh_forecast(self, forecast_service_name, observations: list|None = None):
         config = get_config()
 
         models_registry = (config.models_registry["models"][forecast_service_name.registry_name] or None)
@@ -60,10 +60,19 @@ class ForecastDirector:
             raise Exception(f"Not found forecast models for {forecast_service_name.registry_name}")
         
         forecast_service = forecast_service_name(models)
-            
-        self._build_forecast(forecast_file_path, forecast_service)
 
-    def _build_forecast(self, forecast_file_path, forecast_service):
+        if observations is None:
+            observations = get_live_observations()
+
+        self._build_forecast(forecast_file_path, forecast_service, observations)
+    
+    def refresh_forecasts(self, services: list):
+        observations = get_live_observations()
+        for service in services:
+            self.refresh_forecast(service, observations)
+
+
+    def _build_forecast(self, forecast_file_path, forecast_service, observations):
         forecast_dir = forecast_file_path.parent
         archive_dir = forecast_dir / "archive"
         tmp_forecast_file_path = forecast_dir / (forecast_file_path.name + ".tmp")
@@ -83,7 +92,7 @@ class ForecastDirector:
 
             shutil.copyfile(forecast_file_path, archive_dir / archive_file_name)
         
-        forecast = forecast_service.forecast(get_live_observations())
+        forecast = forecast_service.forecast(observations)
         
         df = forecast_to_dataframe(forecast)
 

@@ -1,5 +1,5 @@
 import pandas as pd
-from common.schemas.forecast import Forecast, WindForecastPoint, KpForecastPoint
+from common.schemas.forecast import Forecast, WindForecastPoint, KpForecastPoint, HmfForecastPoint
 from common.schema import Observation
 
 def observations_to_dataframe(observation: Observation) -> pd.DataFrame:
@@ -49,3 +49,24 @@ def kp_forecast_from_dataframe(df: pd.DataFrame) -> Forecast:
         points=points
     )
 
+def hmf_forecast_from_dataframe(df: pd.DataFrame) -> Forecast:
+    points = []
+
+    for _, row in df.iterrows():
+        points.append(HmfForecastPoint(
+            lead_hours=int(row["lead_hours"]),
+            valid_time=pd.Timestamp(row["valid_time"]).isoformat(),
+
+            p_bt_ge_5=float(row["p_bt_ge_5"]),
+            p_bt_ge_10=float(row["p_bt_ge_10"]),
+            p_bt_ge_15=float(row["p_bt_ge_15"]),
+            
+            p_southward_bz_ge_5=float(row["p_southward_bz_ge_5"]),
+            p_southward_bz_ge_10=float(row["p_southward_bz_ge_10"]),
+            p_southward_bz_ge_15=float(row["p_southward_bz_ge_15"]),
+        ))
+
+    return Forecast(
+        issue_time=pd.Timestamp(df.iloc[0]["issue_time"]).isoformat(),
+        points=points
+    )

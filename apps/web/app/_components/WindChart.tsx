@@ -34,6 +34,8 @@ const linesMeta: any = {
   },
 }
 
+const lineKeys = ["median", "low", "high"] as const;
+
 export default function WindChart({ data }: {data: any}) {
   if (!data || data.length == 0) {
     return (
@@ -63,17 +65,17 @@ export default function WindChart({ data }: {data: any}) {
           {row.dayName}, {row.hour}
         </div>
 
-        {payload.map((item: {dataKey: any, name: string, value: Number}) => (
+        {lineKeys.map((key) => (
           <div
             className="tooltip__row"
-            key={item.dataKey}
+            key={key}
             style={{
-              color: linesMeta[item.name]["color"],
-              fontWeight: linesMeta[item.name]["fontWeight"]
+              color: linesMeta[key].color,
+              fontWeight: linesMeta[key].fontWeight,
             }}
           >
-            <span>{linesMeta[item.name]["name"]}</span>
-            <span>{item.value.toString()} km/s</span>
+            <span>{linesMeta[key].name}</span>
+            <span>{row.values[key]} km/s</span>
           </div>
         ))}
       </div>
@@ -152,29 +154,6 @@ export default function WindChart({ data }: {data: any}) {
                 strokeWidth: 2 
               }}
             />
-
-            {/* invisible base */}
-            <Line
-              type="monotone"
-              dataKey="values.low"
-              name="low"
-              stroke={linesMeta["low"]["stroke"]}
-              fill="none"
-              dot={false}
-              activeDot={false}
-            />
-
-            {/* invisible base */}
-            <Line
-              type="monotone"
-              dataKey="values.high"
-              name="high"
-              stroke={linesMeta["high"]["stroke"]}
-              fill="none"
-              dot={false}
-              activeDot={false}
-            />
-
           </LineChart>
         </ResponsiveContainer>
       </div>

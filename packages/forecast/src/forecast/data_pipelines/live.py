@@ -7,12 +7,18 @@ import tempfile
 import pandas as pd
 import numpy as np
 
+import re
+import gzip
+import shutil
+from tempfile import TemporaryDirectory
+from urllib.parse import urljoin
+
 from common.config import get_config
 from common.schema import ObservationPoint, Observation
 
 DSCOVR_2H_PLASMA_BASE_URL = "https://services.swpc.noaa.gov/products/solar-wind/plasma-"
 DSCOVR_2H_MAG_BASE_URL = "https://services.swpc.noaa.gov/products/solar-wind/mag-"
-GONG_MAG_URL = "https://services.swpc.noaa.gov/products/gong/"
+GONG_MAG_URL = "https://services.swpc.noaa.gov/products/gong/zqs/"
 KP_INDEX_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 SOLAR_CYCLE_INFO_URL = "https://services.swpc.noaa.gov/products/solar-cycle-25-f10-7-predicted-range.json"
 
@@ -89,6 +95,33 @@ def _fetch_live_kp() -> pd.DataFrame:
     )
 
     return kp_df
+
+def _fetch_live_gong(p: Path):
+    r = requests.get(GONG_MAG_URL)
+    r.raise_for_status()
+
+    matches = re.findall(
+        r'href="([^"]+\.fits\.gz)"',
+        r.text,
+        flags=re.IGNORECASE,
+    )
+
+    if not matches:
+        raise RuntimeError("No .fits.gz files found")
+    
+    latest = matches[-1]
+    url = urljoin(GONG_MAG_URL, latest)
+
+    with TemporaryDirectory() as tmpdir:
+        gz_path = Path(tmpdir) / Path(url).name
+
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(gz_path, "wb") as f:
+                shutil.copyfileobj(r.raw, f)
+
+        with gzip.open(gz_path, "rb") as src, open(p, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
 
 def _get_raw_dataset(raw_dataset_path: Path) -> pd.DataFrame:
@@ -240,7 +273,7 @@ def _download_raw_dataset() -> pd.DataFrame:
 def get_live_observations() -> Observation:
     config = get_config()
 
-    live_dataset = _get_raw_dataset(raw_dataset_path=config.data_root / "raw/live_sensors.csv")
+    live_dataset = _get_raw_dataset(raw_dataset_path=config.workdir / config.project_config["paths"]["live_sensors"])
 
     points = []
     
@@ -255,5 +288,7 @@ def get_live_observations() -> Observation:
             t=record["t"],
             kp=record["kp"]
         ))
+
+    _fetch_live_gong(p=config.workdir / config.project_config["paths"]["live_gong"])
     
     return Observation(points=points)

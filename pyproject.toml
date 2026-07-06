@@ -6,7 +6,7 @@ requires-python = ">=3.12.11"
 dependencies = [
     # core
     "numpy",
-    "pandas",
+    "pandas<3",
     "pyarrow",
     "scipy",
     "pyyaml",
@@ -46,6 +46,8 @@ dependencies = [
     "joblib>=1.5.3",
     "scikit-learn>=1.8.0",
     "huxt>=5.0.2",
+    "dask[distributed]>=2026.6.0",
+    "distributed>=2026.6.0",
 ]
 
 [dependency-groups]

@@ -1,18 +1,14 @@
 project:
   name: argus-sunwatch
 
-paths:
-  wind_forecast: data/forecast/solar-wind/live.csv
-  kp_forecast: data/forecast/kp/live.csv
-
-models:
-  plasma_speed: data/models/plasma-speed-quantile-lgbm-v1.joblib
-  plasma_threshold: data/models/plasma-speed-threshold-lgbm-v1.joblib
-  kp_threshold: data/models/kp-lgbm-bucket-v1.joblib
-
 metrics:
   solar_wind_speed: data/metrics/wind_speed_by_lead.csv
   solar_wind_probability: data/metrics/wind_threshold_by_lead.csv
+
+paths:
+  live_sensors: data/raw/live_sensors.csv
+  live_gong: data/raw/live_gong.fits
+  evaluation_dataset: data/training/valid_2025.parquet
 
 sources:
   omni:
@@ -30,8 +26,3 @@ sources:
     timestamps_csv: data/processed/forecast_timeseries.csv
     out_dir: data/raw/sdo
     manifest_out: data/raw/sdo/manifest.parquet
-
-outputs:
-  merged_csv: data/processed/forecast_timeseries.csv
-  forecast_dataset_npz: data/processed/forecast_dataset.npz
-  smoke_payload_json: data/processed/forecast_smoke_payload.json

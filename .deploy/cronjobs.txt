@@ -2,7 +2,4 @@
 @reboot sleep 15 && cd /var/www && ./nginx-proxy-up.sh
 
 # Wind Forecast
-0 * * * * cd /var/www && docker compose run --rm --name scheduled_forecast_update api .venv/bin/python src/commands/generate_wind_forecast.py
-
-# Kp Index Forecast
-0 * * * * cd /var/www && docker compose run --rm --name scheduled_forecast_update api .venv/bin/python src/commands/generate_kp_forecast.py
+0 * * * * cd /var/www && docker compose run --rm --name s_full_forecast_upd api .venv/bin/python src/commands/generate_forecast.py

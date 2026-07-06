@@ -5,7 +5,7 @@ export default function Help() {
             <br />
             <h3>Solar Activity Impact Forecasting & Decision Intelligence</h3>
 
-            <p>Here You can find probabilistic wind speed <a href="/">forecast</a>, <a href="/api/v1/docs">API</a> and <a href="/metrics">metrics</a>.</p>
+            <p>Here You can find probabilistic Solar Activity <a href="/products">forecast</a>, <a href="/api/v1/docs">API</a> and <a href="/metrics">metrics</a>.</p>
 
             <p>
                 <span>Github: </span> <a href="https://github.com/a-kryvenko/argus">https://github.com/a-kryvenko/argus</a>
@@ -29,7 +29,7 @@ export default function Help() {
                         <td>2025</td>
                     </tr>
                     <tr>
-                        <td>Imf</td>
+                        <td>HMF</td>
                         <td>2010-2024</td>
                         <td>2025</td>
                     </tr>

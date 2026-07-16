@@ -1,21 +1,44 @@
 models:
   solar_wind_speed:
     active_versions:
-      quantile: plasma-speed-quantile-lgbm-v1
-      threshold: plasma-speed-threshold-lgbm-v1
+      quantile: plasma-speed-v2
+      threshold: plasma-speed-threshold-lgbm-v2
     forecast_path: data/forecast/solar-wind/live.csv
-    metrics: data/metrics/solar-wind
+    metrics: data/metrics/solar-wind/speed
+  
+  plasma_density:
+    active_versions:
+      quantile: plasma-density-v2
+    forecast_path: data/forecast/solar-wind/live.csv
+    metrics: data/metrics/solar-wind/density
 
   kp:
     active_versions:
-      threshold: kp-lgbm-bucket-v1
+      threshold: kp-lgbm-v2
     forecast_path: data/forecast/kp/live.csv
     metrics: data/metrics/kp
   
-  hmf:
+  ap:
     active_versions:
-      southward_bz: bz-lgbm-v1
-      bt: bt-lgbm-v1
+      quantile: ap-v2
+    forecast_path: data/forecast/ap/live.csv
+    metrics: data/metrics/ap
+  
+  dst:
+    active_versions:
+      quantile: dst-v2
+    forecast_path: data/forecast/dst/live.csv
+    metrics: data/metrics/dst
+  
+  bt:
+    active_versions:
+      threshold: bt-v2
     forecast_path: data/forecast/hmf/live.csv
-    metrics: data/metrics/hmf
+    metrics: data/metrics/hmf/bt
+  
+  southward_bz:
+    active_versions:
+      threshold: south-bz-v2
+    forecast_path: data/forecast/hmf/live.csv
+    metrics: data/metrics/hmf/southward_bz
 

@@ -1,0 +1,25 @@
+.content-block:not(:last-child) {
+  margin-bottom: 36px;
+}
+.text-panel {
+  max-width: 72ch;
+  padding: clamp(1.5rem, 3vw, 2.75rem);
+
+  color: var(--text-secondary);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0.035)
+    );
+
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 20px;
+
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

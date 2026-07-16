@@ -33,7 +33,7 @@ export default function Forecast() {
     <div className="container">
       <h1 className="heading">Southward Bz Forecast Metrics</h1>
       
-      <Metrics data={metricsData} labels={{ "southward_bz_threshold_5": "South Bz > 5 nTl", "southward_bz_threshold_10": "South Bz > 10 nTl", "southward_bz_threshold_15": "South Bz > 15 nTl" }}/>
+      <Metrics data={metricsData} labels={{ "southward_bz_5": "South Bz > 5 nTl", "southward_bz_10": "South Bz > 10 nTl", "southward_bz_15": "South Bz > 15 nTl" }}/>
     </div>
   );
 }

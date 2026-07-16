@@ -32,7 +32,7 @@ export default function Forecast() {
   return (
     <div className="container">
       <h1 className="heading">Kp Forecast Metrics</h1>
-      <Metrics data={metricsData} labels={{ "kp_threshold_4": "Kp 4", "kp_threshold_5": "Kp 5", "kp_threshold_6": "Kp 6" }}/>
+      <Metrics data={metricsData} labels={{ "kp_4": "Kp 4", "kp_5": "Kp 5", "kp_6": "Kp 6" }}/>
     </div>
   );
 }

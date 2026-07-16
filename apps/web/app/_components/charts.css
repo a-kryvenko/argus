@@ -1,13 +1,15 @@
 .tooltip {
-    background-color: white;
+    background-color: #ffffff;
     border: 1px solid #e1e1e1;
     padding: 6px;
+    border-radius: 6px;
 }
 .tooltip__title {
     margin-bottom: 6px;
     padding-bottom: 6px;
     border-bottom: 2px dashed #e1e1e1;
     font-size: 16px;
+    color: #313131;
 }
 .tooltip__row {
     display: flex;
@@ -18,4 +20,11 @@
 .reliability-container {
     width: 600px;
     margin: 0 auto;
+}
+.chart-gradient {
+  background: linear-gradient(
+    180deg,
+    rgba(167, 139, 250, 0.28) 0%,
+    rgba(167, 139, 250, 0.02) 100%
+  );
 }

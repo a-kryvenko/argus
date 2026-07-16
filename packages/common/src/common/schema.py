@@ -12,7 +12,10 @@ class ObservationPoint(BaseModel):
     v: float
     n: float
     t: float
-    kp: float
+    kp: int
+    dst: int
+    ap: int
+    f10_7: int
 
 class Observation(BaseModel):
     model_config = ConfigDict(extra="forbid")

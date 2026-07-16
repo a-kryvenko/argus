@@ -10,6 +10,7 @@ import {
 
 import get_lead_datetime from "../_utils/date_time";
 import "./windchart.css"
+import ContentBlock from "./ContentBlock";
 
 const xAxisMeta = get_lead_datetime();
 
@@ -83,7 +84,7 @@ export default function WindChart({ data }: {data: any}) {
   };
 
   return (
-    <div style={{ width: "100%"}}>
+    <ContentBlock>
       <h2>Solar Wind Speed</h2>
 
       <div style={{ height: 400 }}>
@@ -157,6 +158,6 @@ export default function WindChart({ data }: {data: any}) {
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </ContentBlock>
   );
 }

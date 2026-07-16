@@ -32,7 +32,7 @@ export default function Forecast() {
   return (
     <div className="container">
       <h1 className="heading">HMF Forecast Metrics</h1>
-      <Metrics data={metricsData} labels={{ "bt_threshold_5": "HMF > 5 nTl", "bt_threshold_10": "HMF > 10 nTl", "bt_threshold_15": "HMF > 15 nTl" }}/>
+      <Metrics data={metricsData} labels={{ "bt_5": "HMF > 5 nTl", "bt_10": "HMF > 10 nTl", "bt_15": "HMF > 15 nTl" }}/>
     </div>
   );
 }

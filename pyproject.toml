@@ -48,6 +48,7 @@ dependencies = [
     "huxt>=5.0.2",
     "dask[distributed]>=2026.6.0",
     "distributed>=2026.6.0",
+    "mlflow>=3.14.0",
 ]
 
 [dependency-groups]

@@ -28,12 +28,12 @@ def hmf_forecast_metrics():
     config = get_config()
 
     metrics = {
-        "bt_threshold_5": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "bt/threshold_5.csv",
-        "bt_threshold_10": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "bt/threshold_10.csv",
-        "bt_threshold_15": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "bt/threshold_15.csv",
-        "southward_bz_threshold_5": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "southward_bz/threshold_5.csv",
-        "southward_bz_threshold_10": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "southward_bz/threshold_10.csv",
-        "southward_bz_threshold_15": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "southward_bz/threshold_15.csv",
+        "bt_5": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "bt/threshold_5.csv",
+        "bt_10": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "bt/threshold_10.csv",
+        "bt_15": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "bt/threshold_15.csv",
+        "southward_bz_5": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "southward_bz/threshold_5.csv",
+        "southward_bz_10": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "southward_bz/threshold_10.csv",
+        "southward_bz_15": config.workdir / config.models_registry["models"]["hmf"]["metrics"] / "southward_bz/threshold_15.csv",
     }
 
     data = {}

@@ -49,10 +49,13 @@ DEFAULT_VARS = {
     "BX_GSM": {"id": 12, "title": "Bx, GSE/GSM, nT"},
     "BY_GSM": {"id": 15, "title": "BY, nT (GSM)"},
     "BZ_GSM": {"id": 16, "title": "BZ, nT (GSM)"},
-    "V": {"id": 24, "title": "SW Plasma Speed, km/s"},
-    "N": {"id": 23, "title": "SW Proton Density, N/cm^3"},
     "T": {"id": 22, "title": "SW Plasma Temperature, K"},
-    "KP_10": {"id": 38, "title": "Kp*10 Index"}
+    "N": {"id": 23, "title": "SW Proton Density, N/cm^3"},
+    "V": {"id": 24, "title": "SW Plasma Speed, km/s"},
+    "KP_10": {"id": 38, "title": "Kp index"},
+    "DST": {"id": 40, "title": "Dst-index, nT"},
+    "AP": {"id": 49, "title": "ap_index, nT"},
+    "F10_7": {"id": 50, "title": "f10.7_index"},
 }
 
 def _parse_omni_text(text: str) -> pd.DataFrame:
@@ -106,7 +109,7 @@ def _parse_omni_text(text: str) -> pd.DataFrame:
     df = df.sort_index()
     df = df.resample('1h').mean()
 
-    return df[["timestamp", "BX_GSM", "BY_GSM", "BZ_GSM", "V", "N", "T", "KP_10"]]
+    return df[["timestamp", "BX_GSM", "BY_GSM", "BZ_GSM", "V", "N", "T", "KP_10", "DST", "AP", "F10_7"]]
 
 
 def fetch_omni(start: datetime, end: datetime) -> Observation:
@@ -145,7 +148,10 @@ def fetch_omni(start: datetime, end: datetime) -> Observation:
             v=record["V"],
             n=record["N"],
             t=record["T"],
-            kp=(record["KP_10"]) / 10
+            kp=int((record["KP_10"]) / 10),
+            dst=int(record["DST"]),
+            ap=int(record["AP"]),
+            f10_7=int(record["F10_7"]),
         ))
     
     return Observation(points=points)

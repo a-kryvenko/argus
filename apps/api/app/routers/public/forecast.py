@@ -21,13 +21,14 @@ def get_wind_forecast():
     return SuccessForecastResponse(data=f)
 
 @router.get("/solar-wind/metrics")
-def kp_forecast_metrics():
+def wind_forecast_metrics():
     config = get_config()
 
     metrics = {
         "v_450": config.workdir / config.models_registry["models"]["solar_wind_speed"]["metrics"] / "threshold_450.csv",
         "v_500": config.workdir / config.models_registry["models"]["solar_wind_speed"]["metrics"] / "threshold_500.csv",
         "v_600": config.workdir / config.models_registry["models"]["solar_wind_speed"]["metrics"] / "threshold_600.csv",
+        "regression": config.workdir / config.models_registry["models"]["solar_wind_speed"]["metrics"] / "regression.csv",
     }
 
     data = {}
@@ -56,6 +57,22 @@ def kp_forecast_metrics():
         "kp_4": config.workdir / config.models_registry["models"]["kp"]["metrics"] / "threshold_4.csv",
         "kp_5": config.workdir / config.models_registry["models"]["kp"]["metrics"] / "threshold_5.csv",
         "kp_6": config.workdir / config.models_registry["models"]["kp"]["metrics"] / "threshold_6.csv",
+    }
+
+    data = {}
+
+    for title, p in metrics.items():
+        df = pd.read_csv(p)
+        data[title] = df.to_dict('records')
+
+    return SuccessResponse(data=data)
+
+@router.get("/ap/metrics")
+def ap_forecast_metrics():
+    config = get_config()
+
+    metrics = {
+        "ap": config.workdir / config.models_registry["models"]["ap"]["metrics"] / "regression.csv",
     }
 
     data = {}

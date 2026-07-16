@@ -1,5 +1,7 @@
 import ReactECharts from "echarts-for-react";
 import get_lead_datetime from "../_utils/date_time"
+import "./charts.css"
+import ContentBlock from "./ContentBlock";
 
 const base = new Date();
 base.setMinutes(0, 0, 0);
@@ -85,14 +87,14 @@ export default function HeatMap({title, yLabels, data}: {title: string, yLabels:
   };
 
   return (
-    <>
-    <h2>{ title }</h2>
-    <ReactECharts
-      option={option}
-      style={{ height: 30 * yLabels.length, width: "100%" }}
-      notMerge
-      lazyUpdate
-    />
-    </>
+    <ContentBlock>
+      <h2>{ title }</h2>
+      <ReactECharts
+        option={option}
+        style={{ height: 30 * yLabels.length, width: "100%" }}
+        notMerge
+        lazyUpdate
+      />
+    </ContentBlock>
   );
 }

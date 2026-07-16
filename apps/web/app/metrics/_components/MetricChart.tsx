@@ -9,9 +9,8 @@ import {
   LineChart
 } from "recharts";
 
-import "./metric_chart.css"
-
-const xAxisMeta = Array.from({length: 96}, (_, i) => i + 1);
+import "../../_components/charts.css"
+import ContentBlock from "../../_components/ContentBlock";
 
 const linesMeta: Array<any> = [
   {
@@ -40,6 +39,10 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
       </div>
     );
   }
+
+  const leadHours = data.length;
+
+  const xAxisMeta = Array.from({length: leadHours}, (_, i) => i + 1);
 
   const rechartsData = xAxisMeta.map((x, i) => ({
     x,
@@ -78,7 +81,7 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
   };
 
   return (
-    <div style={{ width: "100%"}}>
+    <ContentBlock>
       <h3 className="heading">{ title }</h3>
 
       <div style={{ height: 400 }}>
@@ -95,8 +98,7 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
             <XAxis
               dataKey="x"
               type="number"
-              domain={[1, 96]}
-              ticks={[1, 6, 12, 24, 36, 48, 60, 96]}
+              domain={[1, leadHours + 1]}
             />
             
             <YAxis
@@ -156,6 +158,6 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
           </LineChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </ContentBlock>
   );
 }

@@ -20,6 +20,8 @@ L1_SENSORS_URL = "https://services.swpc.noaa.gov/products/geospace/propagated-so
 GONG_MAG_URL = "https://services.swpc.noaa.gov/products/gong/zqs/"
 KP_INDEX_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json"
 SOLAR_CYCLE_INFO_URL = "https://services.swpc.noaa.gov/products/solar-cycle-25-f10-7-predicted-range.json"
+F10_7_FLUX_URL = "https://services.swpc.noaa.gov/json/f107_cm_flux.json"
+DST_URL = "https://services.swpc.noaa.gov/products/kyoto-dst.json"
 
 COLUMNS = [
     "issue_time",
@@ -29,12 +31,17 @@ COLUMNS = [
     "v",
     "n",
     "t",
-    "kp"
+    "kp",
+    "ap",
+    "dst",
+    "f10_7"
 ]
 
 def _fetch_latest_observations(endpoint: str) -> pd.DataFrame:
     df = _fetch_live_sensors(endpoint)
     df = df.merge(_fetch_live_kp(), how="left", on="issue_time")
+    df = df.merge(_fetch_f10_7_flux(), how="left", on="issue_time")
+    df = df.merge(_fetch_dst(), how="left", on="issue_time")
 
     df = df.set_index("issue_time", drop=False)
     df = df[~df.index.duplicated(keep="last")]
@@ -71,11 +78,12 @@ def _fetch_live_kp() -> pd.DataFrame:
     r = requests.get(KP_INDEX_URL)
     r.raise_for_status()
     data = r.json()
-    kp_df = pd.DataFrame(data, columns=["time_tag", "Kp"])
+    kp_df = pd.DataFrame(data, columns=["time_tag", "Kp", "a_running"])
     kp_df["issue_time"] = pd.to_datetime(kp_df["time_tag"])
     kp_df["issue_time"] = kp_df["issue_time"].dt.tz_localize("UTC")
     kp_df["kp"] = pd.to_numeric(kp_df["Kp"])
-    kp_df = kp_df[["issue_time", "kp"]]
+    kp_df["ap"] = pd.to_numeric(kp_df["a_running"])
+    kp_df = kp_df[["issue_time", "kp", "ap"]]
     kp_df = kp_df.set_index("issue_time")
 
     kp_df = (
@@ -86,6 +94,46 @@ def _fetch_live_kp() -> pd.DataFrame:
     )
 
     return kp_df
+
+def _fetch_f10_7_flux() -> pd.DataFrame:
+    r = requests.get(F10_7_FLUX_URL)
+    r.raise_for_status()
+    data = r.json()
+    flux_df = pd.DataFrame(data, columns=["time_tag", "flux"])
+    flux_df["issue_time"] = pd.to_datetime(flux_df["time_tag"])
+    flux_df["issue_time"] = flux_df["issue_time"].dt.tz_localize("UTC")
+    flux_df["f10_7"] = pd.to_numeric(flux_df["flux"])
+    flux_df = flux_df[["issue_time", "f10_7"]]
+    flux_df = flux_df.set_index("issue_time")
+
+    flux_df = (
+        flux_df
+        .resample("1h")
+        .interpolate(method="time")
+        .reset_index()
+    )
+
+    return flux_df
+
+def _fetch_dst() -> pd.DataFrame:
+    r = requests.get(DST_URL)
+    r.raise_for_status()
+    data = r.json()
+    dst_df = pd.DataFrame(data, columns=["time_tag", "dst"])
+    dst_df["issue_time"] = pd.to_datetime(dst_df["time_tag"])
+    dst_df["issue_time"] = dst_df["issue_time"].dt.tz_localize("UTC")
+    dst_df["dst"] = pd.to_numeric(dst_df["dst"])
+    dst_df = dst_df[["issue_time", "dst"]]
+    dst_df = dst_df.set_index("issue_time")
+
+    dst_df = (
+        dst_df
+        .resample("1h")
+        .interpolate(method="time")
+        .reset_index()
+    )
+
+    return dst_df
 
 def _fetch_live_gong(p: Path):
     r = requests.get(GONG_MAG_URL)
@@ -123,11 +171,15 @@ def _get_raw_dataset(raw_dataset_path: Path) -> pd.DataFrame:
     if raw_dataset_path.is_file():
         df = pd.read_csv(raw_dataset_path, parse_dates=["issue_time"])
         df = df.set_index("issue_time", drop=False)
-        time_delta = now - df.iloc[-1]["issue_time"]
 
-        # We are able to get only up to 6 day live observations directly from NOAA json products.
-        # For older data we must re-download Archive dataset
-        if time_delta.total_seconds() > 3600 * 24 * 6:
+        if not df.empty and df.size > 0:
+            time_delta = now - df.iloc[-1]["issue_time"]
+
+            # We are able to get only up to 6 day live observations directly from NOAA json products.
+            # For older data we must re-download Archive dataset
+            if time_delta.total_seconds() > 3600 * 24 * 6:
+                df = None
+        else:
             df = None
     
     if df is None:
@@ -238,6 +290,8 @@ def _download_raw_dataset() -> pd.DataFrame:
 
     df = swe_df.merge(mag_df, how="left", on="issue_time")
     df = df.merge(_fetch_live_kp(), how="left", on="issue_time")
+    df = df.merge(_fetch_f10_7_flux(), how="left", on="issue_time")
+    df = df.merge(_fetch_dst(), how="left", on="issue_time")
     df = df.dropna(
         subset=["issue_time"] + COLUMNS,
         how="all"
@@ -269,7 +323,10 @@ def get_live_observations() -> Observation:
             v=record["v"],
             n=record["n"],
             t=record["t"],
-            kp=record["kp"]
+            kp=int(record["kp"]),
+            dst=int(record["dst"]),
+            ap=int(record["ap"]),
+            f10_7=int(record["f10_7"])
         ))
 
     _fetch_live_gong(p=config.workdir / config.project_config["paths"]["live_gong"])

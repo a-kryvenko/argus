@@ -12,14 +12,15 @@ import {
 
 import { useState } from "react";
 
+import "../../_components/charts.css"
+import ContentBlock from "../../_components/ContentBlock";
+
 type ReliabilityRow = {
-  x: number; // 1..96
+  x: number;
   values: Record<string, string>;
 };
 
 type Labels = Record<string, string>;
-
-const xAxisMeta = Array.from({length: 96}, (_, i) => i + 1);
 
 const linesMeta: Array<any> = [
   {
@@ -101,6 +102,10 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
         );
     }
 
+    const leadHours = data.length;
+
+    const xAxisMeta = Array.from({length: leadHours}, (_, i) => i + 1);
+
     const [hour, setHour] = useState(1);
 
     const rechartsData = xAxisMeta.map((x, i) => ({
@@ -111,6 +116,7 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
     const chartData = buildReliabilityChartData(rechartsData, hour, labels);
 
     return (
+      <ContentBlock>
         <div className="reliability-container">
             <h3 className="heading">{ title }</h3>
 
@@ -120,7 +126,7 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
                 <input
                     type="range"
                     min={1}
-                    max={96}
+                    max={leadHours}
                     step={1}
                     value={hour}
                     onChange={(event) => setHour(Number(event.target.value))}
@@ -213,5 +219,6 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
                 </LineChart>
             </ResponsiveContainer>
         </div>
+      </ContentBlock>
     );
 }

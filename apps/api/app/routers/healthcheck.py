@@ -1,9 +1,9 @@
 from fastapi import APIRouter
-from app.schemas.response import SuccessResponse
+from app.schemas.response import success_response
 
-router = APIRouter(tags=["healthcheck"])
+router = APIRouter(tags=["ping"])
 
-@router.get("/healthcheck")
-def get_healthcheck_status():
-    return SuccessResponse(data={"service_status": "up"})
+@router.get("/ping")
+def ping():
+    return success_response("pong")
 

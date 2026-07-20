@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.schemas.response import SuccessForecastResponse, ErrorResponse, SuccessResponse
+from app.schemas.response import success_response, error_response
 from forecast.ForecastDirector import ForecastDirector
 from forecast.inference.PlasmaStateForecastService import PlasmaStateForecastService
 from forecast.inference.KpForecastService import KpForecastService
@@ -16,9 +16,12 @@ def get_wind_forecast():
     f = director.get_forecast(PlasmaStateForecastService)
 
     if not f:
-        return ErrorResponse(error="Forecast not ready yet. Please wait.")
+        return error_response(
+            code="FORECAST_NOT_READY",
+            msg="Forecast not ready yet. Please wait..."
+        )
 
-    return SuccessForecastResponse(data=f)
+    return success_response(f)
 
 @router.get("/solar-wind/metrics")
 def wind_forecast_metrics():
@@ -37,7 +40,7 @@ def wind_forecast_metrics():
         df = pd.read_csv(p)
         data[title] = df.to_dict('records')
 
-    return SuccessResponse(data=data)
+    return success_response(data)
 
 @router.get("/kp")
 def get_kp_forecast():
@@ -45,9 +48,12 @@ def get_kp_forecast():
     f = director.get_forecast(KpForecastService)
 
     if not f:
-        return ErrorResponse(error="Forecast not ready yet. Please wait.")
+        return error_response(
+            code="FORECAST_NOT_READY",
+            msg="Forecast not ready yet. Please wait..."
+        )
 
-    return SuccessForecastResponse(data=f)
+    return success_response(f)
 
 @router.get("/kp/metrics")
 def kp_forecast_metrics():
@@ -65,7 +71,7 @@ def kp_forecast_metrics():
         df = pd.read_csv(p)
         data[title] = df.to_dict('records')
 
-    return SuccessResponse(data=data)
+    return success_response(data)
 
 @router.get("/ap/metrics")
 def ap_forecast_metrics():
@@ -81,4 +87,4 @@ def ap_forecast_metrics():
         df = pd.read_csv(p)
         data[title] = df.to_dict('records')
 
-    return SuccessResponse(data=data)
+    return success_response(data)

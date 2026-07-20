@@ -3,13 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.schemas.response import error_response
+
 import sentry_sdk
 
 from app.routers.auth import router as auth_router
-from app.routers.public.forecast import router as public_forecast_router
-from app.routers.public.metrics import router as metrics_router
+from app.routers.forecasts import router as forecasts_router
 from app.routers.public.observations import router as observations_router
-from app.routers.private.forecast import router as private_forecast_router
 from app.routers.private.probability import router as private_probability_router
 from app.routers.private.risk import router as private_risk_router
 from app.routers.private.model import router as private_model_router
@@ -40,20 +40,24 @@ if not config.debug:
         sentry_sdk.capture_exception(exc)
 
         return JSONResponse(
-            content={
-                "status": "error",
-                "error": "Something went wrong..."
-            },
+            content=error_response(
+                code="INTERNAL_ERROR",
+                msg="Something went wrong..."
+            ).model_dump(exclude_none=True),
             status_code=500,
         )
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    code = {
+        404: "NOT_FOUND",
+        503: "NOT_READY",
+    }.get(exc.status_code, "HTTP_ERROR")
     return JSONResponse(
-        content={
-            "status": "error",
-            "error": exc.detail
-        },
+        content=error_response(
+            code=code,
+            msg=exc.detail
+        ).model_dump(exclude_none=True),
         status_code=exc.status_code,
     )
 
@@ -68,11 +72,9 @@ app.add_middleware(
 # app.include_router(auth_router)
 app.include_router(healthcheck_router)
 
-app.include_router(public_forecast_router)
-app.include_router(metrics_router)
+app.include_router(forecasts_router)
 app.include_router(observations_router)
 
-app.include_router(private_forecast_router)
 app.include_router(private_probability_router)
 app.include_router(private_risk_router)
 app.include_router(private_model_router)

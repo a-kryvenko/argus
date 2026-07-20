@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.schemas.response import SuccessForecastResponse, ErrorResponse, SuccessResponse
+from app.schemas.response import success_response, error_response
 from forecast.ForecastDirector import ForecastDirector
 from forecast_core.inference.HmfForecastService import HmfForecastService
 
@@ -11,17 +11,23 @@ router = APIRouter(prefix="/private/forecast", tags=["forecast-private"])
 
 @router.get("/plasma")
 def plasma_forecast():
-    return ErrorResponse(error="Forecast not implemented.")
+    return error_response(
+        code="FORECAST_NOT_READY",
+        msg="Forecast not ready yet. Please wait..."
+    )
 
 @router.get("/hmf")
 def hmf_forecast():
     director = ForecastDirector()
-    f = director.get_forecast(HmfForecastService)
+    forecast = director.get_forecast(HmfForecastService)
 
-    if not f:
-        return ErrorResponse(error="Forecast not ready yet. Please wait.")
+    if not forecast:
+        return error_response(
+            code="FORECAST_NOT_READY",
+            msg="Forecast not ready yet. Please wait..."
+        )
     
-    return SuccessForecastResponse(data=f)
+    return success_response(forecast)
 
 @router.get("/hmf/metrics")
 def hmf_forecast_metrics():
@@ -42,4 +48,4 @@ def hmf_forecast_metrics():
         df = pd.read_csv(p)
         data[title] = df.to_dict('records')
 
-    return SuccessResponse(data=data)
+    return success_response(data)

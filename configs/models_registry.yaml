@@ -5,7 +5,7 @@ models:
       threshold: plasma-speed-threshold-lgbm-v2
     forecast_path: data/forecast/solar-wind/live.csv
     metrics: data/metrics/solar-wind/speed
-  
+
   plasma_density:
     active_versions:
       quantile: plasma-density-v2
@@ -17,19 +17,19 @@ models:
       threshold: kp-lgbm-v2
     forecast_path: data/forecast/kp/live.csv
     metrics: data/metrics/kp
-  
+
   ap:
     active_versions:
       quantile: ap-v2
     forecast_path: data/forecast/ap/live.csv
     metrics: data/metrics/ap
-  
+
   dst:
     active_versions:
       quantile: dst-v2
     forecast_path: data/forecast/dst/live.csv
     metrics: data/metrics/dst
-  
+
   bt:
     active_versions:
       threshold: bt-v2
@@ -42,3 +42,36 @@ models:
     forecast_path: data/forecast/hmf/live.csv
     metrics: data/metrics/hmf/southward_bz
 
+  f10_7:
+    active_versions:
+      quantile: f10_7-v1
+    forecast_path: data/forecast/f10_7/live.csv
+    metrics: data/metrics/f10_7
+
+  s10:
+    active_versions:
+      quantile: s10-v1
+    forecast_path: data/forecast/s10/live.csv
+    metrics: data/metrics/s10
+
+  m10:
+    active_versions:
+      quantile: m10-v1
+    forecast_path: data/forecast/m10/live.csv
+    metrics: data/metrics/m10
+
+  y10:
+    active_versions:
+      quantile: y10-v1
+    forecast_path: data/forecast/y10/live.csv
+    metrics: data/metrics/y10
+
+  dtc:
+    active_versions: null
+    forecast_path: data/forecast/dtc/live.csv
+    metrics: data/metrics/dtc
+
+  atmospheric_density:
+    active_versions: null
+    forecast_path: data/forecast/atmospheric-density/live.csv
+    metrics: data/metrics/atmospheric-density

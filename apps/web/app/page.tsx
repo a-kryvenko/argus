@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import WindChart from "./_components/WindChart";
 import { prepareWindChartData, preparePlasmaHeatmapData, prepareKpHeatmapData } from "./_utils/transform";
 import HeatMap from "./_components/HeatMap"
+import { apiRequest, type Forecast as ForecastData } from "./_utils/api";
 
 export default function Forecast() {
   const [windChartData, setWindChartData] = useState<Array<any> | []>([]);
@@ -14,15 +15,9 @@ export default function Forecast() {
 
   const loadPlasmaForecast = useCallback(async () => {
     try {
-      const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/v1/public/forecast/solar-wind");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch forecast");
-      }
-
-      const forecastResult = await response.json();
-      setWindChartData(prepareWindChartData(forecastResult.data.points));
-      setWindProbabilityData(preparePlasmaHeatmapData(forecastResult.data.points));
+      const forecast = await apiRequest<ForecastData>("/api/v1/public/forecasts/solar-wind-speed");
+      setWindChartData(prepareWindChartData(forecast.predictions));
+      setWindProbabilityData(preparePlasmaHeatmapData(forecast.predictions));
     } catch (err) {
       console.log(err);
     } finally {
@@ -32,14 +27,8 @@ export default function Forecast() {
 
   const loadKpRiskForecast = useCallback(async () => {
     try {
-      const response = await fetch((process.env.NEXT_PUBLIC_API_POINT || "") + "/api/v1/public/forecast/kp");
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch forecast");
-      }
-
-      const forecastResult = await response.json();
-      setKpRiskData(prepareKpHeatmapData(forecastResult.data.points));
+      const forecast = await apiRequest<ForecastData>("/api/v1/public/forecasts/geomagnetic-activity");
+      setKpRiskData(prepareKpHeatmapData(forecast.predictions));
     } catch (err) {
       console.log(err);
     } finally {

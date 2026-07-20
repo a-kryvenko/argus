@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.schemas.response import SuccessResponse, ErrorResponse
+from app.schemas.response import success_response, error_response
 from forecast.data_pipelines.live import get_live_observations
 
 router = APIRouter(prefix="/public/observations", tags=["observations"])
@@ -10,6 +10,9 @@ def latest_observations():
     observations = get_live_observations()
     latest = observations.points[-1] or None
     if latest is None:
-        return ErrorResponse(error="No observations found")
+        return error_response(
+            code="OBSERVATIONS_NOT_READY",
+            msg="No observations found"
+        )
     
-    return SuccessResponse(data=latest.model_dump())
+    return success_response(latest.model_dump())

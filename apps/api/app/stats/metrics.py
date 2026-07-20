@@ -2,19 +2,25 @@ import pandas as pd
 
 from common.config import get_config
 
-def wind_speed_metrics():
+def wind_speed_metrics() -> dict|None:
     config = get_config()
 
     p = config.workdir / config.project_config["metrics"]["solar_wind_speed"]
+
+    if not p.is_file():
+        return None
 
     df = pd.read_csv(p)
 
     return df.to_dict('records')
 
-def wind_threshold_metrics():
+def wind_threshold_metrics() -> dict|None:
     config = get_config()
 
     p = config.workdir / config.project_config["metrics"]["solar_wind_probability"]
+
+    if not p.is_file():
+        return None
 
     df = pd.read_csv(p)
 

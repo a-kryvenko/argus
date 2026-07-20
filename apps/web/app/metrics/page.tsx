@@ -1,16 +1,18 @@
-export default function Metrics()
-{
+import Link from "next/link";
+import { products } from "../_config/products";
+
+export default function Metrics() {
     return (
         <div className="container color-default">
             <h1 className="text-center">Metrics</h1>
-            <ul>
-                <li><a href="/metrics/solar-wind">Solar Wind Speed</a></li>
-                <li><a href="/metrics/kp">Kp</a></li>
-                <li><a href="/metrics/hmf">Heliospheric Magnetic Field</a></li>
-                <li><a href="/metrics/southward-bz">Southward Bz</a></li>
-                {/* <li><a href="/products/satelites">Satelites Risk</a></li> */}
-                {/* <li><a href="/products/power-grid">Power Grid Risk</a></li> */}
-            </ul>
+            <div className="product-grid">
+              {products.map(product => (
+                <Link className="product-link" href={`/metrics/${product.slug}`} key={product.slug}>
+                  <h2>{product.title}</h2>
+                  <p>Forecast quality by lead hour</p>
+                </Link>
+              ))}
+            </div>
         </div>
     )
 }

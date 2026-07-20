@@ -9,12 +9,13 @@ base.setHours(base.getHours() + 1);
 
 const xAxisMeta = get_lead_datetime();
 
-export default function HeatMap({title, yLabels, data}: {title: string, yLabels: Array<string>, data: Array<Array<Number>>}) {
+export default function HeatMap({title, yLabels, data, horizon}: {title: string, yLabels: Array<string>, data: Array<Array<Number>>, horizon?: number}) {
+  const xMeta = xAxisMeta.slice(0, horizon ?? Math.max(0, ...data.map(row => Number(row[0]) + 1)));
   const option = {
     tooltip: {
       formatter: (params: any) => {
         const [xIndex, yIndex, value] = params.data;
-        const x = xAxisMeta[xIndex];
+        const x = xMeta[xIndex];
 
         return `
           ${x.dayName}, ${x.hour}<br/>
@@ -32,7 +33,7 @@ export default function HeatMap({title, yLabels, data}: {title: string, yLabels:
 
     xAxis: {
       type: "category",
-      data: xAxisMeta.map(x => x.hour),
+      data: xMeta.map(x => x.hour),
       splitArea: { show: false },
       axisLabel: {
         interval: 11,

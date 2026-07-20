@@ -1,16 +1,25 @@
+from typing import Generic, TypeVar
+
 from pydantic import BaseModel
-from typing import Literal
 
-from common.schemas.forecast import Forecast
+T = TypeVar("T")
 
-class SuccessForecastResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    data: Forecast
+class ApiResponse(BaseModel, Generic[T]):
+    success: bool
+    data: T|None = None
+    error: dict|None = None
 
-class SuccessResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    data: dict
+def success_response(data: T):
+    return ApiResponse[T](
+        success=True,
+        data=data
+    )
 
-class ErrorResponse(BaseModel):
-    status: Literal["error"] = "error"
-    error: str
+def error_response(msg: str, code: str):
+    return ApiResponse[None](
+        success=False,
+        error={
+            "code": code,
+            "message": msg
+        }
+    )

@@ -1,34 +1,30 @@
 
-export function prepareWindChartData(f: Array<any>) : Array<any> {
+import type { ForecastPoint } from "./api";
+
+export function prepareWindChartData(f: ForecastPoint[]) : Array<any> {
   return f.map(d => ({
     time: d.valid_time,
-    median: parseInt(d.v_q50),
-    low: parseInt(d.v_q10),
-    high: parseInt(d.v_q90),
+    median: Math.trunc(d.variables.v?.continuous?.q50 ?? 0),
+    low: Math.trunc(d.variables.v?.continuous?.q10 ?? 0),
+    high: Math.trunc(d.variables.v?.continuous?.q90 ?? 0),
   }));
 }
 
-export function preparePlasmaHeatmapData(f: Array<any>) : Array<Array<Number>> {
+export function prepareProbabilityHeatmapData(f: ForecastPoint[], variable: string) : Array<Array<Number>> {
   const riskData: Array<Array<Number>> = []
-  if (f.length > 0) {
-    for (let i = 0; i < f.length; i ++) {
-      riskData.push([i, 0, Math.floor(f[i]["p_v_ge_450"] * 100)])
-      riskData.push([i, 1, Math.floor(f[i]["p_v_ge_500"] * 100)])
-      riskData.push([i, 2, Math.floor(f[i]["p_v_ge_600"] * 100)])
+  for (let i = 0; i < f.length; i++) {
+    const binary = f[i].variables[variable]?.binary ?? [];
+    for (let thresholdIndex = 0; thresholdIndex < binary.length; thresholdIndex++) {
+      riskData.push([
+        i,
+        thresholdIndex,
+        Math.floor(binary[thresholdIndex].probability * 100),
+      ])
     }
   }
 
   return riskData;
 }
 
-export function prepareKpHeatmapData(f: Array<any>): Array<Array<Number>> {
-  const riskData: Array<Array<Number>> = []
-
-  for (let i = 0; i < f.length; i ++) {
-    riskData.push([i, 0, Math.floor(f[i]["p_kp_4"] * 100)])
-    riskData.push([i, 1, Math.floor(f[i]["p_kp_5"] * 100)])
-    riskData.push([i, 2, Math.floor(f[i]["p_kp_6"] * 100)])
-  }
-
-  return riskData;
-}
+export const preparePlasmaHeatmapData = (f: ForecastPoint[]) => prepareProbabilityHeatmapData(f, "v");
+export const prepareKpHeatmapData = (f: ForecastPoint[]) => prepareProbabilityHeatmapData(f, "kp");

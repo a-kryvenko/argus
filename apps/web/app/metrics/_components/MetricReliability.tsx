@@ -17,8 +17,10 @@ import ContentBlock from "../../_components/ContentBlock";
 
 type ReliabilityRow = {
   x: number;
-  values: Record<string, string>;
+  values: Record<string, ReliabilityPoint[]>;
 };
+
+type ReliabilityPoint = { predicted_probability: number; observed_frequency: number };
 
 type Labels = Record<string, string>;
 
@@ -40,15 +42,11 @@ const linesMeta: Array<any> = [
   },
 ];
 
-function parseReliability(reliability: string) {
-  return reliability.split(";").map((pair) => {
-    const [predicted, observed] = pair.split("_").map(Number);
-
-    return {
-      predicted,
-      observed,
-    };
-  });
+function parseReliability(reliability: ReliabilityPoint[]) {
+  return reliability.map((point) => ({
+    predicted: point.predicted_probability,
+    observed: point.observed_frequency,
+  }));
 }
 
 function buildReliabilityChartData(
@@ -63,7 +61,7 @@ function buildReliabilityChartData(
   const selectedKeys = Object.keys(labels);
 
   const allPoints = selectedKeys.flatMap((key) =>
-    parseReliability(row.values[key] ?? "").map((point) => ({
+    parseReliability(row.values[key] ?? []).map((point) => ({
       ...point,
       key,
     }))
@@ -80,7 +78,7 @@ function buildReliabilityChartData(
     };
 
     for (const key of selectedKeys) {
-      const point = parseReliability(row.values[key] ?? "").find(
+      const point = parseReliability(row.values[key] ?? []).find(
         (p) => p.predicted === predicted
       );
 
@@ -93,6 +91,8 @@ function buildReliabilityChartData(
 
 export default function ReliabilityChart({ data, title, labels }: {data: Array<any>, title: string, labels: Labels})
 {
+    const [hour, setHour] = useState(1);
+
     if (!data || data.length == 0) {
         return (
         <div>
@@ -105,8 +105,6 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
     const leadHours = data.length;
 
     const xAxisMeta = Array.from({length: leadHours}, (_, i) => i + 1);
-
-    const [hour, setHour] = useState(1);
 
     const rechartsData = xAxisMeta.map((x, i) => ({
         x,

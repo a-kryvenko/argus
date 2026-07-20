@@ -1399,6 +1399,7 @@ source = { virtual = "packages/forecast-core" }
 dependencies = [
     { name = "astropy" },
     { name = "numpy" },
+    { name = "pyatmos" },
     { name = "scipy" },
 ]
 
@@ -1406,6 +1407,7 @@ dependencies = [
 requires-dist = [
     { name = "astropy", specifier = ">=7.2.0" },
     { name = "numpy", specifier = ">=2.4.6" },
+    { name = "pyatmos", specifier = ">=1.2.7" },
     { name = "scipy", specifier = ">=1.17.1" },
 ]
 
@@ -4019,6 +4021,22 @@ wheels = [
 ]
 
 [[package]]
+name = "pyatmos"
+version = "1.2.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "astropy" },
+    { name = "numba" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scipy" },
+    { name = "wget" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5e/a4/8a1a5cf234e9d3bcd2ad82a812ee66b0359bb657c1a0dcabe42079935e62/pyatmos-1.2.7-py3-none-any.whl", hash = "sha256:e9a81a7dd754770c0c8c7f3c32c4799ac8cd306abc5ca41443ec353c30029ac6", size = 47879, upload-time = "2024-11-05T01:06:05.731Z" },
+]
+
+[[package]]
 name = "pyavm"
 version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
@@ -5492,6 +5510,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/dd/b2/381be8cfdee792dd1
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/8c/2e650f2afeb7ee576912636c23ddb621c91ac6a98e66dc8d29c3c69446e1/werkzeug-3.1.8-py3-none-any.whl", hash = "sha256:63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50", size = 226459, upload-time = "2026-04-02T18:49:12.72Z" },
 ]
+
+[[package]]
+name = "wget"
+version = "3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/6a/62e288da7bcda82b935ff0c6cfe542970f04e29c756b0e147251b2fb251f/wget-3.2.zip", hash = "sha256:35e630eca2aa50ce998b9b1a127bb26b30dfee573702782aa982f875e3f16061", size = 10857, upload-time = "2015-10-22T15:26:37.51Z" }
 
 [[package]]
 name = "widgetsnbextension"

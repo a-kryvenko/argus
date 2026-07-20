@@ -1,18 +1,21 @@
-type Metric = "brier" | "roc_auc" | "avg_precision" | "reliability";
+import type { ForecastMetrics } from "../../_utils/api";
+
+type Metric = "brier_score" | "roc_auc" | "average_precision" | "reliability";
 
 export default function transformMetrics(
-  data: Record<string, Record<string, any>[]>,
+  data: ForecastMetrics,
+  variable: string,
   metric: Metric
 ) {
-  const keys = Object.keys(data);
+  const series = data.variables[variable]?.binary ?? [];
 
-  const maxLength = Math.max(...keys.map(k => data[k].length));
+  const maxLength = Math.max(0, ...series.map(item => item.by_lead_hour.length));
 
   return Array.from({ length: maxLength }, (_, i) => {
     const row: Record<string, any> = {};
 
-    for (const key of keys) {
-      row[key] = data[key][i]?.[metric] ?? null;
+    for (const item of series) {
+      row[String(item.threshold)] = item.by_lead_hour[i]?.[metric] ?? null;
     }
 
     return row;

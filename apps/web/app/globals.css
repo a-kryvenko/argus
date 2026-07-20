@@ -148,3 +148,53 @@ a {
 .text-center {
   text-align: center;
 }
+
+.product-description {
+  max-width: 760px;
+  margin: -16px auto 32px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.product-link,
+.state-message {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--glass);
+}
+
+.product-link {
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.product-link:hover {
+  border-color: var(--border-accent);
+  background: var(--glass-hover);
+}
+
+.product-link h2 {
+  margin: 0 0 10px;
+}
+
+.product-link p,
+.state-message {
+  color: var(--text-secondary);
+}
+
+.state-message {
+  margin: 18px 0;
+  text-align: center;
+}
+
+.variable-heading {
+  margin-top: 36px;
+  text-align: center;
+}

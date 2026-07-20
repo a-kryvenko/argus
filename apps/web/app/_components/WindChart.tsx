@@ -8,11 +8,8 @@ import {
   LineChart
 } from "recharts";
 
-import get_lead_datetime from "../_utils/date_time";
 import "./windchart.css"
 import ContentBlock from "./ContentBlock";
-
-const xAxisMeta = get_lead_datetime();
 
 const linesMeta: any = {
   "low": {
@@ -37,19 +34,20 @@ const linesMeta: any = {
 
 const lineKeys = ["median", "low", "high"] as const;
 
-export default function WindChart({ data }: {data: any}) {
+export default function WindChart({ data, title = "Solar Wind Speed", unit = "km/s" }: {data: any[], title?: string, unit?: string}) {
   if (!data || data.length == 0) {
     return (
       <div>
-        <h2>Solar Wind Speed</h2>
+        <h2>{title}</h2>
         <p>Loading...</p>
       </div>
     );
   }
 
-  const rechartsData = xAxisMeta.map((x, i) => ({
-    ...x,
-    xKey: x.timestamp,
+  const rechartsData = data.map((values, i) => ({
+    index: i,
+    dayName: new Date(values.time).toLocaleDateString(undefined, { weekday: "short" }),
+    hour: new Date(values.time).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
     values: data[i],
   }));
 
@@ -76,7 +74,7 @@ export default function WindChart({ data }: {data: any}) {
             }}
           >
             <span>{linesMeta[key].name}</span>
-            <span>{row.values[key]} km/s</span>
+            <span>{row.values[key]} {unit}</span>
           </div>
         ))}
       </div>
@@ -85,7 +83,7 @@ export default function WindChart({ data }: {data: any}) {
 
   return (
     <ContentBlock>
-      <h2>Solar Wind Speed</h2>
+      <h2>{title}</h2>
 
       <div style={{ height: 400 }}>
         <ResponsiveContainer>
@@ -101,7 +99,7 @@ export default function WindChart({ data }: {data: any}) {
             <XAxis
               dataKey="index"
               type="number"
-              domain={[0, 95]}
+              domain={[0, Math.max(0, rechartsData.length - 1)]}
               ticks={rechartsData
                 .filter((_, i) => i % 6 === 0)
                 .map((d) => d.index)}

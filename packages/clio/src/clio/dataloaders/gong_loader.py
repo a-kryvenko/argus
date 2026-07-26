@@ -1,64 +1,99 @@
-from datetime import datetime, timedelta
-from bs4 import BeautifulSoup
-import requests
-from pathlib import Path
-from urllib.request import urlopen
 import gzip
-import shutil
 import re
+import shutil
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from urllib.parse import urljoin
+from urllib.request import urlopen
+
+import requests
+from bs4 import BeautifulSoup
 
 ARCHIVE_URL = "https://gong.nso.edu/archive/oQR/zqs/"
+LIVE_URL = "https://services.swpc.noaa.gov/products/gong/zqs/"
 
-def fetch_gong(start: datetime, end: datetime, out_dir: Path):
-    out_dir.mkdir(exist_ok=True)
+class GONG_Loader:
+    def load_live(output_file: Path):
+        r = requests.get(LIVE_URL)
+        r.raise_for_status()
 
-    d = start
-    while d <= end:
-        _load_daily_gong(d, out_dir)
-        d += timedelta(days=1)
+        matches = re.findall(
+            r'href="([^"]+\.fits\.gz)"',
+            r.text,
+            flags=re.IGNORECASE,
+        )
 
-def _load_daily_gong(day: datetime, out_dir: Path):
-    y = day.strftime("%Y")
-    y_s = y[2:]
-    m = day.strftime("%m")
-    d = day.strftime("%d")
-    url = f"{ARCHIVE_URL}{y}{m}/mrzqs{y_s}{m}{d}/"
+        if not matches:
+            raise RuntimeError("No .fits.gz files found")
 
-    r = requests.get(url, timeout=60)
-    r.raise_for_status()
+        latest = matches[-1]
+        url = urljoin(LIVE_URL, latest)
 
-    if r.status_code != 200:
-        print("missing:", url)
-        return None
-    
-    soup = BeautifulSoup(r.text, "html.parser")
-    
-    for a in soup.select("table tr td a"):
-        href = a.get("href")
-        if href and href[-8:] == ".fits.gz":
-            _load_fits_file(url + href, out_dir)
-            
+        with TemporaryDirectory() as tmpdir:
+            gz_path = Path(tmpdir) / Path(url).name
 
-def _load_fits_file(url: str, out_dir: Path):
-    gz_path = out_dir / Path(url).name
+            with requests.get(url, stream=True) as r:
+                r.raise_for_status()
+                with open(gz_path, "wb") as f:
+                    shutil.copyfileobj(r.raw, f)
 
-    m = re.search(r"([a-z]+)(\d{2})(\d{2})(\d{2})t(\d{2})(\d{2})", gz_path.name)
-    prefix, yy, mm, dd, hour, minute = m.groups()
+            with gzip.open(gz_path, "rb") as src, open(output_file, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
-    dt = datetime(
-        year=2000 + int(yy),
-        month=int(mm),
-        day=int(dd),
-        hour=int(hour),
-        minute=int(minute),
-    )
+    def load_historical(start_date: datetime, end_date: datetime, output_dir: Path) -> Path:
+        output_dir.mkdir(exist_ok=True)
+        
+        d = start_date
+        while d <= end_date:
+            GONG_Loader._load_daily_gong(d, output_dir)
+            d += timedelta(days=1)
 
-    rounded_hour = dt.replace(minute=0, second=0, microsecond=0)
+    def _load_daily_gong(date: datetime, output_dir: Path) -> bool:
+        y = date.strftime("%Y")
+        y_s = y[2:]
+        m = date.strftime("%m")
+        d = date.strftime("%d")
+        url = f"{ARCHIVE_URL}{y}{m}/mrzqs{y_s}{m}{d}/"
 
-    new_name = f"{prefix}_{rounded_hour:%Y%m%d_%H_00}.fits"
-    out_path = out_dir / new_name
+        r = requests.get(url, timeout=60)
+        r.raise_for_status()
 
-    with urlopen(url) as response:
-        with gzip.GzipFile(fileobj=response) as gz:
-            with open(out_path, "wb") as f_out:
-                shutil.copyfileobj(gz, f_out)
+        if r.status_code != 200:
+            print("missing:", url)
+            return False
+        
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        for a in soup.select("table tr td a"):
+            href = a.get("href")
+            if href and href[-8:] == ".fits.gz":
+                GONG_Loader._load_fits_gz_file(url + href, output_dir)
+
+        return True
+
+
+    def _load_fits_gz_file(url: str, output_dir: Path):
+        gz_path = output_dir / Path(url).name
+
+        m = re.search(r"([a-z]+)(\d{2})(\d{2})(\d{2})t(\d{2})(\d{2})", gz_path.name)
+        prefix, yy, mm, dd, hour, minute = m.groups()
+
+        issue_time = datetime(
+            year=2000 + int(yy),
+            month=int(mm),
+            day=int(dd),
+            hour=int(hour),
+            minute=int(minute),
+            tzinfo=UTC
+        )
+
+        new_name = f"{prefix}_{issue_time:%Y%m%d_%H}_00.fits"
+        out_path = output_dir / new_name
+
+        with (
+            urlopen(url) as response,
+            gzip.GzipFile(fileobj=response) as gz,
+            open(out_path, "wb") as f_out
+        ):
+            shutil.copyfileobj(gz, f_out)

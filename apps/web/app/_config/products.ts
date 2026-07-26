@@ -44,11 +44,11 @@ export const products: ProductConfig[] = [
     variables: [
       {
         key: "bt", label: "Total HMF", unit: "nT", quantile: false,
-        thresholds: [5, 10, 15].map(value => ({ value, label: `Bt ≥ ${value} nT` })),
+        thresholds: [5, 10, 15].map(value => ({ value, label: `≥ ${value} nT` })),
       },
       {
-        key: "southward_bz", label: "Southward Bz", unit: "nT", quantile: false,
-        thresholds: [5, 10, 15].map(value => ({ value, label: `Southward Bz ≥ ${value} nT` })),
+        key: "bs", label: "Southward Bz", unit: "nT", quantile: false,
+        thresholds: [5, 10, 15].map(value => ({ value, label: `≥ ${value} nT` })),
       },
     ],
   },

@@ -1,14 +1,15 @@
-import os
 import csv
+import os
 import re
 import shutil
+from datetime import UTC, datetime
+
 import joblib
 import pandas as pd
-from datetime import datetime, UTC
-
-from common.config import get_config
+from clio.sensors import Sensors
 from common.adapters import forecast_to_dataframe
-from forecast.data_pipelines.live import get_live_observations
+from common.config import get_config
+from common.exceptions import ConfigurationException
 
 DISPLAYED_FORECAST_HORIZON = 96
 
@@ -19,7 +20,7 @@ class ForecastDirector:
         models_registry = (config.models_registry["models"][forecast_service_name.registry_name] or None)
 
         if models_registry is None:
-            raise Exception(f"Not found registry for {forecast_service_name.registry_name}")
+            raise ConfigurationException(f"Not found registry for {forecast_service_name.registry_name}")
         
         forecast_file_path = config.workdir / models_registry["forecast_path"]
         
@@ -42,32 +43,26 @@ class ForecastDirector:
         models_registry = (config.models_registry["models"][forecast_service_name.registry_name] or None)
 
         if models_registry is None:
-            raise Exception(f"Not found registry for {forecast_service_name.registry_name}")
+            raise ConfigurationException(f"Not found registry for {forecast_service_name.registry_name}")
         
         forecast_file_path = config.workdir / models_registry["forecast_path"]
 
-        models = dict()
-        if models_registry["active_versions"] is not None:
-            for k, name in models_registry["active_versions"].items():
-                p = config.workdir / ("data/models/" + name + ".joblib")
+        model_batch_path = config.workdir / ("data/models/" + models_registry["model"] + ".joblib")
 
-                if not p.is_file():
-                    raise Exception(f"{p} not exists")
-                    
-                models[k] = joblib.load(p)
-            
-        if len(models) == 0:
-            raise Exception(f"Not found forecast models for {forecast_service_name.registry_name}")
+        if not model_batch_path.is_file():
+            raise ConfigurationException(f"{model_batch_path} not exists")
+
+        model_batch = joblib.load(model_batch_path)
         
-        forecast_service = forecast_service_name(models)
+        forecast_service = forecast_service_name(model_batch)
 
         if observations is None:
-            observations = get_live_observations()
+            observations = Sensors.get_live_observations_frame()
 
         self._build_forecast(forecast_file_path, forecast_service, observations)
     
     def refresh_forecasts(self, services: list):
-        observations = get_live_observations()
+        observations = Sensors.get_live_observations_frame()
         for service in services:
             self.refresh_forecast(service, observations)
 

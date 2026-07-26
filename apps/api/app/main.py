@@ -1,24 +1,19 @@
+import os
+
+import sentry_sdk
+from common.config import get_config
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.schemas.response import error_response
-
-import sentry_sdk
-
 from app.routers.auth import router as auth_router
 from app.routers.forecasts import router as forecasts_router
-from app.routers.public.observations import router as observations_router
-from app.routers.private.probability import router as private_probability_router
-from app.routers.private.risk import router as private_risk_router
-from app.routers.private.model import router as private_model_router
 from app.routers.healthcheck import router as healthcheck_router
-
-
-from common.config import get_config
-
-import os
+from app.routers.private.model import router as private_model_router
+from app.routers.private.risk import router as private_risk_router
+from app.routers.public.observations import router as observations_router
+from app.schemas.response import error_response
 
 config = get_config()
 
@@ -75,6 +70,5 @@ app.include_router(healthcheck_router)
 app.include_router(forecasts_router)
 app.include_router(observations_router)
 
-app.include_router(private_probability_router)
 app.include_router(private_risk_router)
 app.include_router(private_model_router)

@@ -12,7 +12,6 @@ class QuantileForecast(BaseModel):
 
 class BinaryForecast(BaseModel):
     threshold: float
-    operator: Literal["gte"] = "gte"
     probability: float
 
 

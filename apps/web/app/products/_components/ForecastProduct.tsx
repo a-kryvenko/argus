@@ -44,7 +44,7 @@ export default function ForecastProduct({ product }: { product: ProductConfig })
   }, [product]);
 
   return (
-    <main className="container color-default">
+    <main className="container color-default ">
       <h1 className="heading">{product.title}</h1>
       <p className="product-description">{product.description}</p>
 
@@ -57,7 +57,7 @@ export default function ForecastProduct({ product }: { product: ProductConfig })
           return <div className="state-message" key={variable.key}>{variable.label} forecast is not ready.</div>;
         }
         return (
-          <section key={variable.key}>
+          <section key={variable.key} className="forecast-section">
             {variable.quantile && (
               <WindChart
                 data={quantileData(forecast, variable)}

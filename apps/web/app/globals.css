@@ -198,3 +198,7 @@ a {
   margin-top: 36px;
   text-align: center;
 }
+
+.forecast-section:not(:first-child) {
+  margin-top: 24px;
+}

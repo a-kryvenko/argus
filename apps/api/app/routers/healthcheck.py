@@ -1,5 +1,5 @@
-from fastapi import APIRouter
 from app.schemas.response import success_response
+from fastapi import APIRouter
 
 router = APIRouter(tags=["ping"])
 

@@ -10,7 +10,14 @@ dependencies = [
   "lightgbm>=4.6.0",
   "joblib>=1.5.3",
   "pyarrow>=24.0.0",
+  "scipy>=1.13",
+  "clio",
+  "common",
 ]
 
 [tool.setuptools.package-dir]
 "" = "src"
+
+[tool.uv.sources]
+clio = { workspace = true, editable = true }
+common = { workspace = true, editable = true }

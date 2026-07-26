@@ -12,13 +12,23 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df["bz_over_bt"] = np.minimum(df["bz"] / df["bt"], 1)
     df["dynamic_pressure"] = df["n"] * df["v"]**2
 
-    cols = ["v", "bz", "bt", "n", "t", "dynamic_pressure", "kp"]
-    windows = [3, 6]
+    feature_windows = {
+        "v": [3, 6, 168],
+        "bz": [3, 6, 168],
+        "bt": [3, 6, 168],
+        "n": [3, 6, 168],
+        "t": [3, 6, 168],
+        "dynamic_pressure": [3, 6, 168],
+        "kp": [3, 6, 168],
+        "ap": [3, 6, 168],
+        "dst": [3, 6, 168],
+    }
 
-    for col in cols:
+    for col, windows in feature_windows.items():
         for w in windows:
-            mean_col = f"{col}_mean_{w}h"
-            delta_col = f"{col}_delta_{w}h"
+            suffix = "7d" if w == 168 else f"{w}h"
+            mean_col = f"{col}_mean_{suffix}"
+            delta_col = f"{col}_delta_{suffix}"
 
             df[mean_col] = df[col].rolling(window=w, min_periods=1).mean()
 

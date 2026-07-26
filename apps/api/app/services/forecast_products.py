@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
-
 from app.schemas.forecast import (
     BinaryForecast,
     Forecast,
@@ -30,7 +29,6 @@ class Variable:
     source_prefix: str
     thresholds: tuple[float, ...] = ()
     quantiles: bool = False
-    threshold_marker: str = "ge_"
 
 
 @dataclass(frozen=True)
@@ -43,25 +41,28 @@ class Product:
 
 PRODUCTS = {
     "solar-wind-speed": Product("solar-wind-speed", "public", 96, (
-        Variable("v", "solar_wind_speed", "km/s", "v", (450, 500, 600), True),
+        Variable("v", "plasma_speed_quantile", "km/s", "v", quantiles=True),
+        Variable("v", "plasma_speed_threshold", "km/s", "v", (450, 500, 600)),
     )),
     "solar-wind-density": Product("solar-wind-density", "public", 96, (
-        Variable("n", "plasma_density", "cm^-3", "n", quantiles=True),
+        Variable("n", "plasma_density_quantile", "cm^-3", "n", quantiles=True),
     )),
     "hmf": Product("hmf", "private", 48, (
-        Variable("bt", "bt", "nT", "bt", (5, 10, 15)),
-        Variable("southward_bz", "southward_bz", "nT", "southward_bz", (5, 10, 15)),
+        Variable("bt", "hmf_total_threshold", "nT", "bt", (5, 10, 15)),
+        Variable("bs", "hmf_southward_threshold", "nT", "bs", (5, 10, 15)),
     )),
-    "solar-radiation": Product("solar-radiation", "private", 48, tuple(
-        Variable(name, name, "index" if name != "f10_7" else "sfu", name, quantiles=True)
-        for name in ("f10_7", "s10", "m10", "y10")
+    "solar-radiation": Product("solar-radiation", "private", 48, (
+        Variable("f10_7", "f10_7_quantile", "sfu", "f107", quantiles=True),
+        Variable("s10", "s10_quantile", "index", "s10", quantiles=True),
+        Variable("m10", "m10_quantile", "index", "m10", quantiles=True),
+        Variable("y10", "y10_quantile", "index", "y10", quantiles=True),
     )),
     "geomagnetic-activity": Product("geomagnetic-activity", "public", 48, (
-        Variable("kp", "kp", "index", "kp", (4, 5, 6), threshold_marker=""),
-        Variable("ap", "ap", "index", "ap", quantiles=True),
+        Variable("kp", "kp_threshold", "index", "kp", (4, 5, 6)),
+        Variable("ap", "ap_quantile", "index", "ap", quantiles=True),
     )),
     "dst": Product("dst", "public", 48, (
-        Variable("dst", "dst", "nT", "dst", quantiles=True),
+        Variable("dst", "dst_quantile", "nT", "dst", quantiles=True),
     )),
 }
 
@@ -94,14 +95,14 @@ def _required_columns(variable: Variable) -> set[str]:
     if variable.quantiles:
         columns.update(f"{variable.source_prefix}_q{quantile}" for quantile in (10, 50, 90))
     columns.update(
-        f"p_{variable.source_prefix}_{variable.threshold_marker}{threshold:g}"
+        f"p_{variable.source_prefix}_ge_{threshold:g}"
         for threshold in variable.thresholds
     )
     return columns
 
 
-def _load_variable_frames(product: Product) -> dict[str, pd.DataFrame]:
-    frames = {}
+def _load_variable_frames(product: Product) -> list[tuple[Variable, pd.DataFrame]]:
+    frames = []
     cache: dict[Path, pd.DataFrame] = {}
     for variable in product.variables:
         path = _forecast_path(variable)
@@ -111,7 +112,7 @@ def _load_variable_frames(product: Product) -> dict[str, pd.DataFrame]:
             cache[path] = pd.read_csv(path, parse_dates=["issue_time", "valid_time"])
         frame = cache[path]
         if not frame.empty and _required_columns(variable).issubset(frame.columns):
-            frames[variable.name] = frame
+            frames.append((variable, frame))
     return frames
 
 
@@ -130,11 +131,24 @@ def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
     binary = []
     for threshold in variable.thresholds:
         probability = _number(
-            row[f"p_{variable.source_prefix}_{variable.threshold_marker}{threshold:g}"]
+            row[f"p_{variable.source_prefix}_ge_{threshold:g}"]
         )
         if probability is not None:
             binary.append(BinaryForecast(threshold=threshold, probability=probability))
     return VariableForecast(unit=variable.unit, continuous=continuous, binary=binary)
+
+
+def _merge_variable_forecasts(
+    current: VariableForecast | None,
+    addition: VariableForecast,
+) -> VariableForecast:
+    if current is None:
+        return addition
+    return VariableForecast(
+        unit=current.unit,
+        continuous=current.continuous or addition.continuous,
+        binary=[*current.binary, *addition.binary],
+    )
 
 
 def load_forecast(product: Product) -> Forecast:
@@ -142,35 +156,40 @@ def load_forecast(product: Product) -> Forecast:
     if not frames:
         raise ArtifactNotReadyError(product.target)
 
-    variables = {variable.name: variable for variable in product.variables}
-    base_frame = next(iter(frames.values()))
+    base_frame = frames[0][1]
     base_frame = base_frame[
         base_frame["lead_hours"] <= product.max_horizon_hours
     ]
     if base_frame.empty:
         raise ArtifactNotReadyError(product.target)
     issue_time = base_frame.iloc[0]["issue_time"]
-    rows_by_variable = {
-        name: {int(row["lead_hours"]): row for row in frame.to_dict("records")}
-        for name, frame in frames.items()
+    rows_by_source = [
+        (
+            variable,
+            {int(row["lead_hours"]): row for row in frame.to_dict("records")},
+        )
+        for variable, frame in frames
         if frame.iloc[0]["issue_time"] == issue_time
-    }
+    ]
 
     predictions = []
     for base_row in base_frame.to_dict("records"):
         lead_hours = int(base_row["lead_hours"])
         values = {}
-        for name, rows in rows_by_variable.items():
+        for variable, rows in rows_by_source:
             row = rows.get(lead_hours)
             if row is not None:
-                values[name] = _variable_forecast(variables[name], row)
+                values[variable.name] = _merge_variable_forecasts(
+                    values.get(variable.name),
+                    _variable_forecast(variable, row),
+                )
         predictions.append(ForecastPoint(
             valid_time=base_row["valid_time"],
             lead_hours=lead_hours,
             variables=values,
         ))
 
-    available = [variable.name for variable in product.variables if variable.name in rows_by_variable]
+    available = list(dict.fromkeys(variable.name for variable, _ in rows_by_source))
     return Forecast(
         target=product.target,
         issue_time=issue_time,
@@ -246,7 +265,11 @@ def load_metrics(product: Product) -> ForecastMetrics:
         continuous = _continuous_metrics(variable, product.max_horizon_hours)
         binary = _binary_metrics(variable, product.max_horizon_hours)
         if continuous is not None or binary:
-            variables[variable.name] = VariableMetrics(continuous=continuous, binary=binary)
+            current = variables.get(variable.name)
+            variables[variable.name] = VariableMetrics(
+                continuous=(current.continuous if current else None) or continuous,
+                binary=[*(current.binary if current else []), *binary],
+            )
     if not variables:
         raise ArtifactNotReadyError(product.target)
     return ForecastMetrics(target=product.target, variables=variables)

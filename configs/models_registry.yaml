@@ -1,70 +1,63 @@
 models:
-  solar_wind_speed:
-    active_versions:
-      quantile: plasma-speed-v2
-      threshold: plasma-speed-threshold-lgbm-v2
-    forecast_path: data/forecast/solar-wind/live.csv
-    metrics: data/metrics/solar-wind/speed
-
-  plasma_density:
-    active_versions:
-      quantile: plasma-density-v2
-    forecast_path: data/forecast/solar-wind/live.csv
-    metrics: data/metrics/solar-wind/density
-
-  kp:
-    active_versions:
-      threshold: kp-lgbm-v2
-    forecast_path: data/forecast/kp/live.csv
-    metrics: data/metrics/kp
-
-  ap:
-    active_versions:
-      quantile: ap-v2
-    forecast_path: data/forecast/ap/live.csv
-    metrics: data/metrics/ap
-
-  dst:
-    active_versions:
-      quantile: dst-v2
-    forecast_path: data/forecast/dst/live.csv
-    metrics: data/metrics/dst
-
-  bt:
-    active_versions:
-      threshold: bt-v2
-    forecast_path: data/forecast/hmf/live.csv
-    metrics: data/metrics/hmf/bt
+  plasma_speed_quantile:
+    model: argus-plasma-speed-q-v2
+    forecast_path: data/forecast/plasma/speed_quantile.csv
+    metrics: data/metrics/plasma/speed_quantile
   
-  southward_bz:
-    active_versions:
-      threshold: south-bz-v2
-    forecast_path: data/forecast/hmf/live.csv
-    metrics: data/metrics/hmf/southward_bz
+  plasma_speed_threshold:
+    model: argus-plasma-speed-t-v2
+    forecast_path: data/forecast/plasma/speed_proba.csv
+    metrics: data/metrics/plasma/speed_proba
 
-  f10_7:
-    active_versions:
-      quantile: f10_7-v1
-    forecast_path: data/forecast/f10_7/live.csv
-    metrics: data/metrics/f10_7
+  plasma_density_quantile:
+    model: argus-plasma-den-q-v2
+    forecast_path: data/forecast/plasma/density_quantile.csv
+    metrics: data/metrics/plasma/density_quantile
 
-  s10:
-    active_versions:
-      quantile: s10-v1
-    forecast_path: data/forecast/s10/live.csv
-    metrics: data/metrics/s10
+  kp_threshold:
+    model: argus-kp-t-v2
+    forecast_path: data/forecast/geomagnetic/kp_proba.csv
+    metrics: data/metrics/geomagnetic/kp_proba
 
-  m10:
-    active_versions:
-      quantile: m10-v1
-    forecast_path: data/forecast/m10/live.csv
-    metrics: data/metrics/m10
+  ap_quantile:
+    model: argus-ap-q-v2
+    forecast_path: data/forecast/geomagnetic/ap_quantile.csv
+    metrics: data/metrics/geomagnetic/ap_quantile
 
-  y10:
-    active_versions:
-      quantile: y10-v1
-    forecast_path: data/forecast/y10/live.csv
-    metrics: data/metrics/y10
+  dst_quantile:
+    model: argus-dst-q-v2
+    forecast_path: data/forecast/geomagnetic/dst_quantile.csv
+    metrics: data/metrics/geomagnetic/dst_quantile
+
+  hmf_total_threshold:
+    model: argus-bt-t-v2
+    forecast_path: data/forecast/hmf/total_proba.csv
+    metrics: data/metrics/hmf/total_proba
+  
+  hmf_southward_threshold:
+    model: argus-bs-t-v2
+    forecast_path: data/forecast/hmf/southward_proba.csv
+    metrics: data/metrics/hmf/southward_proba
+
+  f10_7_quantile:
+    model: argus-f10_7-q-v1
+    forecast_path: data/forecast/radiation/f10_7_quantile.csv
+    metrics: data/metrics/radiation/f10_7_quantile
+  
+  s10_quantile:
+    model: argus-s10-q-v1
+    forecast_path: data/forecast/radiation/s10_quantile.csv
+    metrics: data/metrics/radiation/s10_quantile
+  
+  m10_quantile:
+    model: argus-m10-q-v1
+    forecast_path: data/forecast/radiation/m10_quantile.csv
+    metrics: data/metrics/radiation/m10_quantile
+  
+  y10_quantile:
+    model: argus-y10-q-v1
+    forecast_path: data/forecast/radiation/y10_quantile.csv
+    metrics: data/metrics/radiation/y10_quantile
 
   dtc:
     active_versions: null

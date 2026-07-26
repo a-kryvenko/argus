@@ -294,6 +294,7 @@ dependencies = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "forecast" },
+    { name = "forecast-core" },
     { name = "h5netcdf" },
     { name = "h5py" },
     { name = "hdf5plugin" },
@@ -343,6 +344,7 @@ requires-dist = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "forecast", editable = "packages/forecast" },
+    { name = "forecast-core", editable = "packages/forecast-core" },
     { name = "h5netcdf", specifier = ">=1.8.1" },
     { name = "h5py" },
     { name = "hdf5plugin", specifier = ">=6.0.0" },
@@ -813,10 +815,18 @@ version = "0.1.0"
 source = { editable = "packages/clio" }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "cdflib" },
+    { name = "numpy" },
+    { name = "pandas" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "beautifulsoup4", specifier = ">=4.15.0" }]
+requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.15.0" },
+    { name = "cdflib", specifier = ">=1.1.0" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pandas", specifier = ">=2.2" },
+]
 
 [[package]]
 name = "cloudpickle"
@@ -1371,6 +1381,8 @@ version = "0.1.0"
 source = { editable = "packages/forecast" }
 dependencies = [
     { name = "cdflib" },
+    { name = "clio" },
+    { name = "common" },
     { name = "joblib" },
     { name = "lightgbm" },
     { name = "numpy" },
@@ -1378,11 +1390,14 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pyyaml" },
     { name = "scikit-learn" },
+    { name = "scipy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "cdflib", specifier = ">=1.1.0" },
+    { name = "clio", editable = "packages/clio" },
+    { name = "common", editable = "packages/common" },
     { name = "joblib", specifier = ">=1.5.3" },
     { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
@@ -1390,12 +1405,13 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
+    { name = "scipy", specifier = ">=1.13" },
 ]
 
 [[package]]
 name = "forecast-core"
 version = "0.1.1"
-source = { virtual = "packages/forecast-core" }
+source = { editable = "packages/forecast-core" }
 dependencies = [
     { name = "astropy" },
     { name = "numpy" },

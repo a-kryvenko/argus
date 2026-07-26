@@ -1,6 +1,6 @@
 import pandas as pd
-
 from common.config import get_config
+
 
 def wind_speed_metrics() -> dict|None:
     config = get_config()

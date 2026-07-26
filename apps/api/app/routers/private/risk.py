@@ -1,6 +1,5 @@
-from fastapi import APIRouter
-
 from app.schemas.response import error_response
+from fastapi import APIRouter
 
 router = APIRouter(prefix="/private/risk", tags=["risk"])
 

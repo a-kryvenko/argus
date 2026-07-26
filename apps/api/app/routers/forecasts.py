@@ -1,7 +1,5 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
-
 from app.schemas.forecast import Forecast
 from app.schemas.metrics import ForecastMetrics
 from app.schemas.response import ApiResponse, success_response
@@ -12,7 +10,7 @@ from app.services.forecast_products import (
     load_forecast,
     load_metrics,
 )
-
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(tags=["forecasts"])
 

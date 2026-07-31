@@ -11,6 +11,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 COPY apps/api/pyproject.toml apps/api/uv.lock ./
 
+COPY packages/clio ./../../packages/clio
 COPY packages/common ./../../packages/common
 COPY packages/forecast ./../../packages/forecast
 

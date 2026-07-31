@@ -23,10 +23,11 @@ commit_and_push_if_needed() {
   if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
     git -C "$repo_dir" add -A
     git -C "$repo_dir" commit -m "$msg"
-    git -C "$repo_dir" push origin HEAD
   else
     echo "Nothing to commit in $repo_dir"
   fi
+
+  git -C "$repo_dir" push origin HEAD
 }
 
 echo "Syncing models and metrics..."

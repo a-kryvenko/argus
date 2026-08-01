@@ -6,6 +6,11 @@ import pandas as pd
 from common.adapters import observations_to_dataframe
 from common.schemas.forecast import Forecast, ForecastPoint
 from common.schemas.observation import Observation
+from forecast.quantiles import (
+    apply_quantile_calibration,
+    predict_overlapping_quantiles,
+    uses_overlapping_buckets,
+)
 
 
 class DefaultForecastService(ABC):
@@ -83,6 +88,9 @@ class DefaultForecastService(ABC):
         return frame
 
     def _apply_lead_buckets(self, df, lead_buckets):
+        if uses_overlapping_buckets(lead_buckets):
+            return
+
         bins = [0] + [upper for upper, _ in lead_buckets]
         labels = [label for _, label in lead_buckets]
 
@@ -140,14 +148,36 @@ class QuantileForecastService(DefaultForecastService):
         models: dict,
         features: list
     ) -> pd.DataFrame:
-        for (lead_bucket, model_name), model in models.items():
-            mask = frame["lead_bucket"].eq(lead_bucket)
+        buckets = self.models_bundle["buckets"]
 
-            if mask.any():
-                output_column = f"{self.target_name}_{model_name}"
-                frame.loc[mask, output_column] = model.predict(
-                    frame.loc[mask, features]
+        if uses_overlapping_buckets(buckets):
+            predictions = predict_overlapping_quantiles(
+                frame=frame,
+                models=models,
+                features=features,
+                buckets=buckets,
+            )
+            calibration = self.models_bundle.get("calibration")
+            if calibration is not None:
+                predictions = apply_quantile_calibration(
+                    predictions=predictions,
+                    lead_hours=frame["lead_hours"].to_numpy(),
+                    calibration=calibration,
                 )
+
+            for model_name in ["q10", "q50", "q90"]:
+                frame.loc[:, f"{self.target_name}_{model_name}"] = predictions[
+                    model_name
+                ].to_numpy()
+        else:
+            for (lead_bucket, model_name), model in models.items():
+                mask = frame["lead_bucket"].eq(lead_bucket)
+
+                if mask.any():
+                    output_column = f"{self.target_name}_{model_name}"
+                    frame.loc[mask, output_column] = model.predict(
+                        frame.loc[mask, features]
+                    )
 
         quantile_columns = [
             self._col_name(10),

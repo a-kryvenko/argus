@@ -113,6 +113,9 @@ jobs:
             mv ./.deploy/cronjobs.txt ./
             rm -rf ./.deploy
 
+            crontab cronjobs.txt
+            rm cronjobs.txt
+
             echo "$DOCKERHUB_TOKEN" | docker login \
               --username "$DOCKERHUB_LOGIN" \
               --password-stdin
@@ -123,5 +126,3 @@ jobs:
 
             docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_forecast.py
 
-            crontab cronjobs.txt
-            rm cronjobs.txt

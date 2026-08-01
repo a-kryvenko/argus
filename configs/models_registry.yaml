@@ -1,6 +1,6 @@
 models:
   plasma_speed_quantile:
-    model: argus-plasma-speed-q-v2
+    model: argus-plasma-speed-q-v2-smooth
     forecast_path: data/forecast/plasma/speed_quantile.csv
     metrics: data/metrics/plasma/speed_quantile
   

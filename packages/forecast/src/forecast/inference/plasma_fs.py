@@ -22,4 +22,11 @@ class SWSpeedProbaFS(ThresholdForecastService):
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
         df = build_features(raw_observations_frame)
         return df
-    
+
+class SWDensityFS(QuantileForecastService):
+    registry_name: str|None = "plasma_density_quantile"
+    target_name: str|None = "n"
+
+    def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
+        df = build_features(raw_observations_frame)
+        return df

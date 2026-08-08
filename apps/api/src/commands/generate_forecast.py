@@ -11,6 +11,7 @@ def main():
         ForecastServiceRegistry.get(ForecastService.DST_QUANTILE),
         ForecastServiceRegistry.get(ForecastService.PLASMA_SPEED_QUANTILE),
         ForecastServiceRegistry.get(ForecastService.PLASMA_SPEED_THRESHOLD),
+        ForecastServiceRegistry.get(ForecastService.PLASMA_DENSITY_QUANTILE),
         ForecastServiceRegistry.get(ForecastService.HMF_TOTAL_THRESHOLD),
         ForecastServiceRegistry.get(ForecastService.HMF_SOUTH_THRESHOLD),
     ])

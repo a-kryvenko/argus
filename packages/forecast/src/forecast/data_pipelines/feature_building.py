@@ -22,6 +22,7 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
         "kp": [3, 6, 168],
         "ap": [3, 6, 168],
         "dst": [3, 6, 168],
+        "f10_7": [3, 6, 168],
     }
 
     for col, windows in feature_windows.items():

@@ -1,16 +1,17 @@
 from enum import Enum
-from typing import Any
 
 from forecast.inference._forecast_service import DefaultForecastService
 from forecast.inference.geomagnetic_fs import APFS, DstFS, KPProbaFS
 from forecast.inference.hmf_fs import HMFSouthProbaFS, HMFTotalProbaFS
-from forecast.inference.plasma_fs import SWSpeedFS, SWSpeedProbaFS
+from forecast.inference.plasma_fs import SWDensityFS, SWSpeedFS, SWSpeedProbaFS
 from forecast.inference.radiation_fs import F107FS, M10FS, S10FS, Y10FS
 
 
 class ForecastService(Enum):
     PLASMA_SPEED_QUANTILE = SWSpeedFS
     PLASMA_SPEED_THRESHOLD = SWSpeedProbaFS
+
+    PLASMA_DENSITY_QUANTILE = SWDensityFS
 
     KP_INDEX_THRESHOLD = KPProbaFS
     AP_INDEX_QUANTILE = APFS

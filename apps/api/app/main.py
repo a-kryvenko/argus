@@ -1,4 +1,5 @@
 import os
+import time
 
 import sentry_sdk
 from common.config import get_config
@@ -72,3 +73,11 @@ app.include_router(observations_router)
 
 app.include_router(private_risk_router)
 app.include_router(private_model_router)
+
+@app.middleware("http")
+async def add_processing_time_header(request: Request, call_next):
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    process_time = time.perf_counter() - start_time
+    response.headers["X-Process-Time"] = str(process_time)
+    return response

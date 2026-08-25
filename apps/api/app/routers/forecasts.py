@@ -9,6 +9,7 @@ from app.services.forecast_products import (
     get_product,
     load_forecast,
     load_metrics,
+    PRODUCTS
 )
 from fastapi import APIRouter, HTTPException
 
@@ -21,9 +22,10 @@ def _product(target: str, visibility: str):
     except ProductNotFoundError:
         raise HTTPException(status_code=404, detail="Forecast product not found")
 
+TargetType = Literal[*PRODUCTS.keys()]
 
 @router.get("/{visibility}/forecasts/{target}", response_model=ApiResponse[Forecast])
-def forecast(visibility: Literal["public", "private"], target: str):
+def forecast(visibility: Literal["public", "private"], target: TargetType):
     try:
         return success_response(load_forecast(_product(target, visibility)))
     except ArtifactNotReadyError:

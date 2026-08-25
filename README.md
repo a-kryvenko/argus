@@ -5,7 +5,7 @@
 
 ## Overview
 
-Argus Sunwatch is a software system designed to analyze solar activity data and provide **risk-oriented insights on potential impacts to terrestrial infrastructure**, including electrical power systems.
+[Argus Sunwatch](https://argussun.com/) is a software system designed to analyze solar activity data and provide **risk-oriented insights on potential impacts to terrestrial infrastructure**, including electrical power systems.
 
 
 The project focuses on building a **decision-support framework** that combines real-time solar observations with historical event analysis to produce actionable risk indicators for operational awareness.

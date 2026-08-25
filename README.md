@@ -33,9 +33,6 @@ The project focuses on building a **decision-support framework** that combines r
 
 ---
 
-> Disclaimer: The project is in development. Some features are not yet working, and the forecast accuracy is moderate.
-
----
 
 ## System Architecture
 

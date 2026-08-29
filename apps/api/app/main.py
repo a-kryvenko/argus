@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import os
 import time
 
@@ -8,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.db.session import dispose_engine
 from app.routers.auth import router as auth_router
 from app.routers.forecasts import router as forecasts_router
 from app.routers.healthcheck import router as healthcheck_router
@@ -18,6 +20,12 @@ from app.schemas.response import error_response
 
 config = get_config()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await dispose_engine()
+
 if not config.debug:
     sentry_sdk.init(
     dsn=os.getenv("SENTRY_COLLECT_POINT"),
@@ -27,7 +35,8 @@ if not config.debug:
 app = FastAPI(
     title="ARGUS SUNWATCH Public API",
     debug=config.debug,
-    root_path="/api/v1"
+    root_path="/api/v1",
+    lifespan=lifespan,
 )
 
 if not config.debug:

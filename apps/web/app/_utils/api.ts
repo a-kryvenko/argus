@@ -75,7 +75,7 @@ export class ApiError extends Error {
 }
 
 function getApiUrl(path: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_API_POINT?.replace(/\/$/, "") ?? "";
+  const baseUrl = "/api/v1";
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
   return `${baseUrl}${normalizedPath}`;

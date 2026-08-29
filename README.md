@@ -5,7 +5,7 @@
 
 ## Overview
 
-[Argus Sunwatch](https://argussun.com/) is a software system designed to analyze solar activity data and provide **risk-oriented insights on potential impacts to terrestrial infrastructure**, including electrical power systems.
+[Argus Sunwatch](https://argussun.com/) is a software system designed to analyze solar activity data and provide solar activity forecast and **risk-oriented insights on potential impacts to terrestrial infrastructure**, including electrical power systems.
 
 
 The project focuses on building a **decision-support framework** that combines real-time solar observations with historical event analysis to produce actionable risk indicators for operational awareness.
@@ -102,7 +102,7 @@ It **should not be used as the sole basis for operational decisions** in critica
 ## Impact intelligence
 
 - Power grid: input grid latitude + substation coords -> GIC risk.
-- Satellite: input orbit altitude + inclination -> proton upset %.
+- Satellite: input orbit altitude + inclination -> drag risk.
 - GPS: simple TEC formula.
 - Aviation: dose rate at FL350 or input route waypoints -> dose rate.
 
@@ -116,6 +116,29 @@ It **should not be used as the sole basis for operational decisions** in critica
 - Introduce anomaly detection
 - Refine impact intelligence models
 - Compare accuracy with [helioforecast](https://helioforecast.space/solarwind)
+
+---
+
+## Local development
+
+PostgreSQL and Redis run in Docker, while the API and frontend run on the host
+with their regular development servers and hot reload.
+
+```bash
+docker compose up -d
+pnpm run dev
+```
+
+Check the infrastructure status or stop it with:
+
+```bash
+docker compose ps
+docker compose down
+```
+
+The `postgres_data` and `redis_data` volumes preserve local data between
+container restarts. Use `docker compose down --volumes` only when the local
+database and Redis data should be deleted.
 
 ---
 

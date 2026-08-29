@@ -92,5 +92,5 @@ export const products: ProductConfig[] = [
 export const productsBySlug = Object.fromEntries(products.map(product => [product.slug, product]));
 
 export function productApiPath(product: ProductConfig, suffix = "") {
-  return `/api/v1/${product.visibility}/forecasts/${product.apiTarget}${suffix}`;
+  return `/${product.visibility}/forecasts/${product.apiTarget}${suffix}`;
 }

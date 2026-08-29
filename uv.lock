@@ -818,6 +818,7 @@ dependencies = [
     { name = "cdflib" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -826,6 +827,7 @@ requires-dist = [
     { name = "cdflib", specifier = ">=1.1.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
+    { name = "requests", specifier = ">=2.32" },
 ]
 
 [[package]]

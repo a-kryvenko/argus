@@ -4,16 +4,26 @@ services:
     container_name: argusForecast
     restart: unless-stopped
     tty: true
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DB_HOST: postgres
     expose:
       - "8000"
     volumes:
-      - ./.env:/var/www/.env:ro
       - ./configs:/var/www/configs:ro
       - ./data:/var/www/data
       - ./log/api:/var/www/log
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       application:
-  
+      backend:
+
   frontend:
     image: andriykryvenko/argus-frontend:latest
     container_name: argusFrontend
@@ -22,13 +32,42 @@ services:
     expose:
       - "3000"
     volumes:
-      - ./.env:/var/www/.env:ro
-      - ./.env:/var/www/apps/web/.env:ro
       - ./log/frontend:/var/www/log
     depends_on:
       - api
     networks:
       application:
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      backend:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      backend:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   nginx:
     image: nginx:stable-alpine
@@ -61,8 +100,6 @@ services:
     container_name: argusAlloy
     restart: unless-stopped
     tty: true
-    ports:
-      - "12345:12345"
     environment:
       - LOKI_MONITORING_ENDPOINT=${LOKI_MONITORING_ENDPOINT}
       - PROMETHEUS_MONITORING_ENDPOINT=${PROMETHEUS_MONITORING_ENDPOINT}
@@ -87,10 +124,16 @@ services:
     depends_on:
       - nginx
 
+volumes:
+  postgres_data:
+  redis_data:
+
 networks:
   nginx-proxy-network:
     external: true
   frontserver:
     driver: bridge
   application:
+    driver: bridge
+  backend:
     driver: bridge

@@ -15,7 +15,7 @@ export default function Forecast() {
 
   const loadPlasmaForecast = useCallback(async () => {
     try {
-      const forecast = await apiRequest<ForecastData>("/api/v1/public/forecasts/solar-wind-speed");
+      const forecast = await apiRequest<ForecastData>("/public/forecasts/solar-wind-speed");
       setWindChartData(prepareWindChartData(forecast.predictions));
       setWindProbabilityData(preparePlasmaHeatmapData(forecast.predictions));
     } catch (err) {
@@ -27,7 +27,7 @@ export default function Forecast() {
 
   const loadKpRiskForecast = useCallback(async () => {
     try {
-      const forecast = await apiRequest<ForecastData>("/api/v1/public/forecasts/geomagnetic-activity");
+      const forecast = await apiRequest<ForecastData>("/public/forecasts/geomagnetic-activity");
       setKpRiskData(prepareKpHeatmapData(forecast.predictions));
     } catch (err) {
       console.log(err);

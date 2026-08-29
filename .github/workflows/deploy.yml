@@ -88,7 +88,7 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
-          source: ".deploy/docker-compose.yml,.deploy/nginx,.deploy/alloy,.deploy/nginx-proxy-up.sh,configs"
+          source: ".deploy/docker-compose.yml,.deploy/cronjobs.txt,.deploy/nginx,.deploy/alloy,.deploy/nginx-proxy-up.sh,configs"
           target: "/var/www"
       
       
@@ -103,6 +103,8 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           envs: DOCKERHUB_LOGIN,DOCKERHUB_TOKEN
           script: |
+            set -eu
+
             cd /var/www
             mkdir -p log/nginx log/frontend log/api data models metrics nginx nginx/templates alloy configs
             mv ./.deploy/docker-compose.yml ./
@@ -119,10 +121,12 @@ jobs:
             echo "$DOCKERHUB_TOKEN" | docker login \
               --username "$DOCKERHUB_LOGIN" \
               --password-stdin
+            
+            export COMPOSE_ENV_FILES=.env,.env.local
 
+            docker compose config --quiet
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
 
             docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_forecast.py
-

@@ -144,10 +144,10 @@ database and Redis data should be deleted.
 
 ## Author
 
-Andriy Kryvenko
+Andrii Kryvenko
 
 
-Software Systems Architect | Cybersecurity & Infrastructure Specialist
+Senior Software Engineer | Backend, Platform & Reliability
 
 ---
 

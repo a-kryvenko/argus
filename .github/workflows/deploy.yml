@@ -129,4 +129,6 @@ jobs:
             docker compose up -d --remove-orphans
             docker image prune -f
 
+            docker compose run --rm api .venv/bin/alembic upgrade head
+
             docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_forecast.py

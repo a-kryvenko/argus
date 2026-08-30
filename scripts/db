@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname -- "$SCRIPT_DIR")"
+API_DIR="$PROJECT_DIR/apps/api"
+
+UV_ARGS=(--project "$API_DIR")
+
+for env_file in "$PROJECT_DIR/.env" "$PROJECT_DIR/.env.local"; do
+  if [[ -f "$env_file" ]]; then
+    UV_ARGS+=(--env-file "$env_file")
+  fi
+done
+
+exec uv run "${UV_ARGS[@]}" alembic -c "$API_DIR/alembic.ini" "$@"

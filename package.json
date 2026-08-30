@@ -6,6 +6,10 @@
     "dev": "turbo run dev --concurrency 4",
     "dev:api": "turbo run api:dev",
     "dev:web": "turbo run dev --filter=web",
+    "db:migrate": "./scripts/db upgrade head",
+    "db:current": "./scripts/db current",
+    "db:rollback": "./scripts/db downgrade -1",
+    "db:revision": "./scripts/db revision --autogenerate -m",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"

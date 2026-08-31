@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 
 import joblib
 import pandas as pd
-from clio.sensors import Sensors
 from common.adapters import forecast_to_dataframe
 from common.config import get_config
 from common.exceptions import ConfigurationException
+from common.schemas.observation import Observation
 
 DISPLAYED_FORECAST_HORIZON = 96
 
@@ -37,7 +37,11 @@ class ForecastDirector:
         
         return forecast_service_name.forecast_from_df(df)
     
-    def refresh_forecast(self, forecast_service_name, observations: list|None = None):
+    def refresh_forecast(
+        self,
+        forecast_service_name,
+        observations: Observation | None = None,
+    ):
         config = get_config()
 
         models_registry = (config.models_registry["models"][forecast_service_name.registry_name] or None)
@@ -57,12 +61,13 @@ class ForecastDirector:
         forecast_service = forecast_service_name(model_batch)
 
         if observations is None:
-            observations = Sensors.get_live_observations_frame()
+            raise ConfigurationException(
+                "Normalized observations must be supplied by the storage layer"
+            )
 
         self._build_forecast(forecast_file_path, forecast_service, observations)
     
-    def refresh_forecasts(self, services: list):
-        observations = Sensors.get_live_observations_frame()
+    def refresh_forecasts(self, services: list, observations: Observation):
         for service in services:
             self.refresh_forecast(service, observations)
 
@@ -93,4 +98,3 @@ class ForecastDirector:
 
         df.to_csv(tmp_forecast_file_path, index=False)
         shutil.move(tmp_forecast_file_path, forecast_file_path)
-    

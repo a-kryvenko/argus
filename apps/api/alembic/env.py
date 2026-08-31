@@ -1,12 +1,10 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool
-
 from app.db import Base
-from app.db.models import Measurement  # noqa: F401
+from app.db.models import Measurement, NormalizedObservation  # noqa: F401
 from app.db.session import get_database_url
-
+from sqlalchemy import create_engine, pool
 
 config = context.config
 

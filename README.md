@@ -46,7 +46,8 @@ The project focuses on building a **decision-support framework** that combines r
         - [Deep Space Climate Observatory](https://epic.gsfc.nasa.gov/) - provide monitoring of Bx, By, Bz, V (Solar Wind), N (Density), T (Plasma temperature) in L1 Lagrange point. Data accessed wia [NOAA](https://services.swpc.noaa.gov/json/)
         - [Solar Dynamics Observatory](https://data.nasa.gov/dataset/solar-dynamics-observatory) - [jsoc](https://jsoc1.stanford.edu/data/) API is not reliable for live data, because of time delay up to 4 days. So data loaded as is directly from server
 1. Processing Layer
-    - Normalizing data (resample to 1-hour format, fill up gaps with gradient mean)
+    - Store source values in the narrow PostgreSQL `measurement` table
+    - Materialize hourly, gap-filled values in the wide `normalized_observation` table
     - combine L1 sensors data with solar observations from [GONG](https://gong.nso.edu/)
 1. Forecasting Layer
     - [LGBMClassifier](https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMClassifier.html), [LGBMRegressor](https://lightgbm.readthedocs.io/en/latest/pythonapi/lightgbm.LGBMRegressor.html)

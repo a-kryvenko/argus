@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
 
 from common.config import get_config
-from forecast_core.inference.AtmosphericDensityForecastService import (
-    AtmosphericDensityForecastService,
-)
+from forecast_core.inference.AtmosphericDensityForecastService import AtmosphericDensityForecastService
 
 
 def main() -> None:

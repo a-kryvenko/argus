@@ -6,6 +6,7 @@ metrics:
   solar_wind_probability: data/metrics/wind_threshold_by_lead.csv
 
 paths:
+  # Read once to bootstrap an empty measurement table; never updated.
   live_sensors: data/raw/live_sensors.csv
   live_gong: data/raw/live_gong.fits
   evaluation_dataset: data/training/valid_2025.parquet

@@ -1,8 +1,9 @@
 import asyncio
 
+from common.schemas.observation import Observation
+
 from app.db.session import get_session_factory
 from app.services.sensor_observations import refresh_normalized_observations
-from common.schemas.observation import Observation
 
 
 async def _refresh() -> Observation:

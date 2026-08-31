@@ -1,18 +1,26 @@
 from datetime import datetime, timezone
 
 from common.config import get_config
-from forecast_core.inference.AtmosphericDensityForecastService import AtmosphericDensityForecastService
+from forecast_core.inference.AtmosphericDensityForecastService import (
+    AtmosphericDensityForecastService,
+)
 
 
 def main() -> None:
     config = get_config()
-    registry = config.models_registry["models"][AtmosphericDensityForecastService.registry_name]
+    registry = config.models_registry["models"][
+        AtmosphericDensityForecastService.registry_name
+    ]
     output_path = config.workdir / registry["forecast_path"]
     temporary_path = output_path.with_suffix(output_path.suffix + ".tmp")
 
     service = AtmosphericDensityForecastService()
     frame = service.forecast_grid()
-    issue_time = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    issue_time = datetime.now(timezone.utc).replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
     frame.insert(0, "issue_time", issue_time)
     frame.insert(
         2,

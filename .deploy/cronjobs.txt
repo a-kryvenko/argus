@@ -2,4 +2,4 @@
 @reboot sleep 15 && cd /var/www && ./nginx-proxy-up.sh
 
 # Wind Forecast
-0 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_full_forecast_upd api .venv/bin/python src/commands/generate_forecast.py
+0 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_full_forecast_upd api .venv/bin/python -m app.commands.generate_forecast

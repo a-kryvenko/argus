@@ -21,7 +21,6 @@ RUN mkdir -p -m 0700 /root/.ssh \
 RUN --mount=type=ssh uv sync --frozen --no-cache
 
 COPY apps/api/app ./app
-COPY apps/api/src ./src
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
 

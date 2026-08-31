@@ -131,4 +131,4 @@ jobs:
 
             docker compose run --rm api .venv/bin/alembic upgrade head
 
-            docker compose run --rm --name forecast_update api .venv/bin/python src/commands/generate_forecast.py
+            docker compose run --rm --name forecast_update api .venv/bin/python -m app.commands.generate_forecast

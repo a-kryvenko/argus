@@ -25,3 +25,6 @@ class NormalizedObservation(Base):
     dst: Mapped[float] = mapped_column(Double, nullable=False)
     ap: Mapped[float] = mapped_column(Double, nullable=False)
     f10_7: Mapped[float] = mapped_column(Double, nullable=False)
+    s10: Mapped[float | None] = mapped_column(Double, nullable=True)
+    m10: Mapped[float | None] = mapped_column(Double, nullable=True)
+    y10: Mapped[float | None] = mapped_column(Double, nullable=True)

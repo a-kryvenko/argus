@@ -7,7 +7,10 @@ from forecast.data_pipelines.solar_indices import (
     SolarIndexCalibration,
     build_daily_goes_features,
     extract_solar_indices,
+    extract_solar_index_observations,
     fit_solar_index_calibrations,
+    load_solar_index_calibrations,
+    save_solar_index_calibrations,
 )
 
 
@@ -87,3 +90,72 @@ def test_extract_solar_indices_requires_every_calibration() -> None:
 
     with pytest.raises(ValueError, match="Missing solar-index calibrations"):
         extract_solar_indices(_goes_frame(), {"s10": calibration})
+
+
+def _identity_calibrations():
+    return {
+        name: SolarIndexCalibration(
+            feature_columns=features,
+            feature_means=(0.0,) * len(features),
+            feature_scales=(1.0,) * len(features),
+            intercept=0.0,
+            coefficients=(1.0,) + (0.0,) * (len(features) - 1),
+        ) for name, features in INDEX_FEATURE_COLUMNS.items()
+    }
+
+
+def test_calibration_artifact_roundtrip_and_validation(tmp_path):
+    import json
+
+    path = tmp_path / "calibration.json"
+    calibrations = _identity_calibrations()
+    save_solar_index_calibrations(calibrations, path)
+    loaded = load_solar_index_calibrations(path)
+    assert loaded == calibrations
+    pd.testing.assert_frame_equal(
+        extract_solar_indices(_goes_frame(), loaded),
+        extract_solar_indices(_goes_frame(), calibrations),
+    )
+    payload = json.loads(path.read_text())
+    payload["calibrations"]["s10"]["feature_scales"][0] = 0
+    path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="positive scales"):
+        load_solar_index_calibrations(path)
+
+
+def test_hourly_snapshots_use_available_daily_data_without_lookahead():
+    records = pd.concat([_goes_frame(1).iloc[[0]]] * 5, ignore_index=True)
+    records["timestamp"] = pd.to_datetime([
+        "2026-01-01T00:30Z", "2026-01-01T01:30Z", "2026-01-01T02:30Z",
+        "2026-01-01T03:30Z", "2026-01-01T04:30Z",
+    ])
+    records["goes_euv_256"] = [10, 20, 999, 40, 9999]
+    records.loc[2, "goes_euvs_quality_valid"] = False
+    result = extract_solar_index_observations(
+        records, _identity_calibrations(), pd.Timestamp("2026-01-01T04:00Z"),
+    )
+    assert list(result["observed_at"].dt.hour) == [1, 2, 4]
+    # Irradiance correction is 2, followed by a median over the day so far.
+    assert list(result["s10"]) == [20, 30, 40]
+
+
+def test_midnight_closes_previous_day_and_next_hour_starts_new_day():
+    records = pd.concat([_goes_frame(1).iloc[[0]]] * 2, ignore_index=True)
+    records["timestamp"] = pd.to_datetime(["2026-01-01T23:30Z", "2026-01-02T00:30Z"])
+    records["goes_euv_256"] = [10, 100]
+    result = extract_solar_index_observations(
+        records, _identity_calibrations(), pd.Timestamp("2026-01-02T01:00Z"),
+    )
+    assert list(result["s10"]) == [20, 200]
+
+
+def test_no_valid_or_future_only_goes_yields_no_observations():
+    records = _goes_frame(1)
+    records["goes_euvs_quality_valid"] = False
+    assert extract_solar_index_observations(
+        records, _identity_calibrations(), pd.Timestamp("2026-01-01T02:00Z"),
+    ).empty
+    records["goes_euvs_quality_valid"] = True
+    assert extract_solar_index_observations(
+        records, _identity_calibrations(), pd.Timestamp("2025-12-31T23:00Z"),
+    ).empty

@@ -7,7 +7,9 @@ separate from calibration against delayed authoritative SOLFSMY records.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Mapping
 
 import numpy as np
@@ -58,6 +60,18 @@ class SolarIndexCalibration:
     feature_scales: tuple[float, ...]
     intercept: float
     coefficients: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        size = len(self.feature_columns)
+        if not size or any(len(values) != size for values in (
+            self.feature_means, self.feature_scales, self.coefficients,
+        )):
+            raise ValueError("Calibration parameter dimensions do not match")
+        if not np.isfinite([
+            self.intercept, *self.feature_means, *self.feature_scales,
+            *self.coefficients,
+        ]).all() or any(scale <= 0 for scale in self.feature_scales):
+            raise ValueError("Calibration parameters must be finite with positive scales")
 
     def predict(self, frame: pd.DataFrame) -> np.ndarray:
         missing = [column for column in self.feature_columns if column not in frame]
@@ -219,3 +233,90 @@ def extract_solar_indices(
         result[index_name] = calibrations[index_name].predict(result)
 
     return result
+
+
+def save_solar_index_calibrations(
+    calibrations: Mapping[str, SolarIndexCalibration],
+    path: str | Path,
+) -> None:
+    """Save a frozen calibration artifact for the observations pipeline."""
+    payload = {
+        "version": 1,
+        "calibrations": {
+            name: asdict(calibrations[name]) for name in INDEX_FEATURE_COLUMNS
+        },
+    }
+    Path(path).write_text(json.dumps(payload, indent=2, allow_nan=False) + "\n")
+
+
+def load_solar_index_calibrations(
+    path: str | Path,
+) -> dict[str, SolarIndexCalibration]:
+    """Load and validate the versioned GOES-to-SOLFSMY calibration artifact."""
+    payload = json.loads(Path(path).read_text())
+    if not isinstance(payload, dict) or payload.get("version") != 1:
+        raise ValueError("Unsupported solar-index calibration version")
+    if not isinstance(payload.get("calibrations"), dict):
+        raise ValueError("Missing solar-index calibration mappings")
+    result = {}
+    for name, features in INDEX_FEATURE_COLUMNS.items():
+        parameters = payload["calibrations"][name]
+        if not isinstance(parameters, dict):
+            raise ValueError(f"Invalid solar-index calibration for {name}")
+        calibration = SolarIndexCalibration(**{
+            key: tuple(value) if isinstance(value, list) else value
+            for key, value in parameters.items()
+        })
+        if calibration.feature_columns != features:
+            raise ValueError(f"Unexpected calibration features for {name}")
+        result[name] = calibration
+    return result
+
+
+def extract_solar_index_observations(
+    goes: pd.DataFrame,
+    calibrations: Mapping[str, SolarIndexCalibration],
+    as_of: pd.Timestamp,
+) -> pd.DataFrame:
+    """Build causal hourly snapshots of provisional UTC daily estimates.
+
+    Each snapshot uses only that day's records available at the hour boundary.
+    Midnight closes the preceding day. Require a valid sample from the last
+    hour; do not turn missing or stale GOES data into observations.
+    """
+    _require_columns(goes, REQUIRED_GOES_COLUMNS, "GOES")
+    records = goes.copy()
+    records["timestamp"] = pd.to_datetime(records["timestamp"], utc=True, errors="coerce")
+    numeric = [column for column in REQUIRED_GOES_COLUMNS
+               if column not in ("timestamp", "goes_euvs_quality_valid")]
+    records[numeric] = records[numeric].apply(pd.to_numeric, errors="coerce")
+    records = records.loc[
+        records["timestamp"].notna()
+        & records["goes_euvs_quality_valid"].eq(True)
+        & np.isfinite(records[numeric]).all(axis=1)
+    ].sort_values("timestamp")
+    cutoff = pd.Timestamp(as_of)
+    cutoff = cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
+    records = records.loc[records["timestamp"] <= cutoff]
+    columns = ["observed_at", *INDEX_FEATURE_COLUMNS]
+    if records.empty:
+        return pd.DataFrame(columns=columns)
+
+    rows = []
+    for hour in pd.date_range(
+        records["timestamp"].min().ceil("h"),
+        min(cutoff.floor("h"), records["timestamp"].max().ceil("h")),
+        freq="h",
+    ):
+        day_start = (hour - pd.Timedelta(nanoseconds=1)).floor("D")
+        available = records.loc[
+            (records["timestamp"] >= day_start) & (records["timestamp"] <= hour)
+            & (records["timestamp"] < day_start + pd.Timedelta(days=1))
+        ]
+        if available.empty or available["timestamp"].max() <= hour - pd.Timedelta(hours=1):
+            continue
+        estimate = extract_solar_indices(available, calibrations).iloc[0]
+        rows.append({"observed_at": hour, **{
+            name: float(estimate[name]) for name in INDEX_FEATURE_COLUMNS
+        }})
+    return pd.DataFrame(rows, columns=columns)

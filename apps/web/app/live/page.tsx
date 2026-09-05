@@ -15,14 +15,17 @@ const metrics: { key: keyof Omit<ObservationPoint, 'issue_time'>; label: string;
   { key: 'dst', label: 'Dst index', unit: 'nT' },
   { key: 'ap', label: 'Ap index', unit: '' },
   { key: 'f10_7', label: 'F10.7 solar flux', unit: 'sfu' },
+  { key: 's10', label: 'S10 estimate', unit: '' },
+  { key: 'm10', label: 'M10 estimate', unit: '' },
+  { key: 'y10', label: 'Y10 estimate', unit: '' },
 ];
 
 function timestamp(value: string) {
   return new Date(value).toISOString().replace('T', ' ').slice(0, 16);
 }
 
-function number(value: number) {
-  return Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 1 }) : '—';
+function number(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 1 }) : '—';
 }
 
 export default function Live() {
@@ -69,6 +72,7 @@ export default function Live() {
       <h1>Live observations</h1>
       <p className={styles.description}>Latest available hourly observations. Checks for updates every minute. All times are UTC.</p>
       <p className={styles.description}>These are normalized data; missing measurements may be interpolated or filled during processing.</p>
+      <p className={styles.description}>S10, M10 and Y10 are calibrated GOES estimates of daily solar indices, updated from the UTC day’s available observations at each hour boundary. Midnight closes the previous day. These estimates are provisional; no forecasts are shown. A dash means no calibrated estimate is available for that hour; these indices are not gap-filled.</p>
       <nav className="api-links" aria-label="Observations API">
         <a href="/api/v1/public/observations/latest">Latest observation API (JSON)</a>
         <a href="/api/v1/public/observations/history?limit=24">Observation history API (JSON)</a>

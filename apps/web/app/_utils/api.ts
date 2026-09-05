@@ -15,6 +15,9 @@ export type ObservationPoint = {
   dst: number;
   ap: number;
   f10_7: number;
+  s10: number | null;
+  m10: number | null;
+  y10: number | null;
 };
 
 type ApiResponse<T> = {

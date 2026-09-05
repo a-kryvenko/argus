@@ -10,6 +10,7 @@
     "db:current": "./scripts/db current",
     "db:rollback": "./scripts/db downgrade -1",
     "db:revision": "./scripts/db revision --autogenerate -m",
+    "app:forecast": "cd apps/api && .venv/bin/python -m app.commands.generate_forecast",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"

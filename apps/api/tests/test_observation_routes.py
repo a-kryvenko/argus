@@ -13,6 +13,7 @@ def test_history_returns_points_and_passes_limit(monkeypatch):
         issue_time=datetime(2026, 9, 5, tzinfo=UTC),
         bx=1, by=2, bz=-3, v=420, n=5, t=100000,
         kp=2, dst=-10, ap=5, f10_7=120,
+        s10=110.5, m10=99.25,
     )
     loader = AsyncMock(return_value=Observation(points=[point]))
     monkeypatch.setattr(observations, "load_normalized_observations", loader)
@@ -24,7 +25,14 @@ def test_history_returns_points_and_passes_limit(monkeypatch):
         response = client.get('/public/observations/history?limit=12')
         assert response.status_code == 200
         assert response.json()['data']['points'][0]['v'] == 420
+        assert response.json()['data']['points'][0]['s10'] == 110.5
+        assert response.json()['data']['points'][0]['m10'] == 99.25
+        assert response.json()['data']['points'][0]['y10'] is None
         loader.assert_awaited_once_with(session, limit=12)
+        latest = client.get('/public/observations/latest')
+        assert latest.status_code == 200
+        assert latest.json()['data']['s10'] == 110.5
+        assert latest.json()['data']['y10'] is None
         for limit in [0, 169, 'invalid']:
             assert client.get(f'/public/observations/history?limit={limit}').status_code == 422
         loader.return_value = Observation(points=[])

@@ -141,6 +141,47 @@ The `postgres_data` and `redis_data` volumes preserve local data between
 container restarts. Use `docker compose down --volumes` only when the local
 database and Redis data should be deleted.
 
+### Live S10, M10 and Y10 observations
+
+The observations refresh also fetches GOES EUVS/XRS and applies a frozen
+calibration from `models.solar_index_calibration.calibration_path` in
+`configs/models_registry.yaml`.
+Apply the schema migration with `pnpm db:migrate` before running the updated API.
+The `/public/observations/latest` and `/public/observations/history` endpoints
+expose nullable `s10`, `m10`, and `y10` fields, displayed on `/live`.
+
+Run `notebooks/0_spacewx_data_fetching.ipynb` to fetch SOLFSMY reference files
+for the registry datasets. It scans only `issue_time` from `data/training/2010_2024`
+and `data/training/2025`, deduplicates observation dates across forecast horizons,
+and writes separate references without changing the training shards.
+Then prepare normalized historical GOES data at each dataset's `goes_path` and run
+`notebooks/4_calibrate_solar_indices.ipynb`. This fits on the `train` dataset,
+evaluates on the separate `validation` dataset, and saves the frozen calibration,
+MAE/RMSE/bias, coverage, and validation estimates. All paths come from the same
+registry entry used by live observations; no forecast models are trained.
+
+The CLI `python -m forecast.data_pipelines.calibrate_solar_indices` remains
+available for explicit `--goes`, `--solfsmy`, and `--output` paths; use the notebook
+for registry-driven splitting and held-out validation.
+
+GOES input uses the normalized columns returned by `fetch_goes`; SOLFSMY input
+must contain `timestamp`, `s10`, `m10`, and `y10`. Both inputs may be CSV or
+parquet. Historical training data and trained coefficients are not bundled;
+the live GOES loader only retrieves the rolling live feed, not a training archive.
+Validate a fitted calibration on held-out dates and relevant satellites before
+using it operationally. Refreshes load the saved coefficients without retraining.
+
+Each refresh persists the current hour boundary's provisional daily estimate,
+using only quality-valid GOES records up to that boundary in the UTC day.
+At midnight the estimate closes the previous day. The hour needs a valid sample
+from the preceding hour; stale or missing GOES data produce no new estimate.
+Earlier snapshots are retained rather than recomputed from a truncated live feed.
+These estimates accumulate in `measurement` and `normalized_observation` as
+refreshes run; they are not interpolated or carried into missing hours.
+Without a calibration artifact, or if GOES fails, the other observations keep
+updating, new index fields are `null`, and the API logs the reason.
+No S10/M10/Y10 forecast products or forecast targets are added.
+
 ---
 
 ## Author

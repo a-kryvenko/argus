@@ -17,6 +17,10 @@ class ObservationPoint(BaseModel):
     dst: int
     ap: int
     f10_7: int
+    # Provisional GOES-derived daily estimates sampled at the observation hour.
+    s10: float | None = None
+    m10: float | None = None
+    y10: float | None = None
 
 class Observation(BaseModel):
     model_config = ConfigDict(extra="forbid")

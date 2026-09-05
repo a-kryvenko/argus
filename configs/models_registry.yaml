@@ -43,6 +43,28 @@ models:
     model: argus-f10_7-q-v1
     forecast_path: data/forecast/radiation/f10_7_quantile.csv
     metrics: data/metrics/radiation/f10_7_quantile
+
+  # GOES -> SOLFSMY observation calibration; not a forecast model.
+  solar_index_calibration:
+    model: argus-solar-indices-cal-v1
+    calibration_path: data/models/argus-solar-indices-cal-v1.json
+    metrics: data/metrics/radiation/solar_index_calibration
+    goes_archive:
+      cache_path: data/raw/goes/archive
+      # First usable satellite wins at each minute. Never mix two rows per minute.
+      satellites: [18, 16]
+      url: https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes/
+    datasets:
+      "2010_2024":
+        role: train
+        training_path: data/training/2010_2024
+        solfsmy_path: data/raw/spacewx/solfsmy_2010_2024.parquet
+        goes_path: data/raw/goes/goes_2010_2024.parquet
+      "2025":
+        role: validation
+        training_path: data/training/2025
+        solfsmy_path: data/raw/spacewx/solfsmy_2025.parquet
+        goes_path: data/raw/goes/goes_2025.parquet
   
   s10_quantile:
     model: argus-s10-q-v1

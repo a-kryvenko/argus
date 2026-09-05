@@ -22,6 +22,9 @@ export default function MetricsProduct({ product }: { product: ProductConfig }) 
     <main className="container color-default">
       <h1 className="heading">{product.title} Metrics</h1>
       <p className="product-description">Metrics by forecast lead hour.</p>
+      <nav className="api-links" aria-label="Product metrics API">
+        <a href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics API (JSON)</a>
+      </nav>
 
       {error && <div className="state-message">{error}</div>}
       {!metrics && !error && <div className="state-message">Loading metrics…</div>}

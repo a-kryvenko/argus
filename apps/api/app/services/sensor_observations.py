@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from app.db.models import Measurement, NormalizedObservation
 from clio.dataloaders.spdf_loader import SPDF_Loader
 from clio.dataloaders.swpc_loader import SWPC_Loader
 from common.config import get_config
@@ -13,9 +14,6 @@ from common.schemas.observation import Observation, ObservationPoint
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.db.models import Measurement, NormalizedObservation
-
 
 OBSERVATION_METRICS = SWPC_Loader.METRICS
 HISTORY_DAYS = 30

@@ -47,6 +47,10 @@ export default function ForecastProduct({ product }: { product: ProductConfig })
     <main className="container color-default ">
       <h1 className="heading">{product.title}</h1>
       <p className="product-description">{product.description}</p>
+      <nav className="api-links" aria-label="Product API">
+        <a href={`/api/v1${productApiPath(product)}`}>Forecast API (JSON)</a>
+        <a href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics API (JSON)</a>
+      </nav>
 
       {error && <div className="state-message">{error}</div>}
       {!forecast && !error && <div className="state-message">Loading forecast…</div>}

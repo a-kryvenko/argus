@@ -3,6 +3,20 @@ type ApiErrorBody = {
   message?: string;
 };
 
+export type ObservationPoint = {
+  issue_time: string;
+  bx: number;
+  by: number;
+  bz: number;
+  v: number;
+  n: number;
+  t: number;
+  kp: number;
+  dst: number;
+  ap: number;
+  f10_7: number;
+};
+
 type ApiResponse<T> = {
   success: boolean;
   data: T | null;

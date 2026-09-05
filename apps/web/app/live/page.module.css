@@ -1,0 +1,19 @@
+.page { padding-bottom: 32px; }
+.description { color: var(--text-secondary); margin-bottom: 12px; line-height: 1.6; }
+.status { margin: 24px 0; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 12px 28px; }
+.warning { color: var(--warning); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+.card { padding: 22px; background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.card h2 { font-size: 16px; font-weight: 400; color: var(--text-secondary); margin: 0 0 16px; }
+.value { font-size: 30px; font-variant-numeric: tabular-nums; }
+.value span { font-size: 15px; color: var(--text-secondary); }
+.historyHeading { margin: 36px 0 16px; }
+.tableWrapper { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.table caption { text-align: left; padding: 16px; color: var(--text-secondary); }
+.table th, .table td { padding: 14px; border-top: 1px solid var(--border); text-align: right; white-space: nowrap; }
+.table thead { background: var(--glass); }
+.table th { font-weight: 500; }
+.table th:first-child { text-align: left; }
+.table small { display: block; margin-top: 6px; color: var(--text-secondary); }
+.table tbody tr:hover { background: var(--glass-hover); }

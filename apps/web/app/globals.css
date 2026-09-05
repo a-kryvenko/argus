@@ -162,6 +162,15 @@ a {
   gap: 18px;
 }
 
+.api-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 24px;
+  margin: 20px 0 28px;
+  color: var(--primary);
+}
+
 .product-link,
 .state-message {
   padding: 22px;

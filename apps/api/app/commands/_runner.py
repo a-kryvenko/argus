@@ -4,7 +4,6 @@ from collections.abc import Callable
 import sentry_sdk
 from common.config import get_config
 
-
 config = get_config()
 
 

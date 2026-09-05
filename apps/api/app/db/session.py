@@ -1,5 +1,5 @@
-from collections.abc import AsyncIterator
 import os
+from collections.abc import AsyncIterator
 
 from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import (
@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None

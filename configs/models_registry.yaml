@@ -87,6 +87,8 @@ models:
     metrics: data/metrics/dtc
 
   atmospheric_density:
+    history_cache: data/observations/jb2008
+    max_age_hours: 6
     active_versions: null
     forecast_path: data/forecast/atmospheric-density/live.csv
     metrics: data/metrics/atmospheric-density

@@ -10,6 +10,9 @@ dependencies = [
     "pandas>=2.2",
     "cdflib>=1.1.0",
     "requests>=2.32",
+    "xarray>=2026.4.0",
+    "h5netcdf>=1.8.1",
+    "h5py>=3.16.0",
 ]
 
 [tool.setuptools.package-dir]

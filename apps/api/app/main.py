@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db.session import dispose_engine
 from app.routers.auth import router as auth_router
 from app.routers.forecasts import router as forecasts_router
+from app.routers.atmospheric_density import router as atmospheric_density_router
 from app.routers.healthcheck import router as healthcheck_router
 from app.routers.private.model import router as private_model_router
 from app.routers.private.risk import router as private_risk_router
@@ -77,6 +78,7 @@ app.add_middleware(
 # app.include_router(auth_router)
 app.include_router(healthcheck_router)
 
+app.include_router(atmospheric_density_router)
 app.include_router(forecasts_router)
 app.include_router(observations_router)
 

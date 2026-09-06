@@ -1,3 +1,8 @@
+import logging
+
+from app.commands.generate_atmospheric_density_forecast import main as generate_density
+from app.services.forecast_products import ArtifactNotReadyError
+
 from forecast.forecast_services import ForecastService, ForecastServiceRegistry
 from forecast.ForecastDirector import ForecastDirector
 
@@ -21,6 +26,11 @@ def main() -> None:
         ],
         observations,
     )
+
+    try:
+        generate_density()
+    except ArtifactNotReadyError as exc:
+        logging.getLogger(__name__).warning("Density forecast unavailable: %s", exc)
 
 
 if __name__ == "__main__":

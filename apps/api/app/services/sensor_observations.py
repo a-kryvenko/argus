@@ -141,7 +141,15 @@ def _load_solar_index_measurements(now: datetime) -> pd.DataFrame:
     # so a later truncated feed cannot revise earlier daily estimates.
     estimates = estimates.loc[estimates["observed_at"] == pd.Timestamp(now).floor("h")]
     if estimates.empty:
-        logger.warning("Solar-index observations unavailable: no recent valid GOES samples")
+        latest = pd.to_datetime(goes["timestamp"], utc=True).max() if not goes.empty else None
+        valid = goes.loc[goes["goes_euvs_quality_valid"].eq(True)]
+        last_valid = pd.to_datetime(valid["timestamp"], utc=True).max() if not valid.empty else None
+        logger.warning(
+            "Solar-index observations unavailable: no recent valid GOES samples; "
+            "requested_hour=%s, latest_sample=%s, latest_quality_valid=%s, "
+            "quality_valid_rows=%d/%d",
+            pd.Timestamp(now).floor("h"), latest, last_valid, len(valid), len(goes),
+        )
         return empty
     return _wide_to_measurements(estimates)
 

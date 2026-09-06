@@ -117,6 +117,7 @@ def cache_archive_file(
         return path
     temporary = None
     try:
+        logger.info("Downloading GOES archive %s", path.name)
         with session.get(source.url, stream=True, timeout=(20, 120)) as response:
             response.raise_for_status()
             with tempfile.NamedTemporaryFile(dir=cache_dir, suffix=".part", delete=False) as stream:

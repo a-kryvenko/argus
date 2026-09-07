@@ -143,6 +143,20 @@ database and Redis data should be deleted.
 
 ### Observation and forecast services
 
+Observation ingestion and forecast generation are separate commands:
+
+```bash
+pnpm app:observations
+pnpm app:forecast
+```
+
+Forecast commands read stored observations and never refresh them. Run ingestion
+first on a new database. In deployment, observations refresh hourly at minute 0
+and forecasts run at minute 10 using the latest committed data; these are independent
+jobs, so the offset does not guarantee ingestion has finished. The ingestion command
+also persists the longer solar history needed by atmospheric density forecasts.
+Missing input data causes a forecast to fail or report that its product is unavailable.
+
 Apply schema migrations with `pnpm db:migrate`. Observation endpoints expose
 nullable S10, M10 and Y10 values when the configured backend supplies them.
 Private model training, calibration, and generation instructions are maintained

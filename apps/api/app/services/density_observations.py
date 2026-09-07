@@ -37,15 +37,4 @@ async def load_density_drivers(session: AsyncSession, issue_time: datetime) -> p
     ), timeout=60)
     records = pd.DataFrame(result.all(), columns=["metric", "value", "observed_at"])
     logger.info("JB2008: loaded %d observation rows; preparing drivers", len(records))
-    try:
-        return observed_driver_frame(records, issue_time)
-    except ArtifactNotReadyError as exc:
-        if not any(name in str(exc) for name in SOLAR_LAGS_DAYS):
-            raise
-        logger.info("JB2008: supplementing solar observations from private history cache")
-        from forecast_core.api import load_density_history, merge_history
-        try:
-            history = await asyncio.to_thread(load_density_history, issue_time)
-        except (OSError, KeyError, ValueError) as history_error:
-            raise ArtifactNotReadyError(f"JB2008 history unavailable: {history_error}") from history_error
-        return observed_driver_frame(merge_history(history, records), issue_time)
+    return observed_driver_frame(records, issue_time)

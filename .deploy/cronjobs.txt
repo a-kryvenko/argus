@@ -1,5 +1,8 @@
 # Up nginx-proxy after server restart
 @reboot sleep 15 && cd /var/www && ./nginx-proxy-up.sh
 
-# Wind Forecast
-0 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_full_forecast_upd api .venv/bin/python -m app.commands.generate_forecast
+# Observations
+0 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_observations_upd api .venv/bin/python -m app.commands.refresh_observations
+
+# Forecasts use the latest committed observations; no ingestion dependency
+10 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_full_forecast_upd api .venv/bin/python -m app.commands.generate_forecast

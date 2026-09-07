@@ -4,11 +4,13 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
-  "requests",
+  "PyJWT>=2",
+  "pandas>=2.2,<3",
+  "numpy>=1.26",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "forecast",
-  "forecast-core>=0.1.1",
+  "forecast-core>=0.2.0",
   "common",
   "clio",
   "sentry-sdk>=2.61.1",
@@ -21,7 +23,7 @@ dependencies = [
 [tool.uv.sources]
 common = { workspace = true }
 clio = { workspace = true, editable = true }
-forecast-core = { git = "ssh://git@github.com/a-kryvenko/argus-forecast-core.git", branch = "master" }
+forecast-core = { path = "../../packages/forecast-core", editable = true }
 forecast = { workspace = true, editable = true }
 
 [tool.uv.workspace]

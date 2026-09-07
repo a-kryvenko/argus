@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.db.session import dispose_engine, get_session_factory
 from app.services.density_observations import load_density_drivers
 from common.config import get_config
-from forecast.inference.AtmosphericDensityForecastService import (
+from forecast_core.api import (
     AtmosphericDensityForecastService,
 )
 

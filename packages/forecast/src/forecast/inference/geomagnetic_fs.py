@@ -1,6 +1,5 @@
 import pandas as pd
 
-from forecast.data_pipelines.feature_building import build_features
 from forecast.inference._forecast_service import (
     QuantileForecastService,
     ThresholdForecastService,
@@ -12,6 +11,8 @@ class KPProbaFS(ThresholdForecastService):
     target_name: str|None = "kp"
     
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
+        from forecast_core.api import build_features
+
         df = build_features(raw_observations_frame)
         return df
 
@@ -20,6 +21,8 @@ class APFS(QuantileForecastService):
     target_name: str|None = "ap"
 
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
+        from forecast_core.api import build_features
+
         df = build_features(raw_observations_frame)
         return df
 
@@ -28,5 +31,7 @@ class DstFS(QuantileForecastService):
     target_name: str|None = "dst"
 
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
+        from forecast_core.api import build_features
+
         df = build_features(raw_observations_frame)
         return df

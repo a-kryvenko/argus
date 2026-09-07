@@ -19,7 +19,7 @@ def get_config() -> _CommonConfig:
     global _config
 
     if _config is None:
-        workdir = Path(__file__).parents[4]
+        workdir = _find_workdir()
         config_root = workdir / "configs"
 
         load_dotenv(workdir / ".env")
@@ -27,7 +27,7 @@ def get_config() -> _CommonConfig:
             load_dotenv(workdir / ".env.local", override=True)
     
         _config = _CommonConfig(
-            debug=os.getenv("DEBUG") and (os.getenv("DEBUG") == "true" or os.getenv("DEBUG") == "True"),
+            debug=os.getenv("DEBUG", "false").lower() == "true",
             workdir=workdir,
             data_root= workdir / "data",
             config_root=config_root,
@@ -47,3 +47,13 @@ def _load_yml_config(p: Path):
     expanded = os.path.expandvars(raw)
 
     return yaml.safe_load(expanded)
+
+
+def _find_workdir() -> Path:
+    configured = os.getenv("ARGUS_WORKDIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    for candidate in (Path.cwd(), *Path.cwd().parents):
+        if (candidate / "configs" / "project.yaml").is_file():
+            return candidate
+    raise RuntimeError("Set ARGUS_WORKDIR to the application configuration directory")

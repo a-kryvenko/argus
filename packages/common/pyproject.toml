@@ -5,7 +5,9 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>2.0.0",
     "pyyaml",
-    "jwt"
+    "python-dotenv>=1.2.2",
+    "pandas>=2.2",
+    "xarray>=2026.4.0"
 ]
 
 [tool.setuptools.package-dir]

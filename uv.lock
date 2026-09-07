@@ -22,7 +22,6 @@ members = [
     "clio",
     "common",
     "forecast",
-    "forecast-core",
 ]
 
 [[package]]
@@ -294,7 +293,6 @@ dependencies = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "forecast" },
-    { name = "forecast-core" },
     { name = "h5netcdf" },
     { name = "h5py" },
     { name = "hdf5plugin" },
@@ -344,7 +342,6 @@ requires-dist = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "forecast", editable = "packages/forecast" },
-    { name = "forecast-core", editable = "packages/forecast-core" },
     { name = "h5netcdf", specifier = ">=1.8.1" },
     { name = "h5py" },
     { name = "hdf5plugin", specifier = ">=6.0.0" },
@@ -816,6 +813,7 @@ source = { editable = "packages/clio" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "cdflib" },
+    { name = "common" },
     { name = "h5netcdf" },
     { name = "h5py" },
     { name = "numpy" },
@@ -828,6 +826,7 @@ dependencies = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
     { name = "cdflib", specifier = ">=1.1.0" },
+    { name = "common", editable = "packages/common" },
     { name = "h5netcdf", specifier = ">=1.8.1" },
     { name = "h5py", specifier = ">=3.16.0" },
     { name = "numpy", specifier = ">=1.26" },
@@ -868,18 +867,22 @@ name = "common"
 version = "0.1.0"
 source = { editable = "packages/common" }
 dependencies = [
-    { name = "jwt" },
+    { name = "pandas" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "xarray" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "jwt" },
+    { name = "pandas", specifier = ">=2.2" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">2.0.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml" },
+    { name = "xarray", specifier = ">=2026.4.0" },
 ]
 
 [[package]]
@@ -1388,57 +1391,28 @@ name = "forecast"
 version = "0.1.0"
 source = { editable = "packages/forecast" }
 dependencies = [
-    { name = "astropy" },
-    { name = "cdflib" },
-    { name = "clio" },
     { name = "common" },
     { name = "joblib" },
     { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
-    { name = "pyatmos" },
     { name = "pyyaml" },
     { name = "scikit-learn" },
     { name = "scipy" },
-    { name = "setuptools" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "astropy", specifier = ">=7.2.0" },
-    { name = "cdflib", specifier = ">=1.1.0" },
-    { name = "clio", editable = "packages/clio" },
     { name = "common", editable = "packages/common" },
     { name = "joblib", specifier = ">=1.5.3" },
     { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pyarrow", specifier = ">=24.0.0" },
-    { name = "pyatmos", specifier = ">=1.2.7" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.5" },
     { name = "scipy", specifier = ">=1.13" },
-    { name = "setuptools", specifier = "<81" },
-]
-
-[[package]]
-name = "forecast-core"
-version = "0.1.1"
-source = { editable = "packages/forecast-core" }
-dependencies = [
-    { name = "astropy" },
-    { name = "numpy" },
-    { name = "pyatmos" },
-    { name = "scipy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "astropy", specifier = ">=7.2.0" },
-    { name = "numpy", specifier = ">=2.4.6" },
-    { name = "pyatmos", specifier = ">=1.2.7" },
-    { name = "scipy", specifier = ">=1.17.1" },
 ]
 
 [[package]]
@@ -2409,18 +2383,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/26/2d/ef58fed122b268c69c0aa099da20bc67657cdfb2e222688d5731bd5b971d/jupyterlab_widgets-3.0.16.tar.gz", hash = "sha256:423da05071d55cf27a9e602216d35a3a65a3e41cdf9c5d3b643b814ce38c19e0", size = 897423, upload-time = "2025-11-01T21:11:29.724Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/b5/36c712098e6191d1b4e349304ef73a8d06aed77e56ceaac8c0a306c7bda1/jupyterlab_widgets-3.0.16-py3-none-any.whl", hash = "sha256:45fa36d9c6422cf2559198e4db481aa243c7a32d9926b500781c830c80f7ecf8", size = 914926, upload-time = "2025-11-01T21:11:28.008Z" },
-]
-
-[[package]]
-name = "jwt"
-version = "1.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7f/20/21254c9e601e6c29445d1e8854c2a81bdb554e07a82fb1f9846137a6965c/jwt-1.4.0.tar.gz", hash = "sha256:f6f789128ac247142c79ee10f3dba6e366ec4e77c9920d18c1592e28aa0a7952", size = 24911, upload-time = "2025-06-23T13:28:38.289Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/80/34e3fae850adb0b7b8b9b1cf02b2d975fcb68e0e8eb7d56d6b4fc23f7433/jwt-1.4.0-py3-none-any.whl", hash = "sha256:7560a7f1de4f90de94ac645ee0303ac60c95b9e08e058fb69f6c330f71d71b11", size = 18248, upload-time = "2025-06-23T13:28:37.012Z" },
 ]
 
 [[package]]
@@ -4051,22 +4013,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyatmos"
-version = "1.2.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "astropy" },
-    { name = "numba" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "scipy" },
-    { name = "wget" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/a4/8a1a5cf234e9d3bcd2ad82a812ee66b0359bb657c1a0dcabe42079935e62/pyatmos-1.2.7-py3-none-any.whl", hash = "sha256:e9a81a7dd754770c0c8c7f3c32c4799ac8cd306abc5ca41443ec353c30029ac6", size = 47879, upload-time = "2024-11-05T01:06:05.731Z" },
-]
-
-[[package]]
 name = "pyavm"
 version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
@@ -5540,12 +5486,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/dd/b2/381be8cfdee792dd1
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/8c/2e650f2afeb7ee576912636c23ddb621c91ac6a98e66dc8d29c3c69446e1/werkzeug-3.1.8-py3-none-any.whl", hash = "sha256:63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50", size = 226459, upload-time = "2026-04-02T18:49:12.72Z" },
 ]
-
-[[package]]
-name = "wget"
-version = "3.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/47/6a/62e288da7bcda82b935ff0c6cfe542970f04e29c756b0e147251b2fb251f/wget-3.2.zip", hash = "sha256:35e630eca2aa50ce998b9b1a127bb26b30dfee573702782aa982f875e3f16061", size = 10857, upload-time = "2015-10-22T15:26:37.51Z" }
 
 [[package]]
 name = "widgetsnbextension"

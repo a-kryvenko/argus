@@ -2,9 +2,9 @@
 name = "clio"
 version = "0.1.0"
 description = "Part of Argus Sunwatch designed for getting historical solar observations data"
-readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "common",
     "beautifulsoup4>=4.15.0",
     "numpy>=1.26",
     "pandas>=2.2",
@@ -17,3 +17,6 @@ dependencies = [
 
 [tool.setuptools.package-dir]
 "" = "src"
+
+[tool.uv.sources]
+common = { workspace = true }

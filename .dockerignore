@@ -26,3 +26,10 @@ docker-compose.yml
 
 *.log
 .DS_Store
+**/.git
+**/.venv
+**/__pycache__
+**/.pytest_cache
+private
+packages/forecast-core/tests
+packages/forecast-core/examples

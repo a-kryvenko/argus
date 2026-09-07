@@ -14,11 +14,9 @@ COPY apps/api/pyproject.toml apps/api/uv.lock ./
 COPY packages/clio ./../../packages/clio
 COPY packages/common ./../../packages/common
 COPY packages/forecast ./../../packages/forecast
+COPY packages/forecast-core ./../../packages/forecast-core
 
-RUN mkdir -p -m 0700 /root/.ssh \
-    && ssh-keyscan github.com >> /root/.ssh/known_hosts
-
-RUN --mount=type=ssh uv sync --frozen --no-cache
+RUN uv sync --frozen --no-cache
 
 COPY apps/api/app ./app
 COPY apps/api/alembic.ini ./alembic.ini

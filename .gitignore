@@ -54,6 +54,7 @@ yarn-error.log*
 # Proprietary parts
 /notebooks/
 /packages/forecast-core/
+/private/
 
 # Mlflow
 mlflow.db

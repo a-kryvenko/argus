@@ -9,7 +9,6 @@ import pytest
 import xarray as xr
 
 from clio.dataloaders import goes_history_loader as loader
-from forecast.data_pipelines.solar_indices import build_daily_goes_features
 
 
 def _euvs_file(path: Path, satellite=16):
@@ -52,9 +51,6 @@ def test_normalization_uses_standard_mgii_flags_and_previous_day_background(tmp_
     assert joined.goes_xray_background.eq(1e-7).all()  # Neither today's final value nor daily average.
     assert joined.goes_xray_background_timestamp.eq(pd.Timestamp("2024-12-31T00:00Z")).all()
     assert joined.goes_euv_256.iloc[0] == 1  # 1-AU correction deferred to the shared builder.
-    daily = build_daily_goes_features(joined)
-    assert daily.goes_euv_256_1au.iloc[0] == 2
-    assert daily.goes_valid_sample_count.iloc[0] == 1
 
 
 def test_missing_background_is_not_forward_filled(tmp_path):
@@ -124,42 +120,3 @@ def test_interrupted_download_does_not_replace_cache(tmp_path):
         loader.cache_archive_file(source, cache, session, refresh=True)
     assert (cache / "source.nc").read_bytes() == original
     assert list(cache.iterdir()) == [cache / "source.nc"]
-
-
-def test_history_notebook_writes_registry_splits_and_reports_missing_days(tmp_path, monkeypatch):
-    import common.config
-
-    euvs = _euvs_file(tmp_path / "euvs.nc")
-    xrs = _xrs_file(tmp_path / "xrs.nc")
-    sources = [loader.GoesArchiveFile(16, loader.EUVS_PRODUCT, "https://example.test/euvs.nc", 2025),
-               loader.GoesArchiveFile(16, loader.XRS_PRODUCT, "https://example.test/xrs.nc")]
-    discover = Mock(return_value=sources)
-    monkeypatch.setattr(loader, "discover_goes_history", discover)
-    monkeypatch.setattr(loader, "cache_archive_file", lambda source, *args, **kwargs:
-                        euvs if source.product == loader.EUVS_PRODUCT else xrs)
-    training = tmp_path / "shards"
-    training.mkdir()
-    pd.DataFrame({"issue_time": pd.to_datetime(["2010-01-01T00:00Z", "2025-01-01T00:00Z", "2025-01-01T00:00Z"])}).to_parquet(training / "part.parquet")
-    registry = {"datasets": {"test": {"training_path": "shards", "goes_path": "result/goes.parquet"}},
-                "goes_archive": {"cache_path": "cache", "satellites": [16], "url": "https://example.test/"},
-                "metrics": "reports"}
-    monkeypatch.setattr(common.config, "get_config", lambda: SimpleNamespace(workdir=tmp_path, models_registry={"models": {"solar_index_calibration": registry}}))
-    notebook_path = Path(__file__).resolve().parents[3] / "notebooks/0_goes_data_fetching.ipynb"
-    notebook = json.loads(notebook_path.read_text())
-
-    def run():
-        scope = {}
-        for index, cell in enumerate(notebook["cells"]):
-            if cell["cell_type"] == "code":
-                exec(compile("".join(cell["source"]), f"notebook-cell-{index}", "exec"), scope)
-        return scope
-
-    result = run()
-    saved = pd.read_parquet(tmp_path / "result/goes.parquet")
-    assert len(saved) == 4
-    assert result["summary"][0]["days_without_valid_samples"] == 1
-    assert (tmp_path / "reports/goes_archive_manifest.csv").is_file()
-    assert (tmp_path / "reports/goes_daily_coverage.csv").is_file()
-    assert len(build_daily_goes_features(saved)) == 1
-    run()  # Completed normalized output skips archive discovery/download.
-    assert discover.call_count == 1

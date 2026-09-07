@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export PYTHONPATH="$PWD/apps/api:$PWD/packages/common/src:$PWD/packages/clio/src:$PWD/packages/forecast/src:$PWD/packages/forecast-core/src${PYTHONPATH:+:$PYTHONPATH}"
+exec .venv/bin/python -m pytest tests packages/clio/tests packages/forecast/tests apps/api/tests packages/forecast-core/tests "$@"

@@ -1,7 +1,11 @@
 # Up nginx-proxy after server restart
 @reboot sleep 15 && cd /var/www && ./nginx-proxy-up.sh
 
-# Observations
+# Minute solar wind collection runs in the solar-wind Compose service
+# (app.commands.collect_solar_wind --watch), polling every 60 seconds.
+# See docker-compose.yml; no cron entry is needed for this collector.
+
+# Hourly observations and normalization for forecast inputs
 0 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_observations_upd api .venv/bin/python -m app.commands.refresh_observations
 
 # Forecasts use the latest committed observations; no ingestion dependency

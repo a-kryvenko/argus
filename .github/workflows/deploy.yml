@@ -130,10 +130,10 @@ jobs:
 
             docker compose config --quiet
             docker compose pull
+            docker compose up -d postgres redis
+            docker compose run --rm api .venv/bin/alembic upgrade head
             docker compose up -d --remove-orphans
             docker image prune -f
-
-            docker compose run --rm api .venv/bin/alembic upgrade head
 
             docker compose run --rm --name observations_update api .venv/bin/python -m app.commands.refresh_observations
 

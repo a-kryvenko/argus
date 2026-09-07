@@ -7,6 +7,7 @@
     "dev": "next dev --webpack --port 3000",
     "build": "next build --webpack",
     "start": "next start",
+    "test:live": "node --test tests/solar-wind.test.mjs",
     "lint": "eslint --max-warnings 0",
     "check-types": "next typegen && tsc --noEmit"
   },

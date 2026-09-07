@@ -143,6 +143,12 @@ database and Redis data should be deleted.
 
 ### Observation and forecast services
 
+Minute solar wind observations have their own collector and API. Apply migrations
+first, then run `pnpm app:solar-wind --watch` to collect continuously (omit `--watch`
+for one pass). Deployment runs this as the dedicated `solar-wind` Compose service.
+It polls the NOAA magnetic and plasma feeds independently every 60 seconds and
+never runs hourly normalization or forecasts. See [solar wind API](docs/solar-wind-api.md).
+
 Observation ingestion and forecast generation are separate commands:
 
 ```bash

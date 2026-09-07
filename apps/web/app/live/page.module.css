@@ -17,3 +17,17 @@
 .table th:first-child { text-align: left; }
 .table small { display: block; margin-top: 6px; color: var(--text-secondary); }
 .table tbody tr:hover { background: var(--glass-hover); }
+.card h3 { font-size: 16px; font-weight: 400; color: var(--text-secondary); margin: 0 0 16px; }
+.card small { font-size: 12px; }
+.sampleTime { color: var(--text-secondary); font-size: 12px; margin-top: 8px; }
+.fresh { color: #68d5c5; margin-top: 12px; }
+.additional { margin: 28px 0; border-top: 1px solid var(--border); padding-top: 18px; }
+.additional summary { cursor: pointer; margin-bottom: 20px; }
+.chartHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 32px 0 16px; }
+.periods { display: flex; gap: 8px; flex-wrap: wrap; }
+.periods button { color: var(--text-secondary); background: var(--glass); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+.periods button[aria-pressed="true"] { color: #fff; background: #3c4790; border-color: #8aa4ff; }
+.periods button:focus-visible, .additional summary:focus-visible { outline: 2px solid #8aa4ff; outline-offset: 3px; }
+.chart { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--glass); padding: 16px 8px; margin-bottom: 18px; min-width: 0; }
+.chart h3 { margin: 0 16px 16px; font-size: 16px; font-weight: 500; }
+.chart h3 small { color: var(--text-secondary); font-weight: 400; }

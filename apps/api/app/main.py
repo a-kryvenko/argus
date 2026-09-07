@@ -17,6 +17,7 @@ from app.routers.healthcheck import router as healthcheck_router
 from app.routers.private.model import router as private_model_router
 from app.routers.private.risk import router as private_risk_router
 from app.routers.public.observations import router as observations_router
+from app.routers.public.solar_wind import router as solar_wind_router
 from app.schemas.response import error_response
 
 config = get_config()
@@ -81,6 +82,7 @@ app.include_router(healthcheck_router)
 app.include_router(atmospheric_density_router)
 app.include_router(forecasts_router)
 app.include_router(observations_router)
+app.include_router(solar_wind_router)
 
 app.include_router(private_risk_router)
 app.include_router(private_model_router)

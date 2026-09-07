@@ -24,6 +24,24 @@ services:
       application:
       backend:
 
+  solar-wind:
+    image: andriykryvenko/argus-forecast:latest
+    restart: unless-stopped
+    init: true
+    command: [".venv/bin/python", "-m", "app.commands.collect_solar_wind", "--watch"]
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DB_HOST: postgres
+    volumes:
+      - ./configs:/var/www/configs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      backend:
+
   frontend:
     image: andriykryvenko/argus-frontend:latest
     container_name: argusFrontend

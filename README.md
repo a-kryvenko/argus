@@ -130,6 +130,9 @@ docker compose up -d
 pnpm run dev
 ```
 
+The `pnpm dev` command starts the API, frontend, minute solar-wind collector, and
+Kp/Dst collector together. Apply `pnpm db:migrate` before the first start.
+
 Check the infrastructure status or stop it with:
 
 ```bash
@@ -148,6 +151,14 @@ first, then run `pnpm app:solar-wind --watch` to collect continuously (omit `--w
 for one pass). Deployment runs this as the dedicated `solar-wind` Compose service.
 It polls the NOAA magnetic and plasma feeds independently every 60 seconds and
 never runs hourly normalization or forecasts. See [solar wind API](docs/solar-wind-api.md).
+
+Native Kp and Dst have an independent collector: `pnpm app:geomagnetic --watch`
+(Kp every minute, Dst every five minutes). Production uses the `geomagnetic` Compose
+service. The live page and `/public/observations/summary` share coverage-aware
+observed trends. See [geomagnetic observations and summary](docs/geomagnetic-api.md).
+
+Collection diagnostics are available on `/live` and `/public/observations/status`.
+See [collector status and production healthchecks](docs/observation-status.md).
 
 Observation ingestion and forecast generation are separate commands:
 

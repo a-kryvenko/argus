@@ -5,8 +5,6 @@ import { apiRequest, type ObservationPoint } from '../_utils/api';
 import styles from './page.module.css';
 
 const metrics: { key: keyof Omit<ObservationPoint, 'issue_time'>; label: string; unit: string }[] = [
-  { key: 'kp', label: 'Kp index', unit: '' },
-  { key: 'dst', label: 'Dst index', unit: 'nT' },
   { key: 'ap', label: 'Ap index', unit: '' },
   { key: 'f10_7', label: 'F10.7 solar flux', unit: 'sfu' },
   { key: 's10', label: 'S10 estimate', unit: '' },

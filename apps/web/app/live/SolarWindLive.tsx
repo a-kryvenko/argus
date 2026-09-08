@@ -6,8 +6,7 @@ import { apiRequest } from '../_utils/api';
 import { chartPoints, type History, type Latest, type Metric } from './solarWind';
 import styles from './page.module.css';
 
-const primary: Metric[] = ['v', 'n', 'bz', 'bt'];
-const secondary: Metric[] = ['bx', 'by', 't'];
+const metrics: Metric[] = ['v', 'n', 'bz', 'bt', 'bx', 'by', 't'];
 const labels: Record<Metric, string> = { v: 'Solar wind speed', n: 'Proton density', bz: 'Bz', bt: 'Total field Bt', bx: 'Bx', by: 'By', t: 'Proton temperature' };
 const charts: { title: string; unit: string; metrics: Metric[]; colors: string[] }[] = [
   { title: 'Magnetic field · GSM Bz and total Bt', unit: 'nT', metrics: ['bz', 'bt'], colors: ['#8aa4ff', '#f6bd60'] },
@@ -22,10 +21,9 @@ function number(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 1 }) : '—';
 }
 
-export default function SolarWindLive() {
+export default function SolarWindLive({ hours, onHoursChange }: { hours: number; onHoursChange: (hours: number) => void }) {
   const [latest, setLatest] = useState<Latest>();
   const [history, setHistory] = useState<{ data: History; hours: number }>();
-  const [hours, setHours] = useState(24);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkedAt, setCheckedAt] = useState<number>();
@@ -97,13 +95,15 @@ export default function SolarWindLive() {
     {loading && <p role="status">Loading solar wind observations…</p>}
     {errors.length > 0 && <p role="alert" className={styles.warning}>{errors.join(' ')} Previously loaded data remain visible. Retrying in one minute.</p>}
     {!loading && !hasMeasurements && <p role="status">No solar wind measurements are available yet.</p>}
-    {checkedAt && <p className={styles.description}>Latest API check: {timestamp(checkedAt)}. Freshness below uses measurement time.</p>}
-    <div className={styles.grid}>{primary.map(card)}</div>
-    <details className={styles.additional}><summary>Field components and temperature</summary><div className={styles.grid}>{secondary.map(card)}</div></details>
+    <details className={styles.additional}>
+      <summary>Solar wind measurement details</summary>
+      {checkedAt && <p className={styles.description}>Latest API check: {timestamp(checkedAt)}. Freshness below uses measurement time.</p>}
+      <div className={styles.grid}>{metrics.map(card)}</div>
+    </details>
     <div className={styles.chartHeader}>
       <h2>Solar wind history</h2>
       <div className={styles.periods} role="group" aria-label="History period">
-        {[6, 24, 72, 168].map(period => <button key={period} aria-pressed={hours === period} onClick={() => setHours(period)}>{period < 48 ? `${period} hours` : `${period / 24} days`}</button>)}
+        {[6, 24, 72, 168].map(period => <button key={period} aria-pressed={hours === period} onClick={() => onHoursChange(period)}>{period < 48 ? `${period} hours` : `${period / 24} days`}</button>)}
       </div>
     </div>
     {!visibleHistory && <p role="status">{errors.length ? 'History is unavailable for this period.' : 'Loading history…'}</p>}
@@ -115,7 +115,7 @@ export default function SolarWindLive() {
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis dataKey="time" type="number" domain={[Date.parse(visibleHistory.from), Date.parse(visibleHistory.to)]} tickFormatter={value => new Date(value).toISOString().slice(hours > 24 ? 5 : 11, 16).replace('T', ' ')} minTickGap={45} tick={{ fontSize: 12 }} />
           <YAxis width={64} domain={['auto', 'auto']} tick={{ fontSize: 12 }} tickFormatter={value => number(value)} />
-          <Tooltip labelFormatter={value => timestamp(Number(value))} contentStyle={{ background: '#18181b', borderColor: '#3f3f46', color: '#fff' }} />
+          <Tooltip isAnimationActive={false} labelFormatter={value => timestamp(Number(value))} contentStyle={{ background: '#18181b', borderColor: '#3f3f46', color: '#fff' }} />
           <Legend />
           {chart.metrics.includes('bz') && <ReferenceLine y={0} stroke="#808080" />}
           {chart.metrics.map((metric, index) => <Line key={metric} dataKey={metric} name={labels[metric]} unit={` ${chart.unit}`} stroke={chart.colors[index]} type="linear" dot={false} connectNulls={false} isAnimationActive={false} strokeWidth={1.5} />)}

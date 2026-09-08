@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "scripts": {
     "dev": ".venv/bin/uvicorn app.main:app --reload --port 8000",
-    "build": "echo 'Backend is Python - no build step'"
+    "build": "echo 'Backend is Python - no build step'",
+    "dev:solar-wind": ".venv/bin/python -m app.commands.collect_solar_wind --watch",
+    "dev:geomagnetic": ".venv/bin/python -m app.commands.collect_geomagnetic --watch"
   }
 }

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.dataloaders.solar_wind_loader import FIELDS, SOURCES, fetch_records
 from app.db.models import SolarWindObservation
 from app.db.session import get_session_factory
+from app.services.collection_status import track_attempt
 
 logger = logging.getLogger(__name__)
 METADATA = {
@@ -32,17 +33,18 @@ async def ingest_source(kind: str) -> None:
         if not lock.scalar_one():
             logger.info("Solar wind %s ingestion is already running", kind)
             return
-        records = await asyncio.to_thread(fetch_records, kind)
-        for offset in range(0, len(records), 500):
-            statement = insert(SolarWindObservation).values(records[offset:offset + 500])
-            statement = statement.on_conflict_do_update(
-                index_elements=["kind", "observed_at", "spacecraft"],
-                set_={name: statement.excluded[name] for name in ("active", "received_at", "values", "raw")},
-                # Polling an unchanged point must not make its receipt time newer.
-                where=SolarWindObservation.raw.is_distinct_from(statement.excluded.raw),
-            )
-            await session.execute(statement)
-        await session.commit()
+        async with track_attempt(f'solar_wind_{kind}', session, get_session_factory()) as attempt:
+            records = await asyncio.to_thread(fetch_records, kind)
+            attempt.received(records)
+            for offset in range(0, len(records), 500):
+                statement = insert(SolarWindObservation).values(records[offset:offset + 500])
+                statement = statement.on_conflict_do_update(
+                    index_elements=["kind", "observed_at", "spacecraft"],
+                    set_={name: statement.excluded[name] for name in ("active", "received_at", "values", "raw")},
+                    # Polling an unchanged point must not make its receipt time newer.
+                    where=SolarWindObservation.raw.is_distinct_from(statement.excluded.raw),
+                )
+                await session.execute(statement)
         logger.info("Solar wind %s: ingested %d source samples", kind, len(records))
 
 

@@ -25,10 +25,40 @@ services:
       backend:
 
   solar-wind:
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-m", "app.commands.check_collector_health", "solar-wind"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
     image: andriykryvenko/argus-forecast:latest
     restart: unless-stopped
     init: true
     command: [".venv/bin/python", "-m", "app.commands.collect_solar_wind", "--watch"]
+    env_file:
+      - .env
+      - .env.local
+    environment:
+      DB_HOST: postgres
+    volumes:
+      - ./configs:/var/www/configs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      backend:
+
+  geomagnetic:
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-m", "app.commands.check_collector_health", "geomagnetic"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    image: andriykryvenko/argus-forecast:latest
+    restart: unless-stopped
+    init: true
+    command: [".venv/bin/python", "-m", "app.commands.collect_geomagnetic", "--watch"]
     env_file:
       - .env
       - .env.local

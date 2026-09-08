@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { apiRequest } from '../_utils/api';
-import { intervalBounds, type IndexHistory, type IndexLatest, type IndexMetric, type IndexSample } from './geomagnetic';
+import { intervalBounds, type IndexHistory, type IndexMetric, type IndexSample } from './geomagnetic';
+import { useLiveQuery, type LiveSnapshot } from './useLiveQuery';
 import styles from './page.module.css';
+import HistoryCoverage from './HistoryCoverage';
 
 const endpoint = '/public/observations/geomagnetic';
 const metrics: IndexMetric[] = ['kp', 'dst'];
@@ -30,6 +31,7 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
   const y = (value: number) => 200 - (value-low)/(high-low)*180;
   return <section className={styles.chart} aria-label={`${series.label} history`}>
     <h3>{series.label}{series.unit && ` (${series.unit})`}</h3>
+    <HistoryCoverage label={series.label} coverage={series.coverage} />
     {values.length === 0 && <p className={styles.description}>No usable observations in this interval.</p>}
     <div ref={container}>
       <svg width="100%" height={240} viewBox={`0 0 ${width} 240`} role="group" aria-label={`${series.label}: ${metric === 'kp' ? 'three-hour blocks' : 'hourly segments'}, UTC`}>
@@ -59,39 +61,11 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
   </section>;
 }
 
-export default function GeomagneticLive({ hours, onHoursChange }: { hours: number; onHoursChange: (hours: number) => void }) {
-  const [latest, setLatest] = useState<IndexLatest>();
-  const [past, setPast] = useState<{ data: IndexHistory; hours: number }>();
-  const [errors, setErrors] = useState<string[]>([]);
-  const [checkedAt, setCheckedAt] = useState<number>();
-  const [now, setNow] = useState<number>();
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
-      const end = new Date();
-      const query = new URLSearchParams({ from: new Date(end.getTime()-hours*3600000).toISOString(), to: end.toISOString() });
-      const options = { signal: controller.signal, cache: 'no-store' as const };
-      const [current, history] = await Promise.allSettled([
-        apiRequest<IndexLatest>(`${endpoint}/latest`, options), apiRequest<IndexHistory>(`${endpoint}/history?${query}`, options),
-      ]);
-      if (controller.signal.aborted) return;
-      const failures: string[] = [];
-      if (current.status === 'fulfilled') { setLatest(current.value); setCheckedAt(Date.now()); }
-      else failures.push('Latest indices could not be refreshed.');
-      if (history.status === 'fulfilled') setPast({ data: history.value, hours });
-      else failures.push('Index history could not be refreshed.');
-      setErrors(failures); setNow(Date.now());
-      timer = setTimeout(refresh, 60000);
-    }
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [hours]);
-  const visible = past?.hours === hours ? past.data : undefined;
+export default function GeomagneticLive({ hours, onHoursChange, snapshot }: { hours: number; onHoursChange: (hours: number) => void; snapshot: LiveSnapshot }) {
+  const { data: visible, failed } = useLiveQuery<IndexHistory>(`${endpoint}/history`, hours);
+  const { receivedAt: checkedAt, now } = snapshot;
+  const latest = snapshot.data ? { generated_at: snapshot.data.generated_at, series: snapshot.data.geomagnetic } : undefined;
+  const errors = [snapshot.failed ? 'Latest indices could not be refreshed.' : '', failed ? 'Index history could not be refreshed.' : ''].filter(Boolean);
   return <section aria-label="Geomagnetic observations">
     <h2>Geomagnetic activity</h2>
     <p className={styles.description}>Estimated Kp retains its three-hour intervals. Kyoto Dst is shown hourly. Both are preliminary operational data and may be revised.</p>
@@ -123,7 +97,7 @@ export default function GeomagneticLive({ hours, onHoursChange }: { hours: numbe
       <a href="https://www.spaceweather.gov/products/planetary-k-index">NOAA Kp</a>
       <a href="https://wdc.kugi.kyoto-u.ac.jp/dstdir/">Kyoto Dst</a>
     </nav>
-    <div className={styles.chartHeader}><h3>Index history</h3><div className={styles.periods} role="group" aria-label="Shared history period">{[6,24,72,168].map(period => <button key={period} aria-pressed={hours===period} onClick={() => onHoursChange(period)}>{period < 48 ? `${period} hours` : `${period/24} days`}</button>)}</div></div>
+    <div className={styles.chartHeader}><h3>Index history</h3><div className={styles.periods} role="group" aria-label="Shared history period">{[6,24,72,168,720].map(period => <button key={period} aria-pressed={hours===period} onClick={() => onHoursChange(period)}>{period < 48 ? `${period} hours` : `${period/24} days`}</button>)}</div></div>
     {visible ? metrics.map(metric => <IntervalChart key={`${metric}-${hours}`} metric={metric} history={visible} />) : <p role="status">{errors.length ? 'History unavailable for this period.' : 'Loading index history…'}</p>}
     <p className={styles.description}>Blank intervals indicate missing or flagged data. Freshness allows for publication delay after an interval ends: four hours for Kp, two hours for Dst (the next native interval plus one hour).</p>
   </section>;

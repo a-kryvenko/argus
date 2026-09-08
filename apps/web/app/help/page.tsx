@@ -5,7 +5,7 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = {
   title: "Help | Argus Sunwatch",
-  description: "Learn how to read Argus Sunwatch forecasts, interpret probabilities and metrics, and access observation and forecast data.",
+  description: "Forecast charts, observation freshness, model metrics and API access.",
 };
 
 const sections = [
@@ -22,15 +22,13 @@ export default function Help() {
     <main className={`container ${styles.page}`}>
       <header className={styles.hero}>
         <p className={styles.eyebrow}>ARGUS SUNWATCH · HELP</p>
-        <h1>Understand the forecast.</h1>
+        <h1>Reading charts and data</h1>
         <p className={styles.intro}>
-          Argus Sunwatch brings solar wind and geomagnetic forecasts together with
-          recent observations. Use this guide to read the charts, explore uncertainty,
-          and check how the models performed on historical data.
+          Chart values, forecast probabilities, observation timestamps and model evaluation metrics.
         </p>
         <div className={styles.actions}>
-          <Link href="/">Explore the forecast <span aria-hidden="true">→</span></Link>
-          <Link href="/live">Check live observations <span aria-hidden="true">→</span></Link>
+          <Link href="/">Forecasts <span aria-hidden="true">→</span></Link>
+          <Link href="/live">Live observations <span aria-hidden="true">→</span></Link>
         </div>
       </header>
 
@@ -91,12 +89,14 @@ export default function Help() {
 
           <section id="observations" className={styles.section}>
             <h2>Live data & freshness</h2>
-            <p>The <Link href="/live">Live page</Link> shows the latest available hourly observations and up to 24 hourly records. It checks for updates every minute; this does not mean new measurements arrive every minute.</p>
+            <p>The <Link href="/live">Live page</Link> shows solar wind measurements at L1, three-hour Kp and hourly Dst. It checks for updates every minute. All observation times are UTC.</p>
             <dl className={styles.definitions}>
-              <div><dt>Observed vs. last checked</dt><dd>“Observed” identifies the data timestamp. “Last checked” is when the page last successfully fetched data. A recent check can still return an older observation.</dd></div>
-              <div><dt>Delayed data</dt><dd>A warning appears when the latest observation is more than three hours old. If a refresh fails, the page keeps the last loaded data and retries automatically.</dd></div>
-              <div><dt>Missing values</dt><dd>A dash means a value is unavailable, not zero. Observations are normalized; missing measurements may be interpolated or filled during processing.</dd></div>
-              <div><dt>S10, M10 & Y10</dt><dd>These are provisional daily solar index estimates calibrated from GOES data, updated using the UTC day’s available observations. Midnight closes the previous day.</dd></div>
+              <div><dt>Freshness</dt><dd>Solar wind is marked delayed after ten minutes. Kp and Dst use time since the observation interval ended: four hours for Kp and two for Dst. A recent page refresh can still return old data.</dd></div>
+              <div><dt>History resolution</dt><dd>Up to 24 hours uses minute solar wind samples; 3–7 days uses five-minute means; 30 days uses hourly means. Aggregate tooltips include min/max and coverage. Kp/Dst keep their original intervals.</dd></div>
+              <div><dt>Missing values</dt><dd>A dash means unavailable, not zero. Native observations are not filled. Missing intervals and provider-flagged values leave gaps in the charts.</dd></div>
+              <div><dt>Coverage</dt><dd>The percentage counts usable measurements. For aggregates it covers calculated windows only; uncalculated windows have unknown coverage. Values awaiting recalculation remain visible with a notice.</dd></div>
+              <div><dt>Collection status</dt><dd>Expand “Data collection” for source delays, request errors and overdue collection. If a page refresh fails, previously loaded data remain visible while it retries.</dd></div>
+              <div><dt>Additional hourly indices</dt><dd>This separate section uses normalized data, which may be filled. S10, M10 and Y10 are provisional daily estimates calibrated from GOES data.</dd></div>
             </dl>
           </section>
 
@@ -117,8 +117,9 @@ export default function Help() {
             <h2>API & support</h2>
             <p>Use the <a href="/api/v1/docs">API documentation</a> to explore endpoints and response schemas. Product pages link directly to their forecast and metrics JSON responses.</p>
             <div className={styles.resources}>
-              <a href="/api/v1/public/observations/latest">Latest observations <span aria-hidden="true">↗</span></a>
-              <a href="/api/v1/public/observations/history?limit=24">Observation history <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/public/observations/summary">Current observations <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/public/observations/solar-wind/history?resolution=auto">Solar wind history <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/public/observations/geomagnetic/history">Kp/Dst history <span aria-hidden="true">↗</span></a>
               <a href="/api/v1/public/forecasts/solar-wind-speed">Solar wind forecast <span aria-hidden="true">↗</span></a>
               <a href="/api/v1/public/forecasts/solar-wind-speed/metrics">Solar wind metrics <span aria-hidden="true">↗</span></a>
             </div>

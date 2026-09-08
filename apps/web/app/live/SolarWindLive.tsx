@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { apiRequest } from '../_utils/api';
-import { chartPoints, type History, type Latest, type Metric } from './solarWind';
+import { chartPoints, type History, type Metric } from './solarWind';
+import { useLiveQuery, type LiveSnapshot } from './useLiveQuery';
 import styles from './page.module.css';
+import HistoryCoverage from './HistoryCoverage';
 
 const metrics: Metric[] = ['v', 'n', 'bz', 'bt', 'bx', 'by', 't'];
 const labels: Record<Metric, string> = { v: 'Solar wind speed', n: 'Proton density', bz: 'Bz', bt: 'Total field Bt', bx: 'Bx', by: 'By', t: 'Proton temperature' };
@@ -14,6 +15,7 @@ const charts: { title: string; unit: string; metrics: Metric[]; colors: string[]
   { title: 'Proton density', unit: 'cm⁻³', metrics: ['n'], colors: ['#e6a1df'] },
 ];
 const endpoint = '/public/observations/solar-wind';
+const aggregateColors = { min: '#8aa4ff', mean: '#68d5c5', max: '#f6a65a' };
 function timestamp(value: string | number) {
   return new Date(value).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
@@ -21,48 +23,18 @@ function number(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('en-US', { maximumFractionDigits: 1 }) : '—';
 }
 
-export default function SolarWindLive({ hours, onHoursChange }: { hours: number; onHoursChange: (hours: number) => void }) {
-  const [latest, setLatest] = useState<Latest>();
-  const [history, setHistory] = useState<{ data: History; hours: number }>();
-  const [errors, setErrors] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [checkedAt, setCheckedAt] = useState<number>();
-  const [now, setNow] = useState<number>();
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
-      const end = new Date();
-      const start = new Date(end.getTime() - hours * 3_600_000);
-      const query = new URLSearchParams({ from: start.toISOString(), to: end.toISOString(), metrics: 'bz,bt,v,n' });
-      const options = { signal: controller.signal, cache: 'no-store' as const };
-      const [current, past] = await Promise.allSettled([
-        apiRequest<Latest>(`${endpoint}/latest`, options),
-        apiRequest<History>(`${endpoint}/history?${query}`, options),
-      ]);
-      if (controller.signal.aborted) return;
-      const failures: string[] = [];
-      if (current.status === 'fulfilled') { setLatest(current.value); setCheckedAt(Date.now()); }
-      else failures.push('Latest measurements could not be refreshed.');
-      if (past.status === 'fulfilled') setHistory({ data: past.value, hours });
-      else failures.push('History could not be refreshed.');
-      setErrors(failures);
-      setLoading(false);
-      setNow(Date.now());
-      timer = setTimeout(refresh, 60_000);
-    }
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [hours]);
-
-  const visibleHistory = history?.hours === hours ? history.data : undefined;
-  const data = useMemo(() => visibleHistory ? charts.map(chart => chartPoints(visibleHistory, chart.metrics)) : [], [visibleHistory]);
+export default function SolarWindLive({ hours, onHoursChange, snapshot }: { hours: number; onHoursChange: (hours: number) => void; snapshot: LiveSnapshot }) {
+  const { data: visibleHistory, failed } = useLiveQuery<History>(`${endpoint}/history?metrics=bz,bt,v,n&resolution=auto`, hours);
+  const { receivedAt: checkedAt, now, loading } = snapshot;
+  const latest = snapshot.data ? { series: snapshot.data.solar_wind } : undefined;
+  const errors = [snapshot.failed ? 'Latest measurements could not be refreshed.' : '', failed ? 'History could not be refreshed.' : ''].filter(Boolean);
+  const aggregated = (visibleHistory?.resolution_seconds ?? 60) > 60;
+  const visibleCharts = useMemo(() => aggregated ? [
+    { title: 'Magnetic field · GSM Bz', unit: 'nT', metrics: ['bz'] as Metric[], colors: ['#8aa4ff'] },
+    { title: 'Total magnetic field Bt', unit: 'nT', metrics: ['bt'] as Metric[], colors: ['#f6bd60'] },
+    ...charts.slice(1),
+  ] : charts, [aggregated]);
+  const data = useMemo(() => visibleHistory ? visibleCharts.map(chart => chartPoints(visibleHistory, chart.metrics)) : [], [visibleHistory, visibleCharts]);
   const hasMeasurements = latest && Object.values(latest.series).some(series => series.latest?.value != null);
   function card(metric: Metric) {
     const series = latest?.series[metric];
@@ -103,25 +75,39 @@ export default function SolarWindLive({ hours, onHoursChange }: { hours: number;
     <div className={styles.chartHeader}>
       <h2>Solar wind history</h2>
       <div className={styles.periods} role="group" aria-label="History period">
-        {[6, 24, 72, 168].map(period => <button key={period} aria-pressed={hours === period} onClick={() => onHoursChange(period)}>{period < 48 ? `${period} hours` : `${period / 24} days`}</button>)}
+        {[6, 24, 72, 168, 720].map(period => <button key={period} aria-pressed={hours === period} onClick={() => onHoursChange(period)}>{period < 48 ? `${period} hours` : `${period / 24} days`}</button>)}
       </div>
     </div>
+    {visibleHistory && <p className={styles.description}>{(visibleHistory.resolution_seconds ?? 60) === 60 ? 'One-minute measurements' : `${visibleHistory.resolution_seconds === 300 ? 'Five-minute' : 'Hourly'} means · min/max and coverage in the tooltip. Coverage describes calculated windows; gap details identify affected windows, not exact missing-minute times.`}</p>}
     {!visibleHistory && <p role="status">{errors.length ? 'History is unavailable for this period.' : 'Loading history…'}</p>}
     {visibleHistory && !data.some(points => points.length > 0) && <p>No stored measurements in this interval.</p>}
-    {visibleHistory && data.some(points => points.length > 0) && charts.map((chart, index) => <section className={styles.chart} key={chart.title} aria-label={`${chart.title}, ${chart.unit}`}>
+    {visibleHistory && visibleCharts.map((chart, index) => <section className={styles.chart} key={chart.title} aria-label={`${chart.title}, ${chart.unit}`}>
       <h3>{chart.title} <small>({chart.unit})</small></h3>
+      {chart.metrics.map(metric => <HistoryCoverage key={metric} label={labels[metric]} coverage={visibleHistory.series[metric]?.coverage} processing={visibleHistory.series[metric]?.processing} />)}
       <ResponsiveContainer width="100%" height={240}>
         <LineChart data={data[index]} syncId="solar-wind" syncMethod="value" margin={{ top: 8, right: 18, left: 0, bottom: 8 }}>
           <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis dataKey="time" type="number" domain={[Date.parse(visibleHistory.from), Date.parse(visibleHistory.to)]} tickFormatter={value => new Date(value).toISOString().slice(hours > 24 ? 5 : 11, 16).replace('T', ' ')} minTickGap={45} tick={{ fontSize: 12 }} />
           <YAxis width={64} domain={['auto', 'auto']} tick={{ fontSize: 12 }} tickFormatter={value => number(value)} />
-          <Tooltip isAnimationActive={false} labelFormatter={value => timestamp(Number(value))} contentStyle={{ background: '#18181b', borderColor: '#3f3f46', color: '#fff' }} />
+          <Tooltip isAnimationActive={false} labelFormatter={value => timestamp(Number(value))} contentStyle={{ background: '#18181b', borderColor: '#3f3f46', color: '#fff' }}
+            content={aggregated ? ({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              const point = payload[0].payload as Record<string, number | undefined>;
+              return <div style={{ background: '#18181b', border: '1px solid #3f3f46', padding: 12, color: '#fff' }}>
+                <p>{timestamp(Number(label))} · bucket start</p>
+                {chart.metrics.map(metric => <div key={metric}>
+                  <strong>{labels[metric]}</strong>
+                  {(['min', 'mean', 'max'] as const).map(stat => <p key={stat} style={{ color: aggregateColors[stat] }}>{stat}: {number(point[stat === 'mean' ? metric : `${metric}_${stat}`])} {chart.unit}</p>)}
+                  <p>Coverage: {number(point[`${metric}_coverage`])}%</p>
+                </div>)}
+              </div>;
+            } : undefined} />
           <Legend />
           {chart.metrics.includes('bz') && <ReferenceLine y={0} stroke="#808080" />}
-          {chart.metrics.map((metric, index) => <Line key={metric} dataKey={metric} name={labels[metric]} unit={` ${chart.unit}`} stroke={chart.colors[index]} type="linear" dot={false} connectNulls={false} isAnimationActive={false} strokeWidth={1.5} />)}
+          {chart.metrics.map((metric, index) => <Line key={metric} dataKey={metric} name={aggregated ? 'mean' : labels[metric]} unit={` ${chart.unit}`} stroke={aggregated ? aggregateColors.mean : chart.colors[index]} type="linear" legendType="line" dot={false} connectNulls={false} isAnimationActive={false} strokeWidth={1.5} />)}
         </LineChart>
       </ResponsiveContainer>
     </section>)}
-    <p className={styles.description}>Values are operational observations, not independently validated by Argus. A delay above 10 minutes is marked “Delayed”. History is shown at its original one-minute resolution, without interpolation.</p>
+    <p className={styles.description}>Values are operational observations, not independently validated by Argus. A delay above 10 minutes is marked “Delayed”. History resolution depends on the selected period; values are never interpolated.</p>
   </section>;
 }

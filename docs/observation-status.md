@@ -1,13 +1,14 @@
 # Observation collection status
 
+For restart behavior and its regression check, see [history recovery](observation-recovery.md).
+
 `GET /public/observations/status` returns the standard API envelope with
 `generated_at`, aggregate `status` (`ok` or `degraded`), and `sources` keyed by
 `solar_wind_mag`, `solar_wind_plasma`, `kp`, and `dst`. Responses are not cached.
 The expandable **Data collection** block on `/live` refreshes every minute.
 
-Apply migration `20260908_0006` and restart existing collector processes to enable
-tracking. Until a source has attempted collection, its status is `not_started`.
-No historical collection outcomes are inferred from existing observations.
+Status storage was added in migration `20260908_0006`. A source with no recorded
+attempt has status `not_started`; earlier collection outcomes are not reconstructed.
 
 Each source exposes its polling interval, freshness thresholds, last attempt,
 completion, valid parsed response, successful save, latest source measurement,
@@ -47,7 +48,7 @@ collector logs and container health as well.
 ## Production liveness
 
 Both collector services have a Compose healthcheck, every 30 seconds, with a
-120-second startup period and three retries. To run the same probe manually:
+120-second startup period and three retries. From `apps/api`, run a probe with:
 
 ```sh
 .venv/bin/python -m app.commands.check_collector_health solar-wind

@@ -1,3 +1,4 @@
+import type { Coverage, Processing } from './HistoryCoverage';
 export type Metric = 'bx' | 'by' | 'bz' | 'bt' | 'v' | 'n' | 't';
 export type Sample = {
   observed_at: string;
@@ -6,6 +7,8 @@ export type Sample = {
   spacecraft: string;
   quality: 'missing' | 'flagged' | 'unverified';
   provider_quality: number | null;
+  min?: number; max?: number; count?: number; expected_count?: number;
+  coverage_percent?: number; source_changes?: number; last_spacecraft?: string;
 };
 export type Metadata = {
   label: string;
@@ -23,15 +26,41 @@ export type Latest = {
   }>;
 };
 export type History = {
+  resolution_seconds?: number;
   from: string;
   to: string;
-  series: Partial<Record<Metric, Metadata & { points: Sample[] }>>;
+  series: Partial<Record<Metric, Metadata & { points: Sample[]; coverage?: Coverage; processing?: Processing }>>;
 };
 export type ChartPoint = { time: number } & Partial<Record<Metric, number | null>>;
 
 // Null rows break lines across omitted minutes and spacecraft changes.
 // Neither this presentation layer nor the API interpolates measurements.
 export function chartPoints(history: History, metrics?: Metric[]): ChartPoint[] {
+  if ((history.resolution_seconds ?? 60) > 60) {
+    // Connect adjacent means, preserving missing buckets and source transitions.
+    const rows = new Map<number, ChartPoint>();
+    for (const [key, series] of Object.entries(history.series)) {
+      if (!series || (metrics && !metrics.includes(key as Metric))) continue;
+      let previous: Sample | undefined;
+      for (const point of series.points) {
+        const time = Date.parse(point.observed_at);
+        if (previous) {
+          const before = Date.parse(previous.observed_at);
+          if (time - before > history.resolution_seconds! * 1000 ||
+              (previous.last_spacecraft ?? previous.spacecraft) !== point.spacecraft ||
+              previous.source_changes || point.source_changes) {
+            rows.set(before + (time-before)/2, { time: before + (time-before)/2 });
+          }
+        }
+        const row = rows.get(time) ?? { time };
+        Object.assign(row, { [key]: point.value, [`${key}_min`]: point.min, [`${key}_max`]: point.max,
+          [`${key}_coverage`]: point.coverage_percent });
+        rows.set(time, row);
+        previous = point;
+      }
+    }
+    return [...rows.values()].sort((a,b) => a.time-b.time);
+  }
   const rows = new Map<number, ChartPoint>();
   const breaks = new Set<number>();
   for (const [key, series] of Object.entries(history.series)) {

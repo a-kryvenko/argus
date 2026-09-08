@@ -69,7 +69,7 @@ export default function PrivateDashboard() {
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between mb-10">
-          <h1 className="text-4xl font-bold">Impact Intelligence - Hourly Forecast</h1>
+          <h1 className="text-4xl font-bold">Power-grid risk · hourly forecast</h1>
           {data && <button onClick={() => { localStorage.removeItem('access_token'); setData(null); }} className="text-red-400">Logout</button>}
         </div>
 

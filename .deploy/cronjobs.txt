@@ -13,3 +13,6 @@
 
 # Forecasts use the latest committed observations; no ingestion dependency
 10 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_full_forecast_upd api .venv/bin/python -m app.commands.generate_forecast
+
+# Durable 5-minute/hourly aggregates; processes at most 240 source hours per run
+*/5 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm api .venv/bin/python -m app.commands.aggregate_solar_wind

@@ -11,6 +11,7 @@ from clio.dataloaders.solar_wind_loader import FIELDS, SOURCES, fetch_records
 from app.db.models import SolarWindObservation
 from app.db.session import get_session_factory
 from app.services.collection_status import track_attempt
+from app.services.history_coverage import coverage
 
 logger = logging.getLogger(__name__)
 METADATA = {
@@ -35,6 +36,8 @@ async def ingest_source(kind: str) -> None:
             return
         async with track_attempt(f'solar_wind_{kind}', session, get_session_factory()) as attempt:
             records = await asyncio.to_thread(fetch_records, kind)
+            # Replay the entire source window: a latest-time cursor would miss
+            # internal gaps, late publications and revisions after downtime.
             attempt.received(records)
             for offset in range(0, len(records), 500):
                 statement = insert(SolarWindObservation).values(records[offset:offset + 500])
@@ -115,4 +118,6 @@ async def history(session: AsyncSession, metrics: list[str], start: datetime, en
         for metric in metrics:
             if METADATA[metric][0] == record.kind:
                 series[metric]["points"].append(sample(record, metric))
+    for metric, item in series.items():
+        item['coverage'] = coverage(item['points'], start, end, 60)
     return {"from": start, "to": end, "interval": "[from,to)", "gap_filling": "none", "series": series}

@@ -11,9 +11,7 @@ pnpm app:geomagnetic --watch  # independent source loops
 Production runs the `geomagnetic` Compose service. Kp is polled every 60 seconds;
 Dst every 300 seconds. Each source has a separate transaction and advisory lock.
 Failures in one source do not stop the other's schedule. The service retries
-failures; a one-pass command exits nonzero if either source fails. The production
-cron file explains the continuously running collectors; hourly model ingestion
-and forecasts keep their existing schedule and input contracts.
+failures; a one-pass command exits nonzero if either source fails.
 
 Sources:
 
@@ -33,7 +31,7 @@ value at 00:00 in the [Kyoto hourly table](https://wdc.kugi.kyoto-u.ac.jp/dst_re
 It stores the original source record, nullable value, quality, interval boundaries
 and receipt time, keyed by `(metric, interval_start)`. Identical responses are
 no-ops. Corrections replace values and update receipt time. Receipt time is not
-polling time. Revision archives and retention deletion are not implemented here.
+polling time. Previous revisions are not archived; data are not automatically deleted.
 Recovery after downtime is bounded by the rolling history available in each feed.
 
 Kp has `data_status=estimated`; Dst has `data_status=realtime`, not final or the
@@ -59,7 +57,7 @@ not fall back to older good ones. `interval_status=completed` describes elapsed
 time only; it does not imply a final scientific value.
 
 Freshness uses lag from interval **end**, clamped to zero for ongoing intervals.
-The initial stale threshold allows the next native interval plus one hour for
+The stale threshold allows the next native interval plus one hour for
 publication: four hours for Kp, two for Dst. This is an Argus display policy, not a
 provider delivery guarantee. Freshness and quality are independent.
 
@@ -95,6 +93,6 @@ lookback is bounded at 75 minutes. The timestamp and sampled-minute unit prevent
 confusing this with a continuous real-time measurement through the current second.
 
 The page displays Kp as three-hour blocks and Dst as hourly segments with UTC hover
-and keyboard-focus details. Both share the selected 6h/24h/3d/7d period with solar
-wind. Missing/flagged intervals remain blank. The old normalized Kp/Dst cards have
-been removed from the additional-index section; legacy API contracts remain intact.
+and keyboard-focus details. Both share the selected 6h/24h/3d/7d/30d period with
+solar wind. Missing/flagged intervals remain blank. Per-metric history
+[coverage](observation-recovery.md#historical-coverage) counts usable native intervals.

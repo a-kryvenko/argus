@@ -10,6 +10,7 @@ from clio.dataloaders.geomagnetic_loader import SOURCES, INTERVAL_SECONDS, POLL_
 from app.db.models import GeomagneticObservation
 from app.db.session import get_session_factory
 from app.services.collection_status import track_attempt
+from app.services.history_coverage import coverage
 
 logger = logging.getLogger(__name__)
 # Allow the next native interval plus one hour of publication grace.
@@ -25,6 +26,8 @@ async def ingest_source(metric: str) -> None:
             return
         async with track_attempt(metric, session, get_session_factory()) as attempt:
             records = await asyncio.to_thread(fetch_records, metric)
+            # Replay the entire source window, including older revised intervals
+            # and internal gaps left by downtime or late publication.
             attempt.received(records)
             statement = insert(GeomagneticObservation).values(records)
             statement = statement.on_conflict_do_update(
@@ -92,4 +95,6 @@ async def history(session: AsyncSession, start: datetime, end: datetime, now: da
     series = {metric: {**metadata(metric), 'points': []} for metric in SOURCES}
     for record in (await session.execute(statement)).scalars():
         series[record.metric]['points'].append(sample(record, now))
+    for metric, item in series.items():
+        item['coverage'] = coverage(item['points'], start, end, INTERVAL_SECONDS[metric], intervals=True, now=now)
     return {'from': start, 'to': end, 'selection': 'intervals_overlapping_[from,to)', 'series': series}

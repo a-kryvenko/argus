@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db_session
 from app.schemas.response import success_response
-from app.services import solar_wind
+from app.services import solar_wind, aggregate_history
+from typing import Literal
 
 router = APIRouter(prefix="/public/observations/solar-wind", tags=["observations"])
 
@@ -37,12 +38,15 @@ async def history(
     response: Response,
     start: datetime | None = Query(default=None, alias="from", description="Inclusive UTC timestamp; default last 24 hours"),
     end: datetime | None = Query(default=None, alias="to", description="Exclusive UTC timestamp; default now"),
+    resolution: Literal["1m", "5m", "1h", "auto"] = Query(default="1m"),
     metrics: list[str] = Depends(selected_metrics),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Native one-minute samples, oldest first, without filling or resampling.
+    """Stored native samples or complete UTC aggregate windows.
 
-    Maximum range: seven days. Request adjacent intervals for longer history.
+    Limits: 1m seven days, 5m 31 days, 1h 366 days. Auto: 1m through 24h,
+    5m through seven days, otherwise 1h. Aggregate left edge may precede from;
+    current partial buckets are excluded. No source requests or recalculation.
     Omitted timestamps are gaps; explicit missing values are null.
     """
     end = end or datetime.now(UTC)
@@ -50,7 +54,14 @@ async def history(
     if start.tzinfo is None or end.tzinfo is None:
         raise HTTPException(422, "from and to must include a timezone")
     start, end = start.astimezone(UTC), end.astimezone(UTC)
-    if not timedelta(0) < end - start <= timedelta(days=7):
-        raise HTTPException(422, "History interval must be positive and at most seven days")
+    if resolution == 'auto':
+        resolution = '1m' if end-start <= timedelta(days=1) else '5m' if end-start <= timedelta(days=7) else '1h'
+    days = {'1m': 7, '5m': 31, '1h': 366}[resolution]
+    if not timedelta(0) < end - start <= timedelta(days=days):
+        raise HTTPException(422, f"History interval must be positive and at most {days} days for {resolution}")
     response.headers["Cache-Control"] = "no-store"
-    return success_response(await solar_wind.history(session, metrics, start, end))
+    if resolution != '1m':
+        return success_response(await aggregate_history.history(session, metrics, start, end, 300 if resolution == '5m' else 3600))
+    data = await solar_wind.history(session, metrics, start, end)
+    data['resolution_seconds'] = 60
+    return success_response(data)

@@ -1,18 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { apiRequest } from '../_utils/api';
-import type { Latest } from './solarWind';
-import type { IndexLatest } from './geomagnetic';
+import type { Derived, LiveSnapshot } from './useLiveQuery';
 import styles from './page.module.css';
 
-type Derived = { status: 'available' | 'lower_bound' | 'unavailable'; value: number | null; reason?: string; as_of?: string; unit?: string };
-type Summary = {
-  generated_at: string;
-  solar_wind: Latest['series'];
-  geomagnetic: IndexLatest['series'];
-  changes_1h: Record<string, Derived>;
-  southward_bz: Derived;
-};
 const number = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 const reasons: Record<string, string> = { stale: 'delayed measurements', source_changed: 'spacecraft changed', insufficient_coverage: 'insufficient coverage', missing_latest: 'latest measurement unavailable' };
 function trend(point: Derived | undefined) {
@@ -20,29 +9,8 @@ function trend(point: Derived | undefined) {
   return `${point.value > 0 ? '+' : ''}${number(point.value)} ${point.unit ?? ''}`;
 }
 
-export default function ObservationSummary() {
-  const [summary, setSummary] = useState<Summary>();
-  const [failed, setFailed] = useState(false);
-  const [lastSuccess, setLastSuccess] = useState<number>();
-  const [clock, setClock] = useState<number>();
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const clockTimer = setInterval(() => setClock(Date.now()), 30000);
-    async function refresh() {
-      try {
-        const data = await apiRequest<Summary>('/public/observations/summary', { signal: controller.signal, cache: 'no-store' });
-        if (controller.signal.aborted) return;
-        setSummary(data); setFailed(false); setLastSuccess(Date.now()); setClock(Date.now());
-      } catch {
-        if (controller.signal.aborted) return;
-        setFailed(true);
-      }
-      if (!controller.signal.aborted) timer = setTimeout(refresh, 60000);
-    }
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); clearInterval(clockTimer); };
-  }, []);
+export default function ObservationSummary({ snapshot }: { snapshot: LiveSnapshot }) {
+  const { data: summary, failed, receivedAt: lastSuccess, now: clock } = snapshot;
   const oldSnapshot = clock && lastSuccess ? clock-lastSuccess > 120000 : false;
   return <section className={styles.summary} aria-label="Observation summary">
     <h2>At a glance</h2>

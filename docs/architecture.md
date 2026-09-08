@@ -3,11 +3,11 @@
 | Package | Responsibility | Dependencies within the project |
 | --- | --- | --- |
 | common | Shared contracts, configuration, serialization, schema validation | None |
-| clio | Source discovery, live and historical retrieval, source-format decoding, data I/O | common |
-| forecast | Public forecast interfaces, model invocation, forecast artifact orchestration | common; optional local imports from `forecast_core.api` |
+| clio | Fetch and parse source observations | common |
+| forecast | Forecast interfaces, model calls and output files | common; optional local imports from `forecast_core.api` |
 | forecast-core | Private forecasting, feature preparation, aggregation and calibration | common, clio |
 | intelligence-core | Private satellite and power-grid impact calculations | Shared contracts as needed |
-| api | HTTP, authentication, persistence, service orchestration and response serialization | common, clio, forecast; private packages through their `api` integration surface |
+| api | HTTP, authentication, storage and scheduled commands | common, clio, forecast; private packages through their `api` modules |
 
 Database models and migrations belong to API storage. Model input transformations
 belong to forecast-core. Provider parsing belongs to clio. Atmospheric density is
@@ -16,7 +16,7 @@ a forecast product; satellite-specific impact belongs to intelligence-core.
 The public `forecast` registry imports without private packages. Forecasts that
 need a private backend use ordinary local imports from `forecast_core.api` and
 raise `ModuleNotFoundError` if it is missing. API imports private services directly
-from that integration surface. There is no dynamic loader or proxy module.
+from that module.
 Public code must not import private implementation modules.
 Backend source, model details, training notebooks and implementation-specific
 tests must remain in private checkouts.
@@ -41,13 +41,8 @@ this directory to a dedicated private repository before developing or deploying
 impact services. Do not add its source to the public repository.
 
 Docker builds require the forecast-core checkout in the build context. CI checks
-out its private repository before building API. Backend version 0.2.0 introduced
-this integration surface: the private changes must be committed and pushed there
-before deploying the corresponding public changes. Neither checkout is published
-by the refactoring itself.
-
-Moving files out of the public working tree does not remove earlier Git history
-or already published copies. History cleanup is a separate release decision.
+out its private repository before building API. Commit and push private backend
+changes before deploying public code that requires them.
 
 ## Configuration
 

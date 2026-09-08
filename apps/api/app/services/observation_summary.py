@@ -69,7 +69,7 @@ def southward_duration(points: list[dict], now: datetime) -> dict:
 
 async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
-    current = await solar_wind.latest(session, ['v', 'n', 'bz', 'bt'], now)
+    current = await solar_wind.latest(session, list(solar_wind.METADATA), now)
     indices = await geomagnetic.latest(session, now)
     past = await solar_wind.history(session, ['v', 'n', 'bz', 'bt'],
                                     now-timedelta(minutes=LOOKBACK_MINUTES), now+timedelta(microseconds=1))

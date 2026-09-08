@@ -1,3 +1,4 @@
+import type { Coverage } from './HistoryCoverage';
 export type IndexMetric = 'kp' | 'dst';
 export type IndexSample = {
   interval_start: string;
@@ -26,7 +27,7 @@ export type IndexLatest = {
 export type IndexHistory = {
   from: string;
   to: string;
-  series: Record<IndexMetric, IndexMetadata & { points: IndexSample[] }>;
+  series: Record<IndexMetric, IndexMetadata & { points: IndexSample[]; coverage?: Coverage }>;
 };
 
 export function intervalBounds(point: IndexSample, from: number, to: number): [number, number] | null {

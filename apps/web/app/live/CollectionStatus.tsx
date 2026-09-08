@@ -1,6 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { apiRequest } from '../_utils/api';
+import { useLiveQuery } from './useLiveQuery';
 import styles from './page.module.css';
 
 type SourceStatus = {
@@ -36,29 +35,8 @@ function timestamp(value: string | null) {
   return value ? new Date(value).toISOString().replace('T', ' ').slice(0,19) + ' UTC' : 'Not recorded';
 }
 
-export default function CollectionStatus() {
-  const [data, setData] = useState<Status>();
-  const [failed, setFailed] = useState(false);
-  const [receivedAt, setReceivedAt] = useState<number>();
-  const [now, setNow] = useState<number>();
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const clock = setInterval(() => setNow(Date.now()), 30000);
-    async function refresh() {
-      try {
-        const result = await apiRequest<Status>('/public/observations/status', { signal: controller.signal, cache: 'no-store' });
-        if (controller.signal.aborted) return;
-        setData(result); setFailed(false); setReceivedAt(Date.now()); setNow(Date.now());
-      } catch {
-        if (controller.signal.aborted) return;
-        setFailed(true);
-      }
-      if (!controller.signal.aborted) timer = setTimeout(refresh, 60000);
-    }
-    void refresh();
-    return () => { controller.abort(); clearTimeout(timer); clearInterval(clock); };
-  }, []);
+export default function CollectionStatus({ now }: { now?: number }) {
+  const { data, failed, receivedAt } = useLiveQuery<Status>('/public/observations/status');
   const old = receivedAt && now ? now-receivedAt > 120000 : false;
   const sources = Object.values(data?.sources ?? {});
   const affected = sources.filter(source => source.status !== 'ok');

@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin', 'cyrillic'] });
 
 export const metadata: Metadata = {
   title: 'Argus SunWatch',
-  description: 'Solar Wind & Geomagnetic Impact Forecasting',
+  description: 'Solar wind observations, geomagnetic indices and forecasts.',
 };
 
 export default function RootLayout({

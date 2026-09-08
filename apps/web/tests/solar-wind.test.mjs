@@ -38,3 +38,26 @@ test('plasma spacecraft changes do not introduce gaps into the magnetic chart', 
   assert.equal(rows.length, 2);
   assert.deepEqual(rows.map(row => row.bz), [-2, -4]);
 });
+
+test('aggregate chart preserves tooltip statistics and breaks missing buckets', () => {
+  const history = { resolution_seconds: 300, series: { bz: { points: [
+    { observed_at: '2026-09-01T00:00:00Z', value: -2, min: -8, max: 3, coverage_percent: 60 },
+    { observed_at: '2026-09-01T00:10:00Z', value: 1, min: -1, max: 4, coverage_percent: 100 },
+  ] } } };
+  const rows = chartPoints(history, ['bz']);
+  assert.equal(rows.length, 3);
+  assert.equal(rows[1].bz, undefined);
+  assert.equal(rows[0].bz, -2);
+  assert.equal(rows[0].bz_min, -8);
+  assert.equal(rows[0].bz_max, 3);
+  assert.equal(rows[0].bz_coverage, 60);
+});
+
+test('adjacent aggregate means form a line until the spacecraft changes', () => {
+  const samples = [0, 300000, 600000].map((time, index) => ({
+    ...point(time, index, index === 2 ? 'B' : 'A'),
+    source_changes: 0,
+  }));
+  const rows = chartPoints({ resolution_seconds: 300, series: { bz: { points: samples } } }, ['bz']);
+  assert.deepEqual(rows.map(row => row.bz), [0, 1, undefined, 2]);
+});

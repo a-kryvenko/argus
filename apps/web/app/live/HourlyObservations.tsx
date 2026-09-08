@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { apiRequest, type ObservationPoint } from '../_utils/api';
+import type { ObservationPoint } from '../_utils/api';
+import { useLiveQuery } from './useLiveQuery';
 import styles from './page.module.css';
 
 const metrics: { key: keyof Omit<ObservationPoint, 'issue_time'>; label: string; unit: string }[] = [
@@ -21,40 +21,9 @@ function number(value: number | null | undefined) {
 }
 
 export default function HourlyObservations() {
-  const [points, setPoints] = useState<ObservationPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [checkedAt, setCheckedAt] = useState<string>();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function refresh() {
-      try {
-        const data = await apiRequest<{ points: ObservationPoint[] }>('/public/observations/history?limit=24', {
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-        if (controller.signal.aborted) return;
-        setPoints(data.points);
-        setCheckedAt(new Date().toISOString());
-        setError(false);
-      } catch {
-        if (controller.signal.aborted) return;
-        setError(true);
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-          timer = setTimeout(refresh, 60_000);
-        }
-      }
-    }
-    void refresh();
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, []);
+  const { data, loading, failed: error, receivedAt } = useLiveQuery<{ points: ObservationPoint[] }>('/public/observations/history?limit=24');
+  const points = data?.points ?? [];
+  const checkedAt = receivedAt ? new Date(receivedAt).toISOString() : undefined;
 
   const latest = points.at(-1);
   const delayed = latest && checkedAt && new Date(checkedAt).getTime() - new Date(latest.issue_time).getTime() > 3 * 3_600_000;

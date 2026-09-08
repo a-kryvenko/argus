@@ -47,7 +47,7 @@ export default function Forecast() {
   return (
     <div className="container">
       <h1 className="text-center">Argus Sunwatch</h1>
-      <h2 className="text-center">Solar activity forecast & Impact Intelligence</h2>
+      <h2 className="text-center">Solar wind and geomagnetic forecasts</h2>
       <div>
         <HeatMap title="Kp Index" yLabels={["Kp 4", "Kp 5", "Kp 6"]} data={kpRiskData} />
 

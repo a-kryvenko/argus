@@ -70,3 +70,17 @@ test("heatmap maps unordered thresholds to labelled rows and preserves zero prob
     [0, 2, 0],
   ]);
 });
+
+test("heatmap accepts the current API payload without an operator", () => {
+  const forecast = {
+    predictions: [{ variables: { kp: { binary: [
+      { threshold: 4, probability: 0.725 },
+      { threshold: 5, probability: 0 },
+      { threshold: 6, probability: 0.1, operator: "lt" },
+    ] } } }],
+  };
+  assert.deepEqual(probabilityData(forecast, "kp", [4, 5, 6]), [
+    [0, 0, 73],
+    [0, 1, 0],
+  ]);
+});

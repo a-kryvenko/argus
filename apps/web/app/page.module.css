@@ -1,3 +1,12 @@
-.forecast {
-    
+.intro {
+  max-width: 760px;
+  margin: 0 auto 32px;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 24px;
+  font-size: 14px;
 }

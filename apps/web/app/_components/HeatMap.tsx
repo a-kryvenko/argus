@@ -21,6 +21,7 @@ export default function HeatMap({
     },
     tooltip: {
       confine: true,
+      transitionDuration: 0,
       backgroundColor: "#21172e",
       borderColor: "#675579",
       textStyle: { color: "#f7f3fc" },
@@ -84,6 +85,10 @@ export default function HeatMap({
             <span>100%</span>
             <span>· UTC</span>
           </div>
+          <p className="probability-legend">
+            Brighter cells indicate higher probability. Hover or tap a cell for
+            its value. Empty cells indicate unavailable data.
+          </p>
         </>
       ) : (
         <p className="forecast-meta" role="status">

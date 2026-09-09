@@ -37,7 +37,8 @@ export function probabilityData(
   forecast.predictions.forEach((point, x) => {
     thresholds.forEach((threshold, y) => {
       const prediction = point.variables[key]?.binary?.find(
-        (item) => item.threshold === threshold && item.operator === "gte",
+        (item) => item.threshold === threshold &&
+          (item.operator === undefined || item.operator === "gte"),
       );
       if (prediction)
         rows.push([x, y, Math.round(prediction.probability * 100)]);

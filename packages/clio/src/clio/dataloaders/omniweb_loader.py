@@ -59,6 +59,24 @@ DEFAULT_VARS = {
     "f10_7": {"id": 50, "title": "f10.7_index"},
 }
 
+# Hourly OMNI2 fill values; Kp in persisted CSVs is already divided by ten.
+# https://omniweb.gsfc.nasa.gov/html/ow_data.html
+OMNI_FILL_VALUES = {
+    "bx": 999.9, "by": 999.9, "bz": 999.9, "t": 9999999,
+    "n": 999.9, "v": 9999, "kp": 9.9, "dst": 99999,
+    "ap": 999, "f10_7": 999.9,
+}
+
+
+def clean_omni_values(frame: pd.DataFrame) -> pd.DataFrame:
+    """Clean physical-unit OMNI columns without filling missing observations."""
+    frame = frame.copy()
+    for column, fill in OMNI_FILL_VALUES.items():
+        values = pd.to_numeric(frame[column], errors="coerce")
+        frame[column] = values.mask(values.abs().eq(fill))
+    return frame
+
+
 class OMNIWeb_Loader:
     def load(start_date: datetime, end_date: datetime) -> pd.DataFrame:
         start_date_omni = start_date.strftime("%Y%m%d")
@@ -82,7 +100,7 @@ class OMNIWeb_Loader:
     
         omni_records = OMNIWeb_Loader._parse_omni_text(response.text)
     
-        mask = (omni_records["issue_time"] >= start_date_omni) & (omni_records["issue_time"] <= end_date_omni)
+        mask = (omni_records["issue_time"] >= start_date_omni) & (omni_records["issue_time"] < pd.Timestamp(end_date_omni, tz="UTC") + pd.Timedelta(days=1))
     
         omni_records = omni_records.loc[mask]
 
@@ -131,12 +149,8 @@ class OMNIWeb_Loader:
 
         df = df.drop(columns=["year", "doy", "hr"])
 
-        # OMNI missing observations are large numbers like 9999.9 or 9999.99
-        for c in DEFAULT_VARS.keys():
-            mask = (df[c].abs() >= 9_999) & (df[c].abs() <= 10_000)
-            df.loc[mask, c] = pd.NA
-
-        df["kp"] = int(df["kp"] / 10)
+        df["kp"] = df["kp"] / 10.0
+        df = clean_omni_values(df)
 
         df = df.sort_index()
         df = df.resample('1h').mean()

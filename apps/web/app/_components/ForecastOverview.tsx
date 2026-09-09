@@ -43,6 +43,14 @@ function ForecastSection({
             <time dateTime={data.issue_time}>
               {formatForecastTime(data.issue_time)}
             </time>
+            {data.predictions.length > 0 && (
+              <>
+                <br />
+                Valid {formatForecastTime(data.predictions[0].valid_time)}
+                {" – "}
+                {formatForecastTime(data.predictions[data.predictions.length - 1].valid_time)}
+              </>
+            )}
           </p>
           <HeatMap
             title={`${title} threshold probability`}

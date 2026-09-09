@@ -28,7 +28,7 @@ type ApiResponse<T> = {
 
 export type BinaryForecast = {
   threshold: number;
-  operator: "gte";
+  operator?: "gte";
   probability: number;
 };
 

@@ -10,7 +10,7 @@ import {
     Line
 } from "recharts";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import "../../_components/charts.css"
 import ContentBlock from "../../_components/ContentBlock";
@@ -92,12 +92,13 @@ function buildReliabilityChartData(
 export default function ReliabilityChart({ data, title, labels }: {data: Array<any>, title: string, labels: Labels})
 {
     const [hour, setHour] = useState(1);
+    const sliderId = useId();
 
     if (!data || data.length == 0) {
         return (
         <div>
             <h3 className="heading">{ title }</h3>
-            <p>Loading...</p>
+            <p>No metrics available.</p>
         </div>
         );
     }
@@ -119,9 +120,10 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
             <h3 className="heading">{ title }</h3>
 
             <div style={{ marginBottom: 16 }}>
-                <label className="color-default">Lead hour: <strong>{hour}</strong></label>
+                <label htmlFor={sliderId} className="color-default">Lead hour: <strong>{hour}</strong></label>
 
                 <input
+                    id={sliderId}
                     type="range"
                     min={1}
                     max={leadHours}
@@ -132,11 +134,12 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
                 />
             </div>
 
-            <ResponsiveContainer width={500} height={500}>
-                <LineChart data={chartData}>
+            <ResponsiveContainer width="100%" aspect={1}>
+                <LineChart data={chartData} margin={{ top: 12, right: 12, bottom: 24, left: 8 }}>
                     <CartesianGrid strokeDasharray="3 3" />
 
                     <XAxis
+                      tick={{ fill: "#b9aec7", fontSize: 12 }}
                       dataKey="predicted"
                       type="number"
                       domain={[0, 1]}
@@ -145,24 +148,27 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
                       <Label
                         style={{
                             textAnchor: "middle",
-                            fontSize: "130%",
+                            fontSize: 12,
                             fill: "white",
                         }}
                       angle={0} 
+                      position="insideBottom" offset={-12}
                       value={"Predicted probability"} />
                     </XAxis>
 
                     <YAxis
+                      tick={{ fill: "#b9aec7", fontSize: 12 }}
                       type="number"
                       domain={[0, 1]}
                     >
                       <Label
                         style={{
                             textAnchor: "middle",
-                            fontSize: "130%",
+                            fontSize: 12,
                             fill: "white",
                         }}
                       angle={270} 
+                      position="insideLeft"
                       value={"Observed probability"} />
                     </YAxis>
 
@@ -181,7 +187,7 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
                         }}
                     /> */}
 
-                    <Legend />
+
 
                     <Line
                         dataKey="perfect"
@@ -216,6 +222,10 @@ export default function ReliabilityChart({ data, title, labels }: {data: Array<a
                     })}
                 </LineChart>
             </ResponsiveContainer>
+            <div className="reliability-legend">
+              <span style={{ color: "#8884d8" }}>– – Perfect calibration</span>
+              {Object.entries(labels).map(([key, label], index) => <span key={key} style={{ color: linesMeta[index].color }}>● {label}</span>)}
+            </div>
         </div>
       </ContentBlock>
     );

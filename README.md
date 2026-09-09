@@ -49,6 +49,7 @@ the local database and Redis volumes.
 | `pnpm app:geomagnetic --watch` | Poll Kp every minute and Dst every five minutes |
 | `pnpm app:aggregate-solar-wind` | Process queued five-minute/hourly aggregates |
 | `pnpm app:audit-solar-wind` | Compare aggregates with raw data; estimate old-data volume |
+| `pnpm app:cleanup-solar-wind` | Report verified raw hours older than 90 days; `--apply` deletes them |
 | `pnpm app:observations` | Refresh normalized observations and density input history |
 | `pnpm app:forecast` | Generate forecasts from stored observations |
 | `./scripts/test-python -q` | Run the combined Python suite |
@@ -64,6 +65,7 @@ Omit `--watch` for a single collection. Aggregation runs separately from
 - [Recovery and coverage](docs/observation-recovery.md)
 - [Aggregation](docs/solar-wind-aggregation.md) and [audit](docs/aggregation-audit.md)
 - [Storage measurements and proposed retention](docs/observation-retention.md)
+- [Verified raw-history cleanup](docs/solar-wind-cleanup.md)
 - [Live page data flow](docs/live-data-flow.md)
 - [Package boundaries and setup](docs/architecture.md)
 - [Atmospheric density API](docs/jb2008-api.md)

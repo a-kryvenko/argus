@@ -22,6 +22,7 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
     return () => observer.disconnect();
   }, []);
   const series = history.series[metric];
+  const label = metric === 'kp' ? 'Kp' : series.label;
   const start = Date.parse(history.from), end = Date.parse(history.to);
   const values = series.points.filter(p => p.value != null && p.quality !== 'flagged').map(p => p.value as number);
   const low = metric === 'kp' ? 0 : Math.min(0, ...values) - 10;
@@ -29,12 +30,13 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
   const timeTickCount = width < 500 ? 3 : 4;
   const x = (time: number) => 48 + (time-start)/(end-start)*(width-64);
   const y = (value: number) => 200 - (value-low)/(high-low)*180;
-  return <section className={styles.chart} aria-label={`${series.label} history`}>
-    <h3>{series.label}{series.unit && ` (${series.unit})`}</h3>
-    <HistoryCoverage label={series.label} coverage={series.coverage} />
+  return <section className={styles.chart} aria-label={`${label} history`}>
+    <h3>{label}{series.unit && ` (${series.unit})`}</h3>
+    {metric === 'kp' && <p className={styles.chartDetail}>NOAA SWPC · Preliminary estimate</p>}
+    <HistoryCoverage label={label} coverage={series.coverage} />
     {values.length === 0 && <p className={styles.description}>No usable observations in this interval.</p>}
     <div ref={container}>
-      <svg width="100%" height={240} viewBox={`0 0 ${width} 240`} role="group" aria-label={`${series.label}: ${metric === 'kp' ? 'three-hour blocks' : 'hourly segments'}, UTC`}>
+      <svg width="100%" height={240} viewBox={`0 0 ${width} 240`} role="group" aria-label={`${label}: ${metric === 'kp' ? 'three-hour blocks' : 'hourly segments'}, UTC`}>
         {[0, 1, 2, 3].map(tick => {
           const value = low + (high-low)*tick/3;
           return <g key={tick}><line x1={48} x2={width-16} y1={y(value)} y2={y(value)} stroke="var(--border)" strokeDasharray="3 3" /><text x={40} y={y(value)+4} textAnchor="end" fill="var(--text-secondary)" fontSize={12}>{number(value)}</text></g>;
@@ -68,7 +70,7 @@ export default function GeomagneticLive({ hours, onHoursChange, snapshot }: { ho
   const errors = [snapshot.failed ? 'Latest indices could not be refreshed.' : '', failed ? 'Index history could not be refreshed.' : ''].filter(Boolean);
   return <section aria-label="Geomagnetic observations">
     <h2>Geomagnetic activity</h2>
-    <p className={styles.description}>Estimated Kp retains its three-hour intervals. Kyoto Dst is shown hourly. Both are preliminary operational data and may be revised.</p>
+    <p className={styles.description}>Kp retains its three-hour intervals. Kyoto Dst is shown hourly. Both are preliminary operational data and may be revised.</p>
     {errors.length > 0 && <p role="alert" className={styles.warning}>{errors.join(' ')} Showing available saved responses; retrying in one minute.</p>}
     <details className={styles.additional}>
       <summary>Geomagnetic measurement details</summary>
@@ -79,7 +81,8 @@ export default function GeomagneticLive({ hours, onHoursChange, snapshot }: { ho
       const lag = point ? Math.max(0, (serverTime-Date.parse(point.interval_end))/1000) : 0;
       const stale = series && lag > series.stale_after_seconds;
       return <section key={metric} className={styles.card}>
-        <h3>{metric === 'kp' ? 'Estimated Kp' : 'Real-time Dst'}</h3>
+        <h3>{metric === 'kp' ? 'Kp' : 'Real-time Dst'}</h3>
+        {metric === 'kp' && <p className={styles.sampleTime}>NOAA SWPC · Preliminary estimate</p>}
         <p className={styles.value}>{number(point?.value)} <span>{series?.unit}</span></p>
         <p className={point?.value == null || stale || point.quality === 'flagged' ? styles.warning : styles.fresh}>{!latest ? 'Loading…' : point?.value == null ? 'Unavailable' : stale ? 'Delayed' : 'Latest available interval'}</p>
         {point && <>

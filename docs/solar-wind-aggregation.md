@@ -72,7 +72,9 @@ when their windows close. Stop older aggregation workers before switching versio
 A source hour with observations produces all elapsed buckets, including empty
 five-minute buckets. Entire hours with no observations and no queued changes can
 have no aggregate rows; their observation coverage is unknown.
-Changing the aggregation version requires explicitly requeuing historical hours.
+Changing the aggregation version requires explicitly requeuing historical hours
+whose raw data are retained. [Retired hours](solar-wind-cleanup.md) cannot be
+requeued or rebuilt without restoring their raw data.
 
 ## Checks
 

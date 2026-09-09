@@ -4,7 +4,7 @@ import { products } from "../_config/products";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Help | Argus Sunwatch",
+  title: "Help",
   description: "Forecast charts, observation freshness, model metrics and API access.",
 };
 
@@ -68,7 +68,7 @@ export default function Help() {
               <div><dt>Issue time</dt><dd>The reference time from which a forecast is made.</dd></div>
               <div><dt>Lead time</dt><dd>How far ahead a prediction looks, in hours after issue time. Lead hour 24 refers to one day ahead.</dd></div>
               <div><dt>Valid time</dt><dd>The time a prediction applies to. The API exposes this as <code>valid_time</code> for each prediction.</dd></div>
-              <div><dt>Time zones</dt><dd>Live observations are labelled in UTC. Quantile chart dates and hours use your browser’s local time zone. Check the timestamp and time zone when comparing data.</dd></div>
+              <div><dt>Time zones</dt><dd>Live observations are labelled in UTC. Forecast charts also use UTC, with dates and times taken from the forecast. Check the timestamp and time zone when comparing data.</dd></div>
             </dl>
           </section>
 

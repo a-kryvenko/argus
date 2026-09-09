@@ -1,22 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useResource } from "../../_utils/useResource";
+import ResourceState from "../../_components/ResourceState";
 
 import type { ProductConfig } from "../../_config/products";
 import { productApiPath } from "../../_config/products";
-import { apiRequest, type ForecastMetrics } from "../../_utils/api";
+import { type ForecastMetrics } from "../../_utils/api";
 import ContinuousMetrics from "./ContinuousMetrics";
 import Metrics from "./Metrics";
 
 export default function MetricsProduct({ product }: { product: ProductConfig }) {
-  const [metrics, setMetrics] = useState<ForecastMetrics | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiRequest<ForecastMetrics>(productApiPath(product, "/metrics"))
-      .then(setMetrics)
-      .catch(err => setError(err instanceof Error ? err.message : "Failed to load metrics"));
-  }, [product]);
+  const { data: metrics, error, retry } = useResource<ForecastMetrics>(productApiPath(product, "/metrics"));
 
   return (
     <main className="container color-default">
@@ -26,8 +20,7 @@ export default function MetricsProduct({ product }: { product: ProductConfig }) 
         <a href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics API (JSON)</a>
       </nav>
 
-      {error && <div className="state-message">{error}</div>}
-      {!metrics && !error && <div className="state-message">Loading metrics…</div>}
+      {!metrics && <ResourceState error={error} retry={retry} label="metrics" />}
 
       {metrics && product.variables.map(variable => {
         const variableMetrics = metrics.variables[variable.key];

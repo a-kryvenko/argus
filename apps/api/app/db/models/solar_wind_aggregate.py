@@ -19,3 +19,11 @@ class SolarWindAggregatePending(Base):
     __tablename__ = 'solar_wind_aggregate_pending'
     kind: Mapped[str] = mapped_column(String(16), primary_key=True)
     hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+
+
+class SolarWindRetiredHour(Base):
+    __tablename__ = 'solar_wind_retired_hour'
+    kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    retired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    raw_rows: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -50,7 +50,7 @@ export default function ObservationSummary({ snapshot }: { snapshot: LiveSnapsho
         })}
         {(['kp','dst'] as const).map(metric => {
           const series = summary.geomagnetic[metric];
-          return <div key={metric}><h3>{series.label}</h3><p>{number(series.latest?.value)} {series.unit}{series.status !== 'fresh' ? ` · ${series.status}` : ''}{series.latest?.quality === 'flagged' ? ' · flagged' : ''}</p><small>{series.latest ? `${new Date(series.latest.interval_start).toISOString().slice(5,16).replace('T',' ')} – ${new Date(series.latest.interval_end).toISOString().slice(11,16)} UTC` : 'No stored interval'}</small></div>;
+          return <div key={metric}><h3>{metric === 'kp' ? 'Kp' : series.label}</h3><p>{number(series.latest?.value)} {series.unit}{series.status !== 'fresh' ? ` · ${series.status}` : ''}{series.latest?.quality === 'flagged' ? ' · flagged' : ''}</p><small>{series.latest ? `${new Date(series.latest.interval_start).toISOString().slice(5,16).replace('T',' ')} – ${new Date(series.latest.interval_end).toISOString().slice(11,16)} UTC` : 'No stored interval'}</small></div>;
         })}
       </div>
       <p className={styles.sampleTime}>Snapshot: {new Date(summary.generated_at).toISOString().replace('T',' ').slice(0,19)} UTC. Changes compare five-minute means one hour apart and require ≥80% coverage in both windows and the last hour.</p>

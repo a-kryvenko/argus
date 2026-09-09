@@ -1,7 +1,8 @@
 # Storage and proposed retention
 
-Aggregation, aggregate history APIs and read-only auditing are implemented.
-Automatic deletion is not enabled. The retention periods below remain proposals.
+Aggregation, aggregate history APIs, read-only auditing and manual verified
+raw-history cleanup are implemented. No cleanup schedule is enabled. The periods
+below describe the storage policy; only raw cleanup has a deletion command.
 
 ## Local measurement
 
@@ -59,4 +60,5 @@ spacecraft later.
    lasting cleanup permission.
 
 [Aggregation semantics](solar-wind-aggregation.md) define stored statistics and
-recalculation. Archive backfill and automatic cleanup are not implemented.
+recalculation. [Cleanup](solar-wind-cleanup.md) defaults to a report and requires
+`--apply` for deletion. Archive backfill is not implemented.

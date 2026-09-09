@@ -35,7 +35,7 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
     return (
       <div>
         <h3>{ title }</h3>
-        <p>Loading...</p>
+        <p>No metrics available.</p>
       </div>
     );
   }
@@ -96,6 +96,7 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
             }}
           >
             <XAxis
+                      tick={{ fill: "#b9aec7", fontSize: 12 }}
               dataKey="x"
               type="number"
               domain={[1, leadHours + 1]}
@@ -105,7 +106,7 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
               type="number"
               tickCount={6}
               width={70}
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: "#b9aec7" }}
               domain={[
                 (min: number) => Math.floor(min * 10) / 10,
                 (max: number) => Math.ceil(max * 10) / 10,
@@ -135,6 +136,7 @@ export default function MetricChart({ data, title, labels }: {data: Array<any>, 
           
               return (
                 <Line
+                  isAnimationActive={false}
                   key={key}
                   type="monotone"
                   dataKey={`values.${key}`}

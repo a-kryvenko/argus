@@ -8,7 +8,8 @@ import {
   LineChart
 } from "recharts";
 
-import "./windchart.css"
+import "./charts.css";
+import { formatForecastTime } from "../_utils/forecast";
 import ContentBlock from "./ContentBlock";
 
 const linesMeta: any = {
@@ -35,19 +36,19 @@ const linesMeta: any = {
 const lineKeys = ["median", "low", "high"] as const;
 
 export default function WindChart({ data, title = "Solar Wind Speed", unit = "km/s" }: {data: any[], title?: string, unit?: string}) {
-  if (!data || data.length == 0) {
+  if (!data || !data.some(row => row.median !== null && row.median !== undefined)) {
     return (
-      <div>
+      <ContentBlock>
         <h2>{title}</h2>
-        <p>Loading...</p>
-      </div>
+        <p className="forecast-meta" role="status">No quantile forecast available.</p>
+      </ContentBlock>
     );
   }
 
   const rechartsData = data.map((values, i) => ({
     index: i,
-    dayName: new Date(values.time).toLocaleDateString(undefined, { weekday: "short" }),
-    hour: new Date(values.time).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+    dayName: new Date(values.time).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" }),
+    hour: new Date(values.time).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", timeZone: "UTC", hourCycle: "h23" }),
     values: data[i],
   }));
 
@@ -61,7 +62,7 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
     return (
       <div className="tooltip">
         <div className="tooltip__title">
-          {row.dayName}, {row.hour}
+          {formatForecastTime(row.values.time)}
         </div>
 
         {lineKeys.map((key) => (
@@ -74,7 +75,7 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
             }}
           >
             <span>{linesMeta[key].name}</span>
-            <span>{row.values[key]} {unit}</span>
+            <span>{row.values[key] ?? "—"} {unit}</span>
           </div>
         ))}
       </div>
@@ -84,6 +85,7 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
   return (
     <ContentBlock>
       <h2>{title}</h2>
+      <p className="forecast-meta">Median · {unit} · UTC. The tooltip includes the 10th and 90th percentiles.</p>
 
       <div style={{ height: 400 }}>
         <ResponsiveContainer>
@@ -97,6 +99,8 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
             }}
           >
             <XAxis
+              tick={{ fill: "#b9aec7", fontSize: 12 }}
+              minTickGap={30}
               dataKey="index"
               type="number"
               domain={[0, Math.max(0, rechartsData.length - 1)]}
@@ -104,7 +108,8 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
                 .filter((_, i) => i % 6 === 0)
                 .map((d) => d.index)}
               tickFormatter={(index) => {
-                return rechartsData[index]?.hour ?? "";
+                const point = rechartsData[index];
+                return point ? `${point.dayName} ${point.hour}` : "";
               }}
             />
             
@@ -116,10 +121,10 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
               ]}
               tickCount={6}
               width={70}
-              tick={{ fontSize: 12 }}
+              tick={{ fontSize: 12, fill: "#b9aec7" }}
             />
 
-            <CartesianGrid strokeDasharray="3 3" stroke="#212121" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#413449" />
 
             <Tooltip
               cursor={true}
@@ -139,6 +144,7 @@ export default function WindChart({ data, title = "Solar Wind Speed", unit = "km
 
             {/* median line */}
             <Line
+                  isAnimationActive={false}
               type="monotone"
               dataKey="values.median"
               name="median"

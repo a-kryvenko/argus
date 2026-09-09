@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { products } from "../_config/products";
 
+export const metadata = { title: "Products" };
+
 export default function Products() {
     return (
-        <div className="container color-default">
-            <h1 className="text-center">Products</h1>
+        <main className="container color-default">
+            <h1 className="heading">Products</h1>
             <div className="product-grid">
               {products.map(product => (
                 <Link className="product-link" href={`/products/${product.slug}`} key={product.slug}>
@@ -13,6 +15,6 @@ export default function Products() {
                 </Link>
               ))}
             </div>
-        </div>
+        </main>
     )
 }

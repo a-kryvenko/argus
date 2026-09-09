@@ -47,7 +47,8 @@ export default function CollectionStatus({ now }: { now?: number }) {
     {data && <p className={styles.sampleTime}>Status as of {timestamp(data.generated_at)}</p>}
     <div className={styles.collectionGrid}>
       {sources.map(source => <section key={source.source_id}>
-        <h3>{source.label}</h3>
+        <h3>{source.source_id === 'kp' ? 'Kp' : source.label}</h3>
+        {source.source_id === 'kp' && <p className={styles.sampleTime}>NOAA SWPC · Preliminary estimate</p>}
         <p className={source.status === 'ok' ? undefined : styles.warning}>{descriptions[source.status][0]}</p>
         <p>{descriptions[source.status][1]}</p>
         <dl>

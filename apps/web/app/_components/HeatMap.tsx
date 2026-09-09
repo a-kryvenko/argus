@@ -1,101 +1,95 @@
 import ReactECharts from "echarts-for-react";
-import get_lead_datetime from "../_utils/date_time"
-import "./charts.css"
+import { formatForecastTime } from "../_utils/forecast";
+import "./charts.css";
 import ContentBlock from "./ContentBlock";
 
-const base = new Date();
-base.setMinutes(0, 0, 0);
-base.setHours(base.getHours() + 1);
-
-const xAxisMeta = get_lead_datetime();
-
-export default function HeatMap({title, yLabels, data, horizon}: {title: string, yLabels: Array<string>, data: Array<Array<Number>>, horizon?: number}) {
-  const xMeta = xAxisMeta.slice(0, horizon ?? Math.max(0, ...data.map(row => Number(row[0]) + 1)));
+export default function HeatMap({
+  title,
+  yLabels,
+  data,
+  times,
+}: {
+  title: string;
+  yLabels: string[];
+  data: number[][];
+  times: string[];
+}) {
   const option = {
+    aria: {
+      enabled: true,
+      description: `${title}. Color indicates threshold probability from 0 to 100 percent. Times are UTC.`,
+    },
     tooltip: {
-      formatter: (params: any) => {
-        const [xIndex, yIndex, value] = params.data;
-        const x = xMeta[xIndex];
-
-        return `
-          ${x.dayName}, ${x.hour}<br/>
-          ${yLabels[yIndex]}: <b>${value}%</b> risk
-        `;
+      confine: true,
+      backgroundColor: "#21172e",
+      borderColor: "#675579",
+      textStyle: { color: "#f7f3fc" },
+      formatter: (params: { data: number[] }) => {
+        const [x, y, value] = params.data;
+        return `${formatForecastTime(times[x])}<br/>${yLabels[y]}: <b>${value}%</b> probability`;
       },
     },
-
-    grid: {
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 70,
-    },
-
+    grid: { top: 8, right: 12, bottom: 48, left: 8, containLabel: true },
     xAxis: {
       type: "category",
-      data: xMeta.map(x => x.hour),
-      splitArea: { show: false },
+      data: times,
       axisLabel: {
-        interval: 11,
-        formatter: (value: string) => value,
+        color: "#b9aec7",
+        hideOverlap: true,
+        formatter: (value: string) => {
+          const d = new Date(value);
+          return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}\n${d.toISOString().slice(11, 16)}`;
+        },
       },
     },
-
     yAxis: {
       type: "category",
       data: yLabels,
-      splitArea: { show: false },
-      axisLabel: {
-        width: 58,
-        overflow: "truncate",
-        align: "right",
-      },
+      axisLabel: { color: "#d8cfe3", fontSize: 12 },
     },
-
     visualMap: {
       min: 0,
       max: 100,
-      calculable: false,
       show: false,
-      text: ["High risk", "Low risk"],
-      formatter: "{value}%",
-      type: "continuous",
-      orient: "horizontal",
-      left: "center",
-      bottom: 8,
       inRange: {
-        color: ['#dfe6e9', '#7480ff', '#4a09e3', '#ee7f7f', '#d63031']
+        color: ["#272138", "#6655b8", "#a78bfa", "#f5a35b", "#f65c71"],
       },
     },
-
     series: [
       {
-        name: { title },
+        name: title,
         type: "heatmap",
-        data: data,
-        itemStyle: {
-          borderColor: "#fff",
-          borderWidth: 1,
-        },
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 0,
-            shadowColor: "transparent",
-          },
-        },
+        data,
+        itemStyle: { borderColor: "#160f20", borderWidth: 1 },
       },
     ],
   };
-
   return (
     <ContentBlock>
-      <h2>{ title }</h2>
-      <ReactECharts
-        option={option}
-        style={{ height: 30 * yLabels.length, width: "100%" }}
-        notMerge
-        lazyUpdate
-      />
+      <h2>{title}</h2>
+      {data.length ? (
+        <>
+          <ReactECharts
+            option={option}
+            style={{ height: 46 * yLabels.length + 78, width: "100%" }}
+            notMerge
+          />
+          <div
+            className="probability-legend"
+            aria-label="Probability color scale: 0 to 100 percent"
+          >
+            <span>Probability</span>
+            <span>0%</span>
+            <span className="probability-legend__scale" aria-hidden="true" />
+            <span>100%</span>
+            <span>· UTC</span>
+          </div>
+        </>
+      ) : (
+        <p className="forecast-meta" role="status">
+          No probability forecast available.
+        </p>
+      )}
     </ContentBlock>
   );
 }

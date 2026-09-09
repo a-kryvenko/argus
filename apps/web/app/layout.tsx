@@ -1,14 +1,28 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-import Header from './_components/Header';
-import Footer from './_components/Footer';
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import "./globals.css";
+import Header from "./_components/Header";
+import Footer from "./_components/Footer";
 
-const inter = Inter({ subsets: ['latin', 'cyrillic'] });
+const font = localFont({
+  src: "../fonts/GeistVF.woff",
+  display: "swap",
+  weight: "100 900",
+});
 
 export const metadata: Metadata = {
-  title: 'Argus SunWatch',
-  description: 'Solar wind observations, geomagnetic indices and forecasts.',
+  title: {
+    default: "Forecast | Argus SunWatch",
+    template: "%s | Argus SunWatch",
+  },
+  icons: {
+    icon: [
+      { url: "/sun.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  description: "Solar wind observations, geomagnetic indices and forecasts.",
 };
 
 export default function RootLayout({
@@ -18,9 +32,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="d-flex flex-column justify-content-between">
+      <body
+        className={`${font.className} d-flex flex-column justify-content-between`}
+      >
         <div>
-            <Header />
+          <Header />
           {children}
         </div>
         <Footer />

@@ -11,10 +11,7 @@ RUN corepack enable
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/web/next.config.js apps/web/package.json apps/web/tsconfig.json ./apps/web/
-COPY apps/web/app ./apps/web/app
-COPY apps/web/fonts ./apps/web/fonts
-COPY apps/web/public ./apps/web/public
+COPY apps/web/package.json ./apps/web/
 
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --filter web...
@@ -27,6 +24,7 @@ WORKDIR /var/www
 COPY --from=deps /var/www/package.json /var/www/pnpm-lock.yaml /var/www/pnpm-workspace.yaml ./
 COPY --from=deps /var/www/node_modules ./node_modules
 COPY --from=deps /var/www/apps ./apps
+COPY apps/web ./apps/web
 
 RUN pnpm --filter web build
 

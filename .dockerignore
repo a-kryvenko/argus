@@ -13,12 +13,17 @@ notebooks
 **/dist
 **/build
 **/coverage
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
 
 .git
 .gitignore
 
 .env
 .env.*
+**/.env
+**/.env.*
 apps/web/.env
 
 Dockerfile

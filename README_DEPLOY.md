@@ -45,3 +45,11 @@ No scheduled history deletion is configured.
 
 When switching aggregation worker versions, let older jobs finish before running
 the new worker. Apply migrations before manually starting application commands.
+
+## Dashboard authentication
+
+Before starting the updated API, apply `pnpm db:migrate` locally or run the
+existing migration command in the API container. Configure `DASHBOARD_ORIGINS`
+with the exact HTTPS site origin and `DASHBOARD_COOKIE_SECURE=true`. Create the
+first administrator using the interactive command described in
+[Dashboard setup](docs/dashboard.md#setup).

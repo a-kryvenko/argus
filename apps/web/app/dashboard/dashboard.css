@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tailwind preflight is disabled. Theme/reset only the dashboard, including portals. */
+.dashboard {
+  --background: 240 6% 7%;
+  --foreground: 240 5% 96%;
+  --card: 240 5% 9%;
+  --card-foreground: 240 5% 96%;
+  --popover: 240 5% 11%;
+  --popover-foreground: 240 5% 96%;
+  --primary: 255 83% 77%;
+  --primary-foreground: 255 30% 12%;
+  --secondary: 240 4% 16%;
+  --secondary-foreground: 240 5% 96%;
+  --muted: 240 4% 14%;
+  --muted-foreground: 240 5% 63%;
+  --accent: 240 4% 17%;
+  --accent-foreground: 240 5% 96%;
+  --destructive: 0 63% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 240 4% 18%;
+  --input: 240 4% 23%;
+  --ring: 255 83% 77%;
+  --sidebar-background: 240 6% 6%;
+  --sidebar-foreground: 240 5% 75%;
+  --sidebar-primary: 255 83% 77%;
+  --sidebar-primary-foreground: 255 30% 12%;
+  --sidebar-accent: 240 4% 15%;
+  --sidebar-accent-foreground: 240 5% 98%;
+  --sidebar-border: 240 4% 15%;
+  --sidebar-ring: 255 83% 77%;
+  --radius: 0.75rem;
+  width: 100%;
+  min-height: 100svh;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  color-scheme: dark;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.dashboard :where(*, ::before, ::after) {
+  border-width: 0;
+  border-style: solid;
+  border-color: hsl(var(--border));
+}
+.dashboard :where(h1, h2, h3, h4, p) {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+.dashboard :where(a) {
+  text-decoration: none;
+}
+.dashboard :where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+}
+.dashboard :where(button, [role="button"]) {
+  cursor: pointer;
+}
+.dashboard :where(button:disabled) {
+  cursor: default;
+}
+.dashboard :where(ul, ol) {
+  list-style: none;
+}
+.dashboard :where(svg) {
+  display: block;
+  flex-shrink: 0;
+}
+.dashboard :where(table) {
+  border-collapse: collapse;
+  text-indent: 0;
+}
+.dashboard :where(main, footer) {
+  padding: 0;
+}
+.dashboard :where(:focus-visible) {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+.dashboard :where(input, select) {
+  min-width: 0;
+}
+.dashboard :where(input[type="checkbox"]) {
+  accent-color: hsl(var(--primary));
+}
+.dashboard :where(input[type="datetime-local"]) {
+  font-size: 12px;
+}
+.dashboard :where(::selection) {
+  background: hsl(var(--primary) / 0.3);
+}
+.dashboard :where(.recharts-wrapper) {
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard *,
+  .dashboard *::before,
+  .dashboard *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

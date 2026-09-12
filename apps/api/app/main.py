@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 import os
+import asyncio
+from contextlib import suppress
 import time
 
 import sentry_sdk
@@ -9,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.services.api_statistics import record, run_flush_loop, flush
+from app.routers.dashboard import router as dashboard_router
 from app.db.session import dispose_engine
 from app.routers.auth import router as auth_router
 from app.routers.forecasts import router as forecasts_router
@@ -28,8 +32,16 @@ config = get_config()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    yield
-    await dispose_engine()
+    task = asyncio.create_task(run_flush_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        with suppress(TimeoutError):
+            await asyncio.wait_for(flush(), timeout=5)
+        await dispose_engine()
 
 if not config.debug:
     sentry_sdk.init(
@@ -79,6 +91,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(dashboard_router, include_in_schema=False)
 # app.include_router(auth_router)
 app.include_router(healthcheck_router)
 
@@ -96,7 +109,16 @@ app.include_router(private_model_router)
 @app.middleware("http")
 async def add_processing_time_header(request: Request, call_next):
     start_time = time.perf_counter()
-    response = await call_next(request)
-    process_time = time.perf_counter() - start_time
-    response.headers["X-Process-Time"] = str(process_time)
-    return response
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        process_time = time.perf_counter() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        if request.url.path.startswith('/dashboard') or '/dashboard/' in request.url.path:
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+    finally:
+        route = request.scope.get('route')
+        record(getattr(route, 'path', '__unmatched__'), request.method, status_code,
+               (time.perf_counter() - start_time) * 1000)

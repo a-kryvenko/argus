@@ -10,6 +10,7 @@ const links = [
   ["/products", "Products"],
   ["/metrics", "Metrics"],
   ["/help", "Help"],
+  ["/dashboard", "Dashboard"],
 ];
 
 export default function Header() {

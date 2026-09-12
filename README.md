@@ -59,6 +59,8 @@ Omit `--watch` for a single collection. Aggregation runs separately from
 
 ## Documentation
 
+- [Dashboard, users and API statistics](docs/dashboard.md)
+
 - [Solar wind API](docs/solar-wind-api.md)
 - [Kp/Dst API and summary calculations](docs/geomagnetic-api.md)
 - [Collector status and healthchecks](docs/observation-status.md)

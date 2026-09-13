@@ -28,6 +28,8 @@ def artifact(tmp_path, monkeypatch):
     monkeypatch.setattr(service, 'get_config', lambda: SimpleNamespace(
         workdir=tmp_path, models_registry={'models': {'atmospheric_density': {
             'forecast_path': 'density.csv', 'max_age_hours': 6}}}))
+    # Rendering tests receive a frame from the mocked Prophet boundary.
+    monkeypatch.setattr(service, "read_frames", lambda _: {"atmospheric_density": pd.read_csv(path)})
     return path, frame
 
 

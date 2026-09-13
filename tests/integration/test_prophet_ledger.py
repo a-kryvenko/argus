@@ -62,3 +62,103 @@ def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
         rows = dict(conn.execute('SELECT id,status FROM prophet.forecast_run').fetchall())
         assert rows[first.run_id] == 'interrupted'
         assert rows[second.run_id] == 'failed'
+
+
+def store_product(run, tmp_path, names=('dst_quantile',), issue='2026-09-13T00:00:00Z'):
+    from common.schemas.forecast_release import PREDICTION_COLUMNS
+    path = tmp_path / 'result.csv'
+    for name in names:
+        columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
+        values = [issue, '2026-09-13T01:00:00Z', '1', *('0' for _ in PREDICTION_COLUMNS[name])]
+        content = ','.join(columns) + '\n' + ','.join(values) + '\n'
+        path.write_text(content)
+        run.store(name, path, {}, 1, columns)
+    return content
+
+
+def test_only_completed_runs_publish_and_historical_release_survives(recorder_setup, tmp_path):
+    from argus_prophet.publication import read_release, ReleaseNotFound
+    _, _, config = recorder_setup
+    first = RunRecorder.begin('all', 'manual', config)
+    store_product(first, tmp_path)
+    with pytest.raises(ReleaseNotFound):
+        read_release('dst')
+    first.finish()
+    old = read_release('dst')
+    failed = RunRecorder.begin('all', 'manual', config)
+    store_product(failed, tmp_path)
+    failed.finish(error=ValueError('other model failed'))
+    assert read_release('dst').release_id == old.release_id
+    second = RunRecorder.begin('all', 'manual', config)
+    store_product(second, tmp_path)
+    second.skip('atmospheric_density', 'not ready')
+    second.finish()
+    assert read_release('dst').run_id == second.run_id
+    assert read_release('dst', old.release_id) == old
+    # One half of speed is not a publishable product.
+    third = RunRecorder.begin('wind', 'manual', config)
+    store_product(third, tmp_path, names=('plasma_speed_quantile',))
+    third.finish()
+    with pytest.raises(ReleaseNotFound):
+        read_release('solar-wind-speed')
+
+
+def test_export_retries_without_recalculation_and_skips_superseded(recorder_setup, tmp_path, monkeypatch):
+    from argus_prophet import exports
+    from argus_prophet.publication import read_release
+    dsn, passwords, config = recorder_setup
+    config.models_registry = {'models': {'dst_quantile': {'forecast_path': 'live.csv'}}}
+    monkeypatch.setattr(exports, 'get_config', lambda: config)
+    run = RunRecorder.begin('all', 'manual', config)
+    expected = store_product(run, tmp_path)
+    run.finish()
+    original_writer = exports.write_csv
+    monkeypatch.setattr(exports, 'write_csv', lambda *_: (_ for _ in ()).throw(OSError('disk unavailable')))
+    with pytest.raises(RuntimeError, match='pending'):
+        exports.export_current()
+    assert read_release('dst').run_id == run.run_id
+    monkeypatch.setattr(exports, 'write_csv', original_writer)
+    assert exports.export_current() == 1
+    assert (tmp_path / 'live.csv').read_text() == expected
+    assert exports.export_current() == 0
+    with runtime(dsn, 'prophet', passwords) as conn:
+        attempts, exported, error = conn.execute('SELECT attempts,exported_at,error FROM prophet.forecast_export').fetchone()
+        assert attempts == 2 and exported is not None and error is None
+    for _ in range(2):
+        new = RunRecorder.begin('all', 'manual', config)
+        store_product(new, tmp_path)
+        new.finish()
+    assert exports.export_current() == 1
+
+
+def test_publication_validation_rolls_back_all_pointers(recorder_setup, tmp_path):
+    from argus_prophet.publication import read_release, ReleaseNotFound
+    dsn, passwords, config = recorder_setup
+    run = RunRecorder.begin('all', 'manual', config)
+    store_product(run, tmp_path, names=('plasma_density_quantile',))
+    store_product(run, tmp_path, names=('dst_quantile',))
+    with runtime(dsn, 'prophet', passwords) as conn:
+        conn.execute("UPDATE prophet.forecast_artifact SET sha256=%s WHERE name='dst_quantile'", ('0' * 64,))
+    with pytest.raises(ValueError, match='checksum'):
+        run.finish()
+    with pytest.raises(ReleaseNotFound):
+        read_release('solar-wind-density')
+    with runtime(dsn, 'prophet', passwords) as conn:
+        assert conn.execute('SELECT status FROM prophet.forecast_run').fetchone()[0] == 'running'
+
+
+def test_cutover_is_repeatable_and_never_publishes_failed_attempts(recorder_setup, tmp_path):
+    from argus_prophet.publication import publish_existing, read_release
+    dsn, passwords, config = recorder_setup
+    run = RunRecorder.begin('all', 'manual', config)
+    store_product(run, tmp_path)
+    # Simulate pre-publication ledger rows created by the previous runtime.
+    with runtime(dsn, 'prophet', passwords) as conn:
+        conn.execute("UPDATE prophet.forecast_run SET status='succeeded',finished_at=now() WHERE id=%s", (run.run_id,))
+    assert publish_existing() == 1
+    assert publish_existing() == 0
+    assert read_release('dst').run_id == run.run_id
+    older = RunRecorder.begin('all', 'manual', config)
+    store_product(older, tmp_path, issue='2026-09-12T00:00:00Z')
+    older.finish()
+    assert read_release('dst').run_id == run.run_id

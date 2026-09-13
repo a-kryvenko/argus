@@ -12,7 +12,7 @@ from argus_prophet.observations import load_inputs
 
 def main(inputs=None, recorder=None) -> None:
     director = ForecastDirector(on_result=recorder.store if recorder else None,
-                                on_csv_written=recorder.csv_written if recorder else None)
+                                publish_csv=recorder is None)
     inputs = inputs if inputs is not None else load_inputs()
     observations = inputs.observations
     director.refresh_forecasts(

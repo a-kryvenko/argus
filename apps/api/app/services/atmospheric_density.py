@@ -1,4 +1,4 @@
-"""Read the density artifact produced by the application's forecast job."""
+"""Render atmospheric density from a published Prophet release."""
 import json
 
 from datetime import UTC, datetime
@@ -9,14 +9,14 @@ from pydantic import ValidationError
 
 from app.schemas.atmospheric_density import DensityCell, DensityForecast, DensityPoint
 from app.services.forecast_products import ArtifactNotReadyError
+from app.services.forecasts_client import read_frames
 
 
 def load_density_forecast() -> DensityForecast:
     config = get_config()
     entry = config.models_registry["models"]["atmospheric_density"]
-    path = config.workdir / entry["forecast_path"]
     try:
-        frame = pd.read_csv(path)
+        frame = read_frames("atmospheric-density")["atmospheric_density"]
         required = {"issue_time", "observed_at", "valid_time", "lead_hours", "driver_mode", "background_method", "dtc_method", "history_start", "dtc_observed_at", *DensityCell.model_fields}
         if frame.empty or not required.issubset(frame.columns):
             raise ValueError("Incomplete density artifact")

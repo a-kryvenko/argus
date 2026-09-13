@@ -50,10 +50,10 @@ def main(inputs: ForecastInputs | None = None, recorder=None) -> None:
         recorder.store(service.registry_name, temporary_path,
                        {"backend": "forecast_core", "registry_name": service.registry_name,
                         "issue_time": issue_time.isoformat()}, len(frame), list(frame.columns))
-    temporary_path.replace(output_path)
-    if recorder:
-        recorder.csv_written(service.registry_name)
-    print(f"Saved {len(frame):,} JB2008 density rows to {output_path} "
+        temporary_path.unlink()
+    else:
+        temporary_path.replace(output_path)
+    print(f"Calculated {len(frame):,} JB2008 density rows "
           f"in {perf_counter() - started:.1f}s", flush=True)
 
 

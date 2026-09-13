@@ -8,10 +8,11 @@ the Compose services.
 ## Prerequisites
 
 - Production `.env` and `.env.local` configured in `/var/www`, including a strong
-  random `OBSERVATIONS_SERVICE_TOKEN` and six separate domain passwords:
+  random `OBSERVATIONS_SERVICE_TOKEN`, **`FORECASTS_SERVICE_TOKEN` (new)**,
+  and six separate domain passwords:
   `API_DB_PASSWORD`, `API_MIGRATION_PASSWORD`, `CLIO_DB_PASSWORD`,
-  `CLIO_MIGRATION_PASSWORD`, **`PROPHET_DB_PASSWORD`,
-  `PROPHET_MIGRATION_PASSWORD` (new; add before releasing)**. See [database cutover](docs/domain-storage.md).
+  `CLIO_MIGRATION_PASSWORD`, `PROPHET_DB_PASSWORD`,
+  `PROPHET_MIGRATION_PASSWORD`. See [database cutover](docs/domain-storage.md).
 - GitHub secrets: `DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`,
   `FORECAST_CORE_DEPLOY_KEY`, `PROD_HOST`, `PROD_USER`, `PROD_SSH_KEY`.
 - The private forecast backend committed and pushed. CI checks out its `master`
@@ -19,14 +20,18 @@ the Compose services.
 - Model and metric artifacts uploaded to `/var/www/data/models` and
   `/var/www/data/metrics`.
 
-## Required preparation for Prophet run accounting
+## Required preparation for Prophet publication
 
-Add **`PROPHET_DB_PASSWORD`** and **`PROPHET_MIGRATION_PASSWORD`** to production
-`.env.local` before pushing the release tag. Use distinct strong secrets. There
-are no default passwords. The workflow validates the incoming Compose config
-before replacing installed configuration or stopping workers, then provisions the
-Prophet roles/schema and applies its migration before starting the new worker.
-Existing CSV history is not imported. See [rollout and verification](docs/prophet-runs.md).
+Add **`FORECASTS_SERVICE_TOKEN`** to production `.env.local` before pushing the
+release tag. Use a strong secret distinct from the observation token. Compose sets
+API's new `FORECASTS_URL=http://prophet-api:8000` automatically. Existing Prophet
+database passwords remain required.
+
+After migrations the workflow runs `prophet publish-existing` to publish complete
+recorded results, then starts `prophet-api` and the worker. API reads forecasts
+through HTTP; CSV files alone are no longer sufficient. Products without eligible
+recorded runs return 503 until generation succeeds. See [rollout, verification and
+rollback](docs/prophet-publication.md).
 
 ## Release helper
 
@@ -60,7 +65,7 @@ docker compose run --rm prophet prophet generate
 
 Finish independent manual jobs before deploying. The workflow stops service
 writers and saves a PostgreSQL dump,
-provisions/adopts domain storage, runs separate Clio/API/Prophet migrations, then restarts
+provisions/adopts domain storage, runs separate Clio/API/Prophet migrations, publishes eligible recorded forecasts, then restarts
 the stack. Production has already completed the legacy ownership cutover;
 [cutover and recovery](docs/domain-storage.md) documents adoption for older databases. Migration and
 admin credentials exist only in maintenance-profile services, not runtime apps.

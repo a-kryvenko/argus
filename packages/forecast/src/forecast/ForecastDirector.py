@@ -16,7 +16,8 @@ from common.schemas.observation import Observation
 DISPLAYED_FORECAST_HORIZON = 96
 
 class ForecastDirector:
-    def __init__(self, on_result=None, on_csv_written=None):
+    def __init__(self, on_result=None, on_csv_written=None, publish_csv=True):
+        self.publish_csv = publish_csv
         self.on_result = on_result
         self.on_csv_written = on_csv_written
 
@@ -93,7 +94,7 @@ class ForecastDirector:
         os.makedirs(forecast_dir, exist_ok=True)
         os.makedirs(archive_dir, exist_ok=True)
 
-        if forecast_file_path.is_file():
+        if self.publish_csv and forecast_file_path.is_file():
             archive_file_name = "_"
             with open(forecast_file_path) as f:
                 reader = csv.reader(f)
@@ -113,6 +114,9 @@ class ForecastDirector:
         if self.on_result:
             self.on_result(forecast_service.registry_name, tmp_forecast_file_path,
                            model_info or {}, len(df), list(df.columns))
+        if not self.publish_csv:
+            tmp_forecast_file_path.unlink()
+            return
         shutil.move(tmp_forecast_file_path, forecast_file_path)
         if self.on_csv_written:
             self.on_csv_written(forecast_service.registry_name)

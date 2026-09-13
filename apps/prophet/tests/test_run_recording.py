@@ -78,3 +78,16 @@ def test_database_failure_keeps_previous_live_csv(tmp_path, monkeypatch):
         frame_writer(monkeypatch, path, Mock(side_effect=RuntimeError('database unavailable')), written)
     assert path.read_text() == original
     written.assert_not_called()
+
+
+def test_recorded_calculation_does_not_publish_live_csv(tmp_path, monkeypatch):
+    path = tmp_path / 'live.csv'
+    path.write_text('previous release')
+    module = importlib.import_module('forecast.ForecastDirector')
+    monkeypatch.setattr(module, 'forecast_to_dataframe', lambda _: pd.DataFrame({'value': [2]}))
+    stored = Mock()
+    service = SimpleNamespace(registry_name='test', forecast=lambda _: None)
+    ForecastDirector(on_result=stored, publish_csv=False)._build_forecast(path, service, object())
+    stored.assert_called_once()
+    assert path.read_text() == 'previous release'
+    assert not path.with_name('live.csv.tmp').exists()

@@ -1,4 +1,7 @@
-# Prophet run accounting: stage 3a
+# Prophet run accounting: stage 3a (historical)
+
+This page describes the original ledger rollout. For the current deployment and
+behavior, use [stage 3b publication](prophet-publication.md).
 
 ## Required production preparation
 

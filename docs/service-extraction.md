@@ -45,16 +45,20 @@ shared advisory locks. Existing collector/retention behavior is retained.
 Prophet owns its schema, runtime/migrator roles and migrations. Each execution saves
 its input snapshot, model/source hashes, dependency versions and compressed CSV
 artifacts before replacing live CSV files. Runs expose success, partial, failure
-and interrupted states through the installed CLI. API still reads live CSV;
-filesystem scheduling and locking remain unchanged. See [rollout](prophet-runs.md).
+and interrupted states through the installed CLI. At this stage API still read
+live CSV; stage 3b below switches readers to the publication contract. See [rollout](prophet-runs.md).
 
-## Step 3b: Forecast publication (next)
+## Step 3b: Forecast publication (implemented)
 
-Add independent per-product releases and their read contract. Publish completed
-products transactionally in PostgreSQL; export the published release to live CSV
-with a retriable export status. Move readers to Prophet contracts. Define explicit
-freshness and data readiness policy. Replace the temporary filesystem scheduler
-marker/lock with durable scheduling and execution coordination.
+Complete product releases and their current pointers are committed in PostgreSQL
+with run completion. API reads the versioned Prophet HTTP contract; live CSV is a
+retryable export. The new `prophet-api` process serves latest and immutable release
+IDs. See [publication and rollout](prophet-publication.md).
+
+## Step 3c: Durable scheduling and readiness (next)
+
+Define explicit freshness and data readiness policy. Replace the temporary
+filesystem scheduler marker/lock with durable scheduling and execution coordination.
 
 ## Step 4: Intelligence stub
 

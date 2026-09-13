@@ -83,3 +83,15 @@ def test_full_run_shares_one_read_with_density(monkeypatch):
     read.assert_called_once_with()
     assert director.refresh_forecasts.call_args.args[1] is inputs.observations
     density.assert_called_once_with(inputs, recorder=None)
+
+
+def test_kp_command_calculates_both_sources_of_geomagnetic_product(monkeypatch):
+    from argus_prophet.commands import generate_kp_forecast as command
+    inputs = stored_inputs()
+    director = Mock()
+    monkeypatch.setattr(command, 'ForecastDirector', Mock(return_value=director))
+    monkeypatch.setattr(command.ForecastServiceRegistry, 'get', lambda name: name)
+    command.main(inputs=inputs)
+    assert director.refresh_forecasts.call_args.args[0] == [
+        command.ForecastService.KP_INDEX_THRESHOLD, command.ForecastService.AP_INDEX_QUANTILE,
+    ]

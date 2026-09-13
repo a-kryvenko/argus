@@ -33,3 +33,25 @@ def test_manual_and_scheduled_generations_cannot_overlap(tmp_path):
             run_due(generate, tmp_path, datetime.now(UTC))
     generate.assert_not_called()
     assert run_due(generate, tmp_path, datetime.now(UTC))
+
+
+def test_worker_retries_exports_even_when_generation_slot_completed(tmp_path, monkeypatch):
+    from argus_prophet import worker
+    # Three polls of one completed slot: an export failure must not recalculate.
+    class StopAfterThree:
+        count = 0
+        def is_set(self):
+            return self.count == 3
+        def set(self):
+            self.count = 3
+        def wait(self, _):
+            self.count += 1
+    monkeypatch.setattr(worker.threading, 'Event', StopAfterThree)
+    monkeypatch.setattr(worker.signal, 'signal', lambda *_: None)
+    monkeypatch.setattr(worker, 'state_directory', lambda: tmp_path)
+    monkeypatch.setattr(worker, 'due_slot', lambda _: 'fixed-slot')
+    generate = Mock()
+    export = Mock(side_effect=[OSError('disk full'), None, None])
+    worker.work(generate, export=export)
+    generate.assert_called_once()
+    assert export.call_count == 3

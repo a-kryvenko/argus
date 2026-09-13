@@ -5,7 +5,7 @@
 | Schema | Runtime role | Owner/migration role | Data |
 | --- | --- | --- | --- |
 | `clio` | `argus_clio` | `argus_clio_migrator` | Measurements, normalized observations, solar wind/Kp/Dst, source status, aggregates, pending/retired hours, scheduler slots |
-| `prophet` | `argus_prophet` | `argus_prophet_migrator` | Forecast runs, input snapshots, compressed forecast artifacts and provenance |
+| `prophet` | `argus_prophet` | `argus_prophet_migrator` | Forecast runs, input snapshots, compressed forecast artifacts, provenance, published releases and export status |
 | `api` | `argus_api` | `argus_api_migrator` | Dashboard users/groups/memberships/sessions, login attempts, API statistics |
 
 Each schema has its own Alembic version table and migration history. Runtime
@@ -57,7 +57,7 @@ operator/bootstrap container; they are never passed to API, Clio or Prophet runt
 ## Production commands
 
 Configure all six domain passwords (including the new `PROPHET_DB_PASSWORD` and
-`PROPHET_MIGRATION_PASSWORD`) plus `OBSERVATIONS_SERVICE_TOKEN` before the
+`PROPHET_MIGRATION_PASSWORD`) plus `OBSERVATIONS_SERVICE_TOKEN` and `FORECASTS_SERVICE_TOKEN` before the
 release; Compose validates their presence. Maintenance services have separate
 credentials and are excluded from normal `up` by their profile:
 
@@ -66,6 +66,7 @@ docker compose run --rm db-bootstrap
 docker compose run --rm clio-migrate
 docker compose run --rm api-migrate
 docker compose run --rm prophet-migrate
+docker compose run --rm --no-deps prophet prophet publish-existing
 docker compose up -d
 ```
 

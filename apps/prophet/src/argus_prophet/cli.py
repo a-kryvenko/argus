@@ -1,4 +1,4 @@
-"""Installed production entry point: prophet generate [product] / prophet worker."""
+"""Prophet forecasting, publication, CSV export and internal read service."""
 import argparse
 import importlib
 import logging
@@ -23,6 +23,7 @@ def generate(product: str, trigger='manual') -> None:
         recorder.snapshot(inputs)
         command = importlib.import_module(f'argus_prophet.commands.{PRODUCTS[product]}')
         command.main(inputs=inputs, recorder=recorder)
+        recorder.finish()
     except BaseException as exc:
         try:
             recorder.finish(error=exc)
@@ -30,7 +31,6 @@ def generate(product: str, trigger='manual') -> None:
             logging.exception('Could not record failure for run %s', recorder.run_id)
         raise
     else:
-        recorder.finish()
         logging.info('Prophet run %s completed', recorder.run_id)
 
 
@@ -41,6 +41,12 @@ def main() -> None:
     generate_parser.add_argument('product', nargs='?', choices=PRODUCTS, default='all')
     commands.add_parser('worker', help='Generate hourly at :10 UTC; retry failures')
     commands.add_parser('migrate', add_help=False)
+    serve = commands.add_parser('serve', help='Serve published forecast contracts')
+    serve.add_argument('--host', default='0.0.0.0')
+    serve.add_argument('--port', type=int, default=8000)
+    export_parser = commands.add_parser('export', help='Retry pending current CSV exports')
+    export_parser.add_argument('--force', action='store_true', help='Restore all current CSVs from published releases')
+    commands.add_parser('publish-existing', help='Publish complete recorded runs for the read cutover')
     runs = commands.add_parser('runs', help='List recorded executions')
     runs.add_argument('--limit', type=int, default=20)
     show = commands.add_parser('show-run', help='Show execution evidence')
@@ -65,6 +71,10 @@ def main() -> None:
         return
     if remaining:
         parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+    if args.command == 'serve':
+        import uvicorn
+        uvicorn.run('argus_prophet.main:app', host=args.host, port=args.port)
+        return
     if args.command in ('runs', 'show-run'):
         import json
         from common.config import get_config
@@ -79,10 +89,18 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     from argus_prophet.commands._runner import run_command
     from argus_prophet.worker import generation_lock, work
+    from argus_prophet.exports import export_current
     if args.command == 'worker':
-        run_command(lambda: work(lambda: generate('all', trigger='scheduled')))
+        run_command(lambda: work(lambda: generate('all', trigger='scheduled'), export=export_current))
     else:
         def once():
             with generation_lock():
-                generate(args.product)
+                if args.command == 'publish-existing':
+                    from argus_prophet.publication import publish_existing
+                    logging.info('Published %s existing product releases', publish_existing())
+                    return
+                elif args.command == 'generate':
+                    generate(args.product)
+                # Failure here is an export failure: the committed release survives.
+                export_current(force=args.force if args.command == 'export' else False)
         run_command(once)

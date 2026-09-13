@@ -1,4 +1,4 @@
-"""Single-host scheduling until Prophet gains its database-backed run ledger.
+"""Single-host scheduling; publication and execution records live in PostgreSQL.
 
 Shared-volume flock serializes all worker and CLI writes to the live CSV files.
 A completion marker avoids repeating a successful hourly slot after restart.
@@ -63,7 +63,7 @@ def run_due(generate: Callable[[], None], directory: Path, now: datetime) -> boo
         return True
 
 
-def work(generate: Callable[[], None]) -> None:
+def work(generate: Callable[[], None], export: Callable[[], None] | None = None) -> None:
     stopped = threading.Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stopped.set())
@@ -78,4 +78,12 @@ def work(generate: Callable[[], None]) -> None:
             logger.exception('Forecast generation failed; retrying in 60 seconds')
             import sentry_sdk
             sentry_sdk.capture_exception()
+        if export is not None:
+            try:
+                with generation_lock(directory):
+                    export()
+            except GenerationBusy:
+                logger.info('CSV export deferred while generation is running')
+            except Exception:
+                logger.exception('CSV export failed; retrying in 60 seconds without recalculation')
         stopped.wait(60)

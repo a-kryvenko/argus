@@ -20,6 +20,7 @@ from app.schemas.metrics import (
 )
 from common.config import get_config
 from forecast.exceptions import ArtifactNotReadyError
+from app.services.forecasts_client import read_frames
 
 
 @dataclass(frozen=True)
@@ -83,10 +84,6 @@ def _registry(variable: Variable) -> dict:
     return get_config().models_registry["models"][variable.registry_name]
 
 
-def _forecast_path(variable: Variable) -> Path:
-    return get_config().workdir / _registry(variable)["forecast_path"]
-
-
 def _required_columns(variable: Variable) -> set[str]:
     columns = {"issue_time", "valid_time", "lead_hours"}
     if variable.quantiles:
@@ -99,17 +96,13 @@ def _required_columns(variable: Variable) -> set[str]:
 
 
 def _load_variable_frames(product: Product) -> list[tuple[Variable, pd.DataFrame]]:
+    sources = read_frames(product.target)
     frames = []
-    cache: dict[Path, pd.DataFrame] = {}
     for variable in product.variables:
-        path = _forecast_path(variable)
-        if not path.is_file():
-            continue
-        if path not in cache:
-            cache[path] = pd.read_csv(path, parse_dates=["issue_time", "valid_time"])
-        frame = cache[path]
-        if not frame.empty and _required_columns(variable).issubset(frame.columns):
-            frames.append((variable, frame))
+        frame = sources.get(variable.registry_name)
+        if frame is None or frame.empty or not _required_columns(variable).issubset(frame.columns):
+            raise ArtifactNotReadyError(product.target)
+        frames.append((variable, frame))
     return frames
 
 

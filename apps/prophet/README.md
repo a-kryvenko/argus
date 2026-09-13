@@ -6,8 +6,8 @@ contract and writes the existing live forecast CSV products. It records runs,
 input snapshots and compressed results in its own PostgreSQL schema.
 
 Clio owns observations and serves the read contract. API consumes Clio too and
-has no observation SQL models. Prophet still publishes CSV files; database-backed
-publication pointers and forecast read contracts belong to the next extraction stage.
+has no observation SQL models. API now reads published forecasts through the
+Prophet HTTP contract; live CSV files are retryable exports of database releases.
 
 ## Local use
 
@@ -26,6 +26,8 @@ is absent; there is no database or provider-download fallback.
 ./scripts/prophet generate
 ./scripts/prophet generate density
 ./scripts/prophet worker
+./scripts/prophet serve --port 8002
+./scripts/prophet export
 ```
 
 Products for `generate`: `all`, `wind`, `kp`, `hmf`, `density`. The installed CLI
@@ -50,8 +52,8 @@ explicitly rather than silently truncating. Database statements time out after
 60 seconds; the client has a 180-second read timeout and a 10-second connect timeout.
 
 `read_at` is the request's read-start time, not a durable snapshot ID. Historical
-revisions are still possible. Persisted input snapshots and replayable release
-identifiers are distinct from the input snapshot saved in each Prophet run.
+revisions are still possible. Prophet saves the exact response in its execution
+record; published products reference that run.
 
 ## Scheduling and limitations
 
@@ -66,26 +68,25 @@ staleness policies are not introduced in this extraction.
 A shared-volume `flock` serializes worker and CLI generation, preventing competing
 writes to live CSV files. An abrupt stop after output but before the marker can
 cause regeneration; execution is not exactly once. This mechanism is for the
-current single-host deployment. Execution records now live in PostgreSQL; leases and
-per-product publication remain for the later publication stage.
+current single-host deployment. Execution and publication records now live in
+PostgreSQL; database scheduling and leases remain for the next stage.
 
 A missing optional density input retains existing behavior: other products are
-published and density is skipped. A failure halfway through the product list can
-leave products from different issue times, as before. CSV publication is atomic
+published and density is skipped. A failed calculation does not advance publication
+pointers. CSV export is atomic
 per file, not across a complete release. Manual generation does not advance the
 scheduler marker. SIGTERM allows the current calculation to finish within the
 Compose stop grace period.
 
 ## Run accounting and deployment
 
-**New required production variables: `PROPHET_DB_PASSWORD` and
-`PROPHET_MIGRATION_PASSWORD`. Set both before releasing this version.**
-Runtime uses only the first password; the maintenance migrator uses only the second.
-Local generation also requires an initialized Prophet database and runtime credentials.
+**New required production variable: `FORECASTS_SERVICE_TOKEN`. Set it before
+releasing this version.** Compose sets API's `FORECASTS_URL` automatically.
+The existing `PROPHET_DB_PASSWORD` and `PROPHET_MIGRATION_PASSWORD` remain required;
+runtime and maintenance credentials stay separate.
 
-The deploy workflow validates the new Compose configuration before replacing the
-installed configuration or stopping workers. After backup and writer shutdown it
-runs bootstrap, Clio/API/Prophet migrations, then restarts services.
+The workflow validates environment values, backs up storage, applies migrations,
+publishes eligible recorded results and starts the read process and worker.
 
 ```bash
 ./scripts/prophet runs --limit 10
@@ -93,5 +94,5 @@ runs bootstrap, Clio/API/Prophet migrations, then restarts services.
 ./scripts/prophet show-run <run-uuid> --inputs
 ```
 
-See [run accounting and rollout](../../docs/prophet-runs.md) for the exact changes,
+See [publication contract and rollout](../../docs/prophet-publication.md) for the exact changes,
 production verification, failure behavior and remaining publication work.

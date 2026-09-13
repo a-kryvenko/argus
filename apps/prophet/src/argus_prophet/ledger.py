@@ -1,8 +1,4 @@
-"""Persist execution evidence before replacing each existing live CSV.
-
-This ledger is not a publication registry. Reads still use live files in this
-stage; scheduling and single-host exclusion remain in worker.py.
-"""
+"""Execution evidence and transactional publication of completed product releases."""
 import gzip
 import hashlib
 import importlib.metadata
@@ -99,8 +95,13 @@ class RunRecorder:
         status = 'failed' if error is not None else 'partial' if self.skipped else 'succeeded'
         message = f'{type(error).__name__}: {error}'[:2000] if error is not None else None
         with connect() as conn:
-            conn.execute("""UPDATE prophet.forecast_run SET status=%s,finished_at=%s,error=%s
+            result = conn.execute("""UPDATE prophet.forecast_run SET status=%s,finished_at=%s,error=%s
                 WHERE id=%s AND status='running'""", (status, datetime.now(UTC), message, self.run_id))
+            if result.rowcount != 1:
+                raise RuntimeError("Run is no longer running")
+            if error is None:
+                from argus_prophet.publication import publish_run
+                publish_run(conn, self.run_id)
 
 
 def list_runs(limit=20):
@@ -127,4 +128,10 @@ def describe_run(run_id, include_inputs=False):
         cursor.execute('''SELECT name,status,created_at,csv_written_at,sha256,row_count,columns,model_info,error
             FROM prophet.forecast_artifact WHERE run_id=%s ORDER BY name''', (run_id,))
         result['artifacts'] = cursor.fetchall()
+        cursor.execute('''SELECT r.id,r.product,r.published_at,r.issue_time,e.attempts,e.exported_at,e.error,
+            (c.release_id IS NOT NULL) AS is_current FROM prophet.forecast_release r
+            JOIN prophet.forecast_export e ON e.release_id=r.id
+            LEFT JOIN prophet.current_forecast c ON c.release_id=r.id
+            WHERE r.run_id=%s ORDER BY r.product''', (run_id,))
+        result['releases'] = cursor.fetchall()
         return result

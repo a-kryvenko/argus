@@ -156,6 +156,8 @@ jobs:
             set -eu
 
             cd /var/www
+            export COMPOSE_ENV_FILES=.env,.env.local
+            docker compose --project-directory /var/www -f .deploy/docker-compose.yml config --quiet
             mkdir -p log/nginx log/frontend log/api data models metrics nginx nginx/templates alloy configs
             mv ./.deploy/docker-compose.yml ./
             mv ./.deploy/nginx-proxy-up.sh ./
@@ -172,28 +174,20 @@ jobs:
               --username "$DOCKERHUB_LOGIN" \
               --password-stdin
             
-            export COMPOSE_ENV_FILES=.env,.env.local
-
-            docker compose config --quiet
             docker compose --profile maintenance pull
             docker compose up -d postgres redis
 
-            # Remove scheduled legacy writes, stop service writers, then drain
-            # all one-off jobs from this deployment (including old aggregation).
+            # Stop current service writers before backup and migrations.
+            # Finish independent manual jobs before starting a deployment.
             docker compose stop api solar-wind geomagnetic prophet clio clio-refresh clio-aggregate
-            if docker container inspect argusForecast >/dev/null 2>&1; then
-              legacy_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' argusForecast)
-              for container in $(docker ps -q --filter "label=com.docker.compose.project=$legacy_project" --filter label=com.docker.compose.oneoff=True); do
-                docker wait "$container" || true
-              done
-            fi
             mkdir -p backups
-            backup_file="backups/pre-domain-$(date -u +%Y%m%dT%H%M%SZ).dump"
+            backup_file="backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
             docker compose exec -T postgres sh -c 'pg_dump --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --format=custom' > "$backup_file"
 
             docker compose run --rm db-bootstrap
             docker compose run --rm clio-migrate
             docker compose run --rm api-migrate
+            docker compose run --rm prophet-migrate
             docker compose up -d --remove-orphans
             docker image prune -f
 

@@ -108,6 +108,8 @@ services:
       API_MIGRATION_PASSWORD: ${API_MIGRATION_PASSWORD:?API_MIGRATION_PASSWORD is required}
       CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
       CLIO_MIGRATION_PASSWORD: ${CLIO_MIGRATION_PASSWORD:?CLIO_MIGRATION_PASSWORD is required}
+      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
+      PROPHET_MIGRATION_PASSWORD: ${PROPHET_MIGRATION_PASSWORD:?PROPHET_MIGRATION_PASSWORD is required}
     networks: [backend]
 
   api-migrate:
@@ -133,6 +135,19 @@ services:
       - ./configs:/var/www/configs:ro
     networks: [backend]
 
+  prophet-migrate:
+    image: andriykryvenko/argus-prophet:latest
+    profiles: ["maintenance"]
+    command: ["prophet", "migrate", "upgrade", "head"]
+    environment:
+      ARGUS_WORKDIR: /var/www
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      PROPHET_MIGRATION_PASSWORD: ${PROPHET_MIGRATION_PASSWORD:?PROPHET_MIGRATION_PASSWORD is required}
+    volumes:
+      - ./configs:/var/www/configs:ro
+    networks: [backend]
+
   prophet:
     image: andriykryvenko/argus-prophet:latest
     restart: unless-stopped
@@ -141,6 +156,9 @@ services:
     stop_grace_period: 10m
     environment:
       ARGUS_WORKDIR: /var/www
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
       OBSERVATIONS_URL: http://clio:8000
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
@@ -151,6 +169,7 @@ services:
       clio:
         condition: service_healthy
     networks:
+      backend:
       observations:
 
   frontend:

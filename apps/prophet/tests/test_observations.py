@@ -82,4 +82,4 @@ def test_full_run_shares_one_read_with_density(monkeypatch):
     command.main()
     read.assert_called_once_with()
     assert director.refresh_forecasts.call_args.args[1] is inputs.observations
-    density.assert_called_once_with(inputs)
+    density.assert_called_once_with(inputs, recorder=None)

@@ -4,6 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "common",
+  "psycopg[binary]>=3.2,<4",
+  "sqlalchemy>=2.0,<3",
+  "alembic>=1.16,<2",
   "forecast",
   "forecast-core>=0.2.0",
   "httpx>=0.28,<1",
@@ -28,3 +31,6 @@ forecast-core = { path = "../../packages/forecast-core", editable = true }
 
 [tool.uv.workspace]
 members = ["../../packages/common", "../../packages/clio", "../../packages/forecast"]
+
+[tool.setuptools.package-data]
+argus_prophet = ["migrations/script.py.mako"]

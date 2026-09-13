@@ -40,10 +40,17 @@ adapter; private source stays private. Ingestion/aggregation cron commands are
 replaced by owned Clio scheduler processes with database completion markers and
 shared advisory locks. Existing collector/retention behavior is retained.
 
-## Step 3: Prophet run accounting and publication
+## Step 3a: Prophet run accounting (implemented)
 
-Add Prophet-owned migrations/tables and role. Persist replayable input snapshots,
-model versions, attempts and independent per-product releases. Publish completed
+Prophet owns its schema, runtime/migrator roles and migrations. Each execution saves
+its input snapshot, model/source hashes, dependency versions and compressed CSV
+artifacts before replacing live CSV files. Runs expose success, partial, failure
+and interrupted states through the installed CLI. API still reads live CSV;
+filesystem scheduling and locking remain unchanged. See [rollout](prophet-runs.md).
+
+## Step 3b: Forecast publication (next)
+
+Add independent per-product releases and their read contract. Publish completed
 products transactionally in PostgreSQL; export the published release to live CSV
 with a retriable export status. Move readers to Prophet contracts. Define explicit
 freshness and data readiness policy. Replace the temporary filesystem scheduler

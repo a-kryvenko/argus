@@ -16,10 +16,11 @@ def test_domain_credentials_are_not_shared_with_runtime_containers():
         if name == 'api':
             assert 'API_DB_PASSWORD' in environment and 'CLIO_DB_PASSWORD' not in environment
         elif name == 'prophet':
-            assert not any(key.endswith('DB_PASSWORD') for key in environment)
+            assert 'PROPHET_DB_PASSWORD' in environment
+            assert 'CLIO_DB_PASSWORD' not in environment and 'API_DB_PASSWORD' not in environment
         else:
             assert 'CLIO_DB_PASSWORD' in environment and 'API_DB_PASSWORD' not in environment
-    for name in ('api-migrate', 'clio-migrate', 'db-bootstrap'):
+    for name in ('api-migrate', 'clio-migrate', 'prophet-migrate', 'db-bootstrap'):
         assert services[name]['profiles'] == ['maintenance']
     assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
     assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'

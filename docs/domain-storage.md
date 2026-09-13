@@ -5,6 +5,7 @@
 | Schema | Runtime role | Owner/migration role | Data |
 | --- | --- | --- | --- |
 | `clio` | `argus_clio` | `argus_clio_migrator` | Measurements, normalized observations, solar wind/Kp/Dst, source status, aggregates, pending/retired hours, scheduler slots |
+| `prophet` | `argus_prophet` | `argus_prophet_migrator` | Forecast runs, input snapshots, compressed forecast artifacts and provenance |
 | `api` | `argus_api` | `argus_api_migrator` | Dashboard users/groups/memberships/sessions, login attempts, API statistics |
 
 Each schema has its own Alembic version table and migration history. Runtime
@@ -12,7 +13,7 @@ roles get data read/write privileges and sequence usage but no schema creation,
 DDL, migration-marker changes, role membership or foreign schema/table/function
 access. Future objects inherit domain-specific grants from their migration role.
 PostgreSQL privileges enforce the boundary even for SQL issued outside ORM code.
-Prophet still has no database credentials in this stage.
+Prophet reads observations through Clio HTTP; its SQL credentials access only its own schema.
 
 Database models use explicit domain schemas. Raw Clio SQL runs with the Clio
 search path, and trigger functions explicitly set their own search path so their
@@ -28,8 +29,9 @@ public schema; they deliberately refuse it.
 
 Before adoption, stop all service and one-off writers, including legacy cron
 aggregation, and make a PostgreSQL backup. This cutover requires downtime.
-The deployment workflow removes the old application cron entries, stops writers,
-drains deployment one-off containers and writes a custom-format dump under
+For a legacy server, remove old application cron entries and finish all one-off
+jobs before deploying. The deployment workflow stops current service writers
+and writes a custom-format dump under
 `/var/www/backups/` before provisioning and migration. Stop any independent manual
 processes outside that deployment as well.
 
@@ -50,11 +52,12 @@ running a normal upgrade against the legacy version table.
 Bootstrap is repeatable after successful adoption: it refreshes grants/passwords
 without moving data again. Reserved roles must not have pre-existing memberships
 or own the database. Separate administrative credentials are used only by the
-operator/bootstrap container; they are never passed to API or Clio runtime.
+operator/bootstrap container; they are never passed to API, Clio or Prophet runtime.
 
 ## Production commands
 
-Configure all four domain passwords plus `OBSERVATIONS_SERVICE_TOKEN` before the
+Configure all six domain passwords (including the new `PROPHET_DB_PASSWORD` and
+`PROPHET_MIGRATION_PASSWORD`) plus `OBSERVATIONS_SERVICE_TOKEN` before the
 release; Compose validates their presence. Maintenance services have separate
 credentials and are excluded from normal `up` by their profile:
 
@@ -62,6 +65,7 @@ credentials and are excluded from normal `up` by their profile:
 docker compose run --rm db-bootstrap
 docker compose run --rm clio-migrate
 docker compose run --rm api-migrate
+docker compose run --rm prophet-migrate
 docker compose up -d
 ```
 
@@ -98,7 +102,7 @@ To run against your own disposable PostgreSQL server, explicitly configure
 
 The root test environment needs psycopg and Alembic for this integration suite;
 CI installs them explicitly. Tests create temporary databases and provision the
-four reserved roles, so this must be a separate test server. Without this variable
+six reserved roles, so this must be a separate test server. Without this variable
 the database tests skip, and the ordinary contract/unit tests run normally.
 Existing explicit integration scripts now also require this test DSN; they never
 fall back to project database credentials.

@@ -2,12 +2,12 @@
 
 Prophet owns forecast execution. It has an independent Python environment and
 Docker image. It reads observations only through the versioned owner HTTP
-contract and writes the existing live forecast CSV products. It has no database
-credentials or SQL/storage imports.
+contract and writes the existing live forecast CSV products. It records runs,
+input snapshots and compressed results in its own PostgreSQL schema.
 
 Clio owns observations and serves the read contract. API consumes Clio too and
 has no observation SQL models. Prophet still publishes CSV files; database-backed
-forecast releases belong to the next extraction stage.
+publication pointers and forecast read contracts belong to the next extraction stage.
 
 ## Local use
 
@@ -51,7 +51,7 @@ explicitly rather than silently truncating. Database statements time out after
 
 `read_at` is the request's read-start time, not a durable snapshot ID. Historical
 revisions are still possible. Persisted input snapshots and replayable release
-identifiers belong to the subsequent Prophet publication stage.
+identifiers are distinct from the input snapshot saved in each Prophet run.
 
 ## Scheduling and limitations
 
@@ -66,8 +66,8 @@ staleness policies are not introduced in this extraction.
 A shared-volume `flock` serializes worker and CLI generation, preventing competing
 writes to live CSV files. An abrupt stop after output but before the marker can
 cause regeneration; execution is not exactly once. This mechanism is for the
-current single-host deployment. Database-backed execution records, leases and
-per-product publication will replace it in the later publication stage.
+current single-host deployment. Execution records now live in PostgreSQL; leases and
+per-product publication remain for the later publication stage.
 
 A missing optional density input retains existing behavior: other products are
 published and density is skipped. A failure halfway through the product list can
@@ -76,16 +76,22 @@ per file, not across a complete release. Manual generation does not advance the
 scheduler marker. SIGTERM allows the current calculation to finish within the
 Compose stop grace period.
 
-## Deployment
+## Run accounting and deployment
 
-The deploy workflow builds the additional `argus-prophet` image. Add
-`OBSERVATIONS_SERVICE_TOKEN` to the production Compose environment before
-releasing; Compose validates it. Prophet is connected to the observations network
-and receives only the observation URL/token and Sentry setting, not database
-environment files. The external nginx blocks the internal contract.
+**New required production variables: `PROPHET_DB_PASSWORD` and
+`PROPHET_MIGRATION_PASSWORD`. Set both before releasing this version.**
+Runtime uses only the first password; the maintenance migrator uses only the second.
+Local generation also requires an initialized Prophet database and runtime credentials.
 
-Clio and Prophet are independently scheduled Compose processes. The deploy
-workflow drains legacy work and applies domain migrations before startup. See
-[database cutover](../../docs/domain-storage.md) for the coordinated first Clio
-release. No Prophet-owned database migration exists yet; Clio's ownership cutover
-requires its own migration sequence.
+The deploy workflow validates the new Compose configuration before replacing the
+installed configuration or stopping workers. After backup and writer shutdown it
+runs bootstrap, Clio/API/Prophet migrations, then restarts services.
+
+```bash
+./scripts/prophet runs --limit 10
+./scripts/prophet show-run <run-uuid>
+./scripts/prophet show-run <run-uuid> --inputs
+```
+
+See [run accounting and rollout](../../docs/prophet-runs.md) for the exact changes,
+production verification, failure behavior and remaining publication work.

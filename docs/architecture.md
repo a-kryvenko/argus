@@ -7,14 +7,14 @@
 | forecast | Forecast interfaces and CSV products | common; optional forecast_core.api |
 | forecast-core | Private models, feature preparation and calibration | common, clio |
 | apps/clio | Observation storage, collectors, schedules and read HTTP API | common, clio; private calibration through services/calibration.py |
-| apps/prophet | Forecast execution and scheduling; observation reads through HTTP | common, forecast, forecast_core.api |
+| apps/prophet | Forecast execution, scheduling and owned run storage; observation reads through HTTP | common, forecast, forecast_core.api |
 | apps/api | Public HTTP/authentication; own dashboard storage; Clio HTTP client | common, forecast |
 | intelligence-core | Private impact calculations, not yet integrated | Shared contracts as needed |
 
 Clio owns schema `clio` and its migrations under
 `apps/clio/src/argus_clio/migrations`. API owns schema `api` and migrations under
 `apps/api/alembic`. Separate runtime/migration roles enforce ownership; API reads
-observations only through Clio contracts. Prophet has no SQL credentials yet.
+observations only through Clio contracts. Prophet SQL credentials access only its own run/artifact schema.
 See [domain storage and cutover](domain-storage.md) and
 [extraction stages](service-extraction.md).
 

@@ -16,7 +16,7 @@ def test_cli_help_is_available_without_loading_models():
     assert 'generate' in result.stdout and 'worker' in result.stdout
 
 
-def test_installed_environment_imports_without_api_or_database(tmp_path):
+def test_installed_environment_imports_without_observation_storage(tmp_path):
     import pytest
     python = PROPHET / '.venv/bin/python'
     if not python.exists():
@@ -27,8 +27,8 @@ def test_installed_environment_imports_without_api_or_database(tmp_path):
     code = '''
 import importlib.util
 assert importlib.util.find_spec('app') is None
-assert importlib.util.find_spec('sqlalchemy') is None
-assert importlib.util.find_spec('psycopg') is None
+assert importlib.util.find_spec('argus_clio') is None
+import argus_prophet.db.session
 import argus_prophet.commands.generate_forecast
 import argus_prophet.commands.generate_atmospheric_density_forecast
 '''

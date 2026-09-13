@@ -8,15 +8,25 @@ the Compose services.
 ## Prerequisites
 
 - Production `.env` and `.env.local` configured in `/var/www`, including a strong
-  random `OBSERVATIONS_SERVICE_TOKEN` and four separate domain passwords:
+  random `OBSERVATIONS_SERVICE_TOKEN` and six separate domain passwords:
   `API_DB_PASSWORD`, `API_MIGRATION_PASSWORD`, `CLIO_DB_PASSWORD`,
-  `CLIO_MIGRATION_PASSWORD`. See [database cutover](docs/domain-storage.md).
+  `CLIO_MIGRATION_PASSWORD`, **`PROPHET_DB_PASSWORD`,
+  `PROPHET_MIGRATION_PASSWORD` (new; add before releasing)**. See [database cutover](docs/domain-storage.md).
 - GitHub secrets: `DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`,
   `FORECAST_CORE_DEPLOY_KEY`, `PROD_HOST`, `PROD_USER`, `PROD_SSH_KEY`.
 - The private forecast backend committed and pushed. CI checks out its `master`
   branch; the Clio and Prophet lockfiles must match that checkout.
 - Model and metric artifacts uploaded to `/var/www/data/models` and
   `/var/www/data/metrics`.
+
+## Required preparation for Prophet run accounting
+
+Add **`PROPHET_DB_PASSWORD`** and **`PROPHET_MIGRATION_PASSWORD`** to production
+`.env.local` before pushing the release tag. Use distinct strong secrets. There
+are no default passwords. The workflow validates the incoming Compose config
+before replacing installed configuration or stopping workers, then provisions the
+Prophet roles/schema and applies its migration before starting the new worker.
+Existing CSV history is not imported. See [rollout and verification](docs/prophet-runs.md).
 
 ## Release helper
 
@@ -34,7 +44,7 @@ the tag that triggers deployment.
 collectors, `clio-refresh` (hourly at :00 UTC), `clio-aggregate` (every five minutes)
 and `prophet` (hourly at :10 UTC). Each scheduler retries failures and persists
 completed slots. Clio uses its database and shared advisory locks; Prophet still
-uses its filesystem marker and output lock pending release accounting.
+uses its filesystem marker and output lock for scheduling; execution history and results are stored in PostgreSQL.
 
 No application commands remain in [crontab](.deploy/cronjobs.txt); its only entry
 starts the external nginx proxy after host reboot. No history deletion is scheduled.
@@ -48,10 +58,11 @@ docker compose run --rm clio clio aggregate
 docker compose run --rm prophet prophet generate
 ```
 
-The workflow stops writers, drains old one-off jobs, saves a PostgreSQL dump,
-provisions/adopts domain storage, runs separate Clio/API migrations, then restarts
-the stack. This first ownership cutover requires downtime and legacy revision
-`20260911_0010`; read [cutover and recovery](docs/domain-storage.md). Migration and
+Finish independent manual jobs before deploying. The workflow stops service
+writers and saves a PostgreSQL dump,
+provisions/adopts domain storage, runs separate Clio/API/Prophet migrations, then restarts
+the stack. Production has already completed the legacy ownership cutover;
+[cutover and recovery](docs/domain-storage.md) documents adoption for older databases. Migration and
 admin credentials exist only in maintenance-profile services, not runtime apps.
 
 ## Dashboard authentication

@@ -10,7 +10,7 @@ from forecast_core.api import (
 )
 
 
-def main(inputs: ForecastInputs | None = None) -> None:
+def main(inputs: ForecastInputs | None = None, recorder=None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     started = perf_counter()
     print("JB2008: loading internal observations and history", flush=True)
@@ -46,7 +46,13 @@ def main(inputs: ForecastInputs | None = None) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"JB2008: saving {len(frame):,} rows", flush=True)
     frame.to_csv(temporary_path, index=False)
+    if recorder:
+        recorder.store(service.registry_name, temporary_path,
+                       {"backend": "forecast_core", "registry_name": service.registry_name,
+                        "issue_time": issue_time.isoformat()}, len(frame), list(frame.columns))
     temporary_path.replace(output_path)
+    if recorder:
+        recorder.csv_written(service.registry_name)
     print(f"Saved {len(frame):,} JB2008 density rows to {output_path} "
           f"in {perf_counter() - started:.1f}s", flush=True)
 

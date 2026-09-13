@@ -1,4 +1,6 @@
 import csv
+import hashlib
+import io
 import os
 import re
 import shutil
@@ -14,6 +16,10 @@ from common.schemas.observation import Observation
 DISPLAYED_FORECAST_HORIZON = 96
 
 class ForecastDirector:
+    def __init__(self, on_result=None, on_csv_written=None):
+        self.on_result = on_result
+        self.on_csv_written = on_csv_written
+
     def get_forecast(self, forecast_service_name):
         config = get_config()
 
@@ -56,7 +62,14 @@ class ForecastDirector:
         if not model_batch_path.is_file():
             raise ConfigurationException(f"{model_batch_path} not exists")
 
-        model_batch = joblib.load(model_batch_path)
+        model_info = {"registry_name": forecast_service_name.registry_name,
+                      "model": models_registry["model"]}
+        if self.on_result:
+            model_bytes = model_batch_path.read_bytes()
+            model_info["sha256"] = hashlib.sha256(model_bytes).hexdigest()
+            model_batch = joblib.load(io.BytesIO(model_bytes))
+        else:
+            model_batch = joblib.load(model_batch_path)
         
         forecast_service = forecast_service_name(model_batch)
 
@@ -65,14 +78,14 @@ class ForecastDirector:
                 "Normalized observations must be supplied by the storage layer"
             )
 
-        self._build_forecast(forecast_file_path, forecast_service, observations)
+        self._build_forecast(forecast_file_path, forecast_service, observations, model_info)
     
     def refresh_forecasts(self, services: list, observations: Observation):
         for service in services:
             self.refresh_forecast(service, observations)
 
 
-    def _build_forecast(self, forecast_file_path, forecast_service, observations):
+    def _build_forecast(self, forecast_file_path, forecast_service, observations, model_info=None):
         forecast_dir = forecast_file_path.parent
         archive_dir = forecast_dir / "archive"
         tmp_forecast_file_path = forecast_dir / (forecast_file_path.name + ".tmp")
@@ -97,4 +110,9 @@ class ForecastDirector:
         df = forecast_to_dataframe(forecast)
 
         df.to_csv(tmp_forecast_file_path, index=False)
+        if self.on_result:
+            self.on_result(forecast_service.registry_name, tmp_forecast_file_path,
+                           model_info or {}, len(df), list(df.columns))
         shutil.move(tmp_forecast_file_path, forecast_file_path)
+        if self.on_csv_written:
+            self.on_csv_written(forecast_service.registry_name)

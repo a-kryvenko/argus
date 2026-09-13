@@ -10,9 +10,10 @@ from argus_prophet.commands._runner import run_command
 from argus_prophet.observations import load_inputs
 
 
-def main() -> None:
-    director = ForecastDirector()
-    inputs = load_inputs()
+def main(inputs=None, recorder=None) -> None:
+    director = ForecastDirector(on_result=recorder.store if recorder else None,
+                                on_csv_written=recorder.csv_written if recorder else None)
+    inputs = inputs if inputs is not None else load_inputs()
     observations = inputs.observations
     director.refresh_forecasts(
         [
@@ -29,8 +30,11 @@ def main() -> None:
     )
 
     try:
-        generate_density(inputs)
+        generate_density(inputs, recorder=recorder)
     except ArtifactNotReadyError as exc:
+        if recorder:
+            from forecast_core.api import AtmosphericDensityForecastService
+            recorder.skip(AtmosphericDensityForecastService.registry_name, exc)
         logging.getLogger(__name__).warning("Density forecast unavailable: %s", exc)
 
 

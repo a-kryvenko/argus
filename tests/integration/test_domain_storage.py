@@ -48,7 +48,8 @@ def database(tmp_path):
     url = make_url(dsn).set(database=name)
     target = url.render_as_string(hide_password=False)
     passwords = {key: uuid4().hex for key in ('API_DB_PASSWORD', 'API_MIGRATION_PASSWORD',
-                                             'CLIO_DB_PASSWORD', 'CLIO_MIGRATION_PASSWORD')}
+                                             'CLIO_DB_PASSWORD', 'CLIO_MIGRATION_PASSWORD',
+                                             'PROPHET_DB_PASSWORD', 'PROPHET_MIGRATION_PASSWORD')}
     (tmp_path / 'configs').mkdir()
     (tmp_path / 'configs/project.yaml').write_text('project: {name: test}\n')
     (tmp_path / 'configs/models_registry.yaml').write_text('models: {}\n')
@@ -66,7 +67,8 @@ def database(tmp_path):
 
 def migrate(environment):
     for command in ([sys.executable, '-c', 'from argus_clio.cli import main; main()', 'migrate', 'upgrade', 'head'],
-                    [sys.executable, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini'), 'upgrade', 'head']):
+                    [sys.executable, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini'), 'upgrade', 'head'],
+                    [sys.executable, '-c', 'from argus_prophet.cli import main; main()', 'migrate', 'upgrade', 'head']):
         result = subprocess.run(command, env=environment, cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
 

@@ -60,8 +60,8 @@ def test_private_source_is_not_in_public_tree():
     assert len(result.stdout.splitlines()) == 2
 
 
-def test_prophet_has_no_storage_or_api_imports():
-    blocked = {'app', 'sqlalchemy', 'psycopg', 'alembic', 'clio'}
+def test_prophet_only_accesses_its_own_storage():
+    blocked = {'app', 'argus_clio', 'clio'}
     for path in (ROOT / 'apps/prophet/src').rglob('*.py'):
         for module in imports(path):
             assert module.split('.')[0] not in blocked, (path, module)
@@ -69,7 +69,7 @@ def test_prophet_has_no_storage_or_api_imports():
                 assert module == 'forecast_core.api', (path, module)
     config = tomllib.loads((ROOT / 'apps/prophet/pyproject.toml').read_text())
     for dependency in config['project']['dependencies']:
-        assert not dependency.startswith(('argus-api', 'sqlalchemy', 'psycopg', 'alembic'))
+        assert not dependency.startswith(('argus-api', 'argus-clio'))
 
 
 def test_api_no_longer_owns_forecast_commands():

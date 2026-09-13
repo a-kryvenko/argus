@@ -18,6 +18,7 @@ TABLES = {
     'api': ('dashboard_user', 'dashboard_group', 'dashboard_membership',
             'dashboard_session', 'dashboard_login_attempt', 'api_metric'),
 }
+DOMAINS = (*TABLES, 'prophet')
 FUNCTIONS = ('queue_solar_wind_aggregate', 'protect_retired_solar_wind')
 LEGACY_HEAD = '20260911_0010'
 
@@ -29,7 +30,7 @@ def exists(conn, schema, table):
 def provision(conn, passwords):
     # Serialize operator invocations; application writers must already be stopped.
     conn.execute('SELECT pg_advisory_xact_lock(730999)')
-    reserved = {f'argus_{domain}{suffix}' for domain in TABLES for suffix in ('', '_migrator')}
+    reserved = {f'argus_{domain}{suffix}' for domain in DOMAINS for suffix in ('', '_migrator')}
     current, database_owner = conn.execute('SELECT current_user, pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()').fetchone()
     if current in reserved or database_owner in reserved:
         raise RuntimeError('Bootstrap/database ownership must use a separate administrative role')
@@ -47,7 +48,7 @@ def provision(conn, passwords):
     elif any(exists(conn, 'public', table) for tables in TABLES.values() for table in tables):
         raise RuntimeError('Legacy tables exist without their migration history')
 
-    for domain in TABLES:
+    for domain in DOMAINS:
         runtime, owner = f'argus_{domain}', f'argus_{domain}_migrator'
         for role, password_key in ((runtime, f'{domain.upper()}_DB_PASSWORD'),
                                    (owner, f'{domain.upper()}_MIGRATION_PASSWORD')):
@@ -89,14 +90,16 @@ def provision(conn, passwords):
         conn.execute('ALTER TABLE public.legacy_alembic_version SET SCHEMA api')
         conn.execute('ALTER TABLE api.legacy_alembic_version OWNER TO argus_api_migrator')
 
-    for domain in TABLES:
-        runtime, other = f'argus_{domain}', 'api' if domain == 'clio' else 'clio'
+    for domain in DOMAINS:
+        runtime = f'argus_{domain}'
+        others = [f'argus_{other}{suffix}' for other in DOMAINS if other != domain
+                  for suffix in ('', '_migrator')]
         for objects, privileges in [('TABLES', 'SELECT, INSERT, UPDATE, DELETE'), ('SEQUENCES', 'USAGE, SELECT'), ('FUNCTIONS', 'EXECUTE')]:
             conn.execute(sql.SQL('REVOKE ALL ON ALL '+objects+' IN SCHEMA {} FROM PUBLIC').format(sql.Identifier(domain)))
             conn.execute(sql.SQL('GRANT '+privileges+' ON ALL '+objects+' IN SCHEMA {} TO {}').format(sql.Identifier(domain), sql.Identifier(runtime)))
-            for role in (f'argus_{other}', f'argus_{other}_migrator'):
+            for role in others:
                 conn.execute(sql.SQL('REVOKE ALL ON ALL '+objects+' IN SCHEMA {} FROM {}').format(sql.Identifier(domain), sql.Identifier(role)))
-        for role in (f'argus_{other}', f'argus_{other}_migrator'):
+        for role in others:
             conn.execute(sql.SQL('REVOKE ALL ON SCHEMA {} FROM {}').format(sql.Identifier(domain), sql.Identifier(role)))
         if exists(conn, domain, 'alembic_version'):
             conn.execute(sql.SQL('REVOKE ALL ON {}.alembic_version FROM {}').format(sql.Identifier(domain), sql.Identifier(runtime)))
@@ -112,9 +115,10 @@ def main():
     load_dotenv(root / '.env')
     load_dotenv(root / '.env.local', override=True)
     required = ['DB_NAME', 'DB_USER', 'DB_PASSWORD', 'API_DB_PASSWORD',
-                'API_MIGRATION_PASSWORD', 'CLIO_DB_PASSWORD', 'CLIO_MIGRATION_PASSWORD']
+                'API_MIGRATION_PASSWORD', 'CLIO_DB_PASSWORD', 'CLIO_MIGRATION_PASSWORD',
+                'PROPHET_DB_PASSWORD', 'PROPHET_MIGRATION_PASSWORD']
     if any(not os.getenv(key) for key in required):
-        raise RuntimeError('Configure admin and all four domain passwords before bootstrap')
+        raise RuntimeError('Missing required variables: ' + ', '.join(key for key in required if not os.getenv(key)))
     passwords = {key: os.environ[key] for key in required if key not in ('DB_NAME', 'DB_USER')}
     with psycopg.connect(dbname=os.environ['DB_NAME'], user=os.environ['DB_USER'],
                          password=os.environ['DB_PASSWORD'], host=os.getenv('DB_HOST', 'localhost'),

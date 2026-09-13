@@ -1,4 +1,4 @@
-"""Prophet-owned publication pointers. Call writers under generation_lock."""
+"""Prophet-owned publication pointers. Call writers under the database generation_lock."""
 import gzip
 import io
 from datetime import UTC, datetime
@@ -69,7 +69,7 @@ def publish_run(conn, run_id):
 
 def publish_existing():
     """Seed missing/current pointers from recorded successful runs, never loose CSVs."""
-    with connect() as conn:
+    with connect(writing=True) as conn:
         count = 0
         for names in PRODUCT_ARTIFACTS.values():
             # At most one candidate per product, not all historical compressed payloads.

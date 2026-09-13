@@ -1,43 +1,68 @@
-from datetime import UTC, datetime
+from contextlib import contextmanager, nullcontext
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
-from argus_prophet.worker import due_slot, generation_lock, run_due
+from argus_prophet import worker
 
 
-def test_hourly_boundary_and_restart(tmp_path):
-    generate = Mock()
+def test_hourly_boundary_uses_utc_and_rejects_naive_time():
     before = datetime(2026, 9, 12, 10, 9, tzinfo=UTC)
-    after = before.replace(minute=10)
-    assert due_slot(before) == '2026-09-12T09:00:00+00:00'
-    assert run_due(generate, tmp_path, before)
-    assert not run_due(generate, tmp_path, before)
-    assert run_due(generate, tmp_path, after)
-    assert not run_due(generate, tmp_path, after)
-    assert generate.call_count == 2
+    assert worker.due_slot(before) == before.replace(hour=9, minute=0)
+    assert worker.due_slot(before.replace(minute=10)) == before.replace(minute=0)
+    assert worker.due_slot(before.astimezone(timezone(timedelta(hours=2)))) == worker.due_slot(before)
+    with pytest.raises(ValueError, match='timezone'):
+        worker.due_slot(before.replace(tzinfo=None))
 
 
-def test_failed_generation_retries_without_advancing_marker(tmp_path):
+def fake_storage(monkeypatch, rows):
+    conn = Mock()
+    conn.execute.side_effect = [Mock(fetchone=Mock(return_value=row)) for row in rows]
+    @contextmanager
+    def connect(**_):
+        yield conn
+    monkeypatch.setattr(worker, 'connect', connect)
+    monkeypatch.setattr(worker, 'generation_lock', nullcontext)
+    return conn
+
+
+def test_completed_slot_skips_generation_including_clock_rollback(monkeypatch):
     now = datetime(2026, 9, 12, 10, 10, tzinfo=UTC)
-    generate = Mock(side_effect=[RuntimeError('unavailable'), None])
-    with pytest.raises(RuntimeError):
-        run_due(generate, tmp_path, now)
-    assert not (tmp_path / 'last-completed-slot').exists()
-    assert run_due(generate, tmp_path, now)
+    for completed in (worker.due_slot(now), worker.due_slot(now) + timedelta(hours=1)):
+        fake_storage(monkeypatch, [(completed,)])
+        generate = Mock()
+        assert not worker.run_due(generate, now)
+        generate.assert_not_called()
 
 
-def test_manual_and_scheduled_generations_cannot_overlap(tmp_path):
+def test_latest_slot_is_passed_to_generation_without_replaying_missed_hours(monkeypatch):
+    now = datetime(2026, 9, 12, 10, 10, tzinfo=UTC)
+    fake_storage(monkeypatch, [(now - timedelta(days=3),), ('succeeded',)])
     generate = Mock()
-    with generation_lock(tmp_path):
-        with pytest.raises(RuntimeError, match='Another Prophet'):
-            run_due(generate, tmp_path, datetime.now(UTC))
-    generate.assert_not_called()
-    assert run_due(generate, tmp_path, datetime.now(UTC))
+    assert worker.run_due(generate, now)
+    generate.assert_called_once_with(worker.due_slot(now))
 
 
-def test_worker_retries_exports_even_when_generation_slot_completed(tmp_path, monkeypatch):
-    from argus_prophet import worker
-    # Three polls of one completed slot: an export failure must not recalculate.
+def test_callback_cannot_claim_success_without_atomic_slot_completion(monkeypatch):
+    fake_storage(monkeypatch, [(None,), ('running',)])
+    with pytest.raises(RuntimeError, match='did not complete'):
+        worker.run_due(Mock(), datetime.now(UTC))
+
+
+@pytest.mark.parametrize('marker', ['bad', '2026-09-12T10:00:00', '2026-09-12T10:01:00Z', '2099-01-01T00:00:00Z'])
+def test_invalid_legacy_marker_fails_without_storage(monkeypatch, tmp_path, marker):
+    path = tmp_path / 'marker'
+    path.write_text(marker)
+    monkeypatch.setattr(worker, 'connect', lambda **_: pytest.fail('Invalid marker must not touch storage'))
+    with pytest.raises(ValueError):
+        worker.import_schedule(path, now=datetime(2026, 9, 12, 11, tzinfo=UTC))
+
+
+def test_missing_legacy_marker_does_not_invent_completion(tmp_path):
+    assert not worker.import_schedule(tmp_path / 'missing')
+
+
+def test_worker_retries_exports_even_when_generation_slot_completed(monkeypatch):
     class StopAfterThree:
         count = 0
         def is_set(self):
@@ -48,10 +73,11 @@ def test_worker_retries_exports_even_when_generation_slot_completed(tmp_path, mo
             self.count += 1
     monkeypatch.setattr(worker.threading, 'Event', StopAfterThree)
     monkeypatch.setattr(worker.signal, 'signal', lambda *_: None)
-    monkeypatch.setattr(worker, 'state_directory', lambda: tmp_path)
-    monkeypatch.setattr(worker, 'due_slot', lambda _: 'fixed-slot')
+    monkeypatch.setattr(worker, 'generation_lock', nullcontext)
+    run_due = Mock(return_value=False)
+    monkeypatch.setattr(worker, 'run_due', run_due)
     generate = Mock()
     export = Mock(side_effect=[OSError('disk full'), None, None])
     worker.work(generate, export=export)
-    generate.assert_called_once()
-    assert export.call_count == 3
+    generate.assert_not_called()
+    assert run_due.call_count == 3 and export.call_count == 3

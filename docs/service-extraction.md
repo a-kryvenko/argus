@@ -55,10 +55,17 @@ with run completion. API reads the versioned Prophet HTTP contract; live CSV is 
 retryable export. The new `prophet-api` process serves latest and immutable release
 IDs. See [publication and rollout](prophet-publication.md).
 
-## Step 3c: Durable scheduling and readiness (next)
+## Step 3c.1: Database scheduling (implemented)
 
-Define explicit freshness and data readiness policy. Replace the temporary
-filesystem scheduler marker/lock with durable scheduling and execution coordination.
+PostgreSQL slots replace the filesystem checkpoint. All supported Prophet writers
+share a session advisory lock and use its connection for writes. Slot completion
+commits with publication; attempts and interrupted runs remain inspectable. The
+old marker is explicitly imported during deployment. See [rollout](prophet-scheduling.md).
+
+## Step 3c.2: Readiness and freshness (next)
+
+Define explicit per-product freshness and observation-readiness policies. Existing
+thresholds and calculation eligibility remain unchanged in the scheduling step.
 
 ## Step 4: Intelligence stub
 

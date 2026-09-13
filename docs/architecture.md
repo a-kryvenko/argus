@@ -7,7 +7,7 @@
 | forecast | Forecast interfaces and CSV products | common; optional forecast_core.api |
 | forecast-core | Private models, feature preparation and calibration | common, clio |
 | apps/clio | Observation storage, collectors, schedules and read HTTP API | common, clio; private calibration through services/calibration.py |
-| apps/prophet | Forecast execution, scheduling, owned run/release storage and forecast HTTP reads | common, forecast, forecast_core.api |
+| apps/prophet | Forecast execution, database scheduling, owned run/release storage and forecast HTTP reads | common, forecast, forecast_core.api |
 | apps/api | Public HTTP/authentication; own dashboard storage; Clio/Prophet HTTP clients | common, forecast |
 | intelligence-core | Private impact calculations, not yet integrated | Shared contracts as needed |
 
@@ -16,7 +16,8 @@ Clio owns schema `clio` and its migrations under
 `apps/api/alembic`. Separate runtime/migration roles enforce ownership; API reads
 observations only through Clio contracts. Prophet SQL credentials access only its own run/artifact/release schema.
 API forecast reads use Prophet contracts; live CSV files are exports, not the
-API read source. Model evaluation metrics remain deployed static artifacts.
+API read source. Prophet slot completion and publication share a transaction;
+its writers reuse the PostgreSQL session that holds their advisory lock. Model evaluation metrics remain deployed static artifacts.
 See [domain storage and cutover](domain-storage.md) and
 [extraction stages](service-extraction.md).
 

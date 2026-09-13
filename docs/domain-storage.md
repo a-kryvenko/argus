@@ -5,7 +5,7 @@
 | Schema | Runtime role | Owner/migration role | Data |
 | --- | --- | --- | --- |
 | `clio` | `argus_clio` | `argus_clio_migrator` | Measurements, normalized observations, solar wind/Kp/Dst, source status, aggregates, pending/retired hours, scheduler slots |
-| `prophet` | `argus_prophet` | `argus_prophet_migrator` | Forecast runs, input snapshots, compressed forecast artifacts, provenance, published releases and export status |
+| `prophet` | `argus_prophet` | `argus_prophet_migrator` | Forecast runs, input snapshots, compressed forecast artifacts, provenance, published releases, export status and scheduled slots |
 | `api` | `argus_api` | `argus_api_migrator` | Dashboard users/groups/memberships/sessions, login attempts, API statistics |
 
 Each schema has its own Alembic version table and migration history. Runtime
@@ -66,7 +66,7 @@ docker compose run --rm db-bootstrap
 docker compose run --rm clio-migrate
 docker compose run --rm api-migrate
 docker compose run --rm prophet-migrate
-docker compose run --rm --no-deps prophet prophet publish-existing
+docker compose run --rm --no-deps prophet prophet import-schedule
 docker compose up -d
 ```
 
@@ -77,7 +77,8 @@ docker compose run --rm db-bootstrap .venv/bin/python /var/www/scripts/bootstrap
 ```
 
 These commands assume writers are stopped and the backup is complete. The deploy
-workflow performs that sequence. A new empty database follows the same sequence;
+workflow performs that sequence. For the Prophet scheduler transition, see
+[checkpoint adoption](prophet-scheduling.md). A new empty database follows the same sequence;
 the domain migrators create their tables from scratch.
 
 After a successful bootstrap, an old API/collector image is incompatible with the

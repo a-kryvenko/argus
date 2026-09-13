@@ -4,6 +4,7 @@ import io
 import os
 import re
 import shutil
+import tempfile
 from datetime import UTC, datetime
 
 import joblib
@@ -89,7 +90,6 @@ class ForecastDirector:
     def _build_forecast(self, forecast_file_path, forecast_service, observations, model_info=None):
         forecast_dir = forecast_file_path.parent
         archive_dir = forecast_dir / "archive"
-        tmp_forecast_file_path = forecast_dir / (forecast_file_path.name + ".tmp")
 
         os.makedirs(forecast_dir, exist_ok=True)
         os.makedirs(archive_dir, exist_ok=True)
@@ -110,13 +110,22 @@ class ForecastDirector:
         
         df = forecast_to_dataframe(forecast)
 
-        df.to_csv(tmp_forecast_file_path, index=False)
-        if self.on_result:
-            self.on_result(forecast_service.registry_name, tmp_forecast_file_path,
-                           model_info or {}, len(df), list(df.columns))
-        if not self.publish_csv:
-            tmp_forecast_file_path.unlink()
-            return
-        shutil.move(tmp_forecast_file_path, forecast_file_path)
-        if self.on_csv_written:
-            self.on_csv_written(forecast_service.registry_name)
+        # A disconnected writer may still finish CPU work. Its temporary file
+        # must never collide with the next lock owner's output.
+        from pathlib import Path
+        with tempfile.NamedTemporaryFile(dir=forecast_dir, prefix=forecast_file_path.name + '.',
+                                         suffix='.tmp', delete=False) as temporary:
+            tmp_forecast_file_path = Path(temporary.name)
+        try:
+            df.to_csv(tmp_forecast_file_path, index=False)
+            if self.on_result:
+                self.on_result(forecast_service.registry_name, tmp_forecast_file_path,
+                               model_info or {}, len(df), list(df.columns))
+            if self.publish_csv:
+                tmp_forecast_file_path.chmod(forecast_file_path.stat().st_mode & 0o777
+                                             if forecast_file_path.exists() else 0o644)
+                shutil.move(tmp_forecast_file_path, forecast_file_path)
+                if self.on_csv_written:
+                    self.on_csv_written(forecast_service.registry_name)
+        finally:
+            tmp_forecast_file_path.unlink(missing_ok=True)

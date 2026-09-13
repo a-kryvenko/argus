@@ -13,7 +13,7 @@ from argus_prophet.ledger import RunRecorder
 
 
 @pytest.fixture
-def recorder_setup(database, monkeypatch, tmp_path):
+def recorder_database(database, monkeypatch, tmp_path):
     dsn, passwords, environment = database
     with psycopg.connect(dsn) as conn:
         bootstrap.provision(conn, passwords)
@@ -21,6 +21,13 @@ def recorder_setup(database, monkeypatch, tmp_path):
     for key in ('DB_NAME', 'DB_HOST', 'DB_PORT', 'PROPHET_DB_PASSWORD'):
         monkeypatch.setenv(key, environment[key])
     return dsn, passwords, SimpleNamespace(workdir=tmp_path, models_registry={})
+
+
+@pytest.fixture
+def recorder_setup(recorder_database):
+    from argus_prophet.worker import generation_lock
+    with generation_lock():
+        yield recorder_database
 
 
 def test_snapshot_results_partial_completion_and_role_boundary(recorder_setup, tmp_path):
@@ -54,9 +61,11 @@ def test_snapshot_results_partial_completion_and_role_boundary(recorder_setup, t
 
 def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
     dsn, passwords, config = recorder_setup
-    first = RunRecorder.begin('all', 'scheduled', config)
-    # Caller has reacquired the existing generation lock after a writer crash.
-    second = RunRecorder.begin('all', 'scheduled', config)
+    first = RunRecorder.begin('all', 'manual', config)
+    # Simulate recovery performed when a new owner acquires the database lock.
+    from argus_prophet.worker import recover_interrupted
+    recover_interrupted()
+    second = RunRecorder.begin('all', 'manual', config)
     second.finish(error=ValueError('bad model'))
     with runtime(dsn, 'prophet', passwords) as conn:
         rows = dict(conn.execute('SELECT id,status FROM prophet.forecast_run').fetchall())
@@ -113,7 +122,7 @@ def test_export_retries_without_recalculation_and_skips_superseded(recorder_setu
     expected = store_product(run, tmp_path)
     run.finish()
     original_writer = exports.write_csv
-    monkeypatch.setattr(exports, 'write_csv', lambda *_: (_ for _ in ()).throw(OSError('disk unavailable')))
+    monkeypatch.setattr(exports, 'write_csv', lambda *_, **__: (_ for _ in ()).throw(OSError('disk unavailable')))
     with pytest.raises(RuntimeError, match='pending'):
         exports.export_current()
     assert read_release('dst').run_id == run.run_id

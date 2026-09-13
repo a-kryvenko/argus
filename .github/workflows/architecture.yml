@@ -48,7 +48,7 @@ jobs:
           python -m pip install -e packages/common -e packages/clio
           pytest sqlalchemy 'psycopg[binary]' alembic fastapi uvicorn httpx sentry-sdk
       - name: Check fresh install, legacy adoption, privileges and scheduling
-        run: python -m pytest -q tests/integration/test_domain_storage.py tests/integration/test_prophet_ledger.py
+        run: python -m pytest -q tests/integration/test_domain_storage.py tests/integration/test_prophet_ledger.py tests/integration/test_prophet_scheduler.py
       - name: Check aggregation, retention and collection recovery
         run: |
           python apps/clio/tests/integration/verify_solar_wind_aggregation.py

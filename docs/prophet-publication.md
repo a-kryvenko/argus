@@ -1,5 +1,9 @@
 # Prophet publication: stage 3b
 
+For the current stage 3c.1 rollout and database locks, use
+[database scheduling](prophet-scheduling.md). The read and publication contracts
+below remain current; the initial stage 3b cutover is already complete on production.
+
 ## Before deploying
 
 **New required production variable: `FORECASTS_SERVICE_TOKEN`.** Add a strong,
@@ -139,5 +143,5 @@ an old worker with the new HTTP reader would leave readers on stale releases.
 Downgrading the migration deletes release IDs and export history and requires a
 backup; it is not the normal application rollback path.
 
-The next substep is database scheduling/coordination and explicit readiness/freshness
-policy. Shared-volume flock and the hourly filesystem marker remain in this stage.
+Stage 3c.1 replaces the original shared-volume flock and hourly filesystem marker
+with database scheduling. Explicit readiness/freshness policy is the next substep.

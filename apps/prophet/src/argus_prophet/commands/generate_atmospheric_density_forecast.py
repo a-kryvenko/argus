@@ -1,4 +1,6 @@
 import logging
+import tempfile
+from pathlib import Path
 from time import perf_counter
 
 from common.schemas.forecast_inputs import ForecastInputs
@@ -19,7 +21,6 @@ def main(inputs: ForecastInputs | None = None, recorder=None) -> None:
         AtmosphericDensityForecastService.registry_name
     ]
     output_path = config.workdir / registry["forecast_path"]
-    temporary_path = output_path.with_suffix(output_path.suffix + ".tmp")
 
     service = AtmosphericDensityForecastService()
     inputs = inputs if inputs is not None else load_inputs()
@@ -45,14 +46,20 @@ def main(inputs: ForecastInputs | None = None, recorder=None) -> None:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"JB2008: saving {len(frame):,} rows", flush=True)
-    frame.to_csv(temporary_path, index=False)
-    if recorder:
-        recorder.store(service.registry_name, temporary_path,
-                       {"backend": "forecast_core", "registry_name": service.registry_name,
-                        "issue_time": issue_time.isoformat()}, len(frame), list(frame.columns))
-        temporary_path.unlink()
-    else:
-        temporary_path.replace(output_path)
+    with tempfile.NamedTemporaryFile(dir=output_path.parent, prefix=output_path.name + '.',
+                                     suffix='.tmp', delete=False) as temporary:
+        temporary_path = Path(temporary.name)
+    try:
+        frame.to_csv(temporary_path, index=False)
+        if recorder:
+            recorder.store(service.registry_name, temporary_path,
+                           {"backend": "forecast_core", "registry_name": service.registry_name,
+                            "issue_time": issue_time.isoformat()}, len(frame), list(frame.columns))
+        else:
+            temporary_path.chmod(output_path.stat().st_mode & 0o777 if output_path.exists() else 0o644)
+            temporary_path.replace(output_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
     print(f"Calculated {len(frame):,} JB2008 density rows "
           f"in {perf_counter() - started:.1f}s", flush=True)
 

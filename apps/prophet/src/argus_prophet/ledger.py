@@ -38,26 +38,33 @@ class RunRecorder:
         self.skipped = False
 
     @classmethod
-    def begin(cls, product, trigger, config):
+    def begin(cls, product, trigger, config, *, scheduled_slot=None):
         from psycopg.types.json import Jsonb
         run_id = uuid4()
-        # Called only under the shared generation flock. A previous running row
-        # in this same single-host workspace therefore belongs to a dead writer.
+        if (trigger == 'scheduled') != (scheduled_slot is not None):
+            raise ValueError('Scheduled attempts require a slot; manual attempts must not have one')
         scope = str(config.workdir.resolve())
         details = provenance(config)
-        with connect() as conn:
-            conn.execute("""UPDATE prophet.forecast_run SET status='interrupted', finished_at=%s,
-                error='Previous writer ended without recording completion'
-                WHERE scope=%s AND status='running'""", (datetime.now(UTC), scope))
+        with connect(writing=True) as conn:
+            if scheduled_slot is not None:
+                result = conn.execute("""INSERT INTO prophet.forecast_slot(slot,status,attempts,started_at)
+                    VALUES (%s,'running',1,%s) ON CONFLICT(slot) DO UPDATE
+                    SET status='running',attempts=forecast_slot.attempts+1,
+                        started_at=EXCLUDED.started_at,finished_at=NULL,error=NULL
+                    WHERE forecast_slot.status IN ('failed','interrupted') RETURNING slot""",
+                    (scheduled_slot, datetime.now(UTC)))
+                if result.fetchone() is None:
+                    raise RuntimeError('Scheduled slot is already active or complete')
             conn.execute("""INSERT INTO prophet.forecast_run
-                (id,scope,product,trigger,started_at,status,provenance) VALUES (%s,%s,%s,%s,%s,'running',%s)""",
-                         (run_id, scope, product, trigger, datetime.now(UTC), Jsonb(details)))
+                (id,scope,product,trigger,started_at,status,provenance,scheduled_slot)
+                VALUES (%s,%s,%s,%s,%s,'running',%s,%s)""",
+                (run_id, scope, product, trigger, datetime.now(UTC), Jsonb(details), scheduled_slot))
         return cls(run_id)
 
     def snapshot(self, inputs):
         from psycopg.types.json import Jsonb
         payload = inputs.model_dump(mode='json')
-        with connect() as conn:
+        with connect(writing=True) as conn:
             result = conn.execute("""UPDATE prophet.forecast_run SET input_snapshot=%s,input_sha256=%s
                 WHERE id=%s AND status='running' AND input_snapshot IS NULL""",
                                   (Jsonb(payload), fingerprint(payload), self.run_id))
@@ -69,7 +76,7 @@ class RunRecorder:
         if row_count < 1:
             raise ValueError('Cannot record an empty forecast')
         content = Path(path).read_bytes()
-        with connect() as conn:
+        with connect(writing=True) as conn:
             conn.execute("""INSERT INTO prophet.forecast_artifact
                 (run_id,name,status,created_at,csv_gzip,sha256,row_count,columns,model_info)
                 VALUES (%s,%s,'stored',%s,%s,%s,%s,%s,%s)""",
@@ -77,7 +84,7 @@ class RunRecorder:
                           hashlib.sha256(content).hexdigest(), row_count, Jsonb(list(columns)), Jsonb(model_info)))
 
     def csv_written(self, name):
-        with connect() as conn:
+        with connect(writing=True) as conn:
             result = conn.execute("""UPDATE prophet.forecast_artifact SET csv_written_at=%s
                 WHERE run_id=%s AND name=%s AND status='stored'""", (datetime.now(UTC), self.run_id, name))
             if result.rowcount != 1:
@@ -85,7 +92,7 @@ class RunRecorder:
 
     def skip(self, name, reason):
         from psycopg.types.json import Jsonb
-        with connect() as conn:
+        with connect(writing=True) as conn:
             conn.execute("""INSERT INTO prophet.forecast_artifact
                 (run_id,name,status,created_at,model_info,error) VALUES (%s,%s,'skipped',%s,%s,%s)""",
                          (self.run_id, name, datetime.now(UTC), Jsonb({}), str(reason)[:2000]))
@@ -94,14 +101,20 @@ class RunRecorder:
     def finish(self, error=None):
         status = 'failed' if error is not None else 'partial' if self.skipped else 'succeeded'
         message = f'{type(error).__name__}: {error}'[:2000] if error is not None else None
-        with connect() as conn:
+        with connect(writing=True) as conn:
             result = conn.execute("""UPDATE prophet.forecast_run SET status=%s,finished_at=%s,error=%s
-                WHERE id=%s AND status='running'""", (status, datetime.now(UTC), message, self.run_id))
+                WHERE id=%s AND status='running' RETURNING scheduled_slot""", (status, datetime.now(UTC), message, self.run_id))
             if result.rowcount != 1:
                 raise RuntimeError("Run is no longer running")
             if error is None:
                 from argus_prophet.publication import publish_run
                 publish_run(conn, self.run_id)
+            slot = result.fetchone()[0]
+            if slot is not None:
+                changed = conn.execute("""UPDATE prophet.forecast_slot SET status=%s,finished_at=%s,error=%s
+                    WHERE slot=%s AND status='running'""", (status, datetime.now(UTC), message, slot))
+                if changed.rowcount != 1:
+                    raise RuntimeError('Scheduled slot is no longer active')
 
 
 def list_runs(limit=20):
@@ -109,7 +122,7 @@ def list_runs(limit=20):
     if not 1 <= limit <= 100:
         raise ValueError('limit must be between 1 and 100')
     with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('''SELECT id,product,trigger,started_at,finished_at,status,error
+        cursor.execute('''SELECT id,product,trigger,scheduled_slot,started_at,finished_at,status,error
             FROM prophet.forecast_run ORDER BY started_at DESC,id DESC LIMIT %s''', (limit,))
         return cursor.fetchall()
 
@@ -117,7 +130,7 @@ def list_runs(limit=20):
 def describe_run(run_id, include_inputs=False):
     from psycopg.rows import dict_row
     with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('''SELECT id,product,trigger,started_at,finished_at,status,error,
+        cursor.execute('''SELECT id,product,trigger,scheduled_slot,started_at,finished_at,status,error,
             input_sha256,provenance FROM prophet.forecast_run WHERE id=%s''', (run_id,))
         result = cursor.fetchone()
         if result is None:

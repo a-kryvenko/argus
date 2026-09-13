@@ -10,13 +10,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from common.config import get_config
-from argus_prophet.db.session import connect
+from argus_prophet.db.session import connect, check_writer
 from argus_prophet.publication import read_release
 
 logger = logging.getLogger(__name__)
 
 
-def write_csv(path, content, release_id):
+def write_csv(path, content, release_id, *, before_replace=None):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -34,6 +34,8 @@ def write_csv(path, content, release_id):
             file.flush()
             os.fsync(file.fileno())
         temporary.chmod(path.stat().st_mode & 0o777 if path.exists() else 0o644)
+        if before_replace is not None:
+            before_replace()
         temporary.replace(path)
     finally:
         if temporary is not None:
@@ -42,20 +44,20 @@ def write_csv(path, content, release_id):
 
 def export_current(*, force=False):
     config = get_config()
-    with connect() as conn:
+    with connect(writing=True) as conn:
         pending = conn.execute('''SELECT c.product,c.release_id FROM prophet.current_forecast c
             JOIN prophet.forecast_export e ON e.release_id=c.release_id
             WHERE (%s OR e.exported_at IS NULL) ORDER BY c.product''', (force,)).fetchall()
     failures = []
     for product, release_id in pending:
-        with connect() as conn:
+        with connect(writing=True) as conn:
             conn.execute('UPDATE prophet.forecast_export SET attempts=attempts+1,exported_at=NULL,error=NULL WHERE release_id=%s', (release_id,))
         try:
             release = read_release(product, release_id)
             for artifact in release.artifacts:
                 path = config.workdir / config.models_registry['models'][artifact.name]['forecast_path']
-                write_csv(path, artifact.csv_text.encode('utf-8'), release_id)
-            with connect() as conn:
+                write_csv(path, artifact.csv_text.encode('utf-8'), release_id, before_replace=check_writer)
+            with connect(writing=True) as conn:
                 conn.execute('UPDATE prophet.forecast_export SET exported_at=%s,error=NULL WHERE release_id=%s',
                              (datetime.now(UTC), release_id))
                 conn.execute('''UPDATE prophet.forecast_artifact SET csv_written_at=%s
@@ -64,7 +66,7 @@ def export_current(*, force=False):
         except Exception as exc:
             logger.exception('CSV export failed for release %s', release_id)
             failures.append(product)
-            with connect() as conn:
+            with connect(writing=True) as conn:
                 conn.execute('UPDATE prophet.forecast_export SET error=%s WHERE release_id=%s',
                              (f'{type(exc).__name__}: {exc}'[:2000], release_id))
     if failures:

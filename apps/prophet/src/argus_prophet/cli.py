@@ -12,11 +12,11 @@ PRODUCTS = {
 }
 
 
-def generate(product: str, trigger='manual') -> None:
+def generate(product: str, trigger='manual', *, scheduled_slot=None) -> None:
     from common.config import get_config
     from argus_prophet.ledger import RunRecorder
     from argus_prophet.observations import load_inputs
-    recorder = RunRecorder.begin(product, trigger, get_config())
+    recorder = RunRecorder.begin(product, trigger, get_config(), scheduled_slot=scheduled_slot)
     logging.info('Prophet run %s started (%s)', recorder.run_id, product)
     try:
         inputs = load_inputs()
@@ -47,6 +47,11 @@ def main() -> None:
     export_parser = commands.add_parser('export', help='Retry pending current CSV exports')
     export_parser.add_argument('--force', action='store_true', help='Restore all current CSVs from published releases')
     commands.add_parser('publish-existing', help='Publish complete recorded runs for the read cutover')
+    importer = commands.add_parser('import-schedule', help='Import the previous filesystem completion marker once')
+    from pathlib import Path
+    importer.add_argument('--marker', type=Path, help='Legacy marker path; defaults to the previous state directory')
+    slots = commands.add_parser('slots', help='List hourly slots and attempt counts')
+    slots.add_argument('--limit', type=int, default=20)
     runs = commands.add_parser('runs', help='List recorded executions')
     runs.add_argument('--limit', type=int, default=20)
     show = commands.add_parser('show-run', help='Show execution evidence')
@@ -75,13 +80,17 @@ def main() -> None:
         import uvicorn
         uvicorn.run('argus_prophet.main:app', host=args.host, port=args.port)
         return
-    if args.command in ('runs', 'show-run'):
+    if args.command in ('runs', 'show-run', 'slots'):
         import json
         from common.config import get_config
         from argus_prophet.ledger import list_runs, describe_run
         get_config()
         try:
-            result = list_runs(args.limit) if args.command == 'runs' else describe_run(args.run_id, args.inputs)
+            if args.command == 'slots':
+                from argus_prophet.worker import list_slots
+                result = list_slots(args.limit)
+            else:
+                result = list_runs(args.limit) if args.command == 'runs' else describe_run(args.run_id, args.inputs)
         except ValueError as exc:
             parser.error(str(exc))
         print(json.dumps(result, default=str, indent=2))
@@ -91,10 +100,14 @@ def main() -> None:
     from argus_prophet.worker import generation_lock, work
     from argus_prophet.exports import export_current
     if args.command == 'worker':
-        run_command(lambda: work(lambda: generate('all', trigger='scheduled'), export=export_current))
+        run_command(lambda: work(lambda slot: generate('all', trigger='scheduled', scheduled_slot=slot), export=export_current))
     else:
         def once():
             with generation_lock():
+                if args.command == 'import-schedule':
+                    from argus_prophet.worker import import_schedule
+                    logging.info('Legacy schedule marker imported: %s', import_schedule(args.marker))
+                    return
                 if args.command == 'publish-existing':
                     from argus_prophet.publication import publish_existing
                     logging.info('Published %s existing product releases', publish_existing())

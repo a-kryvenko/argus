@@ -59,17 +59,18 @@ record; published products reference that run.
 
 The Compose `prophet` worker replaces the forecast cron entry. It runs the latest
 due hourly slot (at :10 UTC), retries failures every 60 seconds, and remembers
-successful slots under `data/prophet`. Restart skips completed slots and catches
+successful slots in PostgreSQL. Restart skips completed slots and catches
 up only the latest due slot, without replaying every missed hour. Actual forecast
 issue times retain existing model behavior; scheduler slots are not release IDs.
 The worker reads the latest committed observations; data-readiness gating and
 staleness policies are not introduced in this extraction.
 
-A shared-volume `flock` serializes worker and CLI generation, preventing competing
-writes to live CSV files. An abrupt stop after output but before the marker can
-cause regeneration; execution is not exactly once. This mechanism is for the
-current single-host deployment. Execution and publication records now live in
-PostgreSQL; database scheduling and leases remain for the next stage.
+A PostgreSQL session advisory lock serializes worker, manual generation and CSV
+export. Each hour and its attempts are recorded in `prophet.forecast_slot`; slot
+completion commits with release publication. A restart after commit skips that
+hour. Abandoned attempts become `interrupted` when the next writer gets the lock.
+All writes use the lock's connection; session loss cannot silently reconnect an
+old writer without its lock. See [database scheduling](../../docs/prophet-scheduling.md).
 
 A missing optional density input retains existing behavior: other products are
 published and density is skipped. A failed calculation does not advance publication
@@ -80,19 +81,21 @@ Compose stop grace period.
 
 ## Run accounting and deployment
 
-**New required production variable: `FORECASTS_SERVICE_TOKEN`. Set it before
-releasing this version.** Compose sets API's `FORECASTS_URL` automatically.
-The existing `PROPHET_DB_PASSWORD` and `PROPHET_MIGRATION_PASSWORD` remain required;
-runtime and maintenance credentials stay separate.
+**No new env variables in the database-scheduling release.** The existing
+`FORECASTS_SERVICE_TOKEN`, `PROPHET_DB_PASSWORD` and `PROPHET_MIGRATION_PASSWORD`
+remain required, along with the observation client settings.
 
-The workflow validates environment values, backs up storage, applies migrations,
-publishes eligible recorded results and starts the read process and worker.
+The workflow validates configuration, stops old writers, applies migrations,
+imports the old completion marker and starts services. `PROPHET_STATE_DIR` is now
+used only to locate the legacy marker during explicit import; normal scheduling
+and locking no longer depend on that directory.
 
 ```bash
+./scripts/prophet slots --limit 10
 ./scripts/prophet runs --limit 10
 ./scripts/prophet show-run <run-uuid>
 ./scripts/prophet show-run <run-uuid> --inputs
 ```
 
-See [publication contract and rollout](../../docs/prophet-publication.md) for the exact changes,
-production verification, failure behavior and remaining publication work.
+See [scheduler rollout](../../docs/prophet-scheduling.md) for deployment and
+recovery, and [publication contracts](../../docs/prophet-publication.md) for reads and exports.

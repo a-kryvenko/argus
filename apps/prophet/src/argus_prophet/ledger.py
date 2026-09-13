@@ -64,10 +64,13 @@ class RunRecorder:
     def snapshot(self, inputs):
         from psycopg.types.json import Jsonb
         payload = inputs.model_dump(mode='json')
+        from argus_prophet.readiness import input_diagnostics
+        diagnostics = input_diagnostics(inputs)
         with connect(writing=True) as conn:
-            result = conn.execute("""UPDATE prophet.forecast_run SET input_snapshot=%s,input_sha256=%s
+            result = conn.execute("""UPDATE prophet.forecast_run SET input_snapshot=%s,input_sha256=%s,
+                provenance=jsonb_set(provenance,'{input_diagnostics}',%s)
                 WHERE id=%s AND status='running' AND input_snapshot IS NULL""",
-                                  (Jsonb(payload), fingerprint(payload), self.run_id))
+                                  (Jsonb(payload), fingerprint(payload), Jsonb(diagnostics), self.run_id))
             if result.rowcount != 1:
                 raise RuntimeError('Run snapshot can only be recorded once')
 

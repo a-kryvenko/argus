@@ -62,10 +62,17 @@ share a session advisory lock and use its connection for writes. Slot completion
 commits with publication; attempts and interrupted runs remain inspectable. The
 old marker is explicitly imported during deployment. See [rollout](prophet-scheduling.md).
 
-## Step 3c.2: Readiness and freshness (next)
+## Step 3c.2a: Readiness evidence (implemented)
 
-Define explicit per-product freshness and observation-readiness policies. Existing
-thresholds and calculation eligibility remain unchanged in the scheduling step.
+New runs save input diagnostics. An authenticated per-product status contract
+reports current release age separately from the latest attempt and its failure.
+Unconfigured age limits are explicit; no new blocking threshold is assumed.
+See [diagnostic scope](prophet-readiness.md).
+
+## Step 3c.2b: Thresholds and enforcement (next)
+
+Agree on per-product source-age, history-gap and forecast-age limits and the
+corresponding retry/skip/serving behavior before enabling new gates.
 
 ## Step 4: Intelligence stub
 

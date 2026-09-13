@@ -1,5 +1,8 @@
 # Prophet database scheduling: stage 3c.1
 
+The initial marker adoption described below is complete on production. Current
+deployments no longer repeat it; see [readiness diagnostics](prophet-readiness.md).
+
 ## Production rollout
 
 **No new environment variables, secrets, roles or dependencies are required.**

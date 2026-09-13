@@ -66,7 +66,6 @@ docker compose run --rm db-bootstrap
 docker compose run --rm clio-migrate
 docker compose run --rm api-migrate
 docker compose run --rm prophet-migrate
-docker compose run --rm --no-deps prophet prophet import-schedule
 docker compose up -d
 ```
 

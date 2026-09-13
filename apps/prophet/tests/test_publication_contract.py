@@ -100,3 +100,16 @@ def test_missing_prediction_columns_are_rejected():
     payload.update(csv_text=text, columns=text.splitlines()[0].split(','), sha256=hashlib.sha256(text.encode()).hexdigest())
     with pytest.raises(ValueError, match='prediction columns'):
         ForecastArtifact.model_validate(payload)
+
+
+def test_status_contract_requires_auth_and_does_not_change_latest_reads(monkeypatch):
+    from argus_prophet import readiness
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
+    monkeypatch.setattr(readiness, 'product_status', lambda product: dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
+        release_age_hours=None, existing_public_max_age_hours=None, freshness='unavailable',
+        latest_attempt=None, latest_attempt_artifacts=[]))
+    with TestClient(main.app) as client:
+        path = '/internal/v1/forecasts/dst/status'
+        assert client.get(path).status_code == 401
+        response = client.get(path, headers={'Authorization': 'Bearer test-secret'})
+        assert response.status_code == 200 and response.json()['mode'] == 'observe'

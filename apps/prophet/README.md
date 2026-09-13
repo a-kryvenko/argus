@@ -86,11 +86,12 @@ Compose stop grace period.
 remain required, along with the observation client settings.
 
 The workflow validates configuration, stops old writers, applies migrations,
-imports the old completion marker and starts services. `PROPHET_STATE_DIR` is now
+and starts services. The one-time marker import was completed in stage 3c.1. `PROPHET_STATE_DIR` is now
 used only to locate the legacy marker during explicit import; normal scheduling
 and locking no longer depend on that directory.
 
 ```bash
+./scripts/prophet status solar-wind-speed
 ./scripts/prophet slots --limit 10
 ./scripts/prophet runs --limit 10
 ./scripts/prophet show-run <run-uuid>
@@ -99,3 +100,11 @@ and locking no longer depend on that directory.
 
 See [scheduler rollout](../../docs/prophet-scheduling.md) for deployment and
 recovery, and [publication contracts](../../docs/prophet-publication.md) for reads and exports.
+
+## Readiness diagnostics
+
+New runs save input-age and data-quality evidence with their snapshots.
+`prophet status <product>` and the authenticated `/internal/v1/forecasts/{product}/status`
+endpoint distinguish the current release from the latest calculation attempt.
+No new thresholds block generation or serving. See [diagnostic scope and next
+policy decisions](../../docs/prophet-readiness.md).

@@ -171,3 +171,24 @@ def test_cutover_is_repeatable_and_never_publishes_failed_attempts(recorder_setu
     store_product(older, tmp_path, issue='2026-09-12T00:00:00Z')
     older.finish()
     assert read_release('dst').run_id == run.run_id
+
+
+def test_status_distinguishes_current_release_from_latest_failure(recorder_setup, tmp_path):
+    from argus_prophet.readiness import product_status
+    _, _, config = recorder_setup
+    run = RunRecorder.begin('all', 'manual', config)
+    now = datetime(2026, 9, 13, 1, tzinfo=UTC)
+    run.snapshot(ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[])))
+    store_product(run, tmp_path)
+    run.finish()
+    failure = RunRecorder.begin('all', 'manual', config)
+    failure.finish(error=ValueError('observation service unavailable'))
+    status = product_status('dst', now=now)
+    assert status.current_release.run_id == run.run_id
+    assert status.current_release.input_diagnostics['normalized']['count'] == 0
+    assert status.release_age_hours == 1 and status.freshness == 'unconfigured'
+    assert status.latest_attempt.run_id == failure.run_id
+    assert status.latest_attempt.status == 'failed'
+    assert status.latest_attempt_artifacts == []
+    unavailable = product_status('hmf', now=now)
+    assert unavailable.freshness == 'unavailable' and unavailable.current_release is None

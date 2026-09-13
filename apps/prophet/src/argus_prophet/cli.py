@@ -52,6 +52,9 @@ def main() -> None:
     importer.add_argument('--marker', type=Path, help='Legacy marker path; defaults to the previous state directory')
     slots = commands.add_parser('slots', help='List hourly slots and attempt counts')
     slots.add_argument('--limit', type=int, default=20)
+    from common.schemas.forecast_release import PRODUCT_ARTIFACTS
+    status_parser = commands.add_parser('status', help='Inspect current release age and input diagnostics')
+    status_parser.add_argument('product', choices=PRODUCT_ARTIFACTS)
     runs = commands.add_parser('runs', help='List recorded executions')
     runs.add_argument('--limit', type=int, default=20)
     show = commands.add_parser('show-run', help='Show execution evidence')
@@ -80,13 +83,16 @@ def main() -> None:
         import uvicorn
         uvicorn.run('argus_prophet.main:app', host=args.host, port=args.port)
         return
-    if args.command in ('runs', 'show-run', 'slots'):
+    if args.command in ('runs', 'show-run', 'slots', 'status'):
         import json
         from common.config import get_config
         from argus_prophet.ledger import list_runs, describe_run
         get_config()
         try:
-            if args.command == 'slots':
+            if args.command == 'status':
+                from argus_prophet.readiness import product_status
+                result = product_status(args.product).model_dump(mode='json')
+            elif args.command == 'slots':
                 from argus_prophet.worker import list_slots
                 result = list_slots(args.limit)
             else:

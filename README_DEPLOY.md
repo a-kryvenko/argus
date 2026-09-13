@@ -20,20 +20,17 @@ the Compose services.
 - Model and metric artifacts uploaded to `/var/www/data/models` and
   `/var/www/data/metrics`.
 
-## Required preparation for Prophet database scheduling
+## Prophet readiness diagnostics
 
-**No new environment variables or secrets in stage 3c.1.** Existing domain
-passwords and `OBSERVATIONS_SERVICE_TOKEN` / `FORECASTS_SERVICE_TOKEN` remain required.
+**No new environment variables, migrations or dependencies in stage 3c.2a.**
+The existing tokens and domain passwords remain required. Deployment no longer
+runs the one-time `import-schedule` command, since production has completed that
+cutover. Older installations must still follow [checkpoint adoption](docs/prophet-scheduling.md).
 
-The workflow stops writers, applies the new Prophet migration, imports the old
-`last-completed-slot` marker via `prophet import-schedule`, then starts services.
-Finish independent manual jobs first: old filesystem locks and new PostgreSQL
-locks do not exclude each other. A custom old state directory requires importing
-its actual marker path. See [rollout, verification and rollback](docs/prophet-scheduling.md).
-
-The stage 3b `publish-existing` deployment step has been removed because that
-cutover is already complete on production. Older installations must still follow
-the [publication cutover](docs/prophet-publication.md) if needed.
+New runs save diagnostic evidence with their snapshots. Use `prophet status <product>`
+to inspect current release age and the last calculation attempt. New blocking
+thresholds are not enabled; the existing density age check remains. See
+[readiness diagnostics](docs/prophet-readiness.md).
 
 ## Release helper
 
@@ -68,7 +65,7 @@ docker compose run --rm prophet prophet generate
 
 Finish independent manual jobs before deploying. The workflow stops service
 writers and saves a PostgreSQL dump,
-provisions/adopts domain storage, runs separate Clio/API/Prophet migrations, imports the previous Prophet completion marker, then restarts
+provisions/adopts domain storage, runs separate Clio/API/Prophet migrations, then restarts
 the stack. Production has already completed the legacy ownership cutover;
 [cutover and recovery](docs/domain-storage.md) documents adoption for older databases. Migration and
 admin credentials exist only in maintenance-profile services, not runtime apps.

@@ -9,6 +9,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from common.config import get_config
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
+from common.schemas.forecast_status import ForecastStatus
 from argus_prophet.db.session import connect
 from argus_prophet.publication import read_release, ReleaseNotFound
 
@@ -48,6 +49,19 @@ def latest(product: str):
          dependencies=[Depends(require_service_token)])
 def historical(product: str, release_id: UUID):
     return load(product, release_id)
+
+
+@app.get('/internal/v1/forecasts/{product}/status', response_model=ForecastStatus,
+         dependencies=[Depends(require_service_token)])
+def status(product: str):
+    if product not in PRODUCT_ARTIFACTS:
+        raise HTTPException(404, 'Unknown forecast product')
+    from argus_prophet.readiness import product_status
+    try:
+        return product_status(product)
+    except Exception:
+        logger.exception('Forecast status read failed')
+        raise HTTPException(503, 'Forecast storage is not ready') from None
 
 
 @app.get('/health/live')

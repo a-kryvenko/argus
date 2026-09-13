@@ -1,12 +1,69 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TAG=""
+BUMP="patch"
+MESSAGE="Deploy update"
+
+if [[ $# -gt 0 && "$1" != -* ]]; then
+    BUMP="$1"
+    shift
+fi
+
+while getopts "m:" opt; do
+    case "$opt" in
+        m)
+            MESSAGE="$OPTARG"
+            ;;
+        *)
+            echo "Usage: $0 [patch|minor|major] [-m message]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+case "$BUMP" in
+    patch|minor|major)
+        ;;
+    *)
+        echo "Invalid bump type: $BUMP" >&2
+        echo "Usage: $0 [patch|minor|major] [-m message]" >&2
+        exit 1
+        ;;
+esac
+
+LAST_TAG=$(git tag --sort=-v:refname | head -n 1)
+
+if [[ -z "$LAST_TAG" ]]; then
+    MAJOR=0
+    MINOR=0
+    PATCH=0
+else
+    VERSION="${LAST_TAG#v}"
+
+    IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+fi
+
+case "$BUMP" in
+    patch)
+        PATCH=$((PATCH + 1))
+        ;;
+    minor)
+        MINOR=$((MINOR + 1))
+        PATCH=0
+        ;;
+    major)
+        MAJOR=$((MAJOR + 1))
+        MINOR=0
+        PATCH=0
+        ;;
+esac
+
+echo "$LAST_TAG -> $TAG"
+
 MESSAGE="Deploy update"
 
 while getopts "t:m:" opt; do
   case "$opt" in
-    t) TAG="$OPTARG" ;;
     m) MESSAGE="$OPTARG" ;;
     *) echo "Usage: $0 [-t tag] [-m message]" >&2; exit 1 ;;
   esac

@@ -58,3 +58,38 @@ def test_private_source_is_not_in_public_tree():
         capture_output=True, text=True, check=True,
     )
     assert len(result.stdout.splitlines()) == 2
+
+
+def test_prophet_has_no_storage_or_api_imports():
+    blocked = {'app', 'sqlalchemy', 'psycopg', 'alembic', 'clio'}
+    for path in (ROOT / 'apps/prophet/src').rglob('*.py'):
+        for module in imports(path):
+            assert module.split('.')[0] not in blocked, (path, module)
+            if module.startswith(('forecast_core', 'intelligence_core')):
+                assert module == 'forecast_core.api', (path, module)
+    config = tomllib.loads((ROOT / 'apps/prophet/pyproject.toml').read_text())
+    for dependency in config['project']['dependencies']:
+        assert not dependency.startswith(('argus-api', 'sqlalchemy', 'psycopg', 'alembic'))
+
+
+def test_api_no_longer_owns_forecast_commands():
+    assert not list((ROOT / 'apps/api/app/commands').glob('generate*forecast.py'))
+    for path in (ROOT / 'apps/api/app').rglob('*.py'):
+        for module in imports(path):
+            assert not module.startswith('argus_prophet'), (path, module)
+
+
+def test_api_does_not_import_observation_storage_or_private_backend():
+    for path in (ROOT / 'apps/api/app').rglob('*.py'):
+        for module in imports(path):
+            assert module.split('.')[0] not in {'clio', 'argus_clio', 'forecast_core', 'argus_prophet'}, (path, module)
+    assert {p.stem for p in (ROOT / 'apps/api/app/db/models').glob('*.py')} == {'__init__', 'dashboard'}
+    assert not list((ROOT / 'apps/api/app/commands').glob('collect*.py'))
+
+
+def test_clio_owns_storage_and_uses_only_private_adapter():
+    for path in (ROOT / 'apps/clio/src/argus_clio').rglob('*.py'):
+        for module in imports(path):
+            assert module.split('.')[0] not in {'app', 'argus_prophet', 'intelligence_core'}, (path, module)
+            if module.startswith('forecast_core'):
+                assert path.name == 'calibration.py' and module == 'forecast_core.api', (path, module)

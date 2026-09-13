@@ -1,25 +1,21 @@
 from datetime import UTC, datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.db import get_db_session
-from app.schemas.response import success_response
-from app.services import geomagnetic
+from fastapi import APIRouter, HTTPException, Query, Response
+from app.services.observations_client import read_observations
 
 router = APIRouter(prefix='/public/observations/geomagnetic', tags=['observations'])
 
 
 @router.get('/latest')
-async def latest(response: Response, session: AsyncSession = Depends(get_db_session)):
+async def latest(response: Response):
     """Latest native Kp/Dst intervals, with independent quality and publication lag."""
     response.headers['Cache-Control'] = 'no-store'
-    return success_response(await geomagnetic.latest(session))
+    return await read_observations('geomagnetic/latest')
 
 
 @router.get('/history')
 async def history(response: Response,
                   start: datetime | None = Query(default=None, alias='from'),
-                  end: datetime | None = Query(default=None, alias='to'),
-                  session: AsyncSession = Depends(get_db_session)):
+                  end: datetime | None = Query(default=None, alias='to')):
     """Native intervals overlapping [from,to); default 24h, maximum 31 days.
 
     Intervals are not clipped, rounded, interpolated or expanded into hourly Kp.
@@ -33,4 +29,4 @@ async def history(response: Response,
     if not timedelta(0) < end-start <= timedelta(days=31):
         raise HTTPException(422, 'Interval must be positive and at most 31 days')
     response.headers['Cache-Control'] = 'no-store'
-    return success_response(await geomagnetic.history(session, start, end))
+    return await read_observations('geomagnetic/history', {'from': start, 'to': end})

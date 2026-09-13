@@ -11,16 +11,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 COPY apps/api/pyproject.toml apps/api/uv.lock ./
 
-COPY packages/clio ./../../packages/clio
 COPY packages/common ./../../packages/common
 COPY packages/forecast ./../../packages/forecast
-COPY packages/forecast-core ./../../packages/forecast-core
 
 RUN uv sync --frozen --no-cache
 
 COPY apps/api/app ./app
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
+COPY scripts/bootstrap-domain-db.py /var/www/scripts/bootstrap-domain-db.py
 
 EXPOSE 8000
 

@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = '20260911_0010'
-down_revision = '20260908_0009'
+down_revision = None
 branch_labels = None
 depends_on = None
 
@@ -30,8 +30,8 @@ def upgrade():
         sa.Column('route', sa.String(256), primary_key=True), sa.Column('method', sa.String(16), primary_key=True),
         sa.Column('status', sa.Integer, primary_key=True), sa.Column('bucket_ms', sa.Integer, primary_key=True),
         sa.Column('count', sa.Integer, nullable=False), sa.Column('duration_ms', sa.Float, nullable=False))
-    op.bulk_insert(sa.table('dashboard_group', sa.column('name', sa.String), sa.column('permissions', sa.JSON)),
-        [{'name': 'admins', 'permissions': ['observations.read', 'users.manage', 'api_stats.read']}])
+    op.execute("""INSERT INTO dashboard_group(name, permissions)
+        VALUES ('admins', '["observations.read", "users.manage", "api_stats.read"]'::json)""")
 
 
 def downgrade():

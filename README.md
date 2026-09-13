@@ -24,17 +24,22 @@ Private impact calculations are not part of the public observation service.
 
 ## Local development
 
-Install the frontend dependencies with `pnpm install`. Set up the API environment
+Install the frontend dependencies with `pnpm install`. Set up the API, Clio and Prophet environments
 and private backend as described in [package setup](docs/architecture.md).
 Configure `.env` and `.env.local`, then run:
 
 ```sh
 docker compose up -d
+./scripts/domain-db --apply
+./scripts/clio migrate upgrade head
 pnpm db:migrate
 pnpm dev
 ```
 
-`pnpm dev` starts the API, frontend and both observation collectors.
+`pnpm dev` starts the API, frontend, Clio read service and both observation collectors.
+Configure the separate domain credentials and Clio URL described in
+[Clio setup](apps/clio/README.md). For existing databases, follow
+[database cutover](docs/domain-storage.md) before bootstrap.
 PostgreSQL and Redis run in Docker. The API and frontend reload code changes;
 restart collectors after changing their code.
 

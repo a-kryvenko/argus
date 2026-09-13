@@ -13,10 +13,11 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def get_database_url() -> URL:
+def get_database_url(*, migration: bool = False) -> URL:
     """Build a safe connection URL from raw database credentials."""
 
-    required_variables = ("DB_NAME", "DB_USER", "DB_PASSWORD")
+    password_variable = "API_MIGRATION_PASSWORD" if migration else "API_DB_PASSWORD"
+    required_variables = ("DB_NAME", password_variable)
     missing_variables = [name for name in required_variables if not os.getenv(name)]
     if missing_variables:
         missing = ", ".join(missing_variables)
@@ -29,8 +30,8 @@ def get_database_url() -> URL:
 
     return URL.create(
         drivername="postgresql+psycopg",
-        username=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
+        username="argus_api_migrator" if migration else "argus_api",
+        password=os.environ[password_variable],
         host=os.getenv("DB_HOST", "localhost"),
         port=port,
         database=os.environ["DB_NAME"],
@@ -44,6 +45,7 @@ def get_engine() -> AsyncEngine:
         _engine = create_async_engine(
             get_database_url(),
             pool_pre_ping=True,
+            connect_args={"options": "-csearch_path=api,pg_catalog,pg_temp"},
         )
 
     return _engine

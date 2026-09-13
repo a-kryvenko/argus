@@ -1,0 +1,9 @@
+{
+  "name": "clio-service",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": ".venv/bin/clio serve --host 127.0.0.1 --port 8001",
+    "dev:solar-wind": ".venv/bin/clio collect solar-wind --watch",
+    "dev:geomagnetic": ".venv/bin/clio collect geomagnetic --watch"
+  }
+}

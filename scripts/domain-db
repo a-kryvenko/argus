@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec apps/api/.venv/bin/python scripts/bootstrap-domain-db.py "$@"

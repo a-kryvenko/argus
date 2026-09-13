@@ -1,19 +1,18 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db import get_db_session
-from app.schemas.response import success_response
-from app.services import solar_wind, aggregate_history
+from app.services.observations_client import read_observations
+
+METRICS = ("bx", "by", "bz", "bt", "v", "n", "t")
 from typing import Literal
 
 router = APIRouter(prefix="/public/observations/solar-wind", tags=["observations"])
 
 
 def selected_metrics(metrics: str | None = Query(default=None, description="Comma-separated bx,by,bz,bt,v,n,t")) -> list[str]:
-    selected = list(solar_wind.METADATA) if metrics is None else list(dict.fromkeys(m.strip() for m in metrics.split(',')))
-    if not selected or any(metric not in solar_wind.METADATA for metric in selected):
+    selected = list(METRICS) if metrics is None else list(dict.fromkeys(m.strip() for m in metrics.split(',')))
+    if not selected or any(metric not in METRICS for metric in selected):
         raise HTTPException(422, "Unknown metric. Supported: bx,by,bz,bt,v,n,t")
     return selected
 
@@ -22,7 +21,6 @@ def selected_metrics(metrics: str | None = Query(default=None, description="Comm
 async def latest(
     response: Response,
     metrics: list[str] = Depends(selected_metrics),
-    session: AsyncSession = Depends(get_db_session),
 ):
     """Latest active-source samples; freshness is based on measurement time.
 
@@ -30,7 +28,7 @@ async def latest(
     Quality 'unverified' means Argus has not independently validated the sample.
     """
     response.headers["Cache-Control"] = "no-store"
-    return success_response(await solar_wind.latest(session, metrics))
+    return await read_observations('solar-wind/latest', {'metrics': ','.join(metrics)})
 
 
 @router.get("/history")
@@ -40,7 +38,6 @@ async def history(
     end: datetime | None = Query(default=None, alias="to", description="Exclusive UTC timestamp; default now"),
     resolution: Literal["1m", "5m", "1h", "auto"] = Query(default="1m"),
     metrics: list[str] = Depends(selected_metrics),
-    session: AsyncSession = Depends(get_db_session),
 ):
     """Stored native samples or complete UTC aggregate windows.
 
@@ -60,8 +57,6 @@ async def history(
     if not timedelta(0) < end - start <= timedelta(days=days):
         raise HTTPException(422, f"History interval must be positive and at most {days} days for {resolution}")
     response.headers["Cache-Control"] = "no-store"
-    if resolution != '1m':
-        return success_response(await aggregate_history.history(session, metrics, start, end, 300 if resolution == '5m' else 3600))
-    data = await solar_wind.history(session, metrics, start, end)
-    data['resolution_seconds'] = 60
-    return success_response(data)
+    return await read_observations('solar-wind/history', {
+        'from': start, 'to': end, 'resolution': resolution, 'metrics': ','.join(metrics),
+    })

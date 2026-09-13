@@ -45,8 +45,18 @@ DASHBOARD_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 DASHBOARD_COOKIE_SECURE=false
 ```
 
-Secure cookies default to enabled. Allowed origins default to the two local
-origins above; production must set its own origin explicitly. The frontend uses
+Secure cookies default to enabled. Outside production Compose, allowed origins
+default to the two local origins above. Production Compose defaults to
+`https://${APP_NAME}`; set `DASHBOARD_ORIGINS` explicitly for additional origins.
+After changing production environment files, recreate the API container (a
+restart alone does not reload its environment):
+
+```sh
+cd /var/www
+docker compose --env-file .env --env-file .env.local up -d --no-deps --force-recreate api
+```
+
+The frontend uses
 the existing same-origin `/api/v1` proxy. No frontend secrets are required.
 
 For a deployed installation, run in the API container after applying migrations:

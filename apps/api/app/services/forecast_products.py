@@ -19,6 +19,7 @@ from app.schemas.metrics import (
     VariableMetrics,
 )
 from common.config import get_config
+from forecast.exceptions import ArtifactNotReadyError
 
 
 @dataclass(frozen=True)
@@ -68,10 +69,6 @@ PRODUCTS = {
 
 
 class ProductNotFoundError(Exception):
-    pass
-
-
-class ArtifactNotReadyError(Exception):
     pass
 
 

@@ -1,14 +1,42 @@
+x-clio-runtime: &clio-runtime
+  image: andriykryvenko/argus-clio:latest
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 10m
+  environment:
+    ARGUS_WORKDIR: /var/www
+    DEBUG: ${DEBUG:-false}
+    DB_HOST: postgres
+    DB_NAME: ${DB_NAME:?DB_NAME is required}
+    CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+    OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+    SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+  volumes:
+    - ./configs:/var/www/configs:ro
+    - ./data:/var/www/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    backend:
+
 services:
   api:
     image: andriykryvenko/argus-forecast:latest
     container_name: argusForecast
     restart: unless-stopped
     tty: true
-    env_file:
-      - .env
-      - .env.local
     environment:
+      ARGUS_WORKDIR: /var/www
+      DEBUG: ${DEBUG:-false}
       DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS-https://${APP_NAME:?APP_NAME is required}}
+      DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}
     expose:
       - "8000"
     volumes:
@@ -23,54 +51,107 @@ services:
     networks:
       application:
       backend:
+      observations:
+
+  clio:
+    <<: *clio-runtime
+    command: ["clio", "serve"]
+    expose: ["8000"]
+    networks:
+      backend:
+      observations:
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   solar-wind:
+    <<: *clio-runtime
+    command: ["clio", "collect", "solar-wind", "--watch"]
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-m", "app.commands.check_collector_health", "solar-wind"]
+      test: ["CMD", "clio", "check-health", "solar-wind"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 120s
-    image: andriykryvenko/argus-forecast:latest
-    restart: unless-stopped
-    init: true
-    command: [".venv/bin/python", "-m", "app.commands.collect_solar_wind", "--watch"]
-    env_file:
-      - .env
-      - .env.local
-    environment:
-      DB_HOST: postgres
-    volumes:
-      - ./configs:/var/www/configs:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      backend:
 
   geomagnetic:
+    <<: *clio-runtime
+    command: ["clio", "collect", "geomagnetic", "--watch"]
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-m", "app.commands.check_collector_health", "geomagnetic"]
+      test: ["CMD", "clio", "check-health", "geomagnetic"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 120s
+
+  clio-refresh:
+    <<: *clio-runtime
+    command: ["clio", "schedule", "refresh"]
+
+  clio-aggregate:
+    <<: *clio-runtime
+    command: ["clio", "schedule", "aggregate"]
+
+  db-bootstrap:
     image: andriykryvenko/argus-forecast:latest
-    restart: unless-stopped
-    init: true
-    command: [".venv/bin/python", "-m", "app.commands.collect_geomagnetic", "--watch"]
-    env_file:
-      - .env
-      - .env.local
+    profiles: ["maintenance"]
+    command: [".venv/bin/python", "/var/www/scripts/bootstrap-domain-db.py", "--apply"]
     environment:
       DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      API_MIGRATION_PASSWORD: ${API_MIGRATION_PASSWORD:?API_MIGRATION_PASSWORD is required}
+      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+      CLIO_MIGRATION_PASSWORD: ${CLIO_MIGRATION_PASSWORD:?CLIO_MIGRATION_PASSWORD is required}
+    networks: [backend]
+
+  api-migrate:
+    image: andriykryvenko/argus-forecast:latest
+    profiles: ["maintenance"]
+    command: [".venv/bin/alembic", "upgrade", "head"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      API_MIGRATION_PASSWORD: ${API_MIGRATION_PASSWORD:?API_MIGRATION_PASSWORD is required}
+    networks: [backend]
+
+  clio-migrate:
+    image: andriykryvenko/argus-clio:latest
+    profiles: ["maintenance"]
+    command: ["clio", "migrate", "upgrade", "head"]
+    environment:
+      ARGUS_WORKDIR: /var/www
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      CLIO_MIGRATION_PASSWORD: ${CLIO_MIGRATION_PASSWORD:?CLIO_MIGRATION_PASSWORD is required}
     volumes:
       - ./configs:/var/www/configs:ro
+    networks: [backend]
+
+  prophet:
+    image: andriykryvenko/argus-prophet:latest
+    restart: unless-stopped
+    init: true
+    command: ["prophet", "worker"]
+    stop_grace_period: 10m
+    environment:
+      ARGUS_WORKDIR: /var/www
+      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
     depends_on:
-      postgres:
+      clio:
         condition: service_healthy
     networks:
-      backend:
+      observations:
 
   frontend:
     image: andriykryvenko/argus-frontend:latest
@@ -184,4 +265,6 @@ networks:
   application:
     driver: bridge
   backend:
+    driver: bridge
+  observations:
     driver: bridge

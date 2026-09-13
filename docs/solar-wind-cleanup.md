@@ -55,7 +55,7 @@ compare retired hours against raw data and reports them as unverifiable.
 
 ```sh
 ./scripts/test-python -q
-PYTHONPATH=apps/api apps/api/.venv/bin/python apps/api/tests/integration/verify_solar_wind_retention.py
+PYTHONPATH=apps/clio/src apps/clio/.venv/bin/python apps/clio/tests/integration/verify_solar_wind_retention.py
 ```
 
 The integration check deletes synthetic records in a disposable schema. It covers

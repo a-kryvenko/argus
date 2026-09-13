@@ -1,0 +1,30 @@
+[project]
+name = "argus-prophet"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "common",
+  "forecast",
+  "forecast-core>=0.2.0",
+  "httpx>=0.28,<1",
+  "sentry-sdk>=2.61.1",
+]
+
+[project.scripts]
+prophet = "argus_prophet.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv.sources]
+common = { workspace = true, editable = true }
+clio = { workspace = true, editable = true }
+forecast = { workspace = true, editable = true }
+forecast-core = { path = "../../packages/forecast-core", editable = true }
+
+[tool.uv.workspace]
+members = ["../../packages/common", "../../packages/clio", "../../packages/forecast"]

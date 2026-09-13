@@ -1,0 +1,21 @@
+from forecast.forecast_services import ForecastService, ForecastServiceRegistry
+from forecast.ForecastDirector import ForecastDirector
+
+from argus_prophet.commands._runner import run_command
+from argus_prophet.commands._sensor_observations import load_sensor_observations
+
+
+def main() -> None:
+    director = ForecastDirector()
+    observations = load_sensor_observations()
+    director.refresh_forecasts(
+        [
+            ForecastServiceRegistry.get(ForecastService.HMF_TOTAL_THRESHOLD),
+            ForecastServiceRegistry.get(ForecastService.HMF_SOUTH_THRESHOLD),
+        ],
+        observations,
+    )
+
+
+if __name__ == "__main__":
+    run_command(main)

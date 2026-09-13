@@ -48,11 +48,11 @@ collector logs and container health as well.
 ## Production liveness
 
 Both collector services have a Compose healthcheck, every 30 seconds, with a
-120-second startup period and three retries. From `apps/api`, run a probe with:
+120-second startup period and three retries. From `apps/clio`, run a probe with:
 
 ```sh
-.venv/bin/python -m app.commands.check_collector_health solar-wind
-.venv/bin/python -m app.commands.check_collector_health geomagnetic
+.venv/bin/clio check-health solar-wind
+.venv/bin/clio check-health geomagnetic
 ```
 
 The probe reads an atomic heartbeat file local to the container and exits 0 for

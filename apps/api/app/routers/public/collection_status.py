@@ -1,14 +1,11 @@
-from fastapi import APIRouter, Depends, Response
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.db import get_db_session
-from app.schemas.response import success_response
-from app.services.collection_status import source_status
+from fastapi import APIRouter, Response
+from app.services.observations_client import read_observations
 
 router = APIRouter(prefix='/public/observations', tags=['observations'])
 
 
 @router.get('/status')
-async def collection_status(response: Response, session: AsyncSession = Depends(get_db_session)):
+async def collection_status(response: Response):
     """Source diagnostics: attempts, successful responses, storage outcomes and data age.
 
     Status priority: stalled/overdue collection, errors, then delayed/missing data.
@@ -16,4 +13,4 @@ async def collection_status(response: Response, session: AsyncSession = Depends(
     A historical last error is retained after recovery; consecutive_failures resets.
     """
     response.headers['Cache-Control'] = 'no-store'
-    return success_response(await source_status(session))
+    return await read_observations('status')

@@ -20,3 +20,39 @@ jobs:
           tests/test_architecture.py
           tests/test_config.py
           packages/forecast/tests/test_smoke_pipeline.py
+
+  domain-storage:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test-postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_ADMIN_DSN: postgresql://postgres:test-postgres@127.0.0.1:5432/postgres
+      PYTHONPATH: apps/api:apps/clio/src:apps/prophet/src:packages/common/src:packages/clio/src
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install public observation runtime and test dependencies
+        run: >-
+          python -m pip install -e packages/common -e packages/clio
+          pytest sqlalchemy 'psycopg[binary]' alembic fastapi uvicorn httpx sentry-sdk
+      - name: Check fresh install, legacy adoption, privileges and scheduling
+        run: python -m pytest -q tests/integration/test_domain_storage.py
+      - name: Check aggregation, retention and collection recovery
+        run: |
+          python apps/clio/tests/integration/verify_solar_wind_aggregation.py
+          python apps/clio/tests/integration/verify_solar_wind_retention.py
+          python apps/clio/tests/integration/verify_observation_recovery.py
+      - name: Check dashboard through the Clio read interface
+        run: python apps/api/tests/integration/verify_dashboard.py

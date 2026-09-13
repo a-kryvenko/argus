@@ -25,8 +25,11 @@ archive recovery and automatic deletion are not implemented.
 
 From the repository root, with local database settings in `.env` / `.env.local`:
 
+Configure `TEST_DATABASE_ADMIN_DSN` for a disposable PostgreSQL server first;
+see [database verification](domain-storage.md#verification).
+
 ```sh
-PYTHONPATH=apps/api apps/api/.venv/bin/python apps/api/tests/integration/verify_observation_recovery.py
+PYTHONPATH=apps/clio/src apps/clio/.venv/bin/python apps/clio/tests/integration/verify_observation_recovery.py
 ```
 
 The check uses synthetic source responses through the real ingestion functions

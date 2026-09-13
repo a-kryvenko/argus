@@ -79,6 +79,52 @@ jobs:
           subject-digest: ${{ steps.pushApi.outputs.digest }}
           push-to-registry: true
 
+      - name: Extract Prophet metadata
+        id: metaProphet
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: andriykryvenko/argus-prophet
+
+      - name: Build and push Prophet image
+        id: pushProphet
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          file: ./.deploy/prophet.Dockerfile
+          push: true
+          tags: ${{ steps.metaProphet.outputs.tags }}
+          labels: ${{ steps.metaProphet.outputs.labels }}
+
+      - name: Attest Prophet image
+        uses: actions/attest@v4
+        with:
+          subject-name: index.docker.io/andriykryvenko/argus-prophet
+          subject-digest: ${{ steps.pushProphet.outputs.digest }}
+          push-to-registry: true
+
+      - name: Extract Clio metadata
+        id: metaClio
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: andriykryvenko/argus-clio
+
+      - name: Build and push Clio image
+        id: pushClio
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: .
+          file: ./.deploy/clio.Dockerfile
+          push: true
+          tags: ${{ steps.metaClio.outputs.tags }}
+          labels: ${{ steps.metaClio.outputs.labels }}
+
+      - name: Attest Clio image
+        uses: actions/attest@v4
+        with:
+          subject-name: index.docker.io/andriykryvenko/argus-clio
+          subject-digest: ${{ steps.pushClio.outputs.digest }}
+          push-to-registry: true
+
   upload_code:
     needs: push_to_registry
     name: Upload code to production server
@@ -129,12 +175,26 @@ jobs:
             export COMPOSE_ENV_FILES=.env,.env.local
 
             docker compose config --quiet
-            docker compose pull
+            docker compose --profile maintenance pull
             docker compose up -d postgres redis
-            docker compose run --rm api .venv/bin/alembic upgrade head
+
+            # Remove scheduled legacy writes, stop service writers, then drain
+            # all one-off jobs from this deployment (including old aggregation).
+            docker compose stop api solar-wind geomagnetic prophet clio clio-refresh clio-aggregate
+            if docker container inspect argusForecast >/dev/null 2>&1; then
+              legacy_project=$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' argusForecast)
+              for container in $(docker ps -q --filter "label=com.docker.compose.project=$legacy_project" --filter label=com.docker.compose.oneoff=True); do
+                docker wait "$container" || true
+              done
+            fi
+            mkdir -p backups
+            backup_file="backups/pre-domain-$(date -u +%Y%m%dT%H%M%SZ).dump"
+            docker compose exec -T postgres sh -c 'pg_dump --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --format=custom' > "$backup_file"
+
+            docker compose run --rm db-bootstrap
+            docker compose run --rm clio-migrate
+            docker compose run --rm api-migrate
             docker compose up -d --remove-orphans
             docker image prune -f
 
-            docker compose run --rm --name observations_update api .venv/bin/python -m app.commands.refresh_observations
-
-            docker compose run --rm --name forecast_update api .venv/bin/python -m app.commands.generate_forecast
+            # Clio and Prophet schedule and retry their own work.

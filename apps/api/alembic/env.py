@@ -1,49 +1,48 @@
-from logging.config import fileConfig
-
+"""Migrations are scoped to api; provision/adopt legacy storage first."""
 from alembic import context
-from app.db import Base
-from app.db.models import Measurement, NormalizedObservation, SolarWindObservation, GeomagneticObservation, ObservationSourceStatus  # noqa: F401
+from sqlalchemy import create_engine, pool, text
+from app.db.base import Base
+from app.db import models  # noqa: F401
 from app.db.session import get_database_url
-from sqlalchemy import create_engine, pool
 
+DOMAIN = 'api'
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
-
-
-def run_migrations_offline() -> None:
-    context.configure(
-        url=get_database_url(),
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-        compare_type=True,
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
+def include_name(name, type_, parent_names):
+    if type_ == 'schema':
+        return name == DOMAIN
+    if type_ == 'table':
+        return name != 'legacy_alembic_version'
+    return True
 
 
-def run_migrations_online() -> None:
-    connectable = create_engine(get_database_url(), poolclass=pool.NullPool)
-
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-        )
-
-        with context.begin_transaction():
-            context.run_migrations()
-
-    connectable.dispose()
+def configure(**kwargs):
+    context.configure(target_metadata=Base.metadata, compare_type=True,
+                      include_schemas=True, include_name=include_name,
+                      version_table_schema=DOMAIN, **kwargs)
 
 
 if context.is_offline_mode():
-    run_migrations_offline()
+    configure(url=get_database_url(migration=True), literal_binds=True,
+              dialect_opts={'paramstyle': 'named'})
+    with context.begin_transaction():
+        context.execute('SET search_path TO api, pg_catalog, pg_temp')
+        context.run_migrations()
+        context.execute('REVOKE ALL ON api.alembic_version FROM argus_api')
 else:
-    run_migrations_online()
+    engine = create_engine(get_database_url(migration=True), poolclass=pool.NullPool,
+                           connect_args={'options': '-csearch_path=api,pg_catalog,pg_temp'})
+    with engine.connect() as connection:
+        if connection.scalar(text("SELECT to_regclass('public.alembic_version')")):
+            raise RuntimeError('Run domain database bootstrap before domain migrations')
+        connection.commit()
+        # Reflect the domain explicitly, not twice as both the search-path
+        # default and the named schema during autogeneration.
+        connection.dialect.default_schema_name = 'public'
+        configure(connection=connection)
+        with context.begin_transaction():
+            context.run_migrations()
+            if connection.scalar(text("SELECT to_regclass('api.alembic_version')")):
+                connection.execute(text('REVOKE ALL ON api.alembic_version FROM argus_api'))
+    engine.dispose()

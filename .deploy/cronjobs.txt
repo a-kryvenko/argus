@@ -1,18 +1,3 @@
-# Up nginx-proxy after server restart
+# Application work is owned by Compose workers (Clio and Prophet).
+# Bootstrap the external nginx proxy after host restart.
 @reboot sleep 15 && cd /var/www && ./nginx-proxy-up.sh
-
-# Minute solar wind collection runs in the solar-wind Compose service
-# (app.commands.collect_solar_wind --watch), polling every 60 seconds.
-# See docker-compose.yml; no cron entry is needed for this collector.
-
-# Kp/Dst collection runs in the geomagnetic Compose service
-# (app.commands.collect_geomagnetic --watch): Kp every 60s, Dst every 300s.
-
-# Hourly observations and normalization for forecast inputs
-0 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_observations_upd api .venv/bin/python -m app.commands.refresh_observations
-
-# Forecasts use the latest committed observations; no ingestion dependency
-10 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm --name s_full_forecast_upd api .venv/bin/python -m app.commands.generate_forecast
-
-# Durable 5-minute/hourly aggregates; processes at most 240 source hours per run
-*/5 * * * * cd /var/www && docker compose --env-file .env --env-file .env.local run --rm api .venv/bin/python -m app.commands.aggregate_solar_wind

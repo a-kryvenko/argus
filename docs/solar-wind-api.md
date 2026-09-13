@@ -18,7 +18,7 @@ pnpm app:solar-wind          # one pass; nonzero exit on source failure
 pnpm app:solar-wind --watch  # repeat every 60 seconds; retry failures
 ```
 
-Deployment runs `app.commands.collect_solar_wind --watch` in its own Compose
+Deployment runs `clio collect solar-wind --watch` in its own Compose
 service. Each source has a separate transaction and advisory lock. One source's
 failure does not roll back the other source. Overlapping collectors skip a locked
 source. A failed continuous cycle is logged and retried without clearing stored data.

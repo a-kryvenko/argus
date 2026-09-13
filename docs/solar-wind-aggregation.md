@@ -80,7 +80,7 @@ requeued or rebuilt without restoring their raw data.
 
 ```sh
 ./scripts/test-python -q
-PYTHONPATH=apps/api apps/api/.venv/bin/python apps/api/tests/integration/verify_solar_wind_aggregation.py
+PYTHONPATH=apps/clio/src apps/clio/.venv/bin/python apps/clio/tests/integration/verify_solar_wind_aggregation.py
 ```
 
 The integration check uses a temporary PostgreSQL schema and validates the

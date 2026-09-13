@@ -20,6 +20,8 @@ importers:
 
   apps/api: {}
 
+  apps/clio: {}
+
   apps/api-private: {}
 
   apps/api-public: {}

@@ -17,22 +17,30 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from app.db.session import get_database_url, get_db_session
+from app.db.session import get_db_session
 from app.db.models.dashboard import Session, ApiMetric
-from app.db.models.measurement import Measurement
-from app.db.models.normalized_observation import NormalizedObservation
+from argus_clio.db.models.measurement import Measurement
+from argus_clio.db.models.normalized_observation import NormalizedObservation
 from app.routers.dashboard import router, create_user, UserCreate
 from app.routers.public.observations import router as public_router
 from app.services import api_statistics
 
 
+
+def get_database_url():
+    import os
+    from sqlalchemy.engine import make_url
+    value = os.getenv('TEST_DATABASE_ADMIN_DSN')
+    if not value:
+        raise RuntimeError('Set TEST_DATABASE_ADMIN_DSN to an isolated test PostgreSQL server')
+    return make_url(value).set(drivername='postgresql+psycopg')
+
+
 async def verify():
     root = Path(__file__).resolve().parents[4]
-    load_dotenv(root / '.env')
-    load_dotenv(root / '.env.local', override=True)
     schema = 'dashboard_test_' + uuid4().hex
     admin = create_async_engine(get_database_url())
-    engine = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'})
+    engine = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'}, execution_options={'schema_translate_map': {'api': schema, 'clio': schema}})
     factory = async_sessionmaker(engine, expire_on_commit=False)
     created = False
     spec = importlib.util.spec_from_file_location('dashboard_migration', root / 'apps/api/alembic/versions/20260911_0010_dashboard.py')
@@ -65,9 +73,13 @@ async def verify():
             async with factory() as db:
                 yield db
         app.dependency_overrides[get_db_session] = session
+        from argus_clio.main import app as clio_app
+        from argus_clio.db.session import get_db_session as clio_session
+        clio_app.dependency_overrides[clio_session] = session
+        clio_transport = ASGITransport(app=clio_app)
         transport = ASGITransport(app=app)
         headers = {'Origin': 'https://dashboard.test'}
-        with patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true'}):
+        with patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': 'http://clio', 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}), patch('app.services.observations_client.httpx.AsyncClient', side_effect=lambda **_: AsyncClient(transport=clio_transport)):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
                 assert (await client.get('/public/observations/latest')).status_code == 200

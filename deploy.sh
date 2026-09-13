@@ -58,6 +58,8 @@ case "$BUMP" in
         ;;
 esac
 
+TAG="v${MAJOR}.${MINOR}.${PATCH}"
+
 echo "$LAST_TAG -> $TAG"
 
 MESSAGE="Deploy update"

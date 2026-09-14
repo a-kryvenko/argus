@@ -41,3 +41,11 @@ def test_forecast_read_service_is_internal_and_requires_token():
     assert all('/data' not in volume for volume in reader['volumes'])
     assert reader['environment']['FORECASTS_SERVICE_TOKEN'].startswith('${FORECASTS_SERVICE_TOKEN:?')
     assert services['api']['environment']['FORECASTS_URL'] == 'http://prophet-api:8000'
+
+
+def test_intelligence_is_an_explicit_http_only_job():
+    service = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']['intelligence']
+    assert service['profiles'] == ['tools']
+    assert service['networks'] == ['forecasts']
+    assert set(service['environment']) == {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN'}
+    assert not any(key in service for key in ('volumes', 'ports', 'env_file', 'restart'))

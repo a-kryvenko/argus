@@ -21,11 +21,14 @@ jobs:
             packages/*/pyproject.toml
             .github/workflows/architecture.yml
       - name: Install public packages only
-        run: python -m pip install -e packages/common -e packages/forecast pytest
+        run: python -m pip install -e packages/common -e packages/forecast pytest httpx
       - name: Check boundaries and public imports
+        env:
+          PYTHONPATH: apps/intelligence/src
         run: >-
           python -m pytest
           tests/test_architecture.py
+          apps/intelligence/tests
           tests/test_domain_deployment.py
           tests/test_release_deployment.py
           tests/test_config.py

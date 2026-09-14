@@ -79,8 +79,8 @@ Legacy experimental HUXt/training scripts remain in the private backend's
 
 The current domain separation, publication and database scheduling are implemented.
 Readiness diagnostics are in observation mode; per-product thresholds and their
-blocking/skip behavior still need agreement. Intelligence remains a future
-independent stub consuming pinned Prophet releases through HTTP.
+blocking/skip behavior still need agreement. Intelligence is an independent, manually invoked integration stub consuming
+Prophet releases through HTTP. Scheduling and risk calculations are future work.
 
 ## Isolation checks
 
@@ -90,3 +90,6 @@ Installed API/Prophet environments are checked separately from the root developm
 workspace. PostgreSQL CI verifies actual privileges and cross-domain denial.
 The shared `forecast` library in API provides contracts/helpers; it does not give
 API access to Prophet storage or install the private backend.
+
+`apps/intelligence` depends only on common contracts and HTTP. It has its own
+environment/image and no SQL credentials, private backend or domain imports.

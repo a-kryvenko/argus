@@ -50,6 +50,7 @@ fi
 printf 'Migrations: %s\n' "${migrations[*]:-none}"
 phase download-images
 "${candidate[@]}" pull --policy missing
+"${candidate[@]}" pull --policy missing intelligence
 if ((${#migrations[@]})); then
     "${candidate[@]}" pull --policy missing "${migrations[@]}"
 fi

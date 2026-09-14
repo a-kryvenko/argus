@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [frontend, api, clio, prophet]
+        component: [frontend, api, clio, prophet, intelligence]
     permissions:
       contents: read
       attestations: write

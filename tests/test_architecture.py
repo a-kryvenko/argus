@@ -105,3 +105,20 @@ def test_runtime_sql_does_not_read_foreign_domain_tables():
                 if isinstance(node, ast.Constant) and isinstance(node.value, str):
                     for domain in re.findall(r'\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(api|clio|prophet)\.', node.value, re.I):
                         assert domain.lower() == owner, (path, domain)
+
+
+def test_intelligence_uses_only_shared_contracts_and_http():
+    for path in (ROOT / 'apps/intelligence/src').rglob('*.py'):
+        for module in imports(path):
+            assert module.split('.')[0] not in {
+                'app', 'argus_clio', 'argus_prophet', 'clio', 'forecast',
+                'forecast_core', 'intelligence_core', 'psycopg', 'sqlalchemy',
+            }, (path, module)
+    config = tomllib.loads((ROOT / 'apps/intelligence/pyproject.toml').read_text())
+    assert set(config['project']['dependencies']) == {'common', 'httpx>=0.28,<1'}
+
+
+def test_existing_domains_do_not_depend_on_intelligence_runtime():
+    for root in ('apps/api/app', 'apps/clio/src', 'apps/prophet/src', 'packages/common/src'):
+        for path in (ROOT / root).rglob('*.py'):
+            assert all(module.split('.')[0] != 'argus_intelligence' for module in imports(path)), path

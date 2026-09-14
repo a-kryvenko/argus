@@ -21,6 +21,16 @@ x-clio-runtime: &clio-runtime
     backend:
 
 services:
+  intelligence:
+    image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
+    profiles: ["tools"]
+    init: true
+    command: ["intelligence", "check"]
+    environment:
+      FORECASTS_URL: http://prophet-api:8000
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+    networks: [forecasts]
+
   api:
     image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}
     container_name: argusForecast

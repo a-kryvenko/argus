@@ -36,6 +36,7 @@ def source(tmp_path):
     files = {'.gitignore': 'packages/forecast-core/\n', '.dockerignore': '**/.venv\n', 'docs/example.md': 'docs',
              'packages/common/src/common/shared.py': 'shared', 'apps/web/app/page.tsx': 'page',
              'apps/prophet/src/argus_prophet/worker.py': 'worker',
+             'apps/intelligence/src/argus_intelligence/cli.py': 'cli',
              'apps/clio/src/argus_clio/migrations/versions/test.py': 'migration',
              'configs/project.yaml': 'config'}
     files.update({f'.deploy/{name}.Dockerfile': 'FROM scratch' for name in release.IMAGES})
@@ -49,8 +50,9 @@ def changed_components(before, after):
 
 
 @pytest.mark.parametrize('path,expected', [
+    ('apps/intelligence/src/argus_intelligence/cli.py', {'intelligence'}),
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
-    ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet'}),
+    ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'intelligence'}),
     ('packages/forecast-core/src/forecast_core/api.py', {'clio', 'prophet'}),
     ('apps/prophet/src/argus_prophet/worker.py', {'prophet'}), ('configs/project.yaml', set()),
 ])
@@ -76,7 +78,8 @@ def test_migrations_are_fingerprinted_separately(source):
     assert {name for name in before['migrations'] if before['migrations'][name] != after['migrations'][name]} == {'clio'}
 
 
-def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path):
+@pytest.mark.parametrize('domain,command', [('prophet', 'status'), ('intelligence', 'check')])
+def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domain, command):
     root = tmp_path / 'host with spaces'
     (root / 'bin').mkdir(parents=True)
     wrapper = root / 'bin/argus'
@@ -88,13 +91,13 @@ def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path):
     docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
     docker.chmod(0o755)
     import os
-    result = subprocess.run(['bash', str(wrapper), 'prophet', 'status', 'solar-wind-speed'],
+    result = subprocess.run(['bash', str(wrapper), domain, command, 'solar-wind-speed'],
                             cwd=tmp_path, env={**os.environ, 'PATH': str(fake_bin) + ':' + os.environ['PATH']},
                             check=True, capture_output=True, text=True)
     args = result.stdout.splitlines()
     assert args[args.index('--project-directory') + 1] == str(root)
     assert str(root / '.release-images.env') in args
-    assert args[-7:] == ['run', '--rm', '--no-deps', 'prophet', 'prophet', 'status', 'solar-wind-speed']
+    assert args[-7:] == ['run', '--rm', '--no-deps', domain, domain, command, 'solar-wind-speed']
 
 
 def test_every_docker_copy_source_participates_in_image_identity():

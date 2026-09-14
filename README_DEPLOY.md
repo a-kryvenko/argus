@@ -20,7 +20,8 @@ once, and Clio/Prophet builds check out that exact commit.
 | API source/dependencies/migrations | API |
 | Clio source/dependencies/migrations | Clio |
 | Prophet source/dependencies/migrations | Prophet |
-| `packages/common` | API, Clio, Prophet |
+| Intelligence source/dependencies | Intelligence |
+| `packages/common` | API, Clio, Prophet, Intelligence |
 | `packages/forecast` | API, Prophet |
 | `packages/clio`, private backend | Clio, Prophet |
 | Top-level docs and deployment configuration | None |
@@ -30,7 +31,7 @@ Actions**. A test checks it against the Dockerfiles. Matrix jobs still start to
 check the registry, but unchanged images are not rebuilt. Package documentation
 copied into an image participates conservatively in its identity.
 
-All four image references are pinned by digest. Use **Run workflow → rebuild=true**
+All five image references are pinned by digest. Use **Run workflow → rebuild=true**
 to refresh application base images explicitly. Infrastructure images are downloaded
 only when missing; upgrading those is a separate explicit maintenance operation.
 
@@ -42,7 +43,7 @@ Python, extra deployment container or service is required. Compose must support
 `pull --policy missing` and `up --wait`.
 
 Existing GitHub secrets and server `.env` / `.env.local` remain required.
-**No new manual environment settings or secrets.** Actions generates the four
+**No new manual environment settings or secrets.** Actions generates the five
 `ARGUS_*_IMAGE` values in `.release-images.env`; use the wrapper below so these
 pinned versions are always included. Do not define competing image overrides.
 
@@ -104,3 +105,9 @@ Compare total build duration across subsequent releases, not export time alone.
 The server script logs elapsed seconds for image downloads, writer shutdown,
 backup, configuration, migrations, application readiness and reloads. These
 messages distinguish remote execution time from SSH/SCP action overhead.
+
+Intelligence is an explicit tools-profile job: `argus intelligence check` or
+`argus intelligence check dst --release-id <uuid>`. Its image is pulled during
+deployment but no background container or schedule starts. It shares only the
+existing forecast HTTP token, has no database credentials or mounted data, and
+adds no manual env requirements. See [Intelligence](apps/intelligence/README.md).

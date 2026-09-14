@@ -8,7 +8,7 @@ if [[ -f "$project_root/.release-images.env" ]]; then
 fi
 compose+=(-f "$project_root/docker-compose.yml")
 case "${1:-}" in
-    prophet|clio)
+    prophet|clio|intelligence)
         exec 9>"$project_root/.deployment.lock"
         flock -sn 9
         domain="$1"
@@ -20,7 +20,7 @@ case "${1:-}" in
         exec "${compose[@]}" "$@"
         ;;
     *)
-        echo 'Usage: argus prophet <command> | argus clio <command> | argus compose <arguments>' >&2
+        echo 'Usage: argus prophet <command> | argus clio <command> | argus intelligence check [product] | argus compose <arguments>' >&2
         exit 2
         ;;
 esac

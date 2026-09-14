@@ -117,7 +117,7 @@ def test_every_docker_copy_source_participates_in_image_identity():
 
 
 
-@pytest.mark.parametrize('migration,fail', [(False, False), (True, False), (True, True)])
+@pytest.mark.parametrize('migration,fail', [(None, False), ('clio', False), ('clio', True), ('intelligence', False)])
 def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail):
     import os
     import shutil
@@ -128,9 +128,9 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail):
         shutil.copy2(ROOT / 'scripts/deployment' / name, bundle / name)
     for name in ('configs', 'nginx', 'alloy'):
         (bundle / name).mkdir()
-    fingerprints = 'api same\nclio same\nprophet same\nconfigs same\nnginx same\nalloy same\n'
+    fingerprints = 'intelligence same\napi same\nclio same\nprophet same\nconfigs same\nnginx same\nalloy same\n'
     (root / '.release-fingerprints.tsv').write_text(fingerprints)
-    (bundle / 'fingerprints.tsv').write_text(fingerprints.replace('clio same', 'clio changed') if migration else fingerprints)
+    (bundle / 'fingerprints.tsv').write_text(fingerprints.replace(f'{migration} same', f'{migration} changed') if migration else fingerprints)
     for name in ('images.env', 'docker-compose.yml', 'release.json'):
         (bundle / name).write_text('{}')
     log = tmp_path / 'calls'
@@ -153,9 +153,12 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
     if migration:
         stop = next(i for i, call in enumerate(calls) if ' stop ' in call)
         backup = next(i for i, call in enumerate(calls) if 'pg_dump' in call)
-        migrate = next(i for i, call in enumerate(calls) if 'run --rm --no-deps clio-migrate' in call)
+        migrate = next(i for i, call in enumerate(calls) if f'run --rm --no-deps {migration}-migrate' in call)
         assert stop < backup < migrate
-        assert calls[stop].endswith('stop clio solar-wind geomagnetic clio-refresh clio-aggregate')
+        assert calls[stop].endswith('stop intelligence' if migration == 'intelligence' else 'stop clio solar-wind geomagnetic clio-refresh clio-aggregate')
+        if migration == 'intelligence':
+            provision = next(i for i, call in enumerate(calls) if 'run --rm --no-deps intelligence-provision' in call)
+            assert provision < stop
     else:
         assert not any(' stop ' in call or 'pg_dump' in call or '-migrate' in call for call in calls)
     assert (root / '.release-fingerprints.tsv').read_text() == (fingerprints if fail else (bundle / 'fingerprints.tsv').read_text())

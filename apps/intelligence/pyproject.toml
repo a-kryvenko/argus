@@ -2,10 +2,11 @@
 name = "argus-intelligence"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["common", "httpx>=0.28,<1"]
+dependencies = ["common", "httpx>=0.28,<1", "psycopg[binary]>=3.2,<4", "sqlalchemy>=2.0,<3", "alembic>=1.16,<2"]
 
 [project.scripts]
 intelligence = "argus_intelligence.cli:main"
+intelligence-provision = "argus_intelligence.provision:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -19,3 +20,6 @@ common = { workspace = true, editable = true }
 
 [tool.uv.workspace]
 members = ["../../packages/common"]
+
+[tool.setuptools.package-data]
+argus_intelligence = ["migrations/script.py.mako"]

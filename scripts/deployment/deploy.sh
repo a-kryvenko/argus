@@ -34,10 +34,11 @@ changed() {
 }
 migrations=()
 stop=()
-for domain in api clio prophet; do
+for domain in api clio prophet intelligence; do
     if changed "$domain"; then
         migrations+=("$domain-migrate")
         case "$domain" in
+            intelligence) stop+=(intelligence) ;;
             api) stop+=(api) ;;
             clio) stop+=(clio solar-wind geomagnetic clio-refresh clio-aggregate) ;;
             prophet) stop+=(prophet prophet-api) ;;
@@ -45,14 +46,20 @@ for domain in api clio prophet; do
     fi
 done
 if changed configs; then
-    stop=(api clio solar-wind geomagnetic clio-refresh clio-aggregate prophet prophet-api)
+    stop+=(api clio solar-wind geomagnetic clio-refresh clio-aggregate prophet prophet-api)
 fi
 printf 'Migrations: %s\n' "${migrations[*]:-none}"
 phase download-images
 "${candidate[@]}" pull --policy missing
-"${candidate[@]}" pull --policy missing intelligence
 if ((${#migrations[@]})); then
     "${candidate[@]}" pull --policy missing "${migrations[@]}"
+fi
+# New-domain provisioning is isolated from existing schemas and does not rotate passwords.
+# Run before stopping writers; incorrect credentials fail deployment early.
+if changed intelligence; then
+    phase provision-intelligence
+    "${candidate[@]}" pull --policy missing intelligence-provision
+    "${candidate[@]}" run --rm --no-deps intelligence-provision
 fi
 phase drain-writers
 if ((${#stop[@]})); then

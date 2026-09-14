@@ -45,7 +45,38 @@ def main():
     checker = commands.add_parser('check')
     checker.add_argument('product', choices=PRODUCT_ARTIFACTS, nargs='?', default='solar-wind-speed')
     checker.add_argument('--release-id', type=UUID)
-    args = parser.parse_args()
+    for command in ('worker', 'process', 'status'):
+        sub = commands.add_parser(command)
+        sub.add_argument('product', choices=PRODUCT_ARTIFACTS, nargs='?', default='solar-wind-speed')
+    commands.add_parser('migrate', add_help=False)
+    args, remaining = parser.parse_known_args()
+    if args.command == 'migrate':
+        from pathlib import Path
+        from alembic.config import Config, CommandLine
+        runner = CommandLine(prog='intelligence migrate')
+        if not remaining:
+            runner.parser.print_help()
+            return
+        options = runner.parser.parse_args(remaining)
+        config = Config()
+        config.cmd_opts = options
+        config.set_main_option('script_location', str(Path(__file__).parent / 'migrations'))
+        runner.run_cmd(config, options)
+        return
+    if remaining:
+        parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+    if args.command in ('worker', 'process', 'status'):
+        from argus_intelligence import worker
+        try:
+            if args.command == 'worker':
+                worker.worker(args.product)
+                return
+            result = worker.status(args.product) if args.command == 'status' else worker.process_once(args.product)
+        except Exception:
+            print(json.dumps({'service': 'intelligence', 'status': 'error', 'error': 'Database or release processing unavailable'}))
+            raise SystemExit(1) from None
+        print(json.dumps(result, default=str))
+        return
     try:
         result = check(args.product, release_id=args.release_id)
     except (httpx.HTTPError, ValueError):

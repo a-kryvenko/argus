@@ -43,7 +43,10 @@ Python, extra deployment container or service is required. Compose must support
 `pull --policy missing` and `up --wait`.
 
 Existing GitHub secrets and server `.env` / `.env.local` remain required.
-**No new manual environment settings or secrets.** Actions generates the five
+**This release requires two new production env values:**
+`INTELLIGENCE_DB_PASSWORD` and `INTELLIGENCE_MIGRATION_PASSWORD`. Add them before
+creating the release tag. See [Intelligence rollout](apps/intelligence/README.md).
+No new GitHub secrets are required. Actions generates the five
 `ARGUS_*_IMAGE` values in `.release-images.env`; use the wrapper below so these
 pinned versions are always included. Do not define competing image overrides.
 
@@ -62,7 +65,7 @@ The short server script:
 
 A docs-only release does not rebuild or recreate application containers. It still
 runs the Compose reconciliation and nginx validation/reload. There is no separate
-service-state planner, forced recreation of all services, routine bootstrap,
+service-state planner, forced recreation of all services, legacy database bootstrap,
 crontab replacement or image pruning.
 
 The first release builds missing fingerprinted images and runs all existing domain
@@ -106,8 +109,7 @@ The server script logs elapsed seconds for image downloads, writer shutdown,
 backup, configuration, migrations, application readiness and reloads. These
 messages distinguish remote execution time from SSH/SCP action overhead.
 
-Intelligence is an explicit tools-profile job: `argus intelligence check` or
-`argus intelligence check dst --release-id <uuid>`. Its image is pulled during
-deployment but no background container or schedule starts. It shares only the
-existing forecast HTTP token, has no database credentials or mounted data, and
-adds no manual env requirements. See [Intelligence](apps/intelligence/README.md).
+Intelligence now runs as a Compose worker. Its migration fingerprint selects its
+own migration and provisioning services. Provisioning creates only the new domain
+if missing, verifies credentials before stopping services, and never rotates
+existing passwords automatically. `argus intelligence status` reports its ledger.

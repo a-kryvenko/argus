@@ -23,13 +23,45 @@ x-clio-runtime: &clio-runtime
 services:
   intelligence:
     image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
-    profiles: ["tools"]
+    restart: unless-stopped
     init: true
-    command: ["intelligence", "check"]
+    stop_grace_period: 2m
+    command: ["intelligence", "worker"]
     environment:
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-    networks: [forecasts]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prophet-api:
+        condition: service_healthy
+    networks: [backend, forecasts]
+
+  intelligence-migrate:
+    image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
+    profiles: ["maintenance"]
+    command: ["intelligence", "migrate", "upgrade", "head"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      INTELLIGENCE_MIGRATION_PASSWORD: ${INTELLIGENCE_MIGRATION_PASSWORD:?INTELLIGENCE_MIGRATION_PASSWORD is required}
+    networks: [backend]
+
+  intelligence-provision:
+    image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
+    profiles: ["maintenance"]
+    command: ["intelligence-provision"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
+      INTELLIGENCE_MIGRATION_PASSWORD: ${INTELLIGENCE_MIGRATION_PASSWORD:?INTELLIGENCE_MIGRATION_PASSWORD is required}
+    networks: [backend]
 
   api:
     image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}

@@ -4,6 +4,7 @@
 | --- | --- | --- | --- |
 | api | argus_api | argus_api_migrator | Dashboard/authentication and API statistics |
 | clio | argus_clio | argus_clio_migrator | Observations, aggregates, collector/source status and scheduling |
+| intelligence | argus_intelligence | argus_intelligence_migrator | Processing attempts and per-release stub results |
 | prophet | argus_prophet | argus_prophet_migrator | Runs, snapshots, artifacts, releases, exports and slots |
 
 One PostgreSQL instance is shared, but SQL reads/writes remain within each domain.
@@ -18,11 +19,14 @@ instructions and transition commands have been retired.
 
 ## Provisioning and maintenance
 
-Administrative credentials are passed only to `db-bootstrap`; migration passwords
+Administrative credentials are passed only to `db-bootstrap` and
+`intelligence-provision`; migration passwords
 only to maintenance services. Runtime containers do not receive either. Normal
-release deployment does not run bootstrap or rotate/provision database roles.
+release deployment does not run legacy bootstrap or rotate passwords. Intelligence
+provisions its own domain before changed migrations; see its
+[rollout requirements](../apps/intelligence/README.md).
 
-For a new database, configure the existing six domain passwords and admin settings,
+For a new database, configure the eight domain passwords and admin settings,
 start PostgreSQL and run the explicit maintenance sequence with pinned images:
 
 ```bash
@@ -30,6 +34,8 @@ argus compose run --rm --no-deps db-bootstrap
 argus compose run --rm --no-deps clio-migrate
 argus compose run --rm --no-deps api-migrate
 argus compose run --rm --no-deps prophet-migrate
+argus compose run --rm --no-deps intelligence-provision
+argus compose run --rm --no-deps intelligence-migrate
 ```
 
 The host must first have the release Compose/configuration and image references

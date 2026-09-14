@@ -98,24 +98,25 @@ def test_clio_owns_storage_and_uses_only_private_adapter():
 def test_runtime_sql_does_not_read_foreign_domain_tables():
     import re
     roots = {'api': ROOT / 'apps/api/app', 'clio': ROOT / 'apps/clio/src/argus_clio',
-             'prophet': ROOT / 'apps/prophet/src/argus_prophet'}
+             'prophet': ROOT / 'apps/prophet/src/argus_prophet',
+             'intelligence': ROOT / 'apps/intelligence/src/argus_intelligence'}
     for owner, root in roots.items():
         for path in root.rglob('*.py'):
             for node in ast.walk(ast.parse(path.read_text())):
                 if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                    for domain in re.findall(r'\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(api|clio|prophet)\.', node.value, re.I):
+                    for domain in re.findall(r'\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(api|clio|prophet|intelligence)\.', node.value, re.I):
                         assert domain.lower() == owner, (path, domain)
 
 
-def test_intelligence_uses_only_shared_contracts_and_http():
+def test_intelligence_uses_shared_contracts_and_owns_its_storage():
     for path in (ROOT / 'apps/intelligence/src').rglob('*.py'):
         for module in imports(path):
             assert module.split('.')[0] not in {
                 'app', 'argus_clio', 'argus_prophet', 'clio', 'forecast',
-                'forecast_core', 'intelligence_core', 'psycopg', 'sqlalchemy',
+                'forecast_core', 'intelligence_core',
             }, (path, module)
     config = tomllib.loads((ROOT / 'apps/intelligence/pyproject.toml').read_text())
-    assert set(config['project']['dependencies']) == {'common', 'httpx>=0.28,<1'}
+    assert set(config['project']['dependencies']) == {'common', 'httpx>=0.28,<1', 'psycopg[binary]>=3.2,<4', 'sqlalchemy>=2.0,<3', 'alembic>=1.16,<2'}
 
 
 def test_existing_domains_do_not_depend_on_intelligence_runtime():

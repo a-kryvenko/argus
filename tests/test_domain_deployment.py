@@ -43,9 +43,17 @@ def test_forecast_read_service_is_internal_and_requires_token():
     assert services['api']['environment']['FORECASTS_URL'] == 'http://prophet-api:8000'
 
 
-def test_intelligence_is_an_explicit_http_only_job():
-    service = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']['intelligence']
-    assert service['profiles'] == ['tools']
-    assert service['networks'] == ['forecasts']
-    assert set(service['environment']) == {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN'}
-    assert not any(key in service for key in ('volumes', 'ports', 'env_file', 'restart'))
+def test_intelligence_credentials_and_networks_are_scoped():
+    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    runtime = services['intelligence']
+    assert 'profiles' not in runtime
+    assert runtime['command'] == ['intelligence', 'worker']
+    assert runtime['networks'] == ['backend', 'forecasts']
+    assert set(runtime['environment']) == {'DB_HOST', 'DB_NAME', 'INTELLIGENCE_DB_PASSWORD', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN'}
+    assert not any(key in runtime for key in ('volumes', 'ports', 'env_file'))
+    assert services['intelligence-migrate']['profiles'] == ['maintenance']
+    assert set(services['intelligence-migrate']['environment']) == {'DB_HOST', 'DB_NAME', 'INTELLIGENCE_MIGRATION_PASSWORD'}
+    assert services['intelligence-provision']['profiles'] == ['maintenance']
+    for name, service in services.items():
+        if not name.startswith('intelligence'):
+            assert not any(key.startswith('INTELLIGENCE_') for key in service.get('environment', {})), name

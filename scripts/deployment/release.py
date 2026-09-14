@@ -19,7 +19,8 @@ INPUTS = {
     'prophet': ['apps/prophet/pyproject.toml', 'apps/prophet/uv.lock', 'apps/prophet/src',
                 'packages/common', 'packages/clio', 'packages/forecast'],
 }
-MIGRATIONS = {'api': ['apps/api/alembic', 'apps/api/alembic.ini'],
+MIGRATIONS = {'intelligence': ['apps/intelligence/src/argus_intelligence/migrations', 'apps/intelligence/src/argus_intelligence/provision.py'],
+              'api': ['apps/api/alembic', 'apps/api/alembic.ini'],
               'clio': ['apps/clio/src/argus_clio/migrations'],
               'prophet': ['apps/prophet/src/argus_prophet/migrations']}
 IGNORED = {'.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.next',

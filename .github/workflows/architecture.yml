@@ -4,6 +4,10 @@ on:
     branches:
       - '**'
   pull_request:
+concurrency:
+  group: architecture-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   public-boundaries:
     runs-on: ubuntu-latest
@@ -12,6 +16,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            packages/*/pyproject.toml
+            .github/workflows/architecture.yml
       - name: Install public packages only
         run: python -m pip install -e packages/common -e packages/forecast pytest
       - name: Check boundaries and public imports
@@ -45,6 +53,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            packages/*/pyproject.toml
+            .github/workflows/architecture.yml
       - name: Install public observation runtime and test dependencies
         run: >-
           python -m pip install -e packages/common -e packages/clio

@@ -94,3 +94,13 @@ rollback; a restore requires accounting for other domains' subsequent writes.
 Actions serializes production deployments, and flock prevents concurrent host
 scripts. Production rollout and real image builds must still be verified by the
 workflow; local orchestration tests use a fake Docker executable.
+
+## CI timing
+
+Frontend exports `mode=min` BuildKit cache; Python images retain `mode=max`.
+This reduces frontend cache export volume, but intermediate dependency/build
+layers will no longer be exported and may need rebuilding on fresh runners.
+Compare total build duration across subsequent releases, not export time alone.
+The server script logs elapsed seconds for image downloads, writer shutdown,
+backup, configuration, migrations, application readiness and reloads. These
+messages distinguish remote execution time from SSH/SCP action overhead.

@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # Apply an Actions-built release. Compose decides which containers need recreation.
 set -euo pipefail
+phase_name=preflight
+phase_started=$SECONDS
+phase() {
+    printf '[deploy] %s: %ss\n' "$phase_name" "$((SECONDS - phase_started))"
+    phase_name="$1"
+    phase_started=$SECONDS
+    printf '[deploy] starting %s\n' "$phase_name"
+}
+trap 'printf "[deploy] %s: %ss; exit=%s\n" "$phase_name" "$((SECONDS - phase_started))" "$?"' EXIT
 root="${1:-/var/www}"
 bundle="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 command -v rsync >/dev/null
@@ -39,19 +48,23 @@ if changed configs; then
     stop=(api clio solar-wind geomagnetic clio-refresh clio-aggregate prophet prophet-api)
 fi
 printf 'Migrations: %s\n' "${migrations[*]:-none}"
+phase download-images
 "${candidate[@]}" pull --policy missing
 if ((${#migrations[@]})); then
     "${candidate[@]}" pull --policy missing "${migrations[@]}"
 fi
+phase drain-writers
 if ((${#stop[@]})); then
     "${installed[@]}" stop "${stop[@]}"
 fi
 if ((${#migrations[@]})); then
+    phase database-backup
     mkdir -p "$root/backups"
     "${installed[@]}" exec -T postgres sh -c \
         'pg_dump --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --format=custom' \
         > "$root/backups/pre-migration-$(date -u +%Y%m%dT%H%M%S).dump"
 fi
+phase install-configuration
 # These directories are repository-owned; data, models and operator env files are separate.
 for directory in configs nginx alloy; do
     mkdir -p "$root/$directory"
@@ -63,11 +76,15 @@ mkdir -p "$root/bin"
 install -m 755 "$bundle/argus" "$root/bin/argus"
 active=("${base[@]}" --env-file "$root/.release-images.env" -f "$root/docker-compose.yml")
 # Infrastructure must be healthy before migration; unchanged containers stay running.
+phase infrastructure-ready
 "${active[@]}" up -d --wait postgres redis
+phase migrations
 for migration in "${migrations[@]}"; do
     "${active[@]}" run --rm --no-deps "$migration"
 done
+phase application-ready
 "${active[@]}" up -d --wait --wait-timeout 300
+phase reload-services
 # Bind-mounted configuration changes are not detected by Compose.
 for service in nginx alloy; do
     if changed "$service"; then

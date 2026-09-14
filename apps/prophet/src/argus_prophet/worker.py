@@ -1,12 +1,10 @@
 """Hourly scheduling and exclusive Prophet writers coordinated by PostgreSQL."""
 import logging
-import os
 import signal
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from argus_prophet.db.session import connect, open_connection, writer_session
 
@@ -62,32 +60,6 @@ def run_due(generate: Callable[[datetime], None], now: datetime) -> bool:
             if result is None or result[0] not in COMPLETED:
                 raise RuntimeError('Forecast generation did not complete its scheduled slot')
         return True
-
-
-def legacy_marker_path() -> Path:
-    from common.config import get_config
-    # Compatibility only for the explicit one-time import, never scheduler state.
-    directory = Path(os.getenv('PROPHET_STATE_DIR', str(get_config().workdir / 'data/prophet')))
-    return directory / 'last-completed-slot'
-
-
-def import_schedule(path: Path | None = None, *, now: datetime | None = None) -> bool:
-    path = path if path is not None else legacy_marker_path()
-    try:
-        value = path.read_text().strip()
-    except FileNotFoundError:
-        logger.warning('No legacy schedule marker at %s; the latest due slot may run once', path)
-        return False
-    slot = datetime.fromisoformat(value)
-    if slot.tzinfo is None or slot.utcoffset() is None:
-        raise ValueError('Legacy schedule marker must be timezone-aware')
-    slot = slot.astimezone(UTC)
-    if slot != slot.replace(minute=0, second=0, microsecond=0) or slot > due_slot(now or datetime.now(UTC)):
-        raise ValueError('Legacy schedule marker must be an elapsed hourly slot')
-    with connect(writing=True) as conn:
-        result = conn.execute("""INSERT INTO prophet.forecast_slot(slot,status,attempts,finished_at)
-            VALUES (%s,'imported',0,%s) ON CONFLICT(slot) DO NOTHING""", (slot, datetime.now(UTC)))
-    return result.rowcount == 1
 
 
 def list_slots(limit=20):

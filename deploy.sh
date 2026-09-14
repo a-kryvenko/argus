@@ -62,14 +62,7 @@ TAG="v${MAJOR}.${MINOR}.${PATCH}"
 
 echo "$LAST_TAG -> $TAG"
 
-MESSAGE="Deploy update"
-
-while getopts "t:m:" opt; do
-  case "$opt" in
-    m) MESSAGE="$OPTARG" ;;
-    *) echo "Usage: $0 [-t tag] [-m message]" >&2; exit 1 ;;
-  esac
-done
+echo $MESSAGE
 
 commit_and_push_if_needed() {
   local repo_dir="$1"

@@ -18,8 +18,8 @@ observations only through Clio contracts. Prophet SQL credentials access only it
 API forecast reads use Prophet contracts; live CSV files are exports, not the
 API read source. Prophet slot completion and publication share a transaction;
 its writers reuse the PostgreSQL session that holds their advisory lock. Model evaluation metrics remain deployed static artifacts.
-See [domain storage and cutover](domain-storage.md) and
-[extraction stages](service-extraction.md).
+See [domain storage](domain-storage.md) and
+[next steps](#next-work).
 
 Provider parsing belongs to the public clio library. Private calibration and
 legacy model-input normalization stay in forecast-core and are called through a
@@ -74,3 +74,19 @@ requires an explicitly configured disposable server as described in
 
 Legacy experimental HUXt/training scripts remain in the private backend's
 `legacy_scripts` directory and are not production entry points.
+
+## Next work
+
+The current domain separation, publication and database scheduling are implemented.
+Readiness diagnostics are in observation mode; per-product thresholds and their
+blocking/skip behavior still need agreement. Intelligence remains a future
+independent stub consuming pinned Prophet releases through HTTP.
+
+## Isolation checks
+
+The boundary suite checks package import direction, private adapter entry points,
+absence of foreign domain SQL references and runtime/migrator credential separation.
+Installed API/Prophet environments are checked separately from the root development
+workspace. PostgreSQL CI verifies actual privileges and cross-domain denial.
+The shared `forecast` library in API provides contracts/helpers; it does not give
+API access to Prophet storage or install the private backend.

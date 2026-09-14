@@ -39,7 +39,7 @@ pnpm dev
 `pnpm dev` starts the API, frontend, Clio read service and both observation collectors.
 Configure the separate domain credentials and Clio URL described in
 [Clio setup](apps/clio/README.md). For existing databases, follow
-[database cutover](docs/domain-storage.md) before bootstrap.
+[database ownership and provisioning](docs/domain-storage.md) before bootstrap.
 PostgreSQL and Redis run in Docker. The API and frontend reload code changes;
 restart collectors after changing their code.
 

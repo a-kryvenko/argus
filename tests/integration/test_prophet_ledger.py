@@ -156,21 +156,6 @@ def test_publication_validation_rolls_back_all_pointers(recorder_setup, tmp_path
         assert conn.execute('SELECT status FROM prophet.forecast_run').fetchone()[0] == 'running'
 
 
-def test_cutover_is_repeatable_and_never_publishes_failed_attempts(recorder_setup, tmp_path):
-    from argus_prophet.publication import publish_existing, read_release
-    dsn, passwords, config = recorder_setup
-    run = RunRecorder.begin('all', 'manual', config)
-    store_product(run, tmp_path)
-    # Simulate pre-publication ledger rows created by the previous runtime.
-    with runtime(dsn, 'prophet', passwords) as conn:
-        conn.execute("UPDATE prophet.forecast_run SET status='succeeded',finished_at=now() WHERE id=%s", (run.run_id,))
-    assert publish_existing() == 1
-    assert publish_existing() == 0
-    assert read_release('dst').run_id == run.run_id
-    older = RunRecorder.begin('all', 'manual', config)
-    store_product(older, tmp_path, issue='2026-09-12T00:00:00Z')
-    older.finish()
-    assert read_release('dst').run_id == run.run_id
 
 
 def test_status_distinguishes_current_release_from_latest_failure(recorder_setup, tmp_path):

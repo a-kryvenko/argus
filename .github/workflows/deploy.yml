@@ -2,58 +2,36 @@ name: Application Deploy
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Rebuild all images even when source identities are cached (base image updates)
+        type: boolean
+        default: false
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  push_to_registry:
-    name: Build And Push Docker images to Docker Hub
+  plan:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
-      attestations: write
-      id-token: write
+    outputs:
+      private_commit: ${{ steps.plan.outputs.private_commit }}
     steps:
-      - name: Check out the repo
-        uses: actions/checkout@v6
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          username: ${{ secrets.DOCKERHUB_LOGIN }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract frontend metadata (tags, labels) for Docker
-        id: metaFrontend
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
-        with:
-          images: andriykryvenko/argus-frontend
-
-      - name: Build and push Frontend Docker image
-        id: pushFrontend
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
-        with:
-          context: .
-          file: ./.deploy/frontend.Dockerfile
-          push: true
-          tags: ${{ steps.metaFrontend.outputs.tags }}
-          labels: ${{ steps.metaFrontend.outputs.labels }}
-
-      - name: Generate artifact attestation
-        uses: actions/attest@v4
-        with:
-          subject-name: index.docker.io/andriykryvenko/argus-frontend
-          subject-digest: ${{ steps.pushFrontend.outputs.digest }}
-          push-to-registry: true
-      
-      - name: Extract api metadata (tags, labels) for Docker
-        id: metaApi
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
-        with:
-          images: andriykryvenko/argus-forecast
-
-      - name: Check out private forecast backend
+          python-version: '3.12'
+      - name: Validate architecture and deployment planning
+        run: |
+          python3 -m pip install pytest pyyaml
+          python3 -m pytest -q tests/test_architecture.py tests/test_domain_deployment.py tests/test_release_deployment.py
+      - name: Resolve the private backend once for this release
         uses: actions/checkout@v6
         with:
           repository: a-kryvenko/argus-forecast-core
@@ -61,134 +39,149 @@ jobs:
           path: packages/forecast-core
           ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
           persist-credentials: false
+      - name: Compute image identities and migration fingerprints
+        id: plan
+        env:
+          REBUILD_NONCE: ${{ inputs.rebuild && format('{0}-{1}', github.run_id, github.run_attempt) || '' }}
+        run: |
+          python3 scripts/deployment/release.py plan --rebuild "$REBUILD_NONCE" --output release-plan.json
+          python3 - <<'PY'
+          import json, os
+          plan = json.load(open('release-plan.json'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('private_commit=' + plan['private_commit'] + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plan
+          path: release-plan.json
 
-      - name: Build and push Public Api Docker image
-        id: pushApi
+  images:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [frontend, api, clio, prophet]
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+      - name: Read this component's build identity
+        id: identity
+        env:
+          COMPONENT: ${{ matrix.component }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          spec = json.load(open('release-plan.json'))['components'][os.environ['COMPONENT']]
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              for key, value in spec.items():
+                  output.write(key + '=' + value + '\n')
+          PY
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_LOGIN }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Reuse an existing image with the same inputs
+        id: cache
+        env:
+          IMAGE: ${{ steps.identity.outputs.repository }}:${{ steps.identity.outputs.tag }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check out the exact private backend used by the plan
+        if: steps.cache.outputs.exists != 'true' && (matrix.component == 'clio' || matrix.component == 'prophet')
+        uses: actions/checkout@v6
+        with:
+          repository: a-kryvenko/argus-forecast-core
+          ref: ${{ needs.plan.outputs.private_commit }}
+          path: packages/forecast-core
+          ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          persist-credentials: false
+      - name: Build changed component
+        if: steps.cache.outputs.exists != 'true'
+        id: build
         uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
         with:
           context: .
-          file: ./.deploy/api.Dockerfile
+          file: .deploy/${{ matrix.component }}.Dockerfile
           push: true
-          tags: ${{ steps.metaApi.outputs.tags }}
-          labels: ${{ steps.metaApi.outputs.labels }}
-
-      - name: Generate artifact attestation
+          tags: ${{ steps.identity.outputs.repository }}:${{ steps.identity.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+      - name: Attest newly built image
+        if: steps.cache.outputs.exists != 'true'
         uses: actions/attest@v4
         with:
-          subject-name: index.docker.io/andriykryvenko/argus-forecast
-          subject-digest: ${{ steps.pushApi.outputs.digest }}
+          subject-name: index.docker.io/${{ steps.identity.outputs.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-
-      - name: Extract Prophet metadata
-        id: metaProphet
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+      - name: Pin the resulting image digest
+        env:
+          COMPONENT: ${{ matrix.component }}
+          IMAGE: ${{ steps.identity.outputs.repository }}
+          TAG: ${{ steps.identity.outputs.tag }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}' > image-digest.txt
+          python3 - <<'PY'
+          import json, os, re
+          digest = open('image-digest.txt').read().strip()
+          if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+              raise SystemExit('Invalid registry digest')
+          with open(os.environ['COMPONENT'] + '.json', 'w') as output:
+              json.dump({'tag': os.environ['TAG'], 'image': os.environ['IMAGE'] + '@' + digest}, output)
+          PY
+      - uses: actions/upload-artifact@v4
         with:
-          images: andriykryvenko/argus-prophet
+          name: image-${{ matrix.component }}
+          path: ${{ matrix.component }}.json
 
-      - name: Build and push Prophet image
-        id: pushProphet
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
-        with:
-          context: .
-          file: ./.deploy/prophet.Dockerfile
-          push: true
-          tags: ${{ steps.metaProphet.outputs.tags }}
-          labels: ${{ steps.metaProphet.outputs.labels }}
-
-      - name: Attest Prophet image
-        uses: actions/attest@v4
-        with:
-          subject-name: index.docker.io/andriykryvenko/argus-prophet
-          subject-digest: ${{ steps.pushProphet.outputs.digest }}
-          push-to-registry: true
-
-      - name: Extract Clio metadata
-        id: metaClio
-        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
-        with:
-          images: andriykryvenko/argus-clio
-
-      - name: Build and push Clio image
-        id: pushClio
-        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
-        with:
-          context: .
-          file: ./.deploy/clio.Dockerfile
-          push: true
-          tags: ${{ steps.metaClio.outputs.tags }}
-          labels: ${{ steps.metaClio.outputs.labels }}
-
-      - name: Attest Clio image
-        uses: actions/attest@v4
-        with:
-          subject-name: index.docker.io/andriykryvenko/argus-clio
-          subject-digest: ${{ steps.pushClio.outputs.digest }}
-          push-to-registry: true
-
-  upload_code:
-    needs: push_to_registry
-    name: Upload code to production server
+  deploy:
+    needs: [plan, images]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Upload compose/files to server
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-plan
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: image-results
+      - name: Assemble the release bundle
+        run: python3 scripts/deployment/release.py bundle --plan release-plan.json --images image-results --output release-bundle
+      - name: Upload to a unique staging directory
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
-          source: ".deploy/docker-compose.yml,.deploy/cronjobs.txt,.deploy/nginx,.deploy/alloy,.deploy/nginx-proxy-up.sh,configs"
-          target: "/var/www"
-      
-      
-      - name: Restart production containers
+          source: release-bundle
+          target: /var/www/incoming/${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Apply only affected services
         uses: appleboy/ssh-action@v1.2.0
         env:
           DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          RELEASE_DIRECTORY: /var/www/incoming/${{ github.run_id }}-${{ github.run_attempt }}/release-bundle
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
-          envs: DOCKERHUB_LOGIN,DOCKERHUB_TOKEN
+          envs: DOCKERHUB_LOGIN,DOCKERHUB_TOKEN,RELEASE_DIRECTORY
+          command_timeout: 30m
           script: |
             set -eu
-
-            cd /var/www
-            export COMPOSE_ENV_FILES=.env,.env.local
-            docker compose --project-directory /var/www -f .deploy/docker-compose.yml config --quiet
-            mkdir -p log/nginx log/frontend log/api data models metrics nginx nginx/templates alloy configs
-            mv ./.deploy/docker-compose.yml ./
-            mv ./.deploy/nginx-proxy-up.sh ./
-            mv ./.deploy/nginx/default.conf ./nginx/
-            mv ./.deploy/nginx/templates/http.conf.template ./nginx/templates/
-            mv ./.deploy/alloy/config.alloy ./alloy/
-            mv ./.deploy/cronjobs.txt ./
-            rm -rf ./.deploy
-
-            crontab cronjobs.txt
-            rm cronjobs.txt
-
-            echo "$DOCKERHUB_TOKEN" | docker login \
-              --username "$DOCKERHUB_LOGIN" \
-              --password-stdin
-            
-            docker compose --profile maintenance pull
-            docker compose up -d postgres redis
-
-            # Stop current service writers before backup and migrations.
-            # Finish independent manual jobs before starting a deployment.
-            docker compose stop api solar-wind geomagnetic prophet prophet-api clio clio-refresh clio-aggregate
-            mkdir -p backups
-            backup_file="backups/pre-deploy-$(date -u +%Y%m%dT%H%M%SZ).dump"
-            docker compose exec -T postgres sh -c 'pg_dump --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --format=custom' > "$backup_file"
-
-            docker compose run --rm db-bootstrap
-            docker compose run --rm clio-migrate
-            docker compose run --rm api-migrate
-            docker compose run --rm prophet-migrate
-            docker compose up -d --remove-orphans
-            docker image prune -f
-
-            # Clio and Prophet schedule and retry their own work.
+            printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_LOGIN" --password-stdin
+            bash "$RELEASE_DIRECTORY/deploy.sh" /var/www

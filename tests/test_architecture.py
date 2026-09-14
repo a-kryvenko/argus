@@ -17,9 +17,9 @@ def imports(path):
 
 def test_package_dependency_direction():
     forbidden = {
-        'common': {'app', 'clio', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy'},
-        'clio': {'app', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy'},
-        'forecast': {'app', 'clio', 'intelligence_core', 'fastapi', 'sqlalchemy'},
+        'common': {'app', 'clio', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
+        'clio': {'app', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
+        'forecast': {'app', 'clio', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
     }
     violations = []
     for package, blocked in forbidden.items():
@@ -93,3 +93,15 @@ def test_clio_owns_storage_and_uses_only_private_adapter():
             assert module.split('.')[0] not in {'app', 'argus_prophet', 'intelligence_core'}, (path, module)
             if module.startswith('forecast_core'):
                 assert path.name == 'calibration.py' and module == 'forecast_core.api', (path, module)
+
+
+def test_runtime_sql_does_not_read_foreign_domain_tables():
+    import re
+    roots = {'api': ROOT / 'apps/api/app', 'clio': ROOT / 'apps/clio/src/argus_clio',
+             'prophet': ROOT / 'apps/prophet/src/argus_prophet'}
+    for owner, root in roots.items():
+        for path in root.rglob('*.py'):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    for domain in re.findall(r'\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(api|clio|prophet)\.', node.value, re.I):
+                        assert domain.lower() == owner, (path, domain)

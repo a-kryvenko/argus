@@ -49,17 +49,8 @@ def test_callback_cannot_claim_success_without_atomic_slot_completion(monkeypatc
         worker.run_due(Mock(), datetime.now(UTC))
 
 
-@pytest.mark.parametrize('marker', ['bad', '2026-09-12T10:00:00', '2026-09-12T10:01:00Z', '2099-01-01T00:00:00Z'])
-def test_invalid_legacy_marker_fails_without_storage(monkeypatch, tmp_path, marker):
-    path = tmp_path / 'marker'
-    path.write_text(marker)
-    monkeypatch.setattr(worker, 'connect', lambda **_: pytest.fail('Invalid marker must not touch storage'))
-    with pytest.raises(ValueError):
-        worker.import_schedule(path, now=datetime(2026, 9, 12, 11, tzinfo=UTC))
 
 
-def test_missing_legacy_marker_does_not_invent_completion(tmp_path):
-    assert not worker.import_schedule(tmp_path / 'missing')
 
 
 def test_worker_retries_exports_even_when_generation_slot_completed(monkeypatch):

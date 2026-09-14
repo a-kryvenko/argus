@@ -63,32 +63,28 @@ successful slots in PostgreSQL. Restart skips completed slots and catches
 up only the latest due slot, without replaying every missed hour. Actual forecast
 issue times retain existing model behavior; scheduler slots are not release IDs.
 The worker reads the latest committed observations; data-readiness gating and
-staleness policies are not introduced in this extraction.
+staleness policies are not enabled.
 
 A PostgreSQL session advisory lock serializes worker, manual generation and CSV
 export. Each hour and its attempts are recorded in `prophet.forecast_slot`; slot
 completion commits with release publication. A restart after commit skips that
 hour. Abandoned attempts become `interrupted` when the next writer gets the lock.
 All writes use the lock's connection; session loss cannot silently reconnect an
-old writer without its lock. See [database scheduling](../../docs/prophet-scheduling.md).
+old writer without its lock. See [database scheduling](../../docs/prophet.md).
 
 A missing optional density input retains existing behavior: other products are
 published and density is skipped. A failed calculation does not advance publication
 pointers. CSV export is atomic
 per file, not across a complete release. Manual generation does not advance the
-scheduler marker. SIGTERM allows the current calculation to finish within the
+scheduled slot. SIGTERM allows the current calculation to finish within the
 Compose stop grace period.
 
 ## Run accounting and deployment
 
-**No new env variables in the database-scheduling release.** The existing
-`FORECASTS_SERVICE_TOKEN`, `PROPHET_DB_PASSWORD` and `PROPHET_MIGRATION_PASSWORD`
-remain required, along with the observation client settings.
-
-The workflow validates configuration, stops old writers, applies migrations,
-and starts services. The one-time marker import was completed in stage 3c.1. `PROPHET_STATE_DIR` is now
-used only to locate the legacy marker during explicit import; normal scheduling
-and locking no longer depend on that directory.
+Production uses the selective [deployment workflow](../../README_DEPLOY.md).
+Existing service tokens and domain database credentials remain required.
+Use `/var/www/bin/argus prophet ...` on the server; the commands below are for
+the local checkout.
 
 ```bash
 ./scripts/prophet status solar-wind-speed
@@ -98,8 +94,8 @@ and locking no longer depend on that directory.
 ./scripts/prophet show-run <run-uuid> --inputs
 ```
 
-See [scheduler rollout](../../docs/prophet-scheduling.md) for deployment and
-recovery, and [publication contracts](../../docs/prophet-publication.md) for reads and exports.
+See [Prophet operations](../../docs/prophet.md) for deployment and
+recovery, and [publication contracts](../../docs/prophet.md) for reads and exports.
 
 ## Readiness diagnostics
 

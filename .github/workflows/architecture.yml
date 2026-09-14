@@ -18,6 +18,8 @@ jobs:
         run: >-
           python -m pytest
           tests/test_architecture.py
+          tests/test_domain_deployment.py
+          tests/test_release_deployment.py
           tests/test_config.py
           packages/forecast/tests/test_smoke_pipeline.py
 

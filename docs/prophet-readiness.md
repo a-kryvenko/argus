@@ -1,4 +1,4 @@
-# Prophet readiness diagnostics: stage 3c.2a
+# Prophet readiness diagnostics
 
 ## Deployment and scope
 
@@ -6,11 +6,6 @@
 service tokens and database credentials remain required. Input diagnostics use
 an additional `input_diagnostics` object in the existing run `provenance` JSONB.
 Previously recorded snapshots are not rewritten; older runs report null diagnostics.
-
-The one-time `import-schedule` step is removed from deployment because production
-has already completed the database-scheduler cutover. Normal domain migrations
-and service restart remain. For installations older than stage 3c.1, first follow
-the explicit [scheduler cutover](prophet-scheduling.md).
 
 This is diagnostic mode only. There are no new blocking thresholds or changes to
 calculation eligibility, retry rules, publication or public forecast responses.
@@ -21,9 +16,9 @@ explicitly report `unconfigured`, not healthy/current, until thresholds are agre
 ## Inspection
 
 ```bash
-docker compose run --rm prophet prophet status solar-wind-speed
-docker compose run --rm prophet prophet status atmospheric-density
-docker compose run --rm prophet prophet show-run <run-uuid>
+/var/www/bin/argus prophet status solar-wind-speed
+/var/www/bin/argus prophet status atmospheric-density
+/var/www/bin/argus prophet show-run <run-uuid>
 ```
 
 The corresponding internal endpoint is:

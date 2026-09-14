@@ -67,23 +67,6 @@ def publish_run(conn, run_id):
         return published
 
 
-def publish_existing():
-    """Seed missing/current pointers from recorded successful runs, never loose CSVs."""
-    with connect(writing=True) as conn:
-        count = 0
-        for names in PRODUCT_ARTIFACTS.values():
-            # At most one candidate per product, not all historical compressed payloads.
-            row = conn.execute("""SELECT f.id FROM prophet.forecast_run f
-                WHERE f.status IN ('succeeded','partial') AND NOT EXISTS (
-                    SELECT 1 FROM unnest(%s::text[]) AS required(name) WHERE NOT EXISTS (
-                        SELECT 1 FROM prophet.forecast_artifact a
-                        WHERE a.run_id=f.id AND a.name=required.name AND a.status='stored'))
-                ORDER BY f.started_at DESC,f.id DESC LIMIT 1""", (list(names),)).fetchone()
-            if row is not None:
-                count += len(publish_run(conn, row[0]))
-    return count
-
-
 def read_release(product, release_id=None):
     from psycopg.rows import dict_row
     if product not in PRODUCT_ARTIFACTS:

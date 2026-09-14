@@ -11,7 +11,7 @@ import pytest
 from argus_prophet.db.session import require_writer
 from argus_prophet.ledger import RunRecorder
 from argus_prophet.publication import read_release, ReleaseNotFound
-from argus_prophet.worker import generation_lock, run_due, due_slot, import_schedule, GenerationBusy
+from argus_prophet.worker import generation_lock, run_due, due_slot, GenerationBusy
 
 NOW = datetime(2026, 9, 13, 10, 10, tzinfo=UTC)
 
@@ -145,18 +145,3 @@ def test_export_failure_does_not_reopen_completed_slot(recorder_database, tmp_pa
     with generation_lock():
         assert exports.export_current() == 1
     assert (tmp_path / 'live.csv').is_file()
-
-
-def test_marker_import_is_idempotent_and_does_not_fabricate_run_history(recorder_database, tmp_path):
-    dsn, passwords, _ = recorder_database
-    marker = tmp_path / 'last-completed-slot'
-    content = due_slot(NOW).isoformat() + '\n'
-    marker.write_text(content)
-    with generation_lock():
-        assert import_schedule(marker, now=NOW)
-        assert not import_schedule(marker, now=NOW)
-    assert not run_due(lambda _: pytest.fail('Imported completion must skip the slot'), NOW)
-    with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT status,attempts FROM prophet.forecast_slot').fetchone() == ('imported', 0)
-        assert conn.execute('SELECT count(*) FROM prophet.forecast_run').fetchone()[0] == 0
-    assert marker.read_text() == content

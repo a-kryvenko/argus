@@ -1,79 +1,96 @@
 # Deployment
 
-The [deploy workflow](.github/workflows/deploy.yml) runs when a `v*` tag is pushed.
-It builds and publishes the frontend/API/Clio/Prophet images, uploads deployment files,
-installs the cron schedule, pulls images, applies database migrations and restarts
-the Compose services.
+A `v*` tag starts [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+The local `./deploy.sh [patch|minor|major] [-m message]` helper uploads models and
+metrics, commits/pushes notebooks, the private backend and the main repository,
+then creates the next version tag. Review these checkouts before using it.
+Model/metric uploads remain separate from application deployment.
 
-## Prerequisites
+## Builds in GitHub Actions
 
-- Production `.env` and `.env.local` configured in `/var/www`, including a strong
-  random `OBSERVATIONS_SERVICE_TOKEN`, **`FORECASTS_SERVICE_TOKEN`**,
-  and six separate domain passwords:
-  `API_DB_PASSWORD`, `API_MIGRATION_PASSWORD`, `CLIO_DB_PASSWORD`,
-  `CLIO_MIGRATION_PASSWORD`, `PROPHET_DB_PASSWORD`,
-  `PROPHET_MIGRATION_PASSWORD`. See [database cutover](docs/domain-storage.md).
-- GitHub secrets: `DOCKERHUB_LOGIN`, `DOCKERHUB_TOKEN`,
-  `FORECAST_CORE_DEPLOY_KEY`, `PROD_HOST`, `PROD_USER`, `PROD_SSH_KEY`.
-- The private forecast backend committed and pushed. CI checks out its `master`
-  branch; the Clio and Prophet lockfiles must match that checkout.
-- Model and metric artifacts uploaded to `/var/www/data/models` and
-  `/var/www/data/metrics`.
+Actions fingerprints each image's source files, Dockerfile and lockfiles. Images
+with matching inputs are reused from the registry; only missing identities are
+built, with BuildKit caching. This avoids depending on the previous tag: skipped
+or failed releases do not hide source changes. The private backend is resolved
+once, and Clio/Prophet builds check out that exact commit.
 
-## Prophet readiness diagnostics
+| Change | Images affected |
+| --- | --- |
+| Frontend source/manifests | Frontend |
+| API source/dependencies/migrations | API |
+| Clio source/dependencies/migrations | Clio |
+| Prophet source/dependencies/migrations | Prophet |
+| `packages/common` | API, Clio, Prophet |
+| `packages/forecast` | API, Prophet |
+| `packages/clio`, private backend | Clio, Prophet |
+| Top-level docs and deployment configuration | None |
 
-**No new environment variables, migrations or dependencies in stage 3c.2a.**
-The existing tokens and domain passwords remain required. Deployment no longer
-runs the one-time `import-schedule` command, since production has completed that
-cutover. Older installations must still follow [checkpoint adoption](docs/prophet-scheduling.md).
+The COPY input map lives in `scripts/deployment/release.py`, which runs **only in
+Actions**. A test checks it against the Dockerfiles. Matrix jobs still start to
+check the registry, but unchanged images are not rebuilt. Package documentation
+copied into an image participates conservatively in its identity.
 
-New runs save diagnostic evidence with their snapshots. Use `prophet status <product>`
-to inspect current release age and the last calculation attempt. New blocking
-thresholds are not enabled; the existing density age check remains. See
-[readiness diagnostics](docs/prophet-readiness.md).
+All four image references are pinned by digest. Use **Run workflow → rebuild=true**
+to refresh application base images explicitly. Infrastructure images are downloaded
+only when missing; upgrading those is a separate explicit maintenance operation.
 
-## Release helper
+## Applying on the server
 
-`./deploy.sh -t vX.Y.Z -m "Release description"` uploads model/metric artifacts
-through the SSH host alias `argus`, commits all pending changes in `notebooks`,
-`packages/forecast-core` and the root repository, pushes them, then creates and
-pushes the tag. Review all three checkouts before running it.
+Actions uploads a release directory and runs `bash <release>/deploy.sh /var/www`
+over SSH. The host needs **Bash, Docker Compose v2, rsync and flock**. No host
+Python, extra deployment container or service is required. Compose must support
+`pull --policy missing` and `up --wait`.
 
-Without `-t`, the helper still uploads, commits and pushes, but does not create
-the tag that triggers deployment.
+Existing GitHub secrets and server `.env` / `.env.local` remain required.
+**No new manual environment settings or secrets.** Actions generates the four
+`ARGUS_*_IMAGE` values in `.release-images.env`; use the wrapper below so these
+pinned versions are always included. Do not define competing image overrides.
 
-## Scheduled work
+The short server script:
 
-[Compose](.deploy/docker-compose.yml) runs separate solar wind and Kp/Dst
-collectors, `clio-refresh` (hourly at :00 UTC), `clio-aggregate` (every five minutes)
-and `prophet` (hourly at :10 UTC). Each scheduler retries failures and persists
-completed slots in PostgreSQL. Both domains use their own advisory locks; Prophet
-commits slot completion together with forecast publication. CSV export retries
-do not recalculate completed slots.
+1. Validates Compose and downloads missing images before stopping services.
+2. Compares migration/config fingerprints with the last **successful** deployment.
+   Stops writers of domains with changed migrations and backs up PostgreSQL.
+3. Synchronizes repository-owned `configs`, `nginx` and `alloy` directories;
+   operator env files, data and models are outside these directories.
+4. Applies changed domain migrations and runs `docker compose up -d --wait`.
+   Compose recreates containers whose images/configuration changed; unchanged
+   containers remain running. Mounted common config changes stop/restart Python
+   consumers; nginx/alloy config changes restart their services.
+5. Reloads nginx to refresh upstream DNS and records successful fingerprints.
 
-No application commands remain in [crontab](.deploy/cronjobs.txt); its only entry
-starts the external nginx proxy after host reboot. No history deletion is scheduled.
-The ten-minute forecast offset still does not guarantee observation readiness.
+A docs-only release does not rebuild or recreate application containers. It still
+runs the Compose reconciliation and nginx validation/reload. There is no separate
+service-state planner, forced recreation of all services, routine bootstrap,
+crontab replacement or image pruning.
 
-Manual work uses installed commands:
+The first release builds missing fingerprinted images and runs all existing domain
+migrations once. PostgreSQL must already be provisioned. Historical Alembic files
+remain necessary; provisioning/password maintenance is described in
+[domain storage](docs/domain-storage.md).
+
+## Commands and failures
+
+Deployment installs a wrapper that works from any directory:
 
 ```bash
-docker compose run --rm clio clio refresh
-docker compose run --rm clio clio aggregate
-docker compose run --rm prophet prophet generate
+/var/www/bin/argus prophet status solar-wind-speed
+/var/www/bin/argus prophet slots --limit 10
+/var/www/bin/argus clio refresh
+/var/www/bin/argus compose ps
 ```
 
-Finish independent manual jobs before deploying. The workflow stops service
-writers and saves a PostgreSQL dump,
-provisions/adopts domain storage, runs separate Clio/API/Prophet migrations, then restarts
-the stack. Production has already completed the legacy ownership cutover;
-[cutover and recovery](docs/domain-storage.md) documents adoption for older databases. Migration and
-admin credentials exist only in maintenance-profile services, not runtime apps.
+Add `/var/www/bin` to PATH to use `argus` directly. Domain commands acquire a shared
+host lock, preventing overlap with deployment; competing domain writers also use
+their existing database locks. Direct `argus compose` maintenance is an operator
+escape hatch: do not run it concurrently with deployment.
 
-## Dashboard authentication
+A failure stops the script and leaves successful fingerprints unchanged. Affected
+writers can remain stopped; fix the error and rerun the release. Migrations are
+retried, and Compose reconciles actual containers. The uploaded bundle and
+pre-migration database backup remain available. There is no automatic database
+rollback; a restore requires accounting for other domains' subsequent writes.
 
-Before starting the updated API, apply `pnpm db:migrate` locally or run the
-`api-migrate` maintenance service. Configure `DASHBOARD_ORIGINS`
-with the exact HTTPS site origin and `DASHBOARD_COOKIE_SECURE=true`. Create the
-first administrator using the interactive command described in
-[Dashboard setup](docs/dashboard.md#setup).
+Actions serializes production deployments, and flock prevents concurrent host
+scripts. Production rollout and real image builds must still be verified by the
+workflow; local orchestration tests use a fake Docker executable.

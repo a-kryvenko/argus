@@ -46,10 +46,6 @@ def main() -> None:
     serve.add_argument('--port', type=int, default=8000)
     export_parser = commands.add_parser('export', help='Retry pending current CSV exports')
     export_parser.add_argument('--force', action='store_true', help='Restore all current CSVs from published releases')
-    commands.add_parser('publish-existing', help='Publish complete recorded runs for the read cutover')
-    importer = commands.add_parser('import-schedule', help='Import the previous filesystem completion marker once')
-    from pathlib import Path
-    importer.add_argument('--marker', type=Path, help='Legacy marker path; defaults to the previous state directory')
     slots = commands.add_parser('slots', help='List hourly slots and attempt counts')
     slots.add_argument('--limit', type=int, default=20)
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
@@ -110,15 +106,7 @@ def main() -> None:
     else:
         def once():
             with generation_lock():
-                if args.command == 'import-schedule':
-                    from argus_prophet.worker import import_schedule
-                    logging.info('Legacy schedule marker imported: %s', import_schedule(args.marker))
-                    return
-                if args.command == 'publish-existing':
-                    from argus_prophet.publication import publish_existing
-                    logging.info('Published %s existing product releases', publish_existing())
-                    return
-                elif args.command == 'generate':
+                if args.command == 'generate':
                     generate(args.product)
                 # Failure here is an export failure: the committed release survives.
                 export_current(force=args.force if args.command == 'export' else False)

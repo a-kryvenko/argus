@@ -47,7 +47,7 @@ application writers:
 pnpm db:migrate
 ```
 
-Read [database cutover](../../docs/domain-storage.md) before adopting existing data.
+Read [database ownership and provisioning](../../docs/domain-storage.md) before adopting existing data.
 
 ## Commands
 

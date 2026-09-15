@@ -118,6 +118,23 @@ def test_provisioning_does_not_rotate_existing_passwords(database):
         assert conn.execute('SELECT 1').fetchone()[0] == 1
 
 
+def test_snapshot_handles_column_named_like_table_alias(database):
+    dsns, urls, _ = database
+    with runtime(dsns, 'clio', urls) as conn:
+        conn.execute('CREATE SCHEMA clio')
+        conn.execute('CREATE TABLE clio.alembic_version(version_num text PRIMARY KEY)')
+        conn.execute("INSERT INTO clio.alembic_version VALUES ('test')")
+        conn.execute('CREATE TABLE clio.alias_collision(t double precision, payload text)')
+        conn.execute("INSERT INTO clio.alias_collision VALUES (100.5, 'original')")
+    before = transfer_checks.snapshot(make_url(urls['clio']), 'clio')['tables']['alias_collision']
+    assert before['count'] == 1
+    with runtime(dsns, 'clio', urls) as conn:
+        # The fingerprint must cover the whole record, not just the colliding column.
+        conn.execute("UPDATE clio.alias_collision SET payload='changed'")
+    after = transfer_checks.snapshot(make_url(urls['clio']), 'clio')['tables']['alias_collision']
+    assert after['count'] == 1 and after['sha256'] != before['sha256']
+
+
 def pg_tool(tool, url, arguments, *, input=None):
     """Use matching server tools in CI; local runs need pg_dump/pg_restore."""
     import shutil
@@ -149,6 +166,9 @@ def test_schema_dump_transfer_preserves_rows_sequences_and_triggers(database, tm
         with psycopg.connect(source_dsn) as conn:
             conn.execute("INSERT INTO api.dashboard_user(username,password_hash,active) VALUES ('existing','hash',true)")
             conn.execute("INSERT INTO clio.measurement(metric,value,observed_at) VALUES ('f10_7',120,now())")
+            conn.execute("""INSERT INTO clio.normalized_observation
+                (observed_at,bx,by,bz,v,n,t,kp,dst,ap,f10_7)
+                VALUES ('2026-09-02 00:00:00+00',1,2,-3,400,5,100000,2,-10,7,120)""")
             conn.execute("""INSERT INTO clio.solar_wind_observation(kind, observed_at, spacecraft, active, received_at, "values", raw)
                 VALUES ('mag','2026-09-02 00:00:00+00','A',true,now(),'{"bz":-5}','{}')""")
             conn.execute("""INSERT INTO prophet.forecast_run(id,scope,product,trigger,started_at,status,provenance)

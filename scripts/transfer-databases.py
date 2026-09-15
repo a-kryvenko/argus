@@ -47,7 +47,8 @@ def snapshot(url, domain):
             digest, count = hashlib.sha256(), 0
             # Sorting canonical row JSON also covers tables without a primary key.
             with conn.cursor(name='transfer_rows') as rows:
-                rows.execute(sql.SQL('SELECT row_to_json(t)::text FROM {}.{} t ORDER BY (row_to_json(t)::text) COLLATE "C"')
+                # t.* explicitly denotes the whole row, even when a column is named t.
+                rows.execute(sql.SQL('SELECT row_to_json(t.*)::text FROM {}.{} t ORDER BY (row_to_json(t.*)::text) COLLATE "C"')
                              .format(sql.Identifier(domain), sql.Identifier(name)))
                 for (row,) in rows:
                     encoded = row.encode()

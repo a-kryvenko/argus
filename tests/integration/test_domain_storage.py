@@ -4,6 +4,8 @@ Never reads project .env credentials. Creates/drops only UUID-named databases
 and owners. Run serially; TEST_DATABASE_ADMIN_DSN must be administrative.
 """
 import importlib.util
+import json
+from difflib import unified_diff
 import os
 from pathlib import Path
 import subprocess
@@ -197,6 +199,14 @@ def test_schema_dump_transfer_preserves_rows_sequences_and_triggers(database, tm
             dump = pg_tool('pg_dump', source_dsn, ['--schema', domain, '--format=custom', '--no-owner', '--no-privileges'])
             pg_tool('pg_restore', dsns[domain], ['--role', make_url(urls[domain]).username,
                     '--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction'], input=dump)
+            # These databases contain only disposable test data. Show the exact
+            # differing definitions in CI; production logs report only the path.
+            expected = json.loads((state / (domain + '.source.json')).read_text())
+            actual = transfer_checks.snapshot(make_url(urls[domain]), domain)
+            assert actual == expected, '\n'.join(unified_diff(
+                json.dumps(expected, indent=2, sort_keys=True).splitlines(),
+                json.dumps(actual, indent=2, sort_keys=True).splitlines(),
+                fromfile=f'{domain}: source', tofile=f'{domain}: restored', lineterm=''))
             transfer_checks.run('verify', state, domain=domain)
             with psycopg.connect(source_dsn) as source, runtime(dsns, domain, urls) as target:
                 tables = source.execute("SELECT tablename FROM pg_tables WHERE schemaname=%s ORDER BY tablename", (domain,)).fetchall()

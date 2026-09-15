@@ -74,9 +74,36 @@ def target_empty(admin, database):
             UNION ALL SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' LIMIT 1""").fetchone()
 
 
+def snapshot_difference(expected, actual, path='snapshot'):
+    """Locate a mismatch without putting database values into operational logs."""
+    if type(expected) is not type(actual):
+        return path + ' (type differs)'
+    if isinstance(expected, dict):
+        for key in sorted(expected.keys() | actual.keys()):
+            child = f'{path}.{key}'
+            if key not in actual:
+                return child + ' (missing in target)'
+            if key not in expected:
+                return child + ' (unexpected in target)'
+            difference = snapshot_difference(expected[key], actual[key], child)
+            if difference:
+                return difference
+    elif isinstance(expected, list):
+        if len(expected) != len(actual):
+            return path + ' (length differs)'
+        for index, (left, right) in enumerate(zip(expected, actual)):
+            difference = snapshot_difference(left, right, f'{path}[{index}]')
+            if difference:
+                return difference
+    elif expected != actual:
+        return path + ' (value differs)'
+    return None
+
+
 def verify_target(admin, target, domain, expected):
-    if snapshot(target, domain) != expected:
-        raise ValueError(f'{domain}: restored database does not match the saved source snapshot')
+    difference = snapshot_difference(expected, snapshot(target, domain))
+    if difference:
+        raise ValueError(f'{domain}: restored database does not match the saved source snapshot: {difference}')
     with connect(admin.set(database=target.database)) as conn:
         foreign = conn.execute("SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('public','information_schema',%s) AND nspname NOT LIKE 'pg_%%'", (domain,)).fetchall()
         wrong_owner = conn.execute("""SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace

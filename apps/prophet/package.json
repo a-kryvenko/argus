@@ -1,0 +1,8 @@
+{
+  "name": "prophet-service",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "../../scripts/argus prophet serve --host 127.0.0.1 --port 8002"
+  }
+}

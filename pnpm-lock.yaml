@@ -22,6 +22,8 @@ importers:
 
   apps/clio: {}
 
+  apps/prophet: {}
+
   apps/api-private: {}
 
   apps/api-public: {}

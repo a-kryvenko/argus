@@ -27,6 +27,27 @@ def save(path, value):
     temporary.replace(path)
 
 
+def normalize_snapshot(value):
+    """Normalize only the varchar enum CHECK form rewritten by dump/restore.
+
+    Keep casts and enum values intact. Full matching with simple identifiers and
+    literals deliberately leaves all other SQL untouched.
+    """
+    pattern = re.compile(
+        r"CHECK \(\(\(([a-z_][a-z_0-9]*)\)::text = ANY \(\(ARRAY\["
+        r"((?:'[a-zA-Z_0-9]+'::character varying)(?:, '[a-zA-Z_0-9]+'::character varying)*)"
+        r"\]\)::text\[\]\)\)\)")
+    constraints = []
+    for table, name, definition in value['constraints']:
+        match = pattern.fullmatch(definition)
+        if match:
+            column, elements = match.groups()
+            casts = ', '.join(f'({element})::text' for element in elements.split(', '))
+            definition = f'CHECK ((({column})::text = ANY (ARRAY[{casts}])))'
+        constraints.append([table, name, definition])
+    return {**value, 'constraints': constraints}
+
+
 def snapshot(url, domain):
     """Stable data fingerprints plus table/sequence/function/trigger definitions."""
     result = {'tables': {}, 'sequences': {}}
@@ -64,7 +85,7 @@ def snapshot(url, domain):
         result['constraints'] = conn.execute("SELECT c.relname,k.conname,pg_get_constraintdef(k.oid) FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s ORDER BY c.relname,k.conname", (domain,)).fetchall()
         result['triggers'] = conn.execute("SELECT c.relname,t.tgname,pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND NOT t.tgisinternal ORDER BY c.relname,t.tgname", (domain,)).fetchall()
         result['functions'] = conn.execute("SELECT pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=%s AND p.prokind IN ('f','p') ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)", (domain,)).fetchall()
-    return json.loads(json.dumps(result))
+    return normalize_snapshot(json.loads(json.dumps(result)))
 
 
 def target_empty(admin, database):
@@ -165,7 +186,7 @@ def run(command, state, source_name=None, domain=None, system_identifier=None):
                     checkpoint = state / (d + '.source.json')
                     if not plan_path.exists() or not checkpoint.exists():
                         raise ValueError(f'{d}: target is not empty and has no transfer checkpoint')
-                    verify_target(admin, target, d, json.loads(checkpoint.read_text()))
+                    verify_target(admin, target, d, normalize_snapshot(json.loads(checkpoint.read_text())))
                     ready[d] = True
         save(plan_path, identity)
         print('source\t' + source.database)
@@ -188,11 +209,11 @@ def run(command, state, source_name=None, domain=None, system_identifier=None):
     checkpoint = state / (domain + '.source.json')
     if command == 'snapshot':
         value = snapshot(source, domain)
-        if checkpoint.exists() and json.loads(checkpoint.read_text()) != value:
+        if checkpoint.exists() and normalize_snapshot(json.loads(checkpoint.read_text())) != value:
             raise ValueError(f'{domain}: source changed since the saved snapshot')
         save(checkpoint, value)
     elif command == 'verify':
-        verify_target(admin, targets[domain], domain, json.loads(checkpoint.read_text()))
+        verify_target(admin, targets[domain], domain, normalize_snapshot(json.loads(checkpoint.read_text())))
 
 
 def main():

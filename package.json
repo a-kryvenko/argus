@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev dev:solar-wind dev:geomagnetic --concurrency 6",
-    "dev:api": "turbo run api:dev",
+    "dev": "turbo run dev dev:solar-wind dev:geomagnetic --concurrency 7",
+    "dev:api": "turbo run dev --filter=api",
     "dev:web": "turbo run dev --filter=web",
     "db:migrate": "./scripts/argus api migrate upgrade head",
     "db:current": "./scripts/argus api migrate current",

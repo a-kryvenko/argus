@@ -43,15 +43,15 @@ Provisioning создаёт отдельные БД и владельцев, н�
 ./scripts/argus db migrate
 ```
 
-В отдельных терминалах:
+Запуск всех HTTP-сервисов и frontend одной командой:
 
 ```bash
 pnpm dev
-./scripts/argus prophet serve --host 127.0.0.1 --port 8002
 ```
 
 `pnpm dev` запускает web (`http://localhost:3000`), API (`http://localhost:8000`),
-Clio (`127.0.0.1:8001`) и два коллектора. Prophet HTTP нужен для чтения прогнозов;
+Clio (`127.0.0.1:8001`), Prophet HTTP (`127.0.0.1:8002`) и два коллектора.
+Адреса `OBSERVATIONS_URL` и `FORECASTS_URL` из таблицы выше обязательны;
 планировщики и Intelligence этим скриптом не запускаются. Первое наполнение:
 
 ```bash
@@ -76,8 +76,8 @@ Clio (`127.0.0.1:8001`) и два коллектора. Prophet HTTP нужен 
 другого каталога. Старые `scripts/clio`, `scripts/prophet`, `scripts/intelligence`,
 `scripts/db`, `scripts/domain-db` остаются совместимыми алиасами.
 
-Только frontend: `pnpm dev:web`. Только API: `pnpm --filter api dev`
-(`pnpm dev:api` сейчас ссылается на отсутствующую задачу `api:dev`).
+Только frontend: `pnpm dev:web`. Только API: `pnpm dev:api`
+(Clio и Prophet при этом нужно запустить отдельно).
 Остановка процессов — `Ctrl+C`; инфраструктуры —
 `./scripts/argus compose down`.
 `down --volumes` удаляет локальные данные PostgreSQL и Redis.

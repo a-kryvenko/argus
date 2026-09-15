@@ -216,6 +216,11 @@ def test_schema_dump_transfer_preserves_rows_sequences_and_triggers(database, tm
                 assert target.execute("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relowner != (SELECT oid FROM pg_roles WHERE rolname=current_user)", (domain,)).fetchone()[0] == 0
         transfer_checks.run('preflight', state)  # Completed restores are resumable.
         migrate(environment)  # Restored markers are respected; no duplicate creation.
+        with runtime(dsns, 'prophet', urls) as conn:
+            conn.execute('ALTER TABLE prophet.forecast_run DROP CONSTRAINT run_trigger')
+            conn.execute("ALTER TABLE prophet.forecast_run ADD CONSTRAINT run_trigger CHECK (trigger IN ('manual','scheduled','unexpected'))")
+        with pytest.raises(ValueError, match='snapshot.constraints'):
+            transfer_checks.run('verify', state, domain='prophet')
         with runtime(dsns, 'api', urls) as conn:
             assert conn.execute("INSERT INTO api.dashboard_user(username,password_hash,active) VALUES ('next','hash',true) RETURNING id").fetchone()[0] == 2
         with pytest.raises(ValueError, match='does not match'):

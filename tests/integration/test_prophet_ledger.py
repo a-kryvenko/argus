@@ -1,5 +1,5 @@
 """Uses the explicitly configured disposable PostgreSQL server, never production."""
-from test_domain_storage import database, bootstrap, migrate, runtime
+from test_domain_storage import database, migrate, runtime
 import gzip
 import hashlib
 from datetime import UTC, datetime
@@ -15,11 +15,10 @@ from argus_prophet.ledger import RunRecorder
 @pytest.fixture
 def recorder_database(database, monkeypatch, tmp_path):
     dsn, passwords, environment = database
-    with psycopg.connect(dsn) as conn:
-        bootstrap.provision(conn, passwords)
     migrate(environment)
-    for key in ('DB_NAME', 'DB_HOST', 'DB_PORT', 'PROPHET_DB_PASSWORD'):
-        monkeypatch.setenv(key, environment[key])
+    for key, value in environment.items():
+        if key.startswith('PROPHET_DB_'):
+            monkeypatch.setenv(key, value)
     return dsn, passwords, SimpleNamespace(workdir=tmp_path, models_registry={})
 
 
@@ -51,11 +50,11 @@ def test_snapshot_results_partial_completion_and_role_boundary(recorder_setup, t
         assert gzip.decompress(blob) == content and digest == hashlib.sha256(content).hexdigest()
         assert written is not None
         for table in ('clio.measurement', 'api.dashboard_user'):
-            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with pytest.raises(psycopg.errors.UndefinedTable):
                 conn.execute(f'SELECT * FROM {table}')
     for domain in ('api', 'clio'):
         with runtime(dsn, domain, passwords) as conn:
-            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with pytest.raises(psycopg.errors.UndefinedTable):
                 conn.execute('SELECT * FROM prophet.forecast_run')
 
 

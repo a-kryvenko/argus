@@ -3,7 +3,7 @@
 ## Collection
 
 ```bash
-pnpm db:migrate
+./scripts/argus api migrate upgrade head
 pnpm app:geomagnetic          # one pass
 pnpm app:geomagnetic --watch  # independent source loops
 ```

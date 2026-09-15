@@ -22,7 +22,7 @@ once, and Clio/Prophet builds check out that exact commit.
 | Prophet source/dependencies/migrations | Prophet |
 | Intelligence source/dependencies | Intelligence |
 | `packages/common` | API, Clio, Prophet, Intelligence |
-| `packages/forecast` | API, Prophet |
+| `packages/forecast` | Prophet |
 | `packages/clio`, private backend | Clio, Prophet |
 | Top-level docs and deployment configuration | None |
 
@@ -43,9 +43,21 @@ Python, extra deployment container or service is required. Compose must support
 `pull --policy missing` and `up --wait`.
 
 Existing GitHub secrets and server `.env` / `.env.local` remain required.
-**This release requires two new production env values:**
-`INTELLIGENCE_DB_PASSWORD` and `INTELLIGENCE_MIGRATION_PASSWORD`. Add them before
-creating the release tag. See [Intelligence rollout](apps/intelligence/README.md).
+**Before this release, provision four separate domain databases and transfer the
+existing schemas/data** using [domain storage](docs/domain-storage.md).
+Set `API_DB_*`, `CLIO_DB_*`, `PROPHET_DB_*` and `INTELLIGENCE_DB_*`:
+`HOST` (production default `postgres`), `PORT` (default `5432`), `NAME`, `USER`,
+`PASSWORD`. Passwords are raw strings, with no URL encoding. Each service and its
+migrator use one owner. The administrator's `DB_HOST`, `DB_PORT`, `DB_NAME`,
+`DB_USER`, `DB_PASSWORD` are used only for explicit `db-provision` maintenance
+and the PostgreSQL container. Separate migration passwords are no longer used.
+Keep the existing PostgreSQL container credentials and volume unchanged.
+For the one-time transfer, use **Run workflow → prepare_only=true** to build and
+upload the bundle and update the operator tools without applying the application
+release. Then run **`/var/www/bin/argus db transfer`**. It stops applications, backs
+up and transfers the existing data, verifies it, and applies the prepared release.
+Retry the same command on failure; completed copies are not overwritten. Tag
+releases still apply automatically; use prepare-only for this database transition.
 No new GitHub secrets are required. Actions generates the five
 `ARGUS_*_IMAGE` values in `.release-images.env`; use the wrapper below so these
 pinned versions are always included. Do not define competing image overrides.
@@ -54,7 +66,7 @@ The short server script:
 
 1. Validates Compose and downloads missing images before stopping services.
 2. Compares migration/config fingerprints with the last **successful** deployment.
-   Stops writers of domains with changed migrations and backs up PostgreSQL.
+   Stops writers of domains with changed migrations and backs up the whole PostgreSQL instance with `pg_dumpall` (roles included, file mode 0600).
 3. Synchronizes repository-owned `configs`, `nginx` and `alloy` directories;
    operator env files, data and models are outside these directories.
 4. Applies changed domain migrations and runs `docker compose up -d --wait`.
@@ -69,7 +81,7 @@ service-state planner, forced recreation of all services, legacy database bootst
 crontab replacement or image pruning.
 
 The first release builds missing fingerprinted images and runs all existing domain
-migrations once. PostgreSQL must already be provisioned. Historical Alembic files
+migrations once. PostgreSQL must already be provisioned. The four domain databases must exist before applying a release. Historical Alembic files
 remain necessary; provisioning/password maintenance is described in
 [domain storage](docs/domain-storage.md).
 
@@ -88,6 +100,13 @@ Add `/var/www/bin` to PATH to use `argus` directly. Domain commands acquire a sh
 host lock, preventing overlap with deployment; competing domain writers also use
 their existing database locks. Direct `argus compose` maintenance is an operator
 escape hatch: do not run it concurrently with deployment.
+
+The local equivalent is `./scripts/argus`, which selects the installed application
+environment and loads `.env` then `.env.local`. Both wrappers support
+`db provision` (plan), `db provision --apply`, `db migrate` (all four databases),
+and `<domain> migrate <alembic arguments>`. Production provisioning and migrations
+hold an exclusive host lock. They do not stop running writers or take a backup;
+follow the [database maintenance procedure](docs/domain-storage.md) first.
 
 A failure stops the script and leaves successful fingerprints unchanged. Affected
 writers can remain stopped; fix the error and rerun the release. Migrations are
@@ -109,7 +128,6 @@ The server script logs elapsed seconds for image downloads, writer shutdown,
 backup, configuration, migrations, application readiness and reloads. These
 messages distinguish remote execution time from SSH/SCP action overhead.
 
-Intelligence now runs as a Compose worker. Its migration fingerprint selects its
-own migration and provisioning services. Provisioning creates only the new domain
-if missing, verifies credentials before stopping services, and never rotates
-existing passwords automatically. `argus intelligence status` reports its ledger.
+Intelligence runs as a Compose worker. Its migration fingerprint selects only
+its migration service. No domain provisioning or password rotation occurs during
+deployment. `argus intelligence status` reports its ledger.

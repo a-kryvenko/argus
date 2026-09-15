@@ -13,7 +13,7 @@ has missing or flagged measurements.
 ## Collection and storage
 
 ```bash
-pnpm db:migrate
+./scripts/argus api migrate upgrade head
 pnpm app:solar-wind          # one pass; nonzero exit on source failure
 pnpm app:solar-wind --watch  # repeat every 60 seconds; retry failures
 ```

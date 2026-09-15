@@ -13,7 +13,7 @@ trap 'printf "[deploy] %s: %ss; exit=%s\n" "$phase_name" "$((SECONDS - phase_sta
 root="${1:-/var/www}"
 bundle="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 command -v rsync >/dev/null
-exec 9>"$root/.deployment.lock"
+if [[ ! "$root/.deployment.lock" -ef /proc/self/fd/9 ]]; then exec 9>"$root/.deployment.lock"; fi
 flock -n 9
 base=(docker compose --project-directory "$root" --env-file "$root/.env" --env-file "$root/.env.local")
 candidate=("${base[@]}" --env-file "$bundle/images.env" -f "$bundle/docker-compose.yml")
@@ -54,23 +54,17 @@ phase download-images
 if ((${#migrations[@]})); then
     "${candidate[@]}" pull --policy missing "${migrations[@]}"
 fi
-# New-domain provisioning is isolated from existing schemas and does not rotate passwords.
-# Run before stopping writers; incorrect credentials fail deployment early.
-if changed intelligence; then
-    phase provision-intelligence
-    "${candidate[@]}" pull --policy missing intelligence-provision
-    "${candidate[@]}" run --rm --no-deps intelligence-provision
-fi
 phase drain-writers
 if ((${#stop[@]})); then
     "${installed[@]}" stop "${stop[@]}"
 fi
 if ((${#migrations[@]})); then
     phase database-backup
+    umask 077
     mkdir -p "$root/backups"
     "${installed[@]}" exec -T postgres sh -c \
-        'pg_dump --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --format=custom' \
-        > "$root/backups/pre-migration-$(date -u +%Y%m%dT%H%M%S).dump"
+        'pg_dumpall --username="$POSTGRES_USER"' \
+        > "$root/backups/pre-migration-$(date -u +%Y%m%dT%H%M%S).sql"
 fi
 phase install-configuration
 # These directories are repository-owned; data, models and operator env files are separate.
@@ -82,6 +76,8 @@ cp "$bundle/docker-compose.yml" "$root/docker-compose.yml"
 cp "$bundle/images.env" "$root/.release-images.env"
 mkdir -p "$root/bin"
 install -m 755 "$bundle/argus" "$root/bin/argus"
+mkdir -p "$root/.deployment-tools"
+install -m 755 "$bundle/transfer.sh" "$root/.deployment-tools/transfer.sh"
 active=("${base[@]}" --env-file "$root/.release-images.env" -f "$root/docker-compose.yml")
 # Infrastructure must be healthy before migration; unchanged containers stay running.
 phase infrastructure-ready

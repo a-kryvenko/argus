@@ -31,6 +31,8 @@ jobs:
           apps/intelligence/tests
           tests/test_domain_deployment.py
           tests/test_release_deployment.py
+          tests/test_argus_cli.py
+          tests/test_database_transfer.py
           tests/test_config.py
           packages/forecast/tests/test_smoke_pipeline.py
 
@@ -64,8 +66,10 @@ jobs:
         run: >-
           python -m pip install -e packages/common -e packages/clio
           pytest sqlalchemy 'psycopg[binary]' alembic fastapi uvicorn httpx sentry-sdk
-      - name: Check fresh install, legacy adoption, privileges and scheduling
-        run: python -m pytest -q tests/integration/test_domain_storage.py tests/integration/test_prophet_ledger.py tests/integration/test_prophet_scheduler.py tests/integration/test_intelligence_worker.py
+      - name: Check separate databases, ownership, transfer and scheduling
+        env:
+          TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: python -m pytest -q tests/test_database_urls.py tests/integration/test_domain_storage.py tests/integration/test_prophet_ledger.py tests/integration/test_prophet_scheduler.py tests/integration/test_intelligence_worker.py
       - name: Check aggregation, retention and collection recovery
         run: |
           python apps/clio/tests/integration/verify_solar_wind_aggregation.py

@@ -10,15 +10,15 @@ def test_calendar_slots_are_aligned():
     assert slot_for('refresh', now) == now.replace(minute=0, second=0)
 
 
-def test_clio_uses_only_its_own_database_credentials(monkeypatch):
-    monkeypatch.setenv('DB_NAME', 'test')
+def test_clio_uses_only_its_own_database_settings(monkeypatch):
     monkeypatch.setenv('DB_USER', 'postgres')
-    monkeypatch.setenv('DB_PASSWORD', 'admin')
+    monkeypatch.setenv('DB_PASSWORD', 'admin-password')
     monkeypatch.delenv('CLIO_DB_PASSWORD', raising=False)
     with pytest.raises(RuntimeError, match='CLIO_DB_PASSWORD'):
         get_database_url()
-    monkeypatch.setenv('CLIO_DB_PASSWORD', 'runtime')
-    monkeypatch.setenv('CLIO_MIGRATION_PASSWORD', 'migration')
+    monkeypatch.setenv('CLIO_DB_NAME', 'argus_clio')
+    monkeypatch.setenv('CLIO_DB_USER', 'argus_clio')
+    monkeypatch.setenv('CLIO_DB_PASSWORD', 'raw@password:/%')
     assert get_database_url().username == 'argus_clio'
-    assert get_database_url().password == 'runtime'
-    assert get_database_url(migration=True).username == 'argus_clio_migrator'
+    assert get_database_url().database == 'argus_clio'
+    assert get_database_url().password == 'raw@password:/%'

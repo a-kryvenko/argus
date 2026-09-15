@@ -96,7 +96,7 @@ def test_disconnected_writer_cannot_publish_after_new_owner_takes_over(recorder_
         old = RunRecorder.begin('all', 'scheduled', config, scheduled_slot=due_slot(NOW))
         store_product(old, tmp_path)
         pid = require_writer().info.backend_pid
-        with psycopg.connect(dsn, autocommit=True) as admin:
+        with psycopg.connect(dsn['prophet'], autocommit=True) as admin:
             assert admin.execute('SELECT pg_terminate_backend(%s)', (pid,)).fetchone()[0]
         with pytest.raises((psycopg.Error, RuntimeError)):
             old.finish()

@@ -5,7 +5,7 @@ import os
 import httpx
 import pandas as pd
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
-from forecast.exceptions import ArtifactNotReadyError
+from app.services.forecast_errors import ArtifactNotReadyError
 
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 

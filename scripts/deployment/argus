@@ -7,12 +7,63 @@ if [[ -f "$project_root/.release-images.env" ]]; then
     compose+=(--env-file "$project_root/.release-images.env")
 fi
 compose+=(-f "$project_root/docker-compose.yml")
+usage() {
+    echo 'Usage: argus db transfer [--release path] [--source database] | db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
+}
+lock() {
+    exec 9>"$project_root/.deployment.lock"
+    flock "-$1n" 9
+}
 case "${1:-}" in
+    -h|--help|'') usage; exit 0 ;;
+    db)
+        shift
+        case "${1:-}" in
+            transfer)
+                shift
+                lock x
+                exec bash "$project_root/.deployment-tools/transfer.sh" "$project_root" "$@"
+                ;;
+            provision)
+                shift
+                lock x
+                exec "${compose[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/provision-databases.py "$@"
+                ;;
+            migrate)
+                shift
+                [[ $# == 0 ]] || { usage >&2; exit 2; }
+                lock x
+                for domain in api clio prophet intelligence; do
+                    "${compose[@]}" run --rm --no-deps "$domain-migrate"
+                done
+                ;;
+            *) usage >&2; exit 2 ;;
+        esac
+        ;;
+    api)
+        shift
+        case "${1:-}" in
+            migrate)
+                shift
+                lock x
+                exec "${compose[@]}" run --rm --no-deps api-migrate .venv/bin/alembic "$@"
+                ;;
+            user)
+                shift
+                lock s
+                exec "${compose[@]}" run --rm --no-deps api .venv/bin/python -m app.commands.manage_user "$@"
+                ;;
+            *) usage >&2; exit 2 ;;
+        esac
+        ;;
     prophet|clio|intelligence)
-        exec 9>"$project_root/.deployment.lock"
-        flock -sn 9
         domain="$1"
         shift
+        if [[ "${1:-}" == migrate ]]; then
+            lock x
+            exec "${compose[@]}" run --rm --no-deps "$domain-migrate" "$domain" "$@"
+        fi
+        lock s
         exec "${compose[@]}" run --rm --no-deps "$domain" "$domain" "$@"
         ;;
     compose)
@@ -20,7 +71,7 @@ case "${1:-}" in
         exec "${compose[@]}" "$@"
         ;;
     *)
-        echo 'Usage: argus prophet <command> | argus clio <command> | argus intelligence check [product] | argus compose <arguments>' >&2
+        usage >&2
         exit 2
         ;;
 esac

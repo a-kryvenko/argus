@@ -1,64 +1,156 @@
-# Domain storage
+# Хранение данных доменов
 
-| Schema | Runtime | Owner/migrator | Data |
+Один экземпляр PostgreSQL содержит четыре независимые БД. У каждой БД один
+пользователь-владелец: приложение и его Alembic используют одинаковые credentials.
+
+| Домен | БД (рекомендуемое имя) | Владелец | Схема внутри БД |
 | --- | --- | --- | --- |
-| api | argus_api | argus_api_migrator | Dashboard/authentication and API statistics |
-| clio | argus_clio | argus_clio_migrator | Observations, aggregates, collector/source status and scheduling |
-| intelligence | argus_intelligence | argus_intelligence_migrator | Processing attempts and per-release stub results |
-| prophet | argus_prophet | argus_prophet_migrator | Runs, snapshots, artifacts, releases, exports and slots |
+| API | `argus_api` | `argus_api` | `api` |
+| Clio | `argus_clio` | `argus_clio` | `clio` |
+| Prophet | `argus_prophet` | `argus_prophet` | `prophet` |
+| Intelligence | `argus_intelligence` | `argus_intelligence` | `intelligence` |
 
-One PostgreSQL instance is shared, but SQL reads/writes remain within each domain.
-Runtime credentials have DML privileges, no DDL, migration-marker updates, role
-membership or foreign table/function access. Owner default privileges apply to
-new domain objects. API reads observations and forecasts through owner HTTP
-contracts, never foreign ORM models or SQL.
+Существующие имена схем сохранены для совместимости запросов, дампов и истории
+Alembic. Межсервисный доступ идёт через HTTP; таблицы других доменов отсутствуют
+в БД сервиса. Доступ `PUBLIC` к доменным БД закрыт при provisioning. Владелец
+может менять структуру своей БД; отдельных migrator-ролей больше нет.
+Экземпляр PostgreSQL, его ресурсы и отказоустойчивость остаются общими.
 
-Each application owns its Alembic chain. **Keep historical migration files:**
-they are required to create and upgrade databases, even when one-time migration
-instructions and transition commands have been retired.
+## Конфигурация
 
-## Provisioning and maintenance
+Каждое приложение читает только свои `API_DB_*`, `CLIO_DB_*`, `PROPHET_DB_*`
+или `INTELLIGENCE_DB_*`. Имена одинаковы локально и на проде; Compose передаёт
+контейнеру только настройки его домена. Runtime и Alembic используют один набор.
+Пароль передаётся как обычная строка; `URL.create()` собирает подключение в коде.
+URL-кодирование не требуется, переменные `DATABASE_URL` больше не используются.
 
-Administrative credentials are passed only to `db-bootstrap` and
-`intelligence-provision`; migration passwords
-only to maintenance services. Runtime containers do not receive either. Normal
-release deployment does not run legacy bootstrap or rotate passwords. Intelligence
-provisions its own domain before changed migrations; see its
-[rollout requirements](../apps/intelligence/README.md).
+Пример `.env.local` для API (замените пароль):
 
-For a new database, configure the eight domain passwords and admin settings,
-start PostgreSQL and run the explicit maintenance sequence with pinned images:
-
-```bash
-argus compose run --rm --no-deps db-bootstrap
-argus compose run --rm --no-deps clio-migrate
-argus compose run --rm --no-deps api-migrate
-argus compose run --rm --no-deps prophet-migrate
-argus compose run --rm --no-deps intelligence-provision
-argus compose run --rm --no-deps intelligence-migrate
+```dotenv
+API_DB_HOST=127.0.0.1
+API_DB_PORT=5432
+API_DB_NAME=argus_api
+API_DB_USER=argus_api
+API_DB_PASSWORD='example@password:/%'
 ```
 
-The host must first have the release Compose/configuration and image references
-installed as described in [deployment](../README_DEPLOY.md). The bootstrap remains
-an operator tool for provisioning/grants/password maintenance. Stop relevant
-writers and take a backup before administrative storage changes. It also retains
-legacy-database compatibility for recovery; historical cutover instructions are
-available in Git history, not repeated in current release workflows.
+Для Clio, Prophet и Intelligence задайте аналогичные пять переменных с их
+префиксами и отдельными БД/пользователями/паролями. `HOST` по умолчанию `localhost`,
+`PORT` — `5432`; `NAME`, `USER`, `PASSWORD` обязательны. На проде Compose по
+умолчанию использует хост `postgres`. Явно заданный `<DOMAIN>_DB_HOST` имеет приоритет,
+поэтому не копируйте локальный `127.0.0.1` в env сервера.
 
-## Verification
+Обычные правила кавычек `.env` продолжают действовать; например, пароль с `$`
+можно заключить в одинарные кавычки в env-файле Compose.
+Административный provisioning читает отдельные `DB_HOST`, `DB_PORT`, `DB_NAME`,
+`DB_USER`, `DB_PASSWORD`. Локальный хост администратора — `127.0.0.1`, на проде —
+`postgres`. Эти credentials передаются только `db-provision` и PostgreSQL.
+Не меняйте начальные `DB_USER`, `DB_PASSWORD`, `DB_NAME` контейнера PostgreSQL
+для уже существующего volume при переходе.
 
-The public CI `domain-storage` job runs isolated PostgreSQL tests covering fresh
-installation, legacy upgrades, row/OID preservation, grants and rejected foreign
-access, observation retention/aggregation, dashboard access, forecast publication,
-slot atomicity and session-lock recovery.
+## Новая установка
 
-Local integration tests require an explicitly disposable server configured through
-`TEST_DATABASE_ADMIN_DSN`. They create/drop temporary databases and provision the
-six reserved roles, so do not point them at production. They never fall back to
-project database credentials. Without that variable those suites skip.
-
-Boundary and deployment-planning tests can run without Docker or PostgreSQL:
+После запуска PostgreSQL и настройки параметров БД:
 
 ```bash
-.venv/bin/python -m pytest -q tests/test_architecture.py tests/test_domain_deployment.py tests/test_release_deployment.py
+# Локально: просмотр плана без изменений, затем создание БД
+./scripts/argus db provision
+./scripts/argus db provision --apply
+./scripts/argus db migrate
 ```
+
+На сервере с установленными Compose, wrapper и образами нового релиза:
+
+```bash
+argus compose up -d --wait postgres redis
+argus db provision --apply
+argus db migrate
+argus compose up -d --wait
+```
+
+`scripts/provision-databases.py` создаёт только отсутствующие БД и владельцев.
+Повторный запуск не переносит данные и не меняет пароли. Чужой владелец БД или
+административные привилегии сервисной роли приводят к отказу. При существующей
+роли нужен её действующий пароль. `CREATE DATABASE` нетранзакционен: при ошибке
+исправьте причину и повторите запуск. Миграции сами создают свою внутреннюю схему.
+
+`argus db provision` показывает план, `argus db provision --apply` создаёт БД.
+`argus db migrate` последовательно обновляет все четыре БД до `head` и
+останавливается при первой ошибке. Для существующих БД сначала остановите
+писателей и сохраните резервную копию.
+
+Обычный релиз **не запускает provisioning**. Он применяет изменившиеся миграции,
+предварительно останавливает затронутых писателей и сохраняет полный SQL-дамп
+экземпляра (`pg_dumpall`, включая роли) в `/var/www/backups/` с закрытыми правами.
+Пароли меняются отдельной административной операцией, затем обновляется `<DOMAIN>_DB_PASSWORD`
+сервиса и пересоздаются его контейнеры.
+
+## Перенос существующей общей БД одной командой
+
+Подготовьте параметры четырёх доменных БД в `.env.local`, сохранив старые `DB_*`:
+`DB_NAME` остаётся именем исходной общей БД. Для существующих владельцев нужны
+их действующие пароли. Не создавайте таблицы в целевых БД вручную.
+
+Запустите GitHub Actions **Run workflow → prepare_only=true**. Он соберёт образы,
+загрузит bundle и обновит `/var/www/bin/argus`, сохранив работающий релиз.
+Затем на сервере выполните:
+
+```bash
+/var/www/bin/argus db transfer
+```
+
+Команда сама:
+
+1. Берёт эксклюзивную блокировку от деплоя и ручных команд, проверяет настройки,
+   схемы источника, владельцев и отсутствие чужих данных в целевых БД.
+2. Загружает образы, сохраняет текущие env/Compose и останавливает приложения,
+   оставляя PostgreSQL и Redis работающими. Включает для новых подключений к
+   исходной БД `default_transaction_read_only=on` и проверяет отсутствие оставшихся
+   клиентских сессий. Прямые клиенты вне `argus` необходимо закрыть, если проверка их обнаружит.
+3. Делает полный `pg_dumpall`, создаёт недостающие целевые БД/владельцев и переносит
+   каждую схему через `pg_dump` / `pg_restore --single-transaction` без старых ACL.
+4. Сверяет число и хеши строк всех таблиц, определения столбцов, значения и параметры
+   последовательностей, индексы, ограничения, функции, триггеры и владельцев объектов.
+   Alembic-маркеры входят в проверяемые таблицы. Полное чтение и сравнение больших
+   таблиц может занять существенное время.
+5. Применяет подготовленный релиз с миграциями и проверкой готовности контейнеров.
+
+Источник должен уже содержать схемы `api`, `clio`, `prophet`, `intelligence` и их
+Alembic-маркеры. Legacy-таблицы только в `public` не переносятся этой командой.
+Имена БД и ролей для переноса: латинские буквы, цифры, `_`, `-` (до 63 символов).
+Источник и цели должны находиться в одном PostgreSQL, используемом Compose.
+
+При необходимости можно явно выбрать bundle или исходную БД:
+
+```bash
+/var/www/bin/argus db transfer --release /var/www/incoming/<run-id>-<attempt>/release-bundle --source old_database
+```
+
+Контрольные точки, дампы и копии конфигурации сохраняются в
+`/var/www/backups/database-transfer/` (каталог доступен только владельцу).
+При ошибке исправьте причину и **повторите ту же команду**. Приложения могут
+оставаться остановленными, исходная БД — в режиме read-only. Уже восстановленные
+цели проходят проверку и пропускаются; непустые БД без подтверждённой контрольной
+точки не перезаписываются. После проверки всех данных повторный запуск продолжает
+только применение релиза: новые записи в целевых БД не затираются старым дампом.
+Завершённый перенос повторно не выполняется. Bundle и параметры БД операции менять
+при повторе нельзя; команда проверяет их соответствие сохранённой операции.
+
+Исходная БД и старые роли не удаляются. После появления записей в новых БД откат
+требует согласования данных; автоматического переключения назад нет. Настройка
+read-only источника — эксплуатационная защита от случайной записи, не запрет для
+администратора, который может явно её отключить. Файлы моделей/данных остаются на
+своих местах и не входят в SQL-дамп. Удаление старой БД, ролей и резервных копий
+выполняется отдельно после проверки работы нового релиза.
+
+## Проверки
+
+```bash
+./scripts/test-python -q
+```
+
+Интеграционные тесты требуют `TEST_DATABASE_ADMIN_DSN`, указывающий на отдельный
+одноразовый PostgreSQL. Они создают и удаляют БД/роли со случайными именами,
+проверяют полную цепочку миграций, изоляцию подключений, публикации и блокировки.
+Без переменной проверки БД пропускаются; project env как запасной источник не
+используется. Public CI запускает их на отдельном PostgreSQL 17.

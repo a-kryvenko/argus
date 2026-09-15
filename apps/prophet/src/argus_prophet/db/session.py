@@ -1,29 +1,26 @@
 """Prophet storage; writers reuse the connection holding their advisory lock."""
-import os
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from sqlalchemy import URL
 
 _writer_session = ContextVar('prophet_writer_session', default=None)
 
 
-def get_database_url(*, migration=False):
-    key = 'PROPHET_MIGRATION_PASSWORD' if migration else 'PROPHET_DB_PASSWORD'
-    missing = [name for name in ('DB_NAME', key) if not os.getenv(name)]
-    if missing:
-        raise RuntimeError('Missing required database variables: ' + ', '.join(missing))
-    return URL.create('postgresql+psycopg',
-                      username='argus_prophet_migrator' if migration else 'argus_prophet',
-                      password=os.environ[key], database=os.environ['DB_NAME'],
-                      host=os.getenv('DB_HOST', 'localhost'), port=int(os.getenv('DB_PORT', '5432')))
+def get_database_url():
+    """Runtime and Alembic share credentials; passwords remain raw strings."""
+    from sqlalchemy import URL
+    from common.database import database_parameters
+    try:
+        parameters = database_parameters('PROPHET')
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from None
+    return URL.create('postgresql+psycopg', **parameters)
 
 
 def open_connection(*, autocommit=False):
     import psycopg
     url = get_database_url()
-    return psycopg.connect(dbname=url.database, user=url.username, password=url.password,
-                           host=url.host, port=url.port, connect_timeout=10,
+    return psycopg.connect(url.set(drivername='postgresql').render_as_string(hide_password=False), connect_timeout=10,
                            autocommit=autocommit, application_name='argus-prophet',
                            keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
                            tcp_user_timeout=60000,

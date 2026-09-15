@@ -1,7 +1,5 @@
-import os
 from collections.abc import AsyncIterator
 
-from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -13,29 +11,15 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def get_database_url(*, migration: bool = False) -> URL:
-    """Build a safe connection URL from raw database credentials."""
-
-    password_variable = "API_MIGRATION_PASSWORD" if migration else "API_DB_PASSWORD"
-    required_variables = ("DB_NAME", password_variable)
-    missing_variables = [name for name in required_variables if not os.getenv(name)]
-    if missing_variables:
-        missing = ", ".join(missing_variables)
-        raise RuntimeError(f"Missing required database variables: {missing}")
-
+def get_database_url():
+    """Runtime and Alembic share credentials; passwords remain raw strings."""
+    from sqlalchemy import URL
+    from common.database import database_parameters
     try:
-        port = int(os.getenv("DB_PORT", "5432"))
+        parameters = database_parameters('API')
     except ValueError as exc:
-        raise RuntimeError("DB_PORT must be an integer") from exc
-
-    return URL.create(
-        drivername="postgresql+psycopg",
-        username="argus_api_migrator" if migration else "argus_api",
-        password=os.environ[password_variable],
-        host=os.getenv("DB_HOST", "localhost"),
-        port=port,
-        database=os.environ["DB_NAME"],
-    )
+        raise RuntimeError(str(exc)) from None
+    return URL.create('postgresql+psycopg', **parameters)
 
 
 def get_engine() -> AsyncEngine:

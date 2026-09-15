@@ -34,7 +34,8 @@ def tracked_repo(path, files):
 @pytest.fixture
 def source(tmp_path):
     files = {'.gitignore': 'packages/forecast-core/\n', '.dockerignore': '**/.venv\n', 'docs/example.md': 'docs',
-             'packages/common/src/common/shared.py': 'shared', 'apps/web/app/page.tsx': 'page',
+             'packages/common/src/common/shared.py': 'shared',
+             'packages/forecast/src/forecast/example.py': 'forecast', 'apps/web/app/page.tsx': 'page',
              'apps/prophet/src/argus_prophet/worker.py': 'worker',
              'apps/intelligence/src/argus_intelligence/cli.py': 'cli',
              'apps/clio/src/argus_clio/migrations/versions/test.py': 'migration',
@@ -51,6 +52,7 @@ def changed_components(before, after):
 
 @pytest.mark.parametrize('path,expected', [
     ('apps/intelligence/src/argus_intelligence/cli.py', {'intelligence'}),
+    ('packages/forecast/src/forecast/example.py', {'prophet'}),
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
     ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'intelligence'}),
     ('packages/forecast-core/src/forecast_core/api.py', {'clio', 'prophet'}),
@@ -124,7 +126,7 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail):
     root, bundle, bin_dir = [tmp_path / name for name in ('host', 'bundle', 'tools')]
     for directory in (root, bundle, bin_dir):
         directory.mkdir()
-    for name in ('deploy.sh', 'argus'):
+    for name in ('deploy.sh', 'argus', 'transfer.sh'):
         shutil.copy2(ROOT / 'scripts/deployment' / name, bundle / name)
     for name in ('configs', 'nginx', 'alloy'):
         (bundle / name).mkdir()
@@ -149,17 +151,17 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
                             capture_output=True, text=True)
     assert (result.returncode != 0) == fail, result.stderr
     calls = log.read_text().splitlines()
-    assert not any('python' in call or '--force-recreate' in call or 'db-bootstrap' in call for call in calls)
+    assert not any('python' in call or '--force-recreate' in call or 'db-bootstrap' in call or '-provision' in call for call in calls)
     if migration:
         stop = next(i for i, call in enumerate(calls) if ' stop ' in call)
-        backup = next(i for i, call in enumerate(calls) if 'pg_dump' in call)
+        backup = next(i for i, call in enumerate(calls) if 'pg_dumpall' in call)
         migrate = next(i for i, call in enumerate(calls) if f'run --rm --no-deps {migration}-migrate' in call)
         assert stop < backup < migrate
+        assert '--dbname=' not in calls[backup]  # Back up all domain databases and owners.
+        backups = list((root / 'backups').glob('pre-migration-*.sql'))
+        assert len(backups) == 1 and backups[0].stat().st_mode & 0o777 == 0o600
         assert calls[stop].endswith('stop intelligence' if migration == 'intelligence' else 'stop clio solar-wind geomagnetic clio-refresh clio-aggregate')
-        if migration == 'intelligence':
-            provision = next(i for i, call in enumerate(calls) if 'run --rm --no-deps intelligence-provision' in call)
-            assert provision < stop
     else:
-        assert not any(' stop ' in call or 'pg_dump' in call or '-migrate' in call for call in calls)
+        assert not any(' stop ' in call or 'pg_dumpall' in call or '-migrate' in call for call in calls)
     assert (root / '.release-fingerprints.tsv').read_text() == (fingerprints if fail else (bundle / 'fingerprints.tsv').read_text())
     assert not fail or not any('nginx -s reload' in call for call in calls)

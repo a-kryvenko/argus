@@ -5,23 +5,25 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_domain_credentials_are_not_shared_with_runtime_containers():
+def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
-    for name in ('api', 'clio', 'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate', 'prophet', 'prophet-api'):
-        service = services[name]
-        assert 'env_file' not in service, name
-        environment = service['environment']
-        assert 'DB_USER' not in environment and 'DB_PASSWORD' not in environment, name
-        assert not any('MIGRATION' in key for key in environment), name
-        if name == 'api':
-            assert 'API_DB_PASSWORD' in environment and 'CLIO_DB_PASSWORD' not in environment
-        elif name in ('prophet', 'prophet-api'):
-            assert 'PROPHET_DB_PASSWORD' in environment
-            assert 'CLIO_DB_PASSWORD' not in environment and 'API_DB_PASSWORD' not in environment
-        else:
-            assert 'CLIO_DB_PASSWORD' in environment and 'API_DB_PASSWORD' not in environment
-    for name in ('api-migrate', 'clio-migrate', 'prophet-migrate', 'db-bootstrap'):
-        assert services[name]['profiles'] == ['maintenance']
+    domains = {'api': ['api'], 'clio': ['clio', 'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'],
+               'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence']}
+    for domain, names in domains.items():
+        for name in [*names, domain + '-migrate']:
+            service = services[name]
+            assert 'env_file' not in service
+            environment = service['environment']
+            database_keys = {key for key in environment if '_DB_' in key or key.startswith('DB_') or 'DATABASE' in key}
+            expected = {domain.upper() + '_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
+            assert database_keys == expected, name
+            for key in expected:
+                assert environment[key].startswith('${' + key + ':'), name
+            assert all(
+                environment[key] == services[domain + '-migrate']['environment'][key] for key in expected)
+        assert services[domain + '-migrate']['profiles'] == ['maintenance']
+    assert services['db-provision']['profiles'] == ['maintenance']
+    assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
     assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
     assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
 
@@ -49,11 +51,10 @@ def test_intelligence_credentials_and_networks_are_scoped():
     assert 'profiles' not in runtime
     assert runtime['command'] == ['intelligence', 'worker']
     assert runtime['networks'] == ['backend', 'forecasts']
-    assert set(runtime['environment']) == {'DB_HOST', 'DB_NAME', 'INTELLIGENCE_DB_PASSWORD', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN'}
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN'}
     assert not any(key in runtime for key in ('volumes', 'ports', 'env_file'))
     assert services['intelligence-migrate']['profiles'] == ['maintenance']
-    assert set(services['intelligence-migrate']['environment']) == {'DB_HOST', 'DB_NAME', 'INTELLIGENCE_MIGRATION_PASSWORD'}
-    assert services['intelligence-provision']['profiles'] == ['maintenance']
+    assert set(services['intelligence-migrate']['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
     for name, service in services.items():
-        if not name.startswith('intelligence'):
+        if not name.startswith('intelligence') and name != 'db-provision':
             assert not any(key.startswith('INTELLIGENCE_') for key in service.get('environment', {})), name

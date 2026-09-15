@@ -8,12 +8,12 @@
 | forecast-core | Private models, feature preparation and calibration | common, clio |
 | apps/clio | Observation storage, collectors, schedules and read HTTP API | common, clio; private calibration through services/calibration.py |
 | apps/prophet | Forecast execution, database scheduling, owned run/release storage and forecast HTTP reads | common, forecast, forecast_core.api |
-| apps/api | Public HTTP/authentication; own dashboard storage; Clio/Prophet HTTP clients | common, forecast |
+| apps/api | Public HTTP/authentication; own dashboard storage; Clio/Prophet HTTP clients | common |
 | intelligence-core | Private impact calculations, not yet integrated | Shared contracts as needed |
 
 Clio owns schema `clio` and its migrations under
 `apps/clio/src/argus_clio/migrations`. API owns schema `api` and migrations under
-`apps/api/alembic`. Separate runtime/migration roles enforce ownership; API reads
+`apps/api/alembic`. Each domain has a separate database and one owner shared by runtime and migrations; API reads
 observations only through Clio contracts. Prophet SQL credentials access only its own run/artifact/release schema.
 API forecast reads use Prophet contracts; live CSV files are exports, not the
 API read source. Prophet slot completion and publication share a transaction;
@@ -39,6 +39,7 @@ Prophet. Keep its source/version consistent with both application lockfiles.
 uv sync --project apps/api --frozen
 uv sync --project apps/clio --frozen
 uv sync --project apps/prophet --frozen
+uv sync --project apps/intelligence --frozen
 ```
 
 After a backend dependency change, update the Clio/Prophet lockfiles before
@@ -85,11 +86,11 @@ results and attempts in its own schema. Risk calculations remain future work.
 ## Isolation checks
 
 The boundary suite checks package import direction, private adapter entry points,
-absence of foreign domain SQL references and runtime/migrator credential separation.
+absence of foreign domain SQL references and per-service database configuration.
 Installed API/Prophet environments are checked separately from the root development
-workspace. PostgreSQL CI verifies actual privileges and cross-domain denial.
-The shared `forecast` library in API provides contracts/helpers; it does not give
-API access to Prophet storage or install the private backend.
+workspace. PostgreSQL CI verifies actual database ownership and rejected cross-domain connections.
+API depends only on common contracts and its own HTTP/read adapters. It does not
+install the forecast library, Prophet runtime or private backend.
 
 `apps/intelligence` consumes common contracts and HTTP, and owns its storage. It has its own
 environment/image, owned SQL credentials and Alembic chain; it has no private

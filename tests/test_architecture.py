@@ -82,7 +82,7 @@ def test_api_no_longer_owns_forecast_commands():
 def test_api_does_not_import_observation_storage_or_private_backend():
     for path in (ROOT / 'apps/api/app').rglob('*.py'):
         for module in imports(path):
-            assert module.split('.')[0] not in {'clio', 'argus_clio', 'forecast_core', 'argus_prophet'}, (path, module)
+            assert module.split('.')[0] not in {'forecast', 'clio', 'argus_clio', 'forecast_core', 'argus_prophet'}, (path, module)
     assert {p.stem for p in (ROOT / 'apps/api/app/db/models').glob('*.py')} == {'__init__', 'dashboard'}
     assert not list((ROOT / 'apps/api/app/commands').glob('collect*.py'))
 
@@ -123,3 +123,12 @@ def test_existing_domains_do_not_depend_on_intelligence_runtime():
     for root in ('apps/api/app', 'apps/clio/src', 'apps/prophet/src', 'packages/common/src'):
         for path in (ROOT / root).rglob('*.py'):
             assert all(module.split('.')[0] != 'argus_intelligence' for module in imports(path)), path
+
+
+def test_api_environment_does_not_include_forecast_package():
+    config = tomllib.loads((ROOT / 'apps/api/pyproject.toml').read_text())
+    assert 'forecast' not in config['project']['dependencies']
+    assert 'forecast' not in config['tool']['uv']['sources']
+    assert '../../packages/forecast' not in config['tool']['uv']['workspace']['members']
+    lock = tomllib.loads((ROOT / 'apps/api/uv.lock').read_text())
+    assert not {'forecast', 'forecast-core', 'clio'} & {package['name'] for package in lock['package']}

@@ -6,7 +6,6 @@ dependencies = ["common", "httpx>=0.28,<1", "psycopg[binary]>=3.2,<4", "sqlalche
 
 [project.scripts]
 intelligence = "argus_intelligence.cli:main"
-intelligence-provision = "argus_intelligence.provision:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -24,15 +24,17 @@ Private impact calculations are not part of the public observation service.
 
 ## Local development
 
-Install the frontend dependencies with `pnpm install`. Set up the API, Clio and Prophet environments
+See the [local and production command reference](docs/commands.md) for setup,
+daily operations, migrations and diagnostics.
+
+Install the frontend dependencies with `pnpm install`. Set up the API, Clio, Prophet and Intelligence environments
 and private backend as described in [package setup](docs/architecture.md).
 Configure `.env` and `.env.local`, then run:
 
 ```sh
-docker compose up -d
-./scripts/domain-db --apply
-./scripts/clio migrate upgrade head
-pnpm db:migrate
+./scripts/argus compose up -d --wait
+./scripts/argus db provision --apply
+./scripts/argus db migrate
 pnpm dev
 ```
 

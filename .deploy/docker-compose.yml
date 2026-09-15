@@ -6,8 +6,10 @@ x-clio-runtime: &clio-runtime
   environment:
     ARGUS_WORKDIR: /var/www
     DEBUG: ${DEBUG:-false}
-    DB_HOST: postgres
-    DB_NAME: ${DB_NAME:?DB_NAME is required}
+    CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
+    CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
+    CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+    CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
     CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
     OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
     SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
@@ -28,8 +30,10 @@ services:
     stop_grace_period: 2m
     command: ["intelligence", "worker"]
     environment:
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
+      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
       INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
@@ -45,22 +49,11 @@ services:
     profiles: ["maintenance"]
     command: ["intelligence", "migrate", "upgrade", "head"]
     environment:
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
-      INTELLIGENCE_MIGRATION_PASSWORD: ${INTELLIGENCE_MIGRATION_PASSWORD:?INTELLIGENCE_MIGRATION_PASSWORD is required}
-    networks: [backend]
-
-  intelligence-provision:
-    image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
-    profiles: ["maintenance"]
-    command: ["intelligence-provision"]
-    environment:
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
-      DB_USER: ${DB_USER:?DB_USER is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
+      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
       INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
-      INTELLIGENCE_MIGRATION_PASSWORD: ${INTELLIGENCE_MIGRATION_PASSWORD:?INTELLIGENCE_MIGRATION_PASSWORD is required}
     networks: [backend]
 
   api:
@@ -71,8 +64,10 @@ services:
     environment:
       ARGUS_WORKDIR: /var/www
       DEBUG: ${DEBUG:-false}
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      API_DB_HOST: ${API_DB_HOST:-postgres}
+      API_DB_PORT: ${API_DB_PORT:-5432}
+      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
+      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
       FORECASTS_URL: http://prophet-api:8000
@@ -142,21 +137,36 @@ services:
     <<: *clio-runtime
     command: ["clio", "schedule", "aggregate"]
 
-  db-bootstrap:
+  db-provision:
     image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
-    command: [".venv/bin/python", "/var/www/scripts/bootstrap-domain-db.py", "--apply"]
+    command: [".venv/bin/python", "/var/www/scripts/provision-databases.py", "--apply"]
     environment:
-      DB_HOST: postgres
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_USER: ${DB_USER:?DB_USER is required}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      API_DB_HOST: ${API_DB_HOST:-postgres}
+      API_DB_PORT: ${API_DB_PORT:-5432}
+      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
+      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
-      API_MIGRATION_PASSWORD: ${API_MIGRATION_PASSWORD:?API_MIGRATION_PASSWORD is required}
+      CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
+      CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
+      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
       CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
-      CLIO_MIGRATION_PASSWORD: ${CLIO_MIGRATION_PASSWORD:?CLIO_MIGRATION_PASSWORD is required}
+      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
+      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
       PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-      PROPHET_MIGRATION_PASSWORD: ${PROPHET_MIGRATION_PASSWORD:?PROPHET_MIGRATION_PASSWORD is required}
+      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
+      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
     networks: [backend]
 
   api-migrate:
@@ -164,9 +174,11 @@ services:
     profiles: ["maintenance"]
     command: [".venv/bin/alembic", "upgrade", "head"]
     environment:
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
-      API_MIGRATION_PASSWORD: ${API_MIGRATION_PASSWORD:?API_MIGRATION_PASSWORD is required}
+      API_DB_HOST: ${API_DB_HOST:-postgres}
+      API_DB_PORT: ${API_DB_PORT:-5432}
+      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
+      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
     networks: [backend]
 
   clio-migrate:
@@ -175,9 +187,11 @@ services:
     command: ["clio", "migrate", "upgrade", "head"]
     environment:
       ARGUS_WORKDIR: /var/www
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
-      CLIO_MIGRATION_PASSWORD: ${CLIO_MIGRATION_PASSWORD:?CLIO_MIGRATION_PASSWORD is required}
+      CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
+      CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
+      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
+      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
     volumes:
       - ./configs:/var/www/configs:ro
     networks: [backend]
@@ -188,9 +202,11 @@ services:
     command: ["prophet", "migrate", "upgrade", "head"]
     environment:
       ARGUS_WORKDIR: /var/www
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
-      PROPHET_MIGRATION_PASSWORD: ${PROPHET_MIGRATION_PASSWORD:?PROPHET_MIGRATION_PASSWORD is required}
+      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
+      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
+      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
     volumes:
       - ./configs:/var/www/configs:ro
     networks: [backend]
@@ -203,8 +219,10 @@ services:
     stop_grace_period: 10m
     environment:
       ARGUS_WORKDIR: /var/www
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
+      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
       PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
       OBSERVATIONS_URL: http://clio:8000
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
@@ -226,8 +244,10 @@ services:
     command: ["prophet", "serve"]
     environment:
       ARGUS_WORKDIR: /var/www
-      DB_HOST: postgres
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
+      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
       PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
     volumes:

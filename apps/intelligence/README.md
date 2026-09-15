@@ -5,31 +5,16 @@ Prophet's HTTP contract. It validates the full release and saves a stub result i
 its own PostgreSQL schema. It does not calculate satellite risks or enforce model
 readiness. No private backend is installed.
 
-## Deployment: required action before creating the release tag
+## Database and deployment
 
-Add **two new, distinct random passwords** to the existing production env file:
+Intelligence has its own PostgreSQL database and one owner for both runtime and
+Alembic. Set `INTELLIGENCE_DB_HOST`, `INTELLIGENCE_DB_PORT`,
+`INTELLIGENCE_DB_NAME`, `INTELLIGENCE_DB_USER`, `INTELLIGENCE_DB_PASSWORD`.
+Passwords are raw strings, with no URL encoding. Keep `FORECASTS_URL` and `FORECASTS_SERVICE_TOKEN` configured.
 
-| Variable | Used by |
-| --- | --- |
-| `INTELLIGENCE_DB_PASSWORD` | Runtime role `argus_intelligence` |
-| `INTELLIGENCE_MIGRATION_PASSWORD` | Owner/migrator `argus_intelligence_migrator` |
-
-Keep the existing `DB_NAME`, administrative credentials and
-`FORECASTS_SERVICE_TOKEN`. No new GitHub secrets or scheduler settings are needed.
-Compose requires both new values and fails validation before stopping services if
-one is absent. The production env files are never rewritten by deployment.
-
-When Intelligence migrations/provisioning change, deployment runs the isolated
-`intelligence-provision` maintenance container before stopping writers. It creates
-only the Intelligence roles/schema if missing and verifies the supplied passwords.
-It does not adopt legacy data, modify other domains or rotate existing passwords.
-An unexpected schema owner or elevated/member role is rejected. A wrong existing
-password requires explicit rotation; it is not silently changed during deployment.
-
-Deployment then stops Intelligence, backs up PostgreSQL, runs its Alembic chain
-and starts the worker through Compose. Runtime receives only its own SQL password
-and forecast token. The migrator receives only its migration password; admin
-credentials are confined to the provisioning container. No cron entry is needed.
+Create the database explicitly with the shared maintenance tool before the first
+release. Normal deployment runs migrations only; it never creates roles/databases
+or rotates passwords. See [database provisioning and transfer](../../docs/domain-storage.md).
 
 ## Commands
 
@@ -46,10 +31,13 @@ attempt, latest saved result and number of identified pending releases. Products
 other than solar-wind-speed can be processed manually; the production worker
 command selects solar-wind-speed explicitly by default.
 
-For local use, run `uv sync --project apps/intelligence --frozen`, configure the
-same HTTP/runtime database variables (and migration password for migrations),
-and use `./scripts/intelligence ...`. `intelligence migrate upgrade head` applies
-only this domain's migrations after provisioning.
+For local use, run `uv sync --project apps/intelligence --frozen`. The unified
+wrapper selects the installed environment and loads the root env files:
+
+```bash
+./scripts/argus intelligence migrate upgrade head
+./scripts/argus intelligence worker
+```
 
 ## Processing and recovery
 
@@ -76,7 +64,6 @@ quarantine are future operational improvements.
 `risk_assessment: null` remain explicit in saved results. Processing success does
 not mean the input is fresh or safe for operational risk decisions.
 
-Password rotation is explicit maintenance: stop Intelligence, update the two env
-values, run `argus compose run --rm --no-deps intelligence-provision
-intelligence-provision --rotate-passwords`, and recreate Intelligence with the
-updated environment. Coordinate this separately from deployments.
+Password rotation is separate maintenance: stop the worker, change its owner's
+password administratively, update `INTELLIGENCE_DB_PASSWORD`, and recreate the
+container with `argus compose up -d intelligence`.

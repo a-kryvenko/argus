@@ -7,7 +7,7 @@ import pytest
 
 from common.schemas.forecast_release import ForecastRelease, ForecastArtifact
 from app.services import forecasts_client, forecast_products
-from forecast.exceptions import ArtifactNotReadyError
+from app.services.forecast_errors import ArtifactNotReadyError
 
 
 def payload():

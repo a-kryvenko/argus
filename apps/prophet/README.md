@@ -17,17 +17,22 @@ With the private `packages/forecast-core` checkout present:
 uv sync --project apps/prophet --frozen
 ```
 
+Configure `PROPHET_DB_HOST`, `PROPHET_DB_PORT`, `PROPHET_DB_NAME`,
+`PROPHET_DB_USER`, `PROPHET_DB_PASSWORD` for the separate Prophet database.
+Passwords are raw strings, with no URL encoding. Runtime and Alembic use the same owner. See
+[database setup and transfer](../../docs/domain-storage.md).
+
 Configure `OBSERVATIONS_URL` (locally `http://127.0.0.1:8001`) and the same
 `OBSERVATIONS_SERVICE_TOKEN` in the Clio and Prophet environments.
 The token must be a strong random secret. The service refuses requests if it
 is absent; there is no database or provider-download fallback.
 
 ```bash
-./scripts/prophet generate
-./scripts/prophet generate density
-./scripts/prophet worker
-./scripts/prophet serve --port 8002
-./scripts/prophet export
+./scripts/argus prophet generate
+./scripts/argus prophet generate density
+./scripts/argus prophet worker
+./scripts/argus prophet serve --port 8002
+./scripts/argus prophet export
 ```
 
 Products for `generate`: `all`, `wind`, `kp`, `hmf`, `density`. The installed CLI
@@ -87,11 +92,11 @@ Use `/var/www/bin/argus prophet ...` on the server; the commands below are for
 the local checkout.
 
 ```bash
-./scripts/prophet status solar-wind-speed
-./scripts/prophet slots --limit 10
-./scripts/prophet runs --limit 10
-./scripts/prophet show-run <run-uuid>
-./scripts/prophet show-run <run-uuid> --inputs
+./scripts/argus prophet status solar-wind-speed
+./scripts/argus prophet slots --limit 10
+./scripts/argus prophet runs --limit 10
+./scripts/argus prophet show-run <run-uuid>
+./scripts/argus prophet show-run <run-uuid> --inputs
 ```
 
 See [Prophet operations](../../docs/prophet.md) for deployment and

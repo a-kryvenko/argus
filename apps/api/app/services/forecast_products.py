@@ -19,7 +19,7 @@ from app.schemas.metrics import (
     VariableMetrics,
 )
 from common.config import get_config
-from forecast.exceptions import ArtifactNotReadyError
+from app.services.forecast_errors import ArtifactNotReadyError
 from app.services.forecasts_client import read_frames
 
 

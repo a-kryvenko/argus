@@ -19,50 +19,38 @@ only by ingestion. The HTTP read process does not import the private backend.
 Private algorithms are not copied into public code. API no longer installs the
 provider library or private backend.
 
-Configure the following locally in `.env.local` (production passes explicit
-variables to each container, without sharing the entire environment file):
+Configure `CLIO_DB_HOST`, `CLIO_DB_PORT`, `CLIO_DB_NAME`, `CLIO_DB_USER` and
+`CLIO_DB_PASSWORD`. Use host `127.0.0.1` locally and `postgres` in production.
+Passwords remain raw strings; URL construction is handled by the application.
+Runtime and migrations share one database owner. Configure
+`OBSERVATIONS_URL=http://127.0.0.1:8001` and the shared
+`OBSERVATIONS_SERVICE_TOKEN` for API/Prophet consumers.
 
-| Variable | Consumer |
-| --- | --- |
-| `DB_NAME`, `DB_HOST`, `DB_PORT` | Database connection location; local defaults host=localhost, port=5432 |
-| `DB_USER`, `DB_PASSWORD` | Operator bootstrap only; a separate database administrator |
-| `API_DB_PASSWORD` | API runtime, fixed role `argus_api` |
-| `API_MIGRATION_PASSWORD` | API migrations, fixed role `argus_api_migrator` |
-| `CLIO_DB_PASSWORD` | Clio runtime, fixed role `argus_clio` |
-| `CLIO_MIGRATION_PASSWORD` | Clio migrations, fixed role `argus_clio_migrator` |
-| `OBSERVATIONS_URL` | API and Prophet; locally `http://127.0.0.1:8001`, production `http://clio:8000` |
-| `OBSERVATIONS_SERVICE_TOKEN` | Shared read-service credential for Clio, API and Prophet |
-
-Use distinct strong random passwords. Runtime code has no fallback to `DB_USER`
-or `DB_PASSWORD`, and no environment variable can select an administrative role.
-The four domain role names and the `api`/`clio` schemas are reserved for this app.
-
-For a new database, or when adopting the legacy database after stopping all
-application writers:
+For a new database:
 
 ```bash
-./scripts/domain-db                 # validate and roll back
-./scripts/domain-db --apply         # provision/adopt, commit
-./scripts/clio migrate upgrade head
-pnpm db:migrate
+./scripts/argus db provision --apply
+./scripts/argus clio migrate upgrade head
 ```
 
-Read [database ownership and provisioning](../../docs/domain-storage.md) before adopting existing data.
+See [commands](../../docs/commands.md) for full local setup and
+[domain storage](../../docs/domain-storage.md) for database provisioning and
+one-time transfer of existing data. Provisioning does not rotate passwords.
 
 ## Commands
 
 ```bash
-./scripts/clio serve --host 127.0.0.1 --port 8001
-./scripts/clio collect solar-wind --watch
-./scripts/clio collect geomagnetic --watch
-./scripts/clio refresh
-./scripts/clio aggregate --limit 240
-./scripts/clio schedule refresh
-./scripts/clio schedule aggregate
-./scripts/clio audit --help
-./scripts/clio cleanup --help
-./scripts/clio check-health solar-wind
-./scripts/clio migrate current
+./scripts/argus clio serve --host 127.0.0.1 --port 8001
+./scripts/argus clio collect solar-wind --watch
+./scripts/argus clio collect geomagnetic --watch
+./scripts/argus clio refresh
+./scripts/argus clio aggregate --limit 240
+./scripts/argus clio schedule refresh
+./scripts/argus clio schedule aggregate
+./scripts/argus clio audit --help
+./scripts/argus clio cleanup --help
+./scripts/argus clio check-health solar-wind
+./scripts/argus clio migrate current
 ```
 
 Production Compose runs `clio`, `solar-wind`, `geomagnetic`, `clio-refresh` and

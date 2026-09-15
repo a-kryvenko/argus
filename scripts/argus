@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Local command entry point. Application environments must already be installed.
+set -euo pipefail
+script="$(readlink -f -- "${BASH_SOURCE[0]}")"
+root="$(cd -- "$(dirname -- "$script")/.." && pwd)"
+usage() {
+    cat <<'EOF'
+Usage: argus db provision [--apply] | db migrate
+       argus api migrate <alembic arguments> | api user <arguments> | api serve <arguments>
+       argus clio <arguments> | prophet <arguments> | intelligence <arguments>
+       argus compose <arguments>
+EOF
+}
+check_app() {
+    if [[ ! -x "$root/apps/$1/.venv/bin/python" ]]; then
+        echo "Missing $1 environment: run uv sync --project apps/$1 --frozen" >&2
+        exit 1
+    fi
+}
+run_app() {
+    local app="$1"
+    shift
+    check_app "$app"
+    local command=(uv run --project "$root/apps/$app" --frozen --no-sync)
+    for file in "$root/.env" "$root/.env.local"; do
+        [[ ! -f "$file" ]] || command+=(--env-file "$file")
+    done
+    cd "$root/apps/$app"
+    export ARGUS_WORKDIR="$root"
+    exec "${command[@]}" "$@"
+}
+case "${1:-}" in
+    -h|--help|'') usage; exit 0 ;;
+    db)
+        shift
+        case "${1:-}" in
+            provision)
+                shift
+                run_app api python "$root/scripts/provision-databases.py" "$@"
+                ;;
+            migrate)
+                shift
+                [[ $# == 0 ]] || { usage >&2; exit 2; }
+                for domain in api clio prophet intelligence; do check_app "$domain"; done
+                for domain in api clio prophet intelligence; do
+                    "$script" "$domain" migrate upgrade head
+                done
+                ;;
+            *) usage >&2; exit 2 ;;
+        esac
+        ;;
+    api)
+        shift
+        case "${1:-}" in
+            migrate) shift; run_app api alembic -c "$root/apps/api/alembic.ini" "$@" ;;
+            user) shift; run_app api python -m app.commands.manage_user "$@" ;;
+            serve) shift; run_app api uvicorn app.main:app "$@" ;;
+            *) usage >&2; exit 2 ;;
+        esac
+        ;;
+    clio|prophet|intelligence)
+        domain="$1"
+        shift
+        run_app "$domain" "$domain" "$@"
+        ;;
+    compose)
+        shift
+        command=(docker compose --project-directory "$root")
+        for file in "$root/.env" "$root/.env.local"; do
+            [[ ! -f "$file" ]] || command+=(--env-file "$file")
+        done
+        exec "${command[@]}" -f "$root/docker-compose.yml" "$@"
+        ;;
+    *) usage >&2; exit 2 ;;
+esac

@@ -24,8 +24,7 @@ def slot_for(job: str, now: datetime) -> datetime:
 def execute(job: str, run: Callable[[], None], *, scheduled: bool = False, now=None) -> bool:
     import psycopg
     url = get_database_url()
-    with psycopg.connect(dbname=url.database, user=url.username, password=url.password,
-                         host=url.host, port=url.port, autocommit=True,
+    with psycopg.connect(url.set(drivername='postgresql').render_as_string(hide_password=False), autocommit=True,
                          options='-csearch_path=clio,pg_catalog,pg_temp') as conn:
         if not conn.execute('SELECT pg_try_advisory_lock(%s)', (JOBS[job][1],)).fetchone()[0]:
             raise JobBusy(f'Clio {job} is already running')

@@ -5,6 +5,10 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
+      prepare_only:
+        description: Build and upload the release without applying it (database maintenance)
+        type: boolean
+        default: false
       rebuild:
         description: Rebuild all images even when source identities are cached (base image updates)
         type: boolean
@@ -32,7 +36,7 @@ jobs:
       - name: Validate architecture and deployment planning
         run: |
           python3 -m pip install pytest pyyaml
-          python3 -m pytest -q tests/test_architecture.py tests/test_domain_deployment.py tests/test_release_deployment.py
+          python3 -m pytest -q tests/test_architecture.py tests/test_domain_deployment.py tests/test_release_deployment.py tests/test_argus_cli.py tests/test_database_transfer.py
       - name: Resolve the private backend once for this release
         uses: actions/checkout@v6
         with:
@@ -176,19 +180,24 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           source: release-bundle
           target: /var/www/incoming/${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Apply only affected services
+      - name: Prepare operator tools or apply the release
         uses: appleboy/ssh-action@v1.2.0
         env:
           DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_LOGIN }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           RELEASE_DIRECTORY: /var/www/incoming/${{ github.run_id }}-${{ github.run_attempt }}/release-bundle
+          PREPARE_ONLY: ${{ inputs.prepare_only }}
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
-          envs: DOCKERHUB_LOGIN,DOCKERHUB_TOKEN,RELEASE_DIRECTORY
+          envs: DOCKERHUB_LOGIN,DOCKERHUB_TOKEN,RELEASE_DIRECTORY,PREPARE_ONLY
           command_timeout: 30m
           script: |
             set -eu
             printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_LOGIN" --password-stdin
-            bash "$RELEASE_DIRECTORY/deploy.sh" /var/www
+            if [ "$PREPARE_ONLY" = true ]; then
+              bash "$RELEASE_DIRECTORY/install-tools.sh" /var/www
+            else
+              bash "$RELEASE_DIRECTORY/deploy.sh" /var/www
+            fi

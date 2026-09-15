@@ -1,33 +1,22 @@
 """Real ownership, deduplication, retry and crash recovery on disposable PostgreSQL."""
-import os
-import subprocess
-import sys
 from uuid import uuid4
 
 import pytest
 psycopg = pytest.importorskip('psycopg')
 from sqlalchemy.engine import make_url
 
-from test_domain_storage import database, bootstrap, ROOT
-from argus_intelligence import provision, worker
+from test_domain_storage import database, migrate
+from argus_intelligence import worker
 
 
 @pytest.fixture
 def intelligence_db(database, monkeypatch):
     dsn, passwords, environment = database
-    passwords = {**passwords, 'INTELLIGENCE_DB_PASSWORD': uuid4().hex,
-                 'INTELLIGENCE_MIGRATION_PASSWORD': uuid4().hex}
-    with psycopg.connect(dsn) as conn:
-        bootstrap.provision(conn, passwords)
-        provision.provision(conn, passwords, rotate=True)
-    env = {**environment, **passwords}
-    env['PYTHONPATH'] += ':' + str(ROOT / 'apps/intelligence/src')
-    result = subprocess.run([sys.executable, '-c', 'from argus_intelligence.cli import main; main()',
-                             'migrate', 'upgrade', 'head'], env=env, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    for key in ('DB_HOST', 'DB_PORT', 'DB_NAME', 'INTELLIGENCE_DB_PASSWORD'):
-        monkeypatch.setenv(key, env[key])
-    return dsn, passwords
+    migrate(environment)
+    for key, value in environment.items():
+        if key.startswith('INTELLIGENCE_DB_'):
+            monkeypatch.setenv(key, value)
+    return dsn['intelligence'], passwords
 
 
 def evidence(release_id=None):
@@ -87,21 +76,15 @@ def test_lost_session_cannot_commit_a_result(intelligence_db):
     assert worker.process_once(fetch=lambda *a, **kw: item)['status'] == 'succeeded'
 
 
-def test_runtime_cannot_modify_schema_or_read_other_domains(intelligence_db):
-    dsn, passwords = intelligence_db
+def test_domain_owner_has_ddl_and_foreign_databases_reject_connections(intelligence_db):
+    dsn, urls = intelligence_db
     with worker.db.connect() as conn:
-        for statement in ('CREATE TABLE intelligence.forbidden(id int)',
-                          'DELETE FROM intelligence.alembic_version',
-                          'SELECT * FROM api.alembic_version', 'SELECT * FROM clio.alembic_version'):
-            with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                conn.execute(statement)
-    # Existing foreign runtimes/migrators cannot access Intelligence tables either.
+        conn.execute('CREATE TABLE intelligence.owner_test(id int)')
+        conn.execute('DROP TABLE intelligence.owner_test')
     for domain in ('api', 'clio', 'prophet'):
-        for suffix, key in (('', 'DB_PASSWORD'), ('_migrator', 'MIGRATION_PASSWORD')):
-            url = make_url(dsn).set(username='argus_' + domain + suffix, password=passwords[domain.upper() + '_' + key])
-            with psycopg.connect(url.render_as_string(hide_password=False), autocommit=True) as conn:
-                with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                    conn.execute('SELECT * FROM intelligence.result')
+        url = make_url(urls[domain]).set(database=make_url(dsn).database)
+        with pytest.raises(psycopg.OperationalError):
+            psycopg.connect(url.render_as_string(hide_password=False))
 
 
 def test_failed_success_update_rolls_back_result_and_retries(intelligence_db):

@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture(params=['local', 'production'])
 def cli(tmp_path, request):
     root = tmp_path / 'project with spaces'
-    folder = root / ('scripts' if request.param == 'local' else 'bin')
+    folder = root / ('scripts/dev' if request.param == 'local' else 'scripts/prod')
     folder.mkdir(parents=True)
     wrapper = folder / 'argus'
-    source = ROOT / ('scripts/argus' if request.param == 'local' else 'scripts/deployment/argus')
+    source = ROOT / ('scripts/dev/run' if request.param == 'local' else 'scripts/prod/run')
     wrapper.write_bytes(source.read_bytes())
     wrapper.chmod(0o755)
     for domain in ('api', 'clio', 'prophet', 'intelligence'):
@@ -67,7 +67,7 @@ def test_provision_defaults_to_plan(cli, apply):
     result, calls = run('db', 'provision', *(['--apply'] if apply else []))
     assert result.returncode == 0, result.stderr
     args = calls[0]['args']
-    assert any(arg.endswith('/scripts/provision-databases.py') for arg in args)
+    assert any(arg.endswith('/scripts/db/provision.py') for arg in args)
     assert ('--apply' in args) == apply
 
 

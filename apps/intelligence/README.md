@@ -5,39 +5,20 @@ Prophet's HTTP contract. It validates the full release and saves a stub result i
 its own PostgreSQL schema. It does not calculate satellite risks or enforce model
 readiness. No private backend is installed.
 
-## Database and deployment
+## Configuration and operation
 
-Intelligence has its own PostgreSQL database and one owner for both runtime and
-Alembic. Set `INTELLIGENCE_DB_HOST`, `INTELLIGENCE_DB_PORT`,
-`INTELLIGENCE_DB_NAME`, `INTELLIGENCE_DB_USER`, `INTELLIGENCE_DB_PASSWORD`.
-Passwords are raw strings, with no URL encoding. Keep `FORECASTS_URL` and `FORECASTS_SERVICE_TOKEN` configured.
+Configure `INTELLIGENCE_DB_*`, `FORECASTS_URL` and `FORECASTS_SERVICE_TOKEN`.
+See [local setup](../../README.md#local-development),
+[commands](../../docs/commands.md) and [deployment](../../README_DEPLOY.md).
+`./argus intelligence refresh [product]` runs one processing cycle;
+`./argus intelligence status [product]` reports persisted processing history.
+Without a product, these commands cover all supported products; the production
+worker polls solar-wind-speed. Production Compose starts that worker automatically.
 
-Create the database explicitly with the shared maintenance tool before the first
-release. Normal deployment runs migrations only; it never creates roles/databases
-or rotates passwords. See [database provisioning and transfer](../../docs/domain-storage.md).
-
-## Commands
-
-```bash
-/var/www/bin/argus intelligence status
-/var/www/bin/argus intelligence process
-/var/www/bin/argus intelligence check
-/var/www/bin/argus intelligence check dst --release-id <uuid>
-```
-
-`check` remains an HTTP-only diagnostic: it does not write the ledger. `process`
-runs one accounted processing attempt, while `status [product]` returns the latest
-attempt, latest saved result and number of identified pending releases. Products
-other than solar-wind-speed can be processed manually; the production worker
-command selects solar-wind-speed explicitly by default.
-
-For local use, run `uv sync --project apps/intelligence --frozen`. The unified
-wrapper selects the installed environment and loads the root env files:
-
-```bash
-./scripts/argus intelligence migrate upgrade head
-./scripts/argus intelligence worker
-```
+For local worker development use `./scripts/dev/run intelligence worker`.
+The internal adapter's `intelligence check [product] [--release-id UUID]` validates
+HTTP release retrieval without writing a ledger entry. Its `process` command is
+the underlying one-cycle operation exposed as `refresh`.
 
 ## Processing and recovery
 
@@ -64,6 +45,5 @@ quarantine are future operational improvements.
 `risk_assessment: null` remain explicit in saved results. Processing success does
 not mean the input is fresh or safe for operational risk decisions.
 
-Password rotation is separate maintenance: stop the worker, change its owner's
-password administratively, update `INTELLIGENCE_DB_PASSWORD`, and recreate the
-container with `argus compose up -d intelligence`.
+
+Related document: [Atmospheric density API](jb2008-api.md).

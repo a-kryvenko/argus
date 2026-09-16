@@ -18,8 +18,7 @@ RUN uv sync --frozen --no-cache
 COPY apps/api/app ./app
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
-COPY scripts/provision-databases.py /var/www/scripts/provision-databases.py
-COPY scripts/transfer-databases.py /var/www/scripts/transfer-databases.py
+COPY scripts/db/provision.py /var/www/scripts/db/provision.py
 
 EXPOSE 8000
 

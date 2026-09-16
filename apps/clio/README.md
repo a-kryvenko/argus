@@ -1,91 +1,94 @@
-# Clio runtime
+# Clio
 
-Clio owns observations, collection status, aggregation/retention and their
-PostgreSQL migrations. The public `packages/clio` library remains the provider
-fetch/parse layer. The installed `argus-clio` application adds storage and
-operational entry points. Solar wind and Kp/Dst remain separate processes.
+Clio owns observations, normalization, aggregation, collection diagnostics and
+scheduled ingestion. `packages/clio` provides public provider parsing; ingestion
+uses private calibration through `services/calibration.py`. HTTP reads do not
+load the private backend. See [setup](../../README.md#local-development) and
+[commands](../../docs/commands.md).
 
-## Setup
+## Configuration and interfaces
 
-```bash
-uv sync --project apps/clio --frozen
-uv sync --project apps/api --frozen
-```
+Use `CLIO_DB_*` for Clio's database and `OBSERVATIONS_SERVICE_TOKEN` for internal
+HTTP authentication. Consumers configure `OBSERVATIONS_URL`.
 
-The private forecast-core checkout is still required for Clio ingestion's
-calibrated solar indices, historical density drivers and legacy model-input
-normalization. These calls are isolated in `services/calibration.py` and loaded
-only by ingestion. The HTTP read process does not import the private backend.
-Private algorithms are not copied into public code. API no longer installs the
-provider library or private backend.
+Routes under `/internal/v1/observations` require a bearer service token:
+`latest`, `history`, `status`, `summary`, `solar-wind/latest`, `solar-wind/history`,
+`geomagnetic/latest`, `geomagnetic/history`, `browse`, `forecast-inputs`.
+API forwards these reads with its own authorization; there is no SQL/provider fallback.
 
-Configure `CLIO_DB_HOST`, `CLIO_DB_PORT`, `CLIO_DB_NAME`, `CLIO_DB_USER` and
-`CLIO_DB_PASSWORD`. Use host `127.0.0.1` locally and `postgres` in production.
-Passwords remain raw strings; URL construction is handled by the application.
-Runtime and migrations share one database owner. Configure
-`OBSERVATIONS_URL=http://127.0.0.1:8001` and the shared
-`OBSERVATIONS_SERVICE_TOKEN` for API/Prophet consumers.
+`forecast-inputs?as_of=<aware timestamp>` returns normalized observations for
+`[as_of - 30 days, as_of]`, raw density measurements for `[as_of - 88 days, as_of]`,
+`as_of` and `read_at`. Both sets share a repeatable-read, read-only transaction.
+More than 250,000 raw measurements fails explicitly; statements time out after
+60 seconds. `read_at` is not a durable snapshot ID; Prophet archives the response.
 
-For a new database:
+## Sources and storage
 
-```bash
-./scripts/argus db provision --apply
-./scripts/argus clio migrate upgrade head
-```
+| Source | Native data | Poll interval | Display freshness |
+| --- | --- | --- | --- |
+| NOAA RTSW | Minute L1 solar wind; GSM magnetic components | 60s | Measurement age ≤600s |
+| NOAA planetary Kp | Estimated fractional Kp, three-hour intervals | 60s | Interval-end lag ≤4h |
+| Kyoto Dst via NOAA | Realtime Dst in nT, hourly intervals | 300s | Interval-end lag ≤2h |
 
-See [commands](../../docs/commands.md) for full local setup and
-[domain storage](../../docs/domain-storage.md) for database provisioning and
-one-time transfer of existing data. Provisioning does not rotate passwords.
+Solar wind stores each `(kind, observed_at, spacecraft)` and NOAA's active selection.
+Magnetic and plasma streams select their active spacecraft independently; missing
+active data never falls back to inactive data. Geomagnetic records use
+`(metric, interval_start)`. Receipt time tracks changed records, not polling.
+Repeated records are no-ops; corrections replace previous values without revision history.
+Downtime recovery is limited by each provider's rolling history. No automatic deletion runs.
 
-## Commands
+Missing/nonfinite/sentinel values are null. Provider flags remain available;
+flagged numeric values are retained but excluded from charts and derived summaries.
+Kp with zero contributing stations is flagged. Other valid values are `unverified`,
+not independently validated. Kp is estimated and Dst realtime; both can be revised.
+Freshness and quality are independent. Native data retains gaps; normalized model
+inputs are separate and may be propagated or filled.
 
-```bash
-./scripts/argus clio serve --host 127.0.0.1 --port 8001
-./scripts/argus clio collect solar-wind --watch
-./scripts/argus clio collect geomagnetic --watch
-./scripts/argus clio refresh
-./scripts/argus clio aggregate --limit 240
-./scripts/argus clio schedule refresh
-./scripts/argus clio schedule aggregate
-./scripts/argus clio audit --help
-./scripts/argus clio cleanup --help
-./scripts/argus clio check-health solar-wind
-./scripts/argus clio migrate current
-```
+## Scheduling and consistency
 
-Production Compose runs `clio`, `solar-wind`, `geomagnetic`, `clio-refresh` and
-`clio-aggregate`. Scheduling is owned by Clio: hourly refresh at :00 UTC and
-aggregation every five minutes. No application commands remain in crontab.
+Production runs HTTP, two collectors, hourly refresh at `:00 UTC` and aggregation
+every five minutes. Failed scheduled jobs retry every 60 seconds. Restarts catch
+up only the latest due slot. Manual jobs share locks but do not advance scheduled
+completion markers. Work is idempotent/retriable, not exactly once.
 
-`clio.scheduled_job` records the latest completed slot. Failed attempts do not
-advance it; the process retries every 60 seconds. Restarts catch up the latest
-due slot, without replaying every missed hour. A session advisory lock shared by
-manual and scheduled refresh/aggregate calls prevents concurrent supported runs
-of the same job. Existing per-source transaction locks and aggregate row locks
-are preserved. Manual calls do not advance scheduled completion markers.
+Each provider uses a separate transaction and advisory lock. Locked sources are
+skipped; one source failure does not roll back another. Collection attempts commit
+before fetching; observations and success commit together. Failure diagnostics
+commit after rollback. Database outages require logs/healthchecks because the
+unavailable database cannot record them. SIGTERM allows the active job to finish
+within the configured stop grace period.
 
-Work remains idempotent/retriable rather than exactly once: a crash after writes
-but before recording completion can repeat a job. Session locks also require a
-live database connection; the underlying source/upsert and aggregate row-lock
-rules remain the final consistency boundary. SIGTERM allows the current job to
-finish within the Compose stop grace period. History deletion is never scheduled.
+## Status and health
 
-## Read interface
+`./argus clio status` reports attempts, successful responses/saves, measurement age,
+last error and consecutive failures. A retained error with zero consecutive failures
+is historical. Polling unchanged data does not make the observation fresher.
 
-All data routes require `Authorization: Bearer <OBSERVATIONS_SERVICE_TOKEN>`:
+Combined source status prioritizes: `collector_stalled` (unfinished >120s),
+`collector_overdue` (no attempt for two poll intervals +60s), `collection_error`,
+`collecting`, `source_delayed`, `data_unavailable`, `data_partial`, then `ok`.
+A source without attempts is `not_started`. Collection and data status remain separate.
 
-- `/internal/v1/observations/latest`, `/history`, `/status`, `/summary`
-- `/internal/v1/observations/solar-wind/latest`, `/solar-wind/history`
-- `/internal/v1/observations/geomagnetic/latest`, `/geomagnetic/history`
-- `/internal/v1/observations/browse` — paginated raw/normalized dashboard data
-- `/internal/v1/observations/forecast-inputs` — the unchanged Prophet contract
+`/health/live` checks HTTP liveness; `/health/ready` checks migrated storage.
+Collectors use per-container heartbeat files, checked every 30s after a 120s
+startup period, with three retries. Upstream errors alone do not fail liveness
+while polling continues. One-shot collection does not write watch heartbeats.
+Docker's unhealthy status alone does not restart a container.
 
-Query parameters and response envelopes match the corresponding existing public
-and dashboard routes. The public API retains user authorization and forwards
-only the defined reads. It returns 503 when Clio is unavailable, with no SQL or
-provider fallback. The API's own login/user/statistics storage stays local.
+## Aggregation audit
 
-`/health/live` checks the HTTP process; `/health/ready` checks that Clio storage is
-available and migrated. These probes contain no observation data. Collector
-healthchecks retain their independent per-container heartbeat files. Clio is not
-published through nginx; consumers reach it on the Compose observations network.
+`pnpm app:audit-solar-wind` compares stored five-minute/hourly aggregates with raw
+records over the last seven days. `--from` / `--to` accept whole UTC hours, at most
+31 days per run; `--json` and `--detail-limit` control output.
+
+The audit is repeatable-read/read-only and does not fetch, recalculate or delete.
+It checks aggregation version, statistics, coverage and pending work; integer
+counts are exact and float comparisons use 1e-9 relative/absolute tolerance.
+Missing raw hours are unverifiable. Hours absent from raw, aggregate and queue
+tables are outside scope; this is not proof of upstream completeness.
+
+Exit 1 means issues or command failure; exit 0 can mean `ok` or `no_data`.
+Details default to 200 while totals remain complete. Storage estimates scan the
+entire raw table and identify records older than `--retention-days` (default 90).
+They do not certify safe deletion or predict reclaimed disk space. Run off-peak;
+statements have a 60s timeout. Cleanup must revalidate records when deleting them.

@@ -83,9 +83,9 @@ def test_migrations_are_fingerprinted_separately(source):
 @pytest.mark.parametrize('domain,command', [('prophet', 'status'), ('intelligence', 'check')])
 def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domain, command):
     root = tmp_path / 'host with spaces'
-    (root / 'bin').mkdir(parents=True)
-    wrapper = root / 'bin/argus'
-    wrapper.write_bytes((ROOT / 'scripts/deployment/argus').read_bytes())
+    (root / 'scripts/prod').mkdir(parents=True)
+    wrapper = root / 'scripts/prod/run'
+    wrapper.write_bytes((ROOT / 'scripts/prod/run').read_bytes())
     (root / '.release-images.env').write_text('images')
     fake_bin = tmp_path / 'tools'
     fake_bin.mkdir()
@@ -126,8 +126,9 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail):
     root, bundle, bin_dir = [tmp_path / name for name in ('host', 'bundle', 'tools')]
     for directory in (root, bundle, bin_dir):
         directory.mkdir()
-    for name in ('deploy.sh', 'argus', 'transfer.sh'):
-        shutil.copy2(ROOT / 'scripts/deployment' / name, bundle / name)
+    shutil.copy2(ROOT / 'scripts/deployment/deploy.sh', bundle / 'deploy.sh')
+    shutil.copy2(ROOT / 'argus', bundle / 'argus')
+    shutil.copytree(ROOT / 'scripts/prod', bundle / 'scripts/prod')
     for name in ('configs', 'nginx', 'alloy'):
         (bundle / name).mkdir()
     fingerprints = 'intelligence same\napi same\nclio same\nprophet same\nconfigs same\nnginx same\nalloy same\n'
@@ -165,3 +166,8 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
         assert not any(' stop ' in call or 'pg_dumpall' in call or '-migrate' in call for call in calls)
     assert (root / '.release-fingerprints.tsv').read_text() == (fingerprints if fail else (bundle / 'fingerprints.tsv').read_text())
     assert not fail or not any('nginx -s reload' in call for call in calls)
+    assert (root / '.argus-mode').read_text() == 'prod\n'
+    assert (root / 'argus').read_bytes() == (ROOT / 'argus').read_bytes()
+    assert (root / 'bin/argus').resolve() == root / 'argus'
+    assert (root / 'scripts/prod/run').is_file()
+    assert (root / 'scripts/prod/logs').is_file()

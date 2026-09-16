@@ -17,7 +17,7 @@ measure wind forecast skill or establish that missing HMI is harmless.
 - `HelioSpectFormer(..., finetune=True)` returns encoder tokens. We first load the
   complete checkpoint strictly, then enable this path and remove the image
   decoder. No backbone weights are adapted or resized.
-- The current host exposes no working CUDA device. CPU timing is useful for
+- The host used for the recorded probe exposed no working CUDA device. CPU timing is useful for
   feasibility only and cannot be used to estimate GPU throughput or VRAM.
 
 ## Prepare and run
@@ -29,15 +29,15 @@ checksums in a manifest. These historical frames may overlap pretraining and are
 **only suitable for this execution probe**, not for a held-out skill estimate.
 
 ```bash
-.venv/bin/python scripts/surya_aia_prepare.py
-.venv/bin/python scripts/surya_aia_probe.py \
+.venv/bin/python experiments/surya/surya_aia_prepare.py
+.venv/bin/python experiments/surya/surya_aia_probe.py \
   --device cpu --output data/experiments/surya_aia/probe_cpu
 ```
 
 For a GPU measurement, use a new output directory:
 
 ```bash
-.venv/bin/python scripts/surya_aia_probe.py \
+.venv/bin/python experiments/surya/surya_aia_probe.py \
   --device cuda --precision bfloat16 --repeats 3 \
   --output data/experiments/surya_aia/probe_cuda
 ```

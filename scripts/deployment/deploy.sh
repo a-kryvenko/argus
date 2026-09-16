@@ -13,7 +13,7 @@ trap 'printf "[deploy] %s: %ss; exit=%s\n" "$phase_name" "$((SECONDS - phase_sta
 root="${1:-/var/www}"
 bundle="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 command -v rsync >/dev/null
-if [[ ! "$root/.deployment.lock" -ef /proc/self/fd/9 ]]; then exec 9>"$root/.deployment.lock"; fi
+exec 9>"$root/.deployment.lock"
 flock -n 9
 base=(docker compose --project-directory "$root" --env-file "$root/.env" --env-file "$root/.env.local")
 candidate=("${base[@]}" --env-file "$bundle/images.env" -f "$bundle/docker-compose.yml")
@@ -74,10 +74,12 @@ for directory in configs nginx alloy; do
 done
 cp "$bundle/docker-compose.yml" "$root/docker-compose.yml"
 cp "$bundle/images.env" "$root/.release-images.env"
-mkdir -p "$root/bin"
-install -m 755 "$bundle/argus" "$root/bin/argus"
-mkdir -p "$root/.deployment-tools"
-install -m 755 "$bundle/transfer.sh" "$root/.deployment-tools/transfer.sh"
+mkdir -p "$root/scripts/prod" "$root/bin"
+install -m 755 "$bundle/scripts/prod/run" "$root/scripts/prod/run"
+install -m 755 "$bundle/scripts/prod/logs" "$root/scripts/prod/logs"
+printf 'prod\n' > "$root/.argus-mode"
+install -m 755 "$bundle/argus" "$root/argus"
+ln -sfn ../argus "$root/bin/argus"
 active=("${base[@]}" --env-file "$root/.release-images.env" -f "$root/docker-compose.yml")
 # Infrastructure must be healthy before migration; unchanged containers stay running.
 phase infrastructure-ready

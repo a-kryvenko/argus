@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-# Compatibility alias; the command interface lives in scripts/argus.
-set -euo pipefail
-exec "$(dirname -- "${BASH_SOURCE[0]}")/argus" db provision "$@"

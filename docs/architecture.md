@@ -1,97 +1,66 @@
-# Package and application boundaries
+# Architecture
 
-| Component | Responsibility | Project dependencies |
-| --- | --- | --- |
-| common | Configuration, serialization, shared contracts | None |
-| packages/clio | Provider observation fetch/parse | common |
-| forecast | Forecast interfaces and CSV products | common; optional forecast_core.api |
-| forecast-core | Private models, feature preparation and calibration | common, clio |
-| apps/clio | Observation storage, collectors, schedules and read HTTP API | common, clio; private calibration through services/calibration.py |
-| apps/prophet | Forecast execution, database scheduling, owned run/release storage and forecast HTTP reads | common, forecast, forecast_core.api |
-| apps/api | Public HTTP/authentication; own dashboard storage; Clio/Prophet HTTP clients | common |
-| intelligence-core | Private impact calculations, not yet integrated | Shared contracts as needed |
+## Services and packages
 
-Clio owns schema `clio` and its migrations under
-`apps/clio/src/argus_clio/migrations`. API owns schema `api` and migrations under
-`apps/api/alembic`. Each domain has a separate database and one owner shared by runtime and migrations; API reads
-observations only through Clio contracts. Prophet SQL credentials access only its own run/artifact/release schema.
-API forecast reads use Prophet contracts; live CSV files are exports, not the
-API read source. Prophet slot completion and publication share a transaction;
-its writers reuse the PostgreSQL session that holds their advisory lock. Model evaluation metrics remain deployed static artifacts.
-See [domain storage](domain-storage.md) and
-[next steps](#next-work).
+| Component | Responsibility |
+| --- | --- |
+| `apps/api` | Public HTTP, dashboard authentication and API statistics; reads Clio and Prophet over HTTP |
+| `apps/clio` | Observation collection, storage, aggregation, scheduling and internal reads |
+| `apps/prophet` | Forecast generation, input snapshots, releases, exports and scheduling |
+| `apps/intelligence` | Consumes Prophet releases; records attempts and deduplicated stub results |
+| `apps/web` | Next.js frontend |
+| `packages/common` | Configuration and shared contracts |
+| `packages/clio` | Public provider fetching and parsing |
+| `packages/forecast` | Forecast interfaces and product definitions |
+| `packages/forecast-core` | Private models, preparation and calibration |
 
-Provider parsing belongs to the public clio library. Private calibration and
-legacy model-input normalization stay in forecast-core and are called through a
-lazy Clio ingestion adapter; the Clio read path does not import the backend.
-Atmospheric density is a forecast product; satellite-specific impact belongs to
-intelligence-core. Public code must not import private implementation modules.
-Backend source, training and implementation-specific tests remain private.
+Data flows from providers through Clio → Prophet → Intelligence. API reads Clio
+and Prophet contracts. Reads never collect data or generate forecasts. Live CSVs
+are exports of Prophet releases; model evaluation metrics are static artifacts.
 
-## Checkouts and installation
+Clio ingestion accesses private calibration through a lazy adapter; its HTTP read
+path does not import the backend. API and Intelligence install without private
+code and cannot import other applications' runtimes. Private impact calculations
+are not integrated; `private/intelligence-core` is not an application dependency.
 
-The public Python workspace contains common, clio and forecast and resolves
-without private repositories. API also installs without private code.
-`packages/forecast-core` is a separate ignored Git checkout used by Clio and
-Prophet. Keep its source/version consistent with both application lockfiles.
+## Database ownership
 
-```bash
-uv sync --project apps/api --frozen
-uv sync --project apps/clio --frozen
-uv sync --project apps/prophet --frozen
-uv sync --project apps/intelligence --frozen
-```
+One PostgreSQL instance hosts four independent databases. Each service and its
+Alembic migrations share one database owner. Provisioning revokes public database
+access; cross-service reads use HTTP. Resources and server availability remain shared.
 
-After a backend dependency change, update the Clio/Prophet lockfiles before
-syncing. Docker builds for these two apps require the private checkout. CI checks
-it out before building; commit/push private changes before deploying dependent
-public code. API's Docker image contains no private backend or provider library.
+| Service | Suggested database / owner | Schema | Migrations |
+| --- | --- | --- | --- |
+| API | `argus_api` | `api` | `apps/api/alembic` |
+| Clio | `argus_clio` | `clio` | `apps/clio/src/argus_clio/migrations` |
+| Prophet | `argus_prophet` | `prophet` | `apps/prophet/src/argus_prophet/migrations` |
+| Intelligence | `argus_intelligence` | `intelligence` | `apps/intelligence/src/argus_intelligence/migrations` |
 
-The ignored `private/intelligence-core` directory is not yet used by applications.
-Move it to a dedicated private repository before deploying impact calculations;
-do not publish its source in this repository.
+Each application receives only its own prefixed database credentials. Session
+advisory locks serialize supported writers; Prophet and Intelligence reuse the
+lock connection for writes and require direct or session-pooled PostgreSQL.
 
-## Configuration and commands
+## Dependencies and configuration
 
-Set `ARGUS_WORKDIR` when running outside a checkout. Otherwise configuration
-searches the current directory and parents for `configs/project.yaml`, independent
-of package installation paths. Read [Clio setup](../apps/clio/README.md) for domain
-credentials, bootstrap and migration commands; read
-[Prophet setup](../apps/prophet/README.md) for forecast commands.
+The public Python workspace resolves without private repositories.
+`packages/forecast-core` is an ignored, separate Git checkout required by Clio
+and Prophet builds. Keep its version consistent with both application lockfiles;
+push private changes before deploying dependent public code. CI pins one private
+commit for both images. Do not publish private implementation or training code.
+
+Configuration uses `ARGUS_WORKDIR`, or searches the current directory and parents
+for `configs/project.yaml`. The command adapters set the workdir and load root env
+files. See [local setup](../README.md#local-development),
+[commands](commands.md) and [deployment](../README_DEPLOY.md).
 
 ## Validation
 
-```bash
-uv run --frozen pytest tests/test_architecture.py packages/forecast/tests
-./scripts/test-python -q
-```
+`./scripts/test-python -q` runs the application, public package and private backend
+suites. Private tests require the private checkout and installed dependencies.
+Integration tests require `TEST_DATABASE_ADMIN_DSN` pointing to a disposable
+PostgreSQL server; they create and delete random databases and roles. Without it,
+database tests skip rather than use project credentials. Public CI provides PostgreSQL 17.
 
-The combined suite includes Clio, API, Prophet and private backend tests. Private
-implementation tests remain in `packages/forecast-core/tests`. The runner sets
-application/package import paths; installed-environment checks also use the API,
-Clio and Prophet virtual environments after syncing them. PostgreSQL integration
-requires an explicitly configured disposable server as described in
-[domain storage](domain-storage.md); public CI provides one automatically.
-
-Legacy experimental HUXt/training scripts remain in the private backend's
-`legacy_scripts` directory and are not production entry points.
-
-## Next work
-
-The current domain separation, publication and database scheduling are implemented.
-Readiness diagnostics are in observation mode; per-product thresholds and their
-blocking/skip behavior still need agreement. Intelligence polls Prophet releases through HTTP and records deduplicated stub
-results and attempts in its own schema. Risk calculations remain future work.
-
-## Isolation checks
-
-The boundary suite checks package import direction, private adapter entry points,
-absence of foreign domain SQL references and per-service database configuration.
-Installed API/Prophet environments are checked separately from the root development
-workspace. PostgreSQL CI verifies actual database ownership and rejected cross-domain connections.
-API depends only on common contracts and its own HTTP/read adapters. It does not
-install the forecast library, Prophet runtime or private backend.
-
-`apps/intelligence` consumes common contracts and HTTP, and owns its storage. It has its own
-environment/image, owned SQL credentials and Alembic chain; it has no private
-backend or imports from other domain runtimes.
+Boundary tests check import direction, private adapters, absence of foreign-domain
+SQL and isolated credentials. Integration tests cover migrations, ownership,
+publication and locking. See each service README for its runtime guarantees.

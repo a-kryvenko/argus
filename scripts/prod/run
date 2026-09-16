@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Installed at /var/www/bin/argus; works from any current directory.
+# Internal production adapter; invoked by the root argus entrypoint.
 set -euo pipefail
-project_root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
+project_root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/../.." && pwd)"
 compose=(docker compose --project-directory "$project_root" --env-file "$project_root/.env" --env-file "$project_root/.env.local")
 if [[ -f "$project_root/.release-images.env" ]]; then
     compose+=(--env-file "$project_root/.release-images.env")
 fi
 compose+=(-f "$project_root/docker-compose.yml")
 usage() {
-    echo 'Usage: argus db transfer [--release path] [--source database] | db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
+    echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
 }
 lock() {
     exec 9>"$project_root/.deployment.lock"
@@ -19,15 +19,10 @@ case "${1:-}" in
     db)
         shift
         case "${1:-}" in
-            transfer)
-                shift
-                lock x
-                exec bash "$project_root/.deployment-tools/transfer.sh" "$project_root" "$@"
-                ;;
             provision)
                 shift
                 lock x
-                exec "${compose[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/provision-databases.py "$@"
+                exec "${compose[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/db/provision.py "$@"
                 ;;
             migrate)
                 shift

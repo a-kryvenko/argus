@@ -2,7 +2,7 @@
 # Local command entry point. Application environments must already be installed.
 set -euo pipefail
 script="$(readlink -f -- "${BASH_SOURCE[0]}")"
-root="$(cd -- "$(dirname -- "$script")/.." && pwd)"
+root="$(cd -- "$(dirname -- "$script")/../.." && pwd)"
 usage() {
     cat <<'EOF'
 Usage: argus db provision [--apply] | db migrate
@@ -27,7 +27,10 @@ run_app() {
     done
     cd "$root/apps/$app"
     export ARGUS_WORKDIR="$root"
-    exec "${command[@]}" "$@"
+    mkdir -p "$root/data/logs"
+    umask 077
+    "${command[@]}" "$@" 2>&1 | tee -a "$root/data/logs/$app.log"
+    exit "${PIPESTATUS[0]}"
 }
 case "${1:-}" in
     -h|--help|'') usage; exit 0 ;;
@@ -36,7 +39,7 @@ case "${1:-}" in
         case "${1:-}" in
             provision)
                 shift
-                run_app api python "$root/scripts/provision-databases.py" "$@"
+                run_app api python "$root/scripts/db/provision.py" "$@"
                 ;;
             migrate)
                 shift

@@ -24,61 +24,111 @@ Private impact calculations are not part of the public observation service.
 
 ## Local development
 
-See the [local and production command reference](docs/commands.md) for setup,
-daily operations, migrations and diagnostics.
+Requires Docker Compose v2, Node.js 20.9+, pnpm 9, uv and Python 3.12.11.
+Forecast generation also requires the private `packages/forecast-core` checkout,
+models and input files referenced by `configs/`. See [package setup](docs/architecture.md).
 
-Install the frontend dependencies with `pnpm install`. Set up the API, Clio, Prophet and Intelligence environments
-and private backend as described in [package setup](docs/architecture.md).
-Configure `.env` and `.env.local`, then run:
+```bash
+pnpm install --frozen-lockfile
+uv sync --project apps/api --frozen
+uv sync --project apps/clio --frozen
+uv sync --project apps/prophet --frozen
+uv sync --project apps/intelligence --frozen
+```
 
-```sh
-./scripts/argus compose up -d --wait
-./scripts/argus db provision --apply
-./scripts/argus db migrate
+Configure `.env` and `.env.local`; local values take precedence:
+
+| Variables | Purpose |
+| --- | --- |
+| `DB_HOST/PORT/NAME/USER/PASSWORD` | Administrator connection for database provisioning |
+| `API_DB_*`, `CLIO_DB_*`, `PROPHET_DB_*`, `INTELLIGENCE_DB_*` | Each service's `HOST`, `PORT`, `NAME`, `USER`, `PASSWORD` |
+| `OBSERVATIONS_URL` | Locally `http://127.0.0.1:8001` |
+| `FORECASTS_URL` | Locally `http://127.0.0.1:8002` |
+| `OBSERVATIONS_SERVICE_TOKEN` | Shared secret for Clio, API and Prophet |
+| `FORECASTS_SERVICE_TOKEN` | Shared secret for Prophet, API and Intelligence |
+| `DASHBOARD_ORIGINS`, `DASHBOARD_COOKIE_SECURE` | `http://localhost:3000`, `false` for local HTTP |
+
+The database host is `127.0.0.1` locally and `postgres` in production.
+Passwords are raw strings, without URL encoding. For existing databases, read
+[database ownership](docs/architecture.md#database-ownership) and
+[maintenance](README_DEPLOY.md#initial-databases-and-maintenance) before provisioning.
+
+Each service requires `NAME`, `USER` and `PASSWORD`; use a distinct database and
+owner per service. `HOST` defaults to `localhost`, `PORT` to `5432`. Example:
+
+```dotenv
+API_DB_HOST=127.0.0.1
+API_DB_PORT=5432
+API_DB_NAME=argus_api
+API_DB_USER=argus_api
+API_DB_PASSWORD='replace-with-your-password'
+```
+
+Repeat with `CLIO`, `PROPHET` and `INTELLIGENCE` prefixes. Standard env quoting
+rules apply; single-quote values containing `$` when using Compose.
+Provisioning creates missing databases/owners without changing existing passwords.
+
+For a new installation:
+
+```bash
+docker compose --env-file .env --env-file .env.local up -d --wait
+./argus db provision --apply
+./argus db migrate
 pnpm dev
 ```
 
-`pnpm dev` starts the API, frontend, Clio read service and both observation collectors.
-Configure the separate domain credentials and Clio URL described in
-[Clio setup](apps/clio/README.md). For existing databases, follow
-[database ownership and provisioning](docs/domain-storage.md) before bootstrap.
-PostgreSQL and Redis run in Docker. The API and frontend reload code changes;
-restart collectors after changing their code.
+`pnpm dev` starts the frontend, API, Clio HTTP, Prophet HTTP and both observation
+collectors. Schedulers and Intelligence do not start automatically locally;
+production Compose includes the collectors and workers. PostgreSQL and Redis
+run in Docker. The API and frontend reload code changes; restart collectors
+after changing their code.
 
 `docker compose down` stops local infrastructure. Adding `--volumes` deletes
 the local database and Redis volumes.
 
-## Commands
+### Initial data population
 
-| Command | Purpose |
-| --- | --- |
-| `pnpm app:solar-wind --watch` | Poll solar wind every minute |
-| `pnpm app:geomagnetic --watch` | Poll Kp every minute and Dst every five minutes |
-| `pnpm app:aggregate-solar-wind` | Process queued five-minute/hourly aggregates |
-| `pnpm app:audit-solar-wind` | Compare aggregates with raw data; estimate old-data volume |
-| `pnpm app:cleanup-solar-wind` | Report verified raw hours older than 90 days; `--apply` deletes them |
-| `pnpm app:observations` | Refresh normalized observations and density input history |
-| `pnpm app:forecast` | Generate forecasts from stored observations |
-| `./scripts/test-python -q` | Run the combined Python suite |
+With Clio and Prophet HTTP services running, execute in another terminal:
 
-Omit `--watch` for a single collection. Aggregation runs separately from
-`pnpm dev`. No automatic history deletion is enabled.
+```bash
+./argus clio refresh
+./argus clio aggregate
+./argus prophet refresh
+./argus intelligence refresh
+```
+
+Collection and aggregation populate forecast inputs; Prophet then publishes
+forecasts for Intelligence to process. These commands run once. HTTP services
+do not generate forecasts on request.
+
+### Command environment
+
+`./argus` is the shared local and production entrypoint. Without `.argus-mode`,
+it uses `dev`; deployment writes `prod` to that file. Other values are rejected.
+Development uses installed application environments through uv; production uses
+pinned Docker Compose images. Both load `.env`, then `.env.local`.
+
+Process management stays with pnpm and Docker Compose. Python commands launched
+through `scripts/dev/run` write to the terminal and `data/logs/<service>.log`;
+frontend output remains in pnpm. The old `/var/www/bin/argus` path is a symlink
+to `/var/www/argus` and uses the same command syntax.
+
+See the [command reference](docs/commands.md) for operations, migrations and diagnostics.
+Before manual production schema changes, stop affected writers and back up the
+databases; normal deployment performs these steps automatically. Review and commit
+new migration files before deployment.
+
+Run the combined Python suite with `./scripts/test-python -q`.
 
 ## Documentation
 
-- [Dashboard, users and API statistics](docs/dashboard.md)
-
-- [Solar wind API](docs/solar-wind-api.md)
-- [Kp/Dst API and summary calculations](docs/geomagnetic-api.md)
-- [Collector status and healthchecks](docs/observation-status.md)
-- [Recovery and coverage](docs/observation-recovery.md)
-- [Aggregation](docs/solar-wind-aggregation.md) and [audit](docs/aggregation-audit.md)
-- [Storage measurements and proposed retention](docs/observation-retention.md)
-- [Verified raw-history cleanup](docs/solar-wind-cleanup.md)
-- [Live page data flow](docs/live-data-flow.md)
-- [Package boundaries and setup](docs/architecture.md)
-- [Atmospheric density API](docs/jb2008-api.md)
-- [Deployment](README_DEPLOY.md)
+- [Commands](docs/commands.md) and [architecture](docs/architecture.md)
+- [Production deployment and recovery](README_DEPLOY.md)
+- [Clio: observations, aggregation and collection status](apps/clio/README.md)
+- [Prophet: publication, scheduling and readiness](apps/prophet/README.md)
+- [Intelligence: processing and retries](apps/intelligence/README.md)
+- [API: access and public read semantics](apps/api/README.md)
+- [Atmospheric density API](apps/intelligence/jb2008-api.md)
 
 The site provides [usage help](https://argussun.com/help) and
 [API schemas](https://argussun.com/api/v1/docs).

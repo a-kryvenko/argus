@@ -140,7 +140,7 @@ services:
   db-provision:
     image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
-    command: [".venv/bin/python", "/var/www/scripts/provision-databases.py", "--apply"]
+    command: [".venv/bin/python", "/var/www/scripts/db/provision.py", "--apply"]
     environment:
       DB_HOST: ${DB_HOST:-postgres}
       DB_PORT: ${DB_PORT:-5432}

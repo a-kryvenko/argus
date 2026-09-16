@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 AIA = ("aia94", "aia131", "aia171", "aia193", "aia211", "aia304", "aia335", "aia1600")
 HMI = ("hmi_m", "hmi_bx", "hmi_by", "hmi_bz", "hmi_v")
 

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+mode=dev
+[[ ! -f "$root/.argus-mode" ]] || read -r mode < "$root/.argus-mode"
+case "$mode" in dev|prod) ;; *) echo 'Invalid .argus-mode: expected dev or prod' >&2; exit 2 ;; esac
+backend="$root/scripts/$mode/run"
+usage() {
+    cat <<HELP
+Usage: ./argus <command> (environment: $mode)
+  db provision [--apply] | db migrate
+  <service> migrate
+  <service> migration create -m MESSAGE [--autogenerate] (dev only)
+  <service> migration current | history | downgrade REVISION
+  clio refresh [all|observations|solar-wind|geomagnetic]
+  clio aggregate [--limit N] | clio status
+  prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
+  prophet status [PRODUCT]
+  intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
+  api user <arguments>
+  logs [SERVICE] [--tail N] [-f]
+  help [command]
+Services: api, clio, prophet, intelligence.
+refresh runs once; omitted product/source means all supported products/sources.
+HELP
+}
+fail() { echo "$*" >&2; exit 2; }
+run() { "$backend" "$@"; }
+products=(solar-wind-speed solar-wind-density geomagnetic-activity dst hmf atmospheric-density)
+case "${1:-help}" in
+    help|-h|--help) usage; exit 0 ;;
+    logs) shift; exec "$root/scripts/$mode/logs" "$@" ;;
+    db)
+        shift
+        case "${1:-}" in
+            migrate) [[ $# == 1 ]] || fail 'Usage: ./argus db migrate' ;;
+            provision) [[ $# == 1 || ( $# == 2 && "$2" == --apply ) ]] || fail 'Usage: ./argus db provision [--apply]' ;;
+            *) fail 'Expected db migrate or db provision' ;;
+        esac
+        exec "$backend" db "$@" ;;
+    api|clio|prophet|intelligence) service="$1"; shift ;;
+    *) fail 'Unknown command; use ./argus help' ;;
+esac
+command="${1:-}"; [[ $# == 0 ]] || shift
+case "$command" in
+    migrate)
+        [[ $# == 0 ]] || fail 'Use migration current/history/create/downgrade; migrate applies head'
+        exec "$backend" "$service" migrate upgrade head ;;
+    migration)
+        action="${1:-}"; [[ $# == 0 ]] || shift
+        case "$action" in
+            create)
+                [[ "$mode" == dev ]] || fail 'Migration creation is available only in dev'
+                message=false
+                args=("$@")
+                while (($#)); do
+                    case "$1" in
+                        -m|--message) [[ $# -ge 2 && -n "$2" ]] || fail 'Specify -m MESSAGE'; message=true; shift 2 ;;
+                        --autogenerate)
+                            [[ "$service" == api || "$service" == clio ]] || fail 'This service uses handwritten migrations; omit --autogenerate'
+                            shift ;;
+                        *) fail 'Usage: migration create -m MESSAGE [--autogenerate]' ;;
+                    esac
+                done
+                [[ "$message" == true ]] || fail 'Specify -m MESSAGE'
+                set -- "${args[@]}"
+                exec "$backend" "$service" migrate revision "$@" ;;
+            current|history) exec "$backend" "$service" migrate "$action" "$@" ;;
+            downgrade) [[ $# == 1 ]] || fail 'Specify one target revision'; exec "$backend" "$service" migrate downgrade "$@" ;;
+            *) fail 'Expected migration create/current/history/downgrade' ;;
+        esac ;;
+    user) [[ "$service" == api ]] || fail 'user belongs to api'; exec "$backend" api user "$@" ;;
+    aggregate) [[ "$service" == clio ]] || fail 'aggregate belongs to clio'; exec "$backend" clio aggregate "$@" ;;
+    refresh|status) ;;
+    *) fail 'Unknown service command; use ./argus help' ;;
+esac
+[[ $# -le 1 ]] || fail 'Specify at most one source/product'
+selection="${1:-all}"
+if [[ "$service" == clio ]]; then
+    if [[ "$command" == status ]]; then
+        [[ $# == 0 ]] || fail 'Usage: ./argus clio status'
+        exec "$backend" clio status
+    fi
+    case "$selection" in
+        all) run clio collect solar-wind; run clio collect geomagnetic; run clio refresh ;;
+        observations) run clio refresh ;;
+        solar-wind|geomagnetic) run clio collect "$selection" ;;
+        *) fail 'Unknown Clio source' ;;
+    esac
+    exit
+fi
+[[ "$service" != api ]] || fail 'API supports migrate, migration and user'
+case "$selection" in all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density) ;; *) fail 'Unknown or unsupported product' ;; esac
+if [[ "$service" == prophet && "$command" == refresh ]]; then
+    case "$selection" in
+        all|solar-wind-density|dst) product=all ;;
+        solar-wind-speed) product=wind ;;
+        geomagnetic-activity) product=kp ;;
+        atmospheric-density) product=density ;;
+        hmf) product=hmf ;;
+    esac
+    exec "$backend" prophet generate "$product"
+fi
+[[ "$command" != refresh ]] || command=process
+if [[ "$selection" == all ]]; then
+    for product in "${products[@]}"; do run "$service" "$command" "$product"; done
+else
+    run "$service" "$command" "$selection"
+fi

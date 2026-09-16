@@ -1,111 +1,80 @@
-# Prophet runtime
+# Prophet
 
-Prophet owns forecast execution. It has an independent Python environment and
-Docker image. It reads observations only through the versioned owner HTTP
-contract and writes the existing live forecast CSV products. It records runs,
-input snapshots and compressed results in its own PostgreSQL schema.
+Prophet owns forecast runs, saved inputs, artifacts, releases, exports and hourly
+slots. Production uses one image for `prophet` (worker) and `prophet-api` (HTTP).
+It reads Clio over HTTP and never accesses Clio tables. See
+[setup](../../README.md#local-development) and [commands](../../docs/commands.md).
 
-Clio owns observations and serves the read contract. API consumes Clio too and
-has no observation SQL models. API now reads published forecasts through the
-Prophet HTTP contract; live CSV files are retryable exports of database releases.
+## Configuration and inputs
 
-## Local use
+Configure `PROPHET_DB_*`, `OBSERVATIONS_URL`, `OBSERVATIONS_SERVICE_TOKEN` and
+`FORECASTS_SERVICE_TOKEN`. Generation requires the private forecast-core checkout
+and configured models. Clio's [input contract](../clio/README.md#configuration-and-interfaces)
+is read once per full generation, including density, with 180s read and 10s connect
+timeouts. Prophet saves the exact response, dependency/model hashes and compressed
+CSV results. Model binaries are not archived; retain them separately for replay.
 
-With the private `packages/forecast-core` checkout present:
+## Publication and HTTP
 
-```bash
-uv sync --project apps/prophet --frozen
-```
+Run states: `running`, `succeeded`, `partial`, `failed`, `interrupted`.
+A product publishes only when all required artifacts share one run/issue time.
+Run completion, publication and scheduled-slot completion commit together.
+Failed runs retain previous releases; optional density skips allow other products
+to advance. Manual runs do not advance scheduled slots.
 
-Configure `PROPHET_DB_HOST`, `PROPHET_DB_PORT`, `PROPHET_DB_NAME`,
-`PROPHET_DB_USER`, `PROPHET_DB_PASSWORD` for the separate Prophet database.
-Passwords are raw strings, with no URL encoding. Runtime and Alembic use the same owner. See
-[database setup and transfer](../../docs/domain-storage.md).
+Bearer-authenticated routes under `/internal/v1/forecasts/{product}`:
 
-Configure `OBSERVATIONS_URL` (locally `http://127.0.0.1:8001`) and the same
-`OBSERVATIONS_SERVICE_TOKEN` in the Clio and Prophet environments.
-The token must be a strong random secret. The service refuses requests if it
-is absent; there is no database or provider-download fallback.
+- `/latest`: current complete release.
+- `/releases/{release_id}`: historical release.
+- `/status`: release age, latest attempt and saved input diagnostics.
 
-```bash
-./scripts/argus prophet generate
-./scripts/argus prophet generate density
-./scripts/argus prophet worker
-./scripts/argus prophet serve --port 8002
-./scripts/argus prophet export
-```
+Contracts live in `common.schemas.forecast_release` and `forecast_status`.
+Missing current releases/storage failures return 503; unknown products/historical
+releases 404; invalid tokens 401. Status for a known product with no release returns
+200 with `freshness=unavailable`. Reads share a repeatable-read snapshot; payloads
+are limited to 32 MiB per artifact and 64 MiB per response. API has no CSV fallback.
+The solar-radiation contract exists but no supported generator produces it.
+Geomagnetic generation includes both Kp and Ap.
 
-Products for `generate`: `all`, `wind`, `kp`, `hmf`, `density`. The installed CLI
-is the supported entry point; do not invoke implementation modules directly.
-Set `ARGUS_WORKDIR` when running outside the checkout. Configuration/model/data
-paths remain compatible with the existing deployment.
+## Scheduling and recovery
 
-## Read contract
+The worker generates the latest due hour at `:10 UTC`, retries every 60 seconds
+and does not replay missed hours. Partial runs complete their slot; export failures
+do not reopen it. Slots are scheduling records, not forecast issue times or release IDs.
 
-`GET /internal/v1/observations/forecast-inputs?as_of=<timezone-aware timestamp>`
-requires `Authorization: Bearer <OBSERVATIONS_SERVICE_TOKEN>` and returns the
-`common.schemas.forecast_inputs.ForecastInputs` version 1 contract:
+A PostgreSQL session advisory lock serializes generation and export. All writes
+reuse its unpooled connection in short transactions; no transaction spans model
+execution. Use direct or session-pooled PostgreSQL, not transaction pooling.
+After session loss an old writer cannot reconnect silently. The next lock owner
+marks abandoned runs/slots interrupted. SIGTERM permits the active job to finish
+within Compose's grace period.
 
-- Normalized observations in the inclusive interval `[as_of - 30 days, as_of]`.
-- Raw density source metrics in `[as_of - 88 days, as_of]`.
-- `as_of` and `read_at`, both timezone-aware.
+CSV exports retry independently of committed publication. Replacements are atomic
+per file, not across a product or with database acknowledgement. Writers verify
+their lock before replacement; superseded releases cannot overwrite newer exports.
+There is no automatic run/release/archive retention.
 
-Both datasets are read in one PostgreSQL repeatable-read, read-only transaction.
-A single full generation shares this response with density calculation. The
-response is bounded to 250,000 raw measurements; an oversized response fails
-explicitly rather than silently truncating. Database statements time out after
-60 seconds; the client has a 180-second read timeout and a 10-second connect timeout.
-
-`read_at` is the request's read-start time, not a durable snapshot ID. Historical
-revisions are still possible. Prophet saves the exact response in its execution
-record; published products reference that run.
-
-## Scheduling and limitations
-
-The Compose `prophet` worker replaces the forecast cron entry. It runs the latest
-due hourly slot (at :10 UTC), retries failures every 60 seconds, and remembers
-successful slots in PostgreSQL. Restart skips completed slots and catches
-up only the latest due slot, without replaying every missed hour. Actual forecast
-issue times retain existing model behavior; scheduler slots are not release IDs.
-The worker reads the latest committed observations; data-readiness gating and
-staleness policies are not enabled.
-
-A PostgreSQL session advisory lock serializes worker, manual generation and CSV
-export. Each hour and its attempts are recorded in `prophet.forecast_slot`; slot
-completion commits with release publication. A restart after commit skips that
-hour. Abandoned attempts become `interrupted` when the next writer gets the lock.
-All writes use the lock's connection; session loss cannot silently reconnect an
-old writer without its lock. See [database scheduling](../../docs/prophet.md).
-
-A missing optional density input retains existing behavior: other products are
-published and density is skipped. A failed calculation does not advance publication
-pointers. CSV export is atomic
-per file, not across a complete release. Manual generation does not advance the
-scheduled slot. SIGTERM allows the current calculation to finish within the
-Compose stop grace period.
-
-## Run accounting and deployment
-
-Production uses the selective [deployment workflow](../../README_DEPLOY.md).
-Existing service tokens and domain database credentials remain required.
-Use `/var/www/bin/argus prophet ...` on the server; the commands below are for
-the local checkout.
-
-```bash
-./scripts/argus prophet status solar-wind-speed
-./scripts/argus prophet slots --limit 10
-./scripts/argus prophet runs --limit 10
-./scripts/argus prophet show-run <run-uuid>
-./scripts/argus prophet show-run <run-uuid> --inputs
-```
-
-See [Prophet operations](../../docs/prophet.md) for deployment and
-recovery, and [publication contracts](../../docs/prophet.md) for reads and exports.
+Advanced recovery uses the internal adapter `scripts/dev/run` locally or
+`scripts/prod/run` on the server: `prophet runs`, `prophet show-run <uuid>`,
+`prophet slots`, `prophet export [--force]`. Preserve database, image and model
+artifacts together when restoring; see [deployment](../../README_DEPLOY.md#recovery).
 
 ## Readiness diagnostics
 
-New runs save input-age and data-quality evidence with their snapshots.
-`prophet status <product>` and the authenticated `/internal/v1/forecasts/{product}/status`
-endpoint distinguish the current release from the latest calculation attempt.
-No new thresholds block generation or serving. See [diagnostic scope and next
-policy decisions](../../docs/prophet-readiness.md).
+Health endpoints report infrastructure readiness, not forecast fitness.
+`./argus prophet status [product]` separates the published release from the latest
+attempt. Release age uses model `issue_time`, not publication time. Freshness is
+`unavailable`, `future_issue_time`, `unconfigured`, `stale` or `within_age_limit`;
+the last confirms only an age check. Atmospheric density has a public maximum age
+of 6h by default, configured in its registry entry. Other age limits are unconfigured.
+
+Saved diagnostics describe input counts, timestamp range/age, gaps, duplicate,
+naive/future timestamps and missing/nonfinite values. Density source metrics have
+separate age/count evidence. Ages refer to the snapshot's `as_of`; older runs can
+lack diagnostics. Status reads metadata without decompressing artifacts.
+
+Normalization can fill old source values into recent rows, so
+`source_freshness_known=false` and `thresholds_configured=false` remain explicit.
+Diagnostics do not add generation gates. Per-product freshness/history requirements
+and breach behavior still need definition; successful processing is not scientific
+validation or proof of fresh sensors.

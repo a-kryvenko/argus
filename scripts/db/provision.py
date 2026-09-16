@@ -78,7 +78,7 @@ def main():
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
     from dotenv import load_dotenv
-    root = Path(os.getenv('ARGUS_WORKDIR', Path(__file__).resolve().parents[1]))
+    root = Path(os.getenv('ARGUS_WORKDIR', Path(__file__).resolve().parents[2]))
     load_dotenv(root / '.env')
     load_dotenv(root / '.env.local', override=True)
     try:

@@ -4,8 +4,6 @@ Never reads project .env credentials. Creates/drops only UUID-named databases
 and owners. Run serially; TEST_DATABASE_ADMIN_DSN must be administrative.
 """
 import importlib.util
-import json
-from difflib import unified_diff
 import os
 from pathlib import Path
 import subprocess
@@ -32,8 +30,7 @@ def load(path):
     return module
 
 
-provisioning = load(ROOT / 'scripts/provision-databases.py')
-transfer_checks = load(ROOT / 'scripts/transfer-databases.py')
+provisioning = load(ROOT / 'scripts/db/provision.py')
 
 
 def database_environment(urls):
@@ -118,121 +115,6 @@ def test_provisioning_does_not_rotate_existing_passwords(database):
         provisioning.provision(os.environ['TEST_DATABASE_ADMIN_DSN'], changed, apply=True)
     with psycopg.connect(urls['api']) as conn:
         assert conn.execute('SELECT 1').fetchone()[0] == 1
-
-
-def test_snapshot_handles_column_named_like_table_alias(database):
-    dsns, urls, _ = database
-    with runtime(dsns, 'clio', urls) as conn:
-        conn.execute('CREATE SCHEMA clio')
-        conn.execute('CREATE TABLE clio.alembic_version(version_num text PRIMARY KEY)')
-        conn.execute("INSERT INTO clio.alembic_version VALUES ('test')")
-        conn.execute('CREATE TABLE clio.alias_collision(t double precision, payload text)')
-        conn.execute("INSERT INTO clio.alias_collision VALUES (100.5, 'original')")
-    before = transfer_checks.snapshot(make_url(urls['clio']), 'clio')['tables']['alias_collision']
-    assert before['count'] == 1
-    with runtime(dsns, 'clio', urls) as conn:
-        # The fingerprint must cover the whole record, not just the colliding column.
-        conn.execute("UPDATE clio.alias_collision SET payload='changed'")
-    after = transfer_checks.snapshot(make_url(urls['clio']), 'clio')['tables']['alias_collision']
-    assert after['count'] == 1 and after['sha256'] != before['sha256']
-
-
-def pg_tool(tool, url, arguments, *, input=None):
-    """Use matching server tools in CI; local runs need pg_dump/pg_restore."""
-    import shutil
-    url = make_url(url)
-    container = os.getenv('TEST_POSTGRES_CONTAINER')
-    if not container and not shutil.which(tool):
-        pytest.skip('PostgreSQL client tools or TEST_POSTGRES_CONTAINER required for transfer test')
-    command = ['docker', 'exec', '-i', '-e', 'PGPASSWORD', container] if container else []
-    command += [tool, '--host', url.host, '--port', str(url.port or 5432),
-                '--username', url.username, '--dbname', url.database, *arguments]
-    result = subprocess.run(command, input=input, capture_output=True,
-                            env={**os.environ, 'PGPASSWORD': url.password})
-    assert result.returncode == 0, result.stderr.decode()
-    return result.stdout
-
-
-def test_schema_dump_transfer_preserves_rows_sequences_and_triggers(database, tmp_path, monkeypatch):
-    dsns, urls, environment = database
-    source_name = 'test_shared_' + uuid4().hex
-    admin_dsn = os.environ['TEST_DATABASE_ADMIN_DSN']
-    source_dsn = make_url(admin_dsn).set(database=source_name).render_as_string(hide_password=False)
-    with psycopg.connect(admin_dsn, autocommit=True) as admin:
-        admin.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(source_name)))
-    try:
-        # Model the current shared database at the actual migration heads.
-        source_env = {**environment, **database_environment({d: source_dsn for d in provisioning.DOMAINS})}
-        migrate(source_env)
-        run_id, attempt_id = uuid4(), uuid4()
-        with psycopg.connect(source_dsn) as conn:
-            conn.execute("INSERT INTO api.dashboard_user(username,password_hash,active) VALUES ('existing','hash',true)")
-            conn.execute("INSERT INTO clio.measurement(metric,value,observed_at) VALUES ('f10_7',120,now())")
-            conn.execute("""INSERT INTO clio.normalized_observation
-                (observed_at,bx,by,bz,v,n,t,kp,dst,ap,f10_7)
-                VALUES ('2026-09-02 00:00:00+00',1,2,-3,400,5,100000,2,-10,7,120)""")
-            conn.execute("""INSERT INTO clio.solar_wind_observation(kind, observed_at, spacecraft, active, received_at, "values", raw)
-                VALUES ('mag','2026-09-02 00:00:00+00','A',true,now(),'{"bz":-5}','{}')""")
-            conn.execute("""INSERT INTO prophet.forecast_run(id,scope,product,trigger,started_at,status,provenance)
-                VALUES (%s,'test','all','manual',now(),'succeeded','{}')""", (run_id,))
-            conn.execute("INSERT INTO intelligence.attempt(id,product,status) VALUES (%s,'dst','skipped')", (attempt_id,))
-        state = tmp_path / 'transfer-state'
-        state.mkdir()
-        for key, value in database_environment(urls).items():
-            monkeypatch.setenv(key, value)
-        source_url = make_url(source_dsn)
-        for key, value in dict(HOST=source_url.host, PORT=str(source_url.port or 5432), NAME=source_name,
-                               USER=source_url.username, PASSWORD=source_url.password).items():
-            monkeypatch.setenv('DB_' + key, value)
-        with pytest.raises(ValueError, match='does not match the installed'):
-            transfer_checks.run('preflight', state, system_identifier='wrong-server')
-        transfer_checks.run('preflight', state)
-        with psycopg.connect(source_dsn) as active_client:
-            active_client.execute('SELECT 1')
-            with pytest.raises(ValueError, match='client sessions'):
-                transfer_checks.run('freeze', state)
-        transfer_checks.run('freeze', state)
-        with psycopg.connect(source_dsn) as conn:
-            assert conn.execute('SHOW default_transaction_read_only').fetchone()[0] == 'on'
-        for domain in provisioning.DOMAINS:
-            transfer_checks.run('snapshot', state, domain=domain)
-            dump = pg_tool('pg_dump', source_dsn, ['--schema', domain, '--format=custom', '--no-owner', '--no-privileges'])
-            pg_tool('pg_restore', dsns[domain], ['--role', make_url(urls[domain]).username,
-                    '--no-owner', '--no-privileges', '--exit-on-error', '--single-transaction'], input=dump)
-            # These databases contain only disposable test data. Show the exact
-            # differing definitions in CI; production logs report only the path.
-            expected = json.loads((state / (domain + '.source.json')).read_text())
-            actual = transfer_checks.snapshot(make_url(urls[domain]), domain)
-            assert actual == expected, '\n'.join(unified_diff(
-                json.dumps(expected, indent=2, sort_keys=True).splitlines(),
-                json.dumps(actual, indent=2, sort_keys=True).splitlines(),
-                fromfile=f'{domain}: source', tofile=f'{domain}: restored', lineterm=''))
-            transfer_checks.run('verify', state, domain=domain)
-            with psycopg.connect(source_dsn) as source, runtime(dsns, domain, urls) as target:
-                tables = source.execute("SELECT tablename FROM pg_tables WHERE schemaname=%s ORDER BY tablename", (domain,)).fetchall()
-                for (table,) in tables:
-                    query = sql.SQL('SELECT * FROM {}.{}').format(sql.Identifier(domain), sql.Identifier(table))
-                    assert source.execute(query).fetchall() == target.execute(query).fetchall(), (domain, table)
-                assert target.execute("SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=%s AND c.relowner != (SELECT oid FROM pg_roles WHERE rolname=current_user)", (domain,)).fetchone()[0] == 0
-        transfer_checks.run('preflight', state)  # Completed restores are resumable.
-        migrate(environment)  # Restored markers are respected; no duplicate creation.
-        with runtime(dsns, 'prophet', urls) as conn:
-            conn.execute('ALTER TABLE prophet.forecast_run DROP CONSTRAINT run_trigger')
-            conn.execute("ALTER TABLE prophet.forecast_run ADD CONSTRAINT run_trigger CHECK (trigger IN ('manual','scheduled','unexpected'))")
-        with pytest.raises(ValueError, match='snapshot.constraints'):
-            transfer_checks.run('verify', state, domain='prophet')
-        with runtime(dsns, 'api', urls) as conn:
-            assert conn.execute("INSERT INTO api.dashboard_user(username,password_hash,active) VALUES ('next','hash',true) RETURNING id").fetchone()[0] == 2
-        with pytest.raises(ValueError, match='does not match'):
-            transfer_checks.run('verify', state, domain='api')
-        with runtime(dsns, 'clio', urls) as conn:
-            conn.execute('SET search_path TO pg_catalog')
-            conn.execute("""INSERT INTO clio.solar_wind_observation(kind, observed_at, spacecraft, active, received_at, "values", raw)
-                VALUES ('mag','2026-09-03 00:00:00+00','A',true,now(),'{"bz":-4}','{}')""")
-            assert conn.execute("SELECT count(*) FROM clio.solar_wind_aggregate_pending WHERE hour='2026-09-03 00:00:00+00'").fetchone()[0] == 1
-    finally:
-        with psycopg.connect(admin_dsn, autocommit=True) as admin:
-            admin.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(source_name)))
 
 
 def test_scheduler_retries_restarts_and_serializes_jobs(database, monkeypatch):

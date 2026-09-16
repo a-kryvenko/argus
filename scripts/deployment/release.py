@@ -14,7 +14,7 @@ INPUTS = {
     'intelligence': ['apps/intelligence/pyproject.toml', 'apps/intelligence/uv.lock', 'apps/intelligence/src', 'packages/common'],
     'frontend': ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web'],
     'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/app', 'apps/api/alembic',
-            'apps/api/alembic.ini', 'packages/common', 'scripts/provision-databases.py', 'scripts/transfer-databases.py'],
+            'apps/api/alembic.ini', 'packages/common', 'scripts/db/provision.py'],
     'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common', 'packages/clio'],
     'prophet': ['apps/prophet/pyproject.toml', 'apps/prophet/uv.lock', 'apps/prophet/src',
                 'packages/common', 'packages/clio', 'packages/forecast'],
@@ -75,9 +75,8 @@ def bundle(root, plan_path, images_path, destination):
         shutil.copytree(root / '.deploy' / name, destination / name, dirs_exist_ok=True)
     shutil.copytree(root / 'configs', destination / 'configs', dirs_exist_ok=True)
     shutil.copy2(root / 'scripts/deployment/deploy.sh', destination / 'deploy.sh')
-    shutil.copy2(root / 'scripts/deployment/argus', destination / 'argus')
-    for name in ('transfer.sh', 'install-tools.sh'):
-        shutil.copy2(root / 'scripts/deployment' / name, destination / name)
+    shutil.copy2(root / 'argus', destination / 'argus')
+    shutil.copytree(root / 'scripts/prod', destination / 'scripts/prod', dirs_exist_ok=True)
     (destination / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     fingerprints = {**manifest['migrations'], 'configs': manifest['config_hash'],
                     'nginx': digest(root, ['.deploy/nginx']), 'alloy': digest(root, ['.deploy/alloy'])}

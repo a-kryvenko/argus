@@ -9,7 +9,7 @@ import pytest
 import torch
 
 SPEC = importlib.util.spec_from_file_location(
-    "surya_aia_probe", Path(__file__).resolve().parents[1] / "scripts/surya_aia_probe.py"
+    "surya_aia_probe", Path(__file__).resolve().parents[1] / "experiments/surya/surya_aia_probe.py"
 )
 probe = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(probe)

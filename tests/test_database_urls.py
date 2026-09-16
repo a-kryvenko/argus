@@ -46,7 +46,7 @@ def test_raw_passwords_and_domain_settings_are_isolated(domain, monkeypatch):
 
 def test_provisioning_rejects_shared_databases_before_connecting(monkeypatch):
     pytest.importorskip('psycopg')
-    spec = importlib.util.spec_from_file_location('provisioning', ROOT / 'scripts/provision-databases.py')
+    spec = importlib.util.spec_from_file_location('provisioning', ROOT / 'scripts/db/provision.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module.psycopg, 'connect', lambda *a, **kw: pytest.fail('Invalid plan connected to PostgreSQL'))

@@ -33,14 +33,28 @@ def main():
     collect.add_argument('source', choices=['solar-wind', 'geomagnetic'])
     for name in ['refresh', 'aggregate', 'audit', 'cleanup', 'check-health', 'migrate']:
         commands.add_parser(name, add_help=False)
+    commands.add_parser('status', help='Show stored collection progress and source freshness')
     schedule = commands.add_parser('schedule')
     schedule.add_argument('job', choices=['refresh', 'aggregate'])
     args, remainder = parser.parse_known_args()
-    if args.command in ('serve', 'schedule') and remainder:
+    if args.command in ('serve', 'schedule', 'status') and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
     from common.config import get_config
     get_config()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    if args.command == 'status':
+        import asyncio
+        import json
+        from argus_clio.db.session import get_session_factory, dispose_engine
+        from argus_clio.services.collection_status import source_status
+        async def read_status():
+            try:
+                async with get_session_factory()() as session:
+                    return await source_status(session)
+            finally:
+                await dispose_engine()
+        print(json.dumps(asyncio.run(read_status()), default=str, indent=2))
+        return
     if args.command == 'serve':
         import uvicorn
         uvicorn.run('argus_clio.main:app', host=args.host, port=args.port)

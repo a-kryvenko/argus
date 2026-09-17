@@ -55,7 +55,7 @@ def plan(root, *, rebuild=''):
     for name, prefixes in INPUTS.items():
         source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'])
         identity = hashlib.sha256((source + (private_hash if name in ('clio', 'prophet') else '') + rebuild).encode()).hexdigest()
-        result['components'][name] = {'repository': 'andriykryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
+        result['components'][name] = {'repository': 'ghcr.io/a-kryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
     result['migrations'] = {name: digest(root, paths) for name, paths in MIGRATIONS.items()}
     return result
 

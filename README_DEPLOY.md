@@ -18,6 +18,39 @@ checkout secrets referenced by [deploy.yml](.github/workflows/deploy.yml).
 It generates `.release-images.env` with five digest-pinned image references;
 do not override them with competing image settings.
 
+## Private application images (GHCR)
+
+Application images are published to `ghcr.io/a-kryvenko/argus-*`. Actions publishes
+with its automatic `GITHUB_TOKEN` and job-level `packages: write` permission;
+no personal write token is needed. Images are linked to this repository.
+New GHCR packages are private by default. If these package names already exist,
+verify that each package has **Private** visibility and grants this repository
+Actions access before running the release. Repository visibility and package
+visibility are separate settings.
+
+Before the first GHCR deployment, add these repository Actions secrets:
+
+- `GHCR_USERNAME`: GitHub username of the account allowed to read all five packages.
+- `GHCR_READ_TOKEN`: that account's personal access token **(classic)** with
+  `read:packages`. Authorize SSO if required by the organization. Fine-grained
+  personal access tokens are not supported for this registry authentication.
+
+The deployment logs the production SSH user into `ghcr.io` with this read token
+via standard input. Docker stores the credentials for subsequent manual pulls;
+use the same server user for maintenance and update the secret when rotating the
+token. The existing production SSH and private-backend checkout secrets remain
+required.
+
+The first release builds any images absent from GHCR and installs digest-pinned
+references. Existing Docker Hub images are not copied or deleted. Keep the old
+images and server Docker Hub login while historical release bundles are needed
+for recovery. After a successful migration, the `DOCKERHUB_LOGIN` and
+`DOCKERHUB_TOKEN` Actions secrets are no longer used and can be removed.
+Infrastructure and Dockerfile base images still use their upstream registries.
+
+See [GitHub's Container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+for authentication, package visibility and access settings.
+
 ## Initial databases and maintenance
 
 With the release bundle, root `argus`, prod adapters and Compose/image configuration
@@ -39,9 +72,11 @@ and `.release-images.env` and must not overlap deployment.
 
 ## Release workflow
 
-A `v*` tag triggers deployment. Local `./deploy.sh [patch|minor|major] [-m message]`
-uploads models/metrics, commits and pushes notebooks, private backend and main
-checkout, then creates the tag. Review these checkouts before invoking it.
+A `v*` tag triggers deployment. Local `./deploy.sh -m "message"` only commits and
+pushes notebooks, private backend and main checkout; it does not upload artifacts
+or create a tag. Use `./deploy.sh patch|minor|major -m "message"` to also upload
+models/metrics and create and push the release tag. Review these checkouts before
+invoking either mode.
 
 Actions fingerprints Docker inputs and lockfiles, reuses matching images and builds
 missing identities. Clio/Prophet share one pinned private-backend commit. The input

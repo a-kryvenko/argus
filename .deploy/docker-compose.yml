@@ -1,5 +1,5 @@
 x-clio-runtime: &clio-runtime
-  image: ${ARGUS_CLIO_IMAGE:-andriykryvenko/argus-clio:latest}
+  image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
   restart: unless-stopped
   init: true
   stop_grace_period: 10m
@@ -24,7 +24,7 @@ x-clio-runtime: &clio-runtime
 
 services:
   intelligence:
-    image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
+    image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
     restart: unless-stopped
     init: true
     stop_grace_period: 2m
@@ -45,7 +45,7 @@ services:
     networks: [backend, forecasts]
 
   intelligence-migrate:
-    image: ${ARGUS_INTELLIGENCE_IMAGE:-andriykryvenko/argus-intelligence:latest}
+    image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
     profiles: ["maintenance"]
     command: ["intelligence", "migrate", "upgrade", "head"]
     environment:
@@ -57,7 +57,7 @@ services:
     networks: [backend]
 
   api:
-    image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}
+    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
     container_name: argusForecast
     restart: unless-stopped
     tty: true
@@ -138,7 +138,7 @@ services:
     command: ["clio", "schedule", "aggregate"]
 
   db-provision:
-    image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}
+    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
     command: [".venv/bin/python", "/var/www/scripts/db/provision.py", "--apply"]
     environment:
@@ -170,7 +170,7 @@ services:
     networks: [backend]
 
   api-migrate:
-    image: ${ARGUS_API_IMAGE:-andriykryvenko/argus-forecast:latest}
+    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
     command: [".venv/bin/alembic", "upgrade", "head"]
     environment:
@@ -182,7 +182,7 @@ services:
     networks: [backend]
 
   clio-migrate:
-    image: ${ARGUS_CLIO_IMAGE:-andriykryvenko/argus-clio:latest}
+    image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
     profiles: ["maintenance"]
     command: ["clio", "migrate", "upgrade", "head"]
     environment:
@@ -197,7 +197,7 @@ services:
     networks: [backend]
 
   prophet-migrate:
-    image: ${ARGUS_PROPHET_IMAGE:-andriykryvenko/argus-prophet:latest}
+    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
     profiles: ["maintenance"]
     command: ["prophet", "migrate", "upgrade", "head"]
     environment:
@@ -212,7 +212,7 @@ services:
     networks: [backend]
 
   prophet:
-    image: ${ARGUS_PROPHET_IMAGE:-andriykryvenko/argus-prophet:latest}
+    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
     restart: unless-stopped
     init: true
     command: ["prophet", "worker"]
@@ -238,7 +238,7 @@ services:
       observations:
 
   prophet-api:
-    image: ${ARGUS_PROPHET_IMAGE:-andriykryvenko/argus-prophet:latest}
+    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
     restart: unless-stopped
     init: true
     command: ["prophet", "serve"]
@@ -265,7 +265,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ${ARGUS_FRONTEND_IMAGE:-andriykryvenko/argus-frontend:latest}
+    image: ${ARGUS_FRONTEND_IMAGE:-ghcr.io/a-kryvenko/argus-frontend:latest}
     container_name: argusFrontend
     restart: unless-stopped
     tty: true

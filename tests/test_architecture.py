@@ -51,10 +51,14 @@ def test_public_workspace_does_not_require_private_checkouts():
 
 
 def test_private_source_is_not_in_public_tree():
-    assert not (ROOT / 'packages/intelligence-core').exists()
+    tracked = subprocess.check_output(
+        ['git', 'ls-files', '--', 'packages/forecast-core', 'packages/intelligence-core'],
+        cwd=ROOT, text=True,
+    )
+    assert not tracked
     result = subprocess.run(
         ['git', 'check-ignore', 'packages/forecast-core/src/example.py',
-         'private/intelligence-core/src/example.py'], cwd=ROOT,
+         'packages/intelligence-core/src/example.py'], cwd=ROOT,
         capture_output=True, text=True, check=True,
     )
     assert len(result.stdout.splitlines()) == 2

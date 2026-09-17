@@ -12,7 +12,8 @@
 | `packages/common` | Configuration and shared contracts |
 | `packages/clio` | Public provider fetching and parsing |
 | `packages/forecast` | Forecast interfaces and product definitions |
-| `packages/forecast-core` | Private models, preparation and calibration |
+| `packages/forecast-core` | Proprietary models, preparation and calibration; separate Git repository |
+| `packages/intelligence-core` | Proprietary impact calculations; separate repository not yet created |
 
 Data flows from providers through Clio → Prophet → Intelligence. API reads Clio
 and Prophet contracts. Reads never collect data or generate forecasts. Live CSVs
@@ -21,7 +22,7 @@ are exports of Prophet releases; model evaluation metrics are static artifacts.
 Clio ingestion accesses private calibration through a lazy adapter; its HTTP read
 path does not import the backend. API and Intelligence install without private
 code and cannot import other applications' runtimes. Private impact calculations
-are not integrated; `private/intelligence-core` is not an application dependency.
+are not integrated; `packages/intelligence-core` is not an application dependency.
 
 ## Database ownership
 
@@ -42,6 +43,10 @@ lock connection for writes and require direct or session-pooled PostgreSQL.
 
 ## Dependencies and configuration
 
+All packages live in `packages/`. Proprietary `forecast-core` and
+`intelligence-core` are excluded from the public Git repository and maintained
+in separate repositories. The repository for `intelligence-core` has not been
+created yet; its local source stays private.
 The public Python workspace resolves without private repositories.
 `packages/forecast-core` is an ignored, separate Git checkout required by Clio
 and Prophet builds. Keep its version consistent with both application lockfiles;

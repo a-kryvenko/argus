@@ -1,3 +1,22 @@
+# Anonymous operational traffic only. Never write URLs, IPs or account data here.
+map $uri $argus_channel {
+    default site;
+    ~^/api/v1/dashboard(?:/|$) skip;
+    ~^/api/ api;
+    ~^/dashboard(?:/|$) skip;
+    ~^/_next/ skip;
+    ~*\.(?:js|css|map|png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|txt|xml)$ skip;
+}
+map $http_user_agent $argus_traffic_channel {
+    default $argus_channel;
+    "Argus-Monitor/1" monitor;
+}
+map $argus_traffic_channel $argus_log_traffic {
+    default 1;
+    skip 0;
+}
+log_format argus_traffic escape=json '{"time":"$msec","channel":"$argus_traffic_channel","status":$status,"seconds":"$request_time"}';
+
 server {
     listen 80;
     listen [::]:80;

@@ -17,3 +17,10 @@ async def collection_status(response: Response, session: AsyncSession = Depends(
     """
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await source_status(session))
+
+
+@router.get('/monitoring')
+async def monitoring(response: Response, session: AsyncSession = Depends(get_db_session)):
+    from argus_clio.services.monitoring import monitoring_status
+    response.headers['Cache-Control'] = 'no-store'
+    return success_response(await monitoring_status(session))

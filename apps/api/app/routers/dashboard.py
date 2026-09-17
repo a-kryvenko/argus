@@ -174,3 +174,43 @@ async def api_stats(hours: int = Query(24, ge=1, le=720), db: AsyncSession = Dep
     since = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours-1)
     rows = (await db.scalars(select(ApiMetric).where(ApiMetric.hour >= since))).all()
     return success_response(summarize(rows))
+
+
+@router.get('/project-monitoring', dependencies=[Depends(require('project_monitoring.read'))])
+async def project_monitoring(db: AsyncSession = Depends(get_db_session)):
+    from app.db.models.monitoring import MonitorState
+    from app.services.project_monitoring import STALE_SECONDS
+    state = await db.get(MonitorState, 'project')
+    now = datetime.now(timezone.utc)
+    if state is None:
+        return success_response({'status': 'unknown', 'checked_at': None, 'stale': True,
+            'services': [], 'observations': None, 'forecasts': [], 'host': None})
+    stale = (now-state.checked_at).total_seconds() > STALE_SECONDS
+    return success_response({**state.payload, 'checked_at': state.checked_at,
+        'stale': stale, 'status': 'unknown' if stale else state.payload['status']})
+
+
+@router.get('/project-traffic', dependencies=[Depends(require('project_monitoring.read'))])
+async def project_traffic(period: Literal['hour', 'day', 'week'] = 'day', db: AsyncSession = Depends(get_db_session)):
+    from app.db.models.monitoring import MonitorState, TrafficMetric
+    from app.services.edge_traffic import traffic_summary
+    now = datetime.now(timezone.utc)
+    resolution = 'minute' if period == 'hour' else 'hour'
+    until = now.replace(second=0, microsecond=0, **({'minute': 0} if resolution == 'hour' else {}))
+    since = until - (timedelta(minutes=59) if period == 'hour' else timedelta(hours=23 if period == 'day' else 167))
+    state = await db.get(MonitorState, 'traffic')
+    stale = not state or (now-state.checked_at).total_seconds() > 120
+    payload = state.payload if state else {}
+    last_event = payload.get('last_event_at')
+    if not last_event or (now-datetime.fromisoformat(last_event)).total_seconds() > 120:
+        stale = True
+    rows = (await db.scalars(select(TrafficMetric).where(TrafficMetric.resolution == resolution,
+        TrafficMetric.time >= since, TrafficMetric.time <= until))).all()
+    recent_errors = await db.scalar(select(func.coalesce(func.sum(TrafficMetric.count), 0)).where(
+        TrafficMetric.resolution == 'minute', TrafficMetric.time >= now.replace(second=0, microsecond=0)-timedelta(minutes=4),
+        TrafficMetric.status >= 500))
+    return success_response({'recent_errors_5xx': recent_errors,
+        'status': 'unknown' if stale else payload.get('status', 'unknown'),
+        'checked_at': state.checked_at if state else None, 'stale': bool(stale),
+        'since': payload.get('since'), 'resolution': resolution,
+        'channels': traffic_summary(rows, since, until, resolution) if state else None})

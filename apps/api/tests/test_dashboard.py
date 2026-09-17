@@ -25,7 +25,7 @@ def test_anonymous_cannot_access_dashboard():
     app.include_router(router)
     app.dependency_overrides[get_db_session] = lambda: AsyncMock()
     with TestClient(app) as client:
-        for path in ['/me', '/users', '/groups', '/observations', '/observations?kind=normalized', '/api-stats']:
+        for path in ['/me', '/users', '/groups', '/observations', '/observations?kind=normalized', '/api-stats', '/project-monitoring', '/project-traffic']:
             assert client.get('/dashboard'+path).status_code == 401
         assert client.post('/dashboard/users', headers={'Origin': 'http://localhost:3000'},
                            json={'username': 'test', 'password': 'long-password'}).status_code == 401
@@ -52,7 +52,7 @@ def test_user_without_permissions_is_forbidden():
     app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=1, username='reader', active=True)
     with TestClient(app) as client:
         assert client.get('/dashboard/me').status_code == 200
-        for endpoint in ['/users', '/groups', '/observations', '/api-stats']:
+        for endpoint in ['/users', '/groups', '/observations', '/api-stats', '/project-monitoring', '/project-traffic']:
             assert client.get('/dashboard'+endpoint).status_code == 403
 
 

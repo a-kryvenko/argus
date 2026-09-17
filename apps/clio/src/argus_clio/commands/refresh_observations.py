@@ -30,7 +30,7 @@ async def _refresh() -> None:
                 logger.warning("Density observation history unavailable: %s", exc)
             else:
                 existing = await _load_measurements(session, since=now - timedelta(days=88))
-                await _upsert_measurements(session, merge_history(history, existing))
+                await _upsert_measurements(session, merge_history(history, existing), track_receipt=False)
                 await session.commit()
     finally:
         await dispose_engine()

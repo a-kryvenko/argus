@@ -76,12 +76,21 @@ services:
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
       DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS-https://${APP_NAME:?APP_NAME is required}}
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}
+      MONITORING_SITE_URL: http://nginx
+      MONITORING_SITE_HOST: ${APP_NAME}
+      MONITORING_API_URL: http://127.0.0.1:8000
+      MONITORING_REDIS_URL: redis://redis:6379/0
+      MONITORING_TRAFFIC_LOG: /var/log/nginx/traffic.jsonl
+      MONITORING_HOST_PROC: /host/proc
+      MONITORING_DISK_PATH: /var/log/nginx
     expose:
       - "8000"
     volumes:
       - ./configs:/var/www/configs:ro
       - ./data:/var/www/data
       - ./log/api:/var/www/log
+      - ./log/nginx:/var/log/nginx:ro
+      - /proc:/host/proc:ro
     depends_on:
       postgres:
         condition: service_healthy

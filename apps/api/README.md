@@ -55,3 +55,11 @@ Gaps, flags or spacecraft changes before a known onset make the result unavailab
 If the entire available sequence is negative, `lower_bound` indicates only the
 observed duration. Lookback is 75 minutes; sampled minutes are not proof of
 continuous real-time duration. Summary values are statistics, not impact estimates.
+
+## Project monitoring
+
+Administrators see service health, per-source/per-metric observation timestamps,
+per-product forecast publication/generation status, host resources and separate
+API/site traffic on `/dashboard`. Clients have a separate placeholder landing
+page. See [project monitoring](../../docs/project-monitoring.md) for permissions,
+configuration, collection semantics, retention and deployment migrations.

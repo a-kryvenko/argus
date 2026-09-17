@@ -29,13 +29,17 @@ config = get_config()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    task = asyncio.create_task(run_flush_loop())
+    from app.services.project_monitoring import run_monitor_loop
+    from app.services.edge_traffic import run_traffic_loop
+    tasks = [asyncio.create_task(loop()) for loop in (run_flush_loop, run_monitor_loop, run_traffic_loop)]
     try:
         yield
     finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with suppress(asyncio.CancelledError):
+                await task
         with suppress(TimeoutError):
             await asyncio.wait_for(flush(), timeout=5)
         await dispose_engine()

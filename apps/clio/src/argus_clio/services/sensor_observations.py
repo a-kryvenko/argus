@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from argus_clio.db.models import Measurement, NormalizedObservation
+from argus_clio.db.models import Measurement, NormalizedObservation, MeasurementReceipt
 from common.schemas.observation import Observation, ObservationPoint
 from clio.observations import (
     load_bootstrap_measurements as _load_bootstrap_measurements, load_live_measurements,
@@ -34,6 +34,7 @@ async def _database_is_empty(session: AsyncSession) -> bool:
 async def _upsert_measurements(
     session: AsyncSession,
     measurements: pd.DataFrame,
+    *, track_receipt: bool = True,
 ) -> None:
     if measurements.empty:
         return
@@ -62,6 +63,18 @@ async def _upsert_measurements(
             set_={"value": statement.excluded.value},
         )
         await session.execute(statement)
+
+    # Metadata and observations commit together; older backfills cannot replace
+    # the receipt timestamp of a newer observation.
+    if not track_receipt:
+        return
+    received = datetime.now(UTC)
+    for metric, group in frame.groupby('metric'):
+        latest = group['observed_at'].max().to_pydatetime()
+        stmt = insert(MeasurementReceipt).values(metric=metric, latest_observation_at=latest, received_at=received)
+        await session.execute(stmt.on_conflict_do_update(index_elements=['metric'],
+            set_={'latest_observation_at': latest, 'received_at': received},
+            where=MeasurementReceipt.latest_observation_at <= latest))
 
 
 async def _load_measurements(
@@ -116,7 +129,7 @@ async def refresh_normalized_observations(
 
     if await _database_is_empty(session):
         bootstrap = await asyncio.to_thread(_load_bootstrap_measurements, now)
-        await _upsert_measurements(session, bootstrap)
+        await _upsert_measurements(session, bootstrap, track_receipt=False)
 
     live = await asyncio.to_thread(load_live_measurements)
     await _upsert_measurements(session, live)

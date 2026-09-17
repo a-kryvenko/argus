@@ -8,3 +8,5 @@ from argus_clio.db.models.normalized_observation import NormalizedObservation
 __all__ = ["SolarWindAggregate", "SolarWindAggregatePending", "SolarWindRetiredHour", "Measurement", "NormalizedObservation", "SolarWindObservation", "GeomagneticObservation", "ObservationSourceStatus"]
 
 from argus_clio.db.models.scheduled_job import ScheduledJob
+
+from argus_clio.db.models.measurement_receipt import MeasurementReceipt

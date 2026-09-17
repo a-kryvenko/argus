@@ -2,11 +2,20 @@
 import ReactECharts from "echarts-for-react";
 import type { Stats } from "./ApiActivity";
 
-export default function TrafficChart({ rows }: { rows: Stats["hours"] }) {
+export default function TrafficChart({
+  rows,
+  label,
+}: {
+  rows: Stats["hours"];
+  label?: string;
+}) {
   return (
     <div
       role="img"
-      aria-label="Hourly API request volume and errors. Exact values are available in the API statistics hourly activity table."
+      aria-label={
+        label ??
+        "Hourly API request volume and errors. Exact values are available in the API statistics hourly activity table."
+      }
     >
       <ReactECharts
         style={{ height: 280, width: "100%" }}

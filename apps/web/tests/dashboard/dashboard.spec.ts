@@ -5,7 +5,71 @@ const admin = {
   username: "andrew",
   active: true,
   groups: ["admins"],
-  permissions: ["observations.read", "users.manage", "api_stats.read"],
+  permissions: [
+    "observations.read",
+    "users.manage",
+    "api_stats.read",
+    "project_monitoring.read",
+  ],
+};
+const checkedAt = new Date().toISOString();
+const project = {
+  status: "ok",
+  checked_at: checkedAt,
+  stale: false,
+  services: [
+    "Website",
+    "API",
+    "Clio",
+    "Prophet",
+    "Redis",
+    "PostgreSQL (API)",
+  ].map((name) => ({ name, status: "ok", response_ms: 12 })),
+  host: {
+    status: "ok",
+    cpu_percent: 12.5,
+    memory_percent: 42,
+    disk_percent: 30,
+    disk_free_bytes: 1024 ** 3 * 70,
+  },
+  observations: {
+    status: "ok",
+    sources: {
+      kp: {
+        source_id: "kp",
+        label: "Estimated Kp",
+        status: "ok",
+        latest_observation_at: checkedAt,
+        last_response_at: checkedAt,
+        last_success_at: checkedAt,
+        last_attempt_at: checkedAt,
+        consecutive_failures: 0,
+      },
+    },
+    measurements: [
+      {
+        metric: "dst",
+        status: "fresh",
+        latest_observation_at: checkedAt,
+        received_at: checkedAt,
+        stale_after_seconds: 21600,
+      },
+    ],
+  },
+  forecasts: [
+    {
+      product: "dst",
+      status: "ok",
+      freshness: "within_age_limit",
+      current_release: { issue_time: checkedAt, published_at: checkedAt },
+      latest_attempt: {
+        status: "succeeded",
+        started_at: checkedAt,
+        finished_at: checkedAt,
+      },
+      latest_attempt_artifacts: [],
+    },
+  ],
 };
 const secondUser = { ...admin, id: 2, username: "alex" };
 const summary = {
@@ -73,6 +137,28 @@ async function mockApi(page: Page, user = admin) {
     let data: unknown;
     if (path === "/me") data = user;
     else if (path === "/api-stats") data = stats;
+    else if (path === "/project-monitoring") data = project;
+    else if (path === "/project-traffic")
+      data = {
+        status: "ok",
+        checked_at: checkedAt,
+        stale: false,
+        since: new Date(Date.now() - 86400000).toISOString(),
+        resolution: "hour",
+        recent_errors_5xx: 0,
+        channels: Object.fromEntries(
+          ["api", "site"].map((channel) => [
+            channel,
+            {
+              summary: {
+                ...summary,
+                requests: channel === "api" ? 12840 : 3210,
+              },
+              points: [{ ...summary, time: checkedAt }],
+            },
+          ]),
+        ),
+      };
     else if (path === "/users") data = { items: [admin, secondUser], total: 2 };
     else if (path === "/groups")
       data = [{ name: "admins", permissions: admin.permissions }];
@@ -140,12 +226,12 @@ test("overview, chart, desktop navigation and persistent collapse", async ({
   await mockApi(page);
   await page.goto("/dashboard");
   await expect(
-    page.getByRole("heading", { name: "Workspace overview" }),
+    page.getByRole("heading", { name: "Project overview" }),
   ).toBeVisible();
   await expect(page.getByText("12,840", { exact: true })).toBeVisible();
-  await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.locator("canvas").first()).toBeVisible();
   await expect(page.locator("h1")).toHaveCSS("font-size", "24px");
-  await expect(page.getByText("Total requests", { exact: true })).toHaveCSS(
+  await expect(page.getByText("Requests", { exact: true }).first()).toHaveCSS(
     "font-size",
     "12px",
   );
@@ -153,9 +239,7 @@ test("overview, chart, desktop navigation and persistent collapse", async ({
     path: "/tmp/argus-dashboard-overview.png",
     fullPage: true,
   });
-  await page
-    .locator('[data-sidebar="trigger"]')
-    .click();
+  await page.locator('[data-sidebar="trigger"]').click();
   await expect(
     page.locator('[data-state="collapsed"][data-collapsible="icon"]'),
   ).toBeVisible();
@@ -263,11 +347,9 @@ test("mobile sidebar closes on navigation; wide tables remain contained", async 
   await mockApi(page);
   await page.goto("/dashboard");
   await expect(
-    page.getByRole("heading", { name: "Workspace overview" }),
+    page.getByRole("heading", { name: "Project overview" }),
   ).toBeVisible();
-  await page
-    .locator('[data-sidebar="trigger"]')
-    .click();
+  await page.locator('[data-sidebar="trigger"]').click();
   const sidebar = page.getByRole("dialog");
   await expect(sidebar).toBeVisible();
   await sidebar
@@ -307,7 +389,7 @@ test("login errors, sign in and sign out", async ({ page }) => {
     .fill("correct-test-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Workspace overview" }),
+    page.getByRole("heading", { name: "Project overview" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
@@ -320,9 +402,13 @@ test("permissions hide protected navigation and direct pages", async ({
 }) => {
   await mockApi(page, { ...admin, groups: [], permissions: [] });
   await page.goto("/dashboard/users");
-  await expect(page.locator(".dashboard").getByRole("alert")).toContainText("You do not have access");
+  await expect(page.locator(".dashboard").getByRole("alert")).toContainText(
+    "You do not have access",
+  );
   await expect(
-    page.locator('[data-sidebar="menu"]').getByRole("link", { name: "Users & access", exact: true }),
+    page
+      .locator('[data-sidebar="menu"]')
+      .getByRole("link", { name: "Users & access", exact: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Create user", exact: true }),
@@ -353,4 +439,99 @@ test("dashboard styles do not change public typography after client navigation",
       return { fontSize: css.fontSize, color: css.color, margin: css.margin };
     });
   expect(after).toEqual(before);
+});
+
+test("client landing never requests project monitoring", async ({ page }) => {
+  const { reads } = await mockApi(page, {
+    ...admin,
+    groups: ["clients"],
+    permissions: [],
+  });
+  await page.goto("/dashboard");
+  await expect(
+    page.getByRole("heading", { name: "Your workspace" }),
+  ).toBeVisible();
+  await expect(page.getByText("Client dashboard is coming soon")).toBeVisible();
+  expect(
+    reads.some((url) => /project-(monitoring|traffic)/.test(url.pathname)),
+  ).toBeFalsy();
+  await expect(page.getByText("Clio · Observation sources")).toHaveCount(0);
+});
+
+test("multiple groups use monitoring permission and show source and forecast timestamps", async ({
+  page,
+}) => {
+  await mockApi(page, { ...admin, groups: ["clients", "admins"] });
+  await page.goto("/dashboard");
+  await expect(page.getByText("All systems operational")).toBeVisible();
+  await expect(page.getByText("Estimated Kp", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Response received" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Published", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Public page requests", { exact: true }),
+  ).toBeVisible();
+});
+
+test("stale checks cannot display a healthy project", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/v1/dashboard/project-monitoring", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: { ...project, checked_at: "2020-01-01T00:00:00Z" },
+      },
+    }),
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByText("No current project status")).toBeVisible();
+  await expect(page.getByText("All systems operational")).toHaveCount(0);
+});
+
+test("unavailable monitoring is visible and does not break the page", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.route("**/api/v1/dashboard/project-monitoring", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { success: false, error: { message: "Unavailable" } },
+    }),
+  );
+  await page.goto("/dashboard");
+  await expect(
+    page.getByText(/Could not refresh project status/),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Public page requests", { exact: true }),
+  ).toBeVisible();
+});
+
+test("recent server errors override healthy service probes", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          status: "ok",
+          checked_at: checkedAt,
+          stale: false,
+          since: checkedAt,
+          recent_errors_5xx: 7,
+          resolution: "hour",
+          channels: null,
+        },
+      },
+    }),
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByText("Project needs attention")).toBeVisible();
+  await expect(page.getByText(/7 server errors/)).toBeVisible();
+  await expect(page.getByText("All systems operational")).toHaveCount(0);
 });

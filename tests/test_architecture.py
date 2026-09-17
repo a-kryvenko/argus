@@ -87,7 +87,11 @@ def test_api_does_not_import_observation_storage_or_private_backend():
     for path in (ROOT / 'apps/api/app').rglob('*.py'):
         for module in imports(path):
             assert module.split('.')[0] not in {'forecast', 'clio', 'argus_clio', 'forecast_core', 'argus_prophet'}, (path, module)
-    assert {p.stem for p in (ROOT / 'apps/api/app/db/models').glob('*.py')} == {'__init__', 'dashboard'}
+    # API owns dashboard identities, monitoring snapshots and traffic aggregates;
+    # observation and forecast storage remain in their respective services.
+    assert {p.stem for p in (ROOT / 'apps/api/app/db/models').glob('*.py')} == {
+        '__init__', 'dashboard', 'monitoring',
+    }
     assert not list((ROOT / 'apps/api/app/commands').glob('collect*.py'))
 
 

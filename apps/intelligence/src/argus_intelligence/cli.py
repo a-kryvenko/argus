@@ -1,4 +1,4 @@
-"""Validate one published Prophet release through its owner HTTP contract."""
+"""Validate Prophet releases and manage Intelligence processing and migrations."""
 import argparse
 from datetime import UTC, datetime
 import json

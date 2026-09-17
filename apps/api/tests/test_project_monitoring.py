@@ -128,3 +128,20 @@ def test_traffic_heartbeat_must_be_recent_even_if_reader_is_running():
     db.scalar.return_value = 0
     result = asyncio.run(project_traffic('hour', db))
     assert result.data['status'] == 'unknown' and result.data['stale']
+
+
+@pytest.mark.parametrize('count', [0, 7])
+def test_recent_error_count_serializes_as_json_number(count):
+    from decimal import Decimal
+    from unittest.mock import Mock
+    db = AsyncMock()
+    now = datetime.now(UTC)
+    db.get.return_value = SimpleNamespace(checked_at=now, payload={
+        'status': 'ok', 'last_event_at': now.isoformat()})
+    db.scalars.return_value = Mock(all=Mock(return_value=[]))
+    # PostgreSQL SUM(bigint) returns Decimal even when its value is zero.
+    db.scalar.return_value = Decimal(count)
+    result = asyncio.run(project_traffic('hour', db))
+    payload = json.loads(result.model_dump_json())
+    assert type(payload['data']['recent_errors_5xx']) is int
+    assert payload['data']['recent_errors_5xx'] == count

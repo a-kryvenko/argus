@@ -209,7 +209,8 @@ async def project_traffic(period: Literal['hour', 'day', 'week'] = 'day', db: As
     recent_errors = await db.scalar(select(func.coalesce(func.sum(TrafficMetric.count), 0)).where(
         TrafficMetric.resolution == 'minute', TrafficMetric.time >= now.replace(second=0, microsecond=0)-timedelta(minutes=4),
         TrafficMetric.status >= 500))
-    return success_response({'recent_errors_5xx': recent_errors,
+    # PostgreSQL SUM(bigint) returns numeric/Decimal; keep the JSON counter numeric.
+    return success_response({'recent_errors_5xx': int(recent_errors),
         'status': 'unknown' if stale else payload.get('status', 'unknown'),
         'checked_at': state.checked_at if state else None, 'stale': bool(stale),
         'since': payload.get('since'), 'resolution': resolution,

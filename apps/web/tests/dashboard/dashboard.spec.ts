@@ -535,3 +535,31 @@ test("recent server errors override healthy service probes", async ({
   await expect(page.getByText(/7 server errors/)).toBeVisible();
   await expect(page.getByText("All systems operational")).toHaveCount(0);
 });
+
+for (const count of [0, "0"]) {
+  test(`zero server errors (${typeof count}) do not degrade project health`, async ({
+    page,
+  }) => {
+    await mockApi(page);
+    await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            status: "ok",
+            checked_at: new Date().toISOString(),
+            stale: false,
+            since: checkedAt,
+            recent_errors_5xx: count,
+            resolution: "hour",
+            channels: null,
+          },
+        },
+      }),
+    );
+    await page.goto("/dashboard");
+    await expect(page.getByText("All systems operational")).toBeVisible();
+    await expect(page.getByText(/server errors \(5xx\)/)).toHaveCount(0);
+    await expect(page.getByText("Project needs attention")).toHaveCount(0);
+  });
+}

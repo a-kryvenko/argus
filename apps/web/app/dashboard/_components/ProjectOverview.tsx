@@ -229,12 +229,13 @@ export default function ProjectOverview() {
     clock - Date.parse(traffic.checked_at) > 120000 ||
     traffic.stale ||
     !!errors.traffic;
+  const recentErrors = Number(traffic?.recent_errors_5xx ?? 0);
   const healthy =
     !old &&
     project?.status === "ok" &&
     !trafficOld &&
     traffic?.status === "ok" &&
-    !traffic.recent_errors_5xx;
+    recentErrors === 0;
   return (
     <>
       <PageHeading
@@ -263,10 +264,10 @@ export default function ProjectOverview() {
         </div>
         <Status value={healthy ? "ok" : old ? "unknown" : "degraded"} />
       </Card>
-      {!!traffic?.recent_errors_5xx && (
+      {recentErrors > 0 && (
         <Message>
-          {traffic.recent_errors_5xx} server errors (5xx) in the last five
-          minute buckets. Check API and website traffic below.
+          {recentErrors} server errors (5xx) in the last five minute buckets.
+          Check API and website traffic below.
         </Message>
       )}
       {errors.project && (

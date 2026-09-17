@@ -1,0 +1,104 @@
+name: GHCR visibility probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: [.github/workflows/ghcr-visibility-probe.yml]
+
+permissions:
+  contents: read
+  packages: write
+  attestations: write
+  id-token: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Deliberately do not check out application code or the private backend.
+      - name: Prepare an isolated, harmless image
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          package="argus-visibility-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "PACKAGE=$package" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${OWNER,,}/$package" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/ghcr-probe"
+          printf 'GHCR visibility diagnostic; no application code or secrets.\n' > "$RUNNER_TEMP/ghcr-probe/notice.txt"
+          printf 'FROM scratch\nCOPY notice.txt /notice.txt\n' > "$RUNNER_TEMP/ghcr-probe/Dockerfile"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Publish with the production authentication and source label
+        id: build
+        uses: docker/build-push-action@3b5e8027fcad23fda98b2e3ac259d8d67585f671
+        with:
+          context: ${{ runner.temp }}/ghcr-probe
+          push: true
+          tags: ${{ env.IMAGE }}:probe
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      - name: Prepare read-only visibility checks
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "REFERENCE=$IMAGE@$DIGEST" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/check-visibility.sh" <<'SH'
+          set -euo pipefail
+          phase="$1"
+          metadata="$RUNNER_TEMP/package-$phase.json"
+          visibility=unknown
+          if gh api "users/$GITHUB_REPOSITORY_OWNER/packages/container/$PACKAGE" > "$metadata"; then
+            visibility=$(jq -r '.visibility' "$metadata")
+          fi
+          anonymous_config=$(mktemp -d)
+          printf '{"auths":{}}\n' > "$anonymous_config/config.json"
+          result="$RUNNER_TEMP/anonymous-$phase.txt"
+          anonymous=unknown
+          # manifest inspect talks to the registry, not the daemon's image cache.
+          if docker --config "$anonymous_config" manifest inspect "$REFERENCE" > "$result" 2>&1; then
+            anonymous=allowed
+          elif grep -Eqi 'unauthorized|denied|forbidden' "$result"; then
+            anonymous=denied
+          fi
+          cat "$result"
+          printf '| %s | %s | %s |\n' "$phase" "$visibility" "$anonymous" >> "$GITHUB_STEP_SUMMARY"
+          printf '%s %s\n' "$visibility" "$anonymous" > "$RUNNER_TEMP/verdict-$phase.txt"
+          SH
+          {
+            printf 'Probe image: `%s`\n\n' "$REFERENCE"
+            printf 'Package: https://github.com/users/%s/packages/container/package/%s\n\n' "$GITHUB_REPOSITORY_OWNER" "$PACKAGE"
+            printf '| Phase | API visibility | Anonymous manifest access |\n'
+            printf '| --- | --- | --- |\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Check immediately after image publication
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash "$RUNNER_TEMP/check-visibility.sh" before-attestation
+      - name: Apply the production attestation step
+        id: attest
+        continue-on-error: true
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Check after attestation and evaluate privacy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATTESTATION_OUTCOME: ${{ steps.attest.outcome }}
+        run: |
+          bash "$RUNNER_TEMP/check-visibility.sh" after-attestation
+          printf '\nAttestation outcome: %s\n' "$ATTESTATION_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          for phase in before-attestation after-attestation; do
+            if [[ "$(cat "$RUNNER_TEMP/verdict-$phase.txt")" != 'private denied' ]]; then
+              echo "::error::Privacy not established in $phase; inspect the run summary. No application images were published."
+              exit 1
+            fi
+          done
+          [[ "$ATTESTATION_OUTCOME" == success ]]

@@ -14,12 +14,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.services.api_statistics import record, run_flush_loop, flush
 from app.routers.dashboard import router as dashboard_router
 from app.db.session import dispose_engine
-from app.routers.auth import router as auth_router
 from app.routers.forecasts import router as forecasts_router
 from app.routers.atmospheric_density import router as atmospheric_density_router
 from app.routers.healthcheck import router as healthcheck_router
-from app.routers.private.model import router as private_model_router
-from app.routers.private.risk import router as private_risk_router
 from app.routers.public.observations import router as observations_router
 from app.routers.public.solar_wind import router as solar_wind_router
 from app.routers.public.geomagnetic import router as geomagnetic_router
@@ -92,7 +89,6 @@ app.add_middleware(
 )
 
 app.include_router(dashboard_router, include_in_schema=False)
-# app.include_router(auth_router)
 app.include_router(healthcheck_router)
 
 app.include_router(atmospheric_density_router)
@@ -102,9 +98,6 @@ app.include_router(solar_wind_router)
 app.include_router(geomagnetic_router)
 app.include_router(observation_summary_router)
 app.include_router(collection_status_router)
-
-app.include_router(private_risk_router)
-app.include_router(private_model_router)
 
 @app.middleware("http")
 async def add_processing_time_header(request: Request, call_next):

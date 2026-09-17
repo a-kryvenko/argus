@@ -1,4 +1,4 @@
-"""Server-side dashboard sessions. Independent of contract API tokens."""
+"""Server-side dashboard sessions."""
 import hashlib
 import hmac
 import os

@@ -12,8 +12,7 @@ Configure `API_DB_*`, `OBSERVATIONS_URL`, `OBSERVATIONS_SERVICE_TOKEN`,
 `FORECASTS_URL`, `FORECASTS_SERVICE_TOKEN`, `DASHBOARD_ORIGINS` and
 `DASHBOARD_COOKIE_SECURE`. Service tokens authenticate internal HTTP requests;
 they are separate from dashboard user sessions. `./argus api user --help` lists
-user-management actions. The legacy private-access token endpoint is a prototype
-with a hard-coded signing key, not dashboard authentication.
+user-management actions.
 
 The running `/docs` is the request/response reference (externally `/api/v1/docs`).
 Public observation routes use `{success,data,error}` and `Cache-Control: no-store`.

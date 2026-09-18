@@ -55,7 +55,7 @@ commit for both images. Do not publish private implementation or training code.
 
 Configuration uses `ARGUS_WORKDIR`, or searches the current directory and parents
 for `configs/project.yaml`. The command adapters set the workdir and load root env
-files. See [local setup](../README.md#local-development),
+files. See [local setup](../README_DEPLOY.md#local-development),
 [commands](commands.md) and [deployment](../README_DEPLOY.md).
 
 ## Validation

@@ -8,7 +8,7 @@ readiness. No private backend is installed.
 ## Configuration and operation
 
 Configure `INTELLIGENCE_DB_*`, `FORECASTS_URL` and `FORECASTS_SERVICE_TOKEN`.
-See [local setup](../../README.md#local-development),
+See [local setup](../../README_DEPLOY.md#local-development),
 [commands](../../docs/commands.md) and [deployment](../../README_DEPLOY.md).
 `./argus intelligence refresh [product]` runs one processing cycle;
 `./argus intelligence status [product]` reports persisted processing history.

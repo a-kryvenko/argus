@@ -3,7 +3,7 @@
 FastAPI serves public observations/forecasts, dashboard authentication and usage
 statistics. It owns only dashboard storage; Clio and Prophet reads go through HTTP
 with no SQL, provider-download or live CSV fallback. Model evaluation metrics are
-static deployed artifacts. See [setup](../../README.md#local-development) and
+static deployed artifacts. See [setup](../../README_DEPLOY.md#local-development) and
 [commands](../../docs/commands.md).
 
 ## Configuration and access

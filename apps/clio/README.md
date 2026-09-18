@@ -3,7 +3,7 @@
 Clio owns observations, normalization, aggregation, collection diagnostics and
 scheduled ingestion. `packages/clio` provides public provider parsing; ingestion
 uses private calibration through `services/calibration.py`. HTTP reads do not
-load the private backend. See [setup](../../README.md#local-development) and
+load the private backend. See [setup](../../README_DEPLOY.md#local-development) and
 [commands](../../docs/commands.md).
 
 ## Configuration and interfaces

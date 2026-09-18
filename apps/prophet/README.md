@@ -3,7 +3,7 @@
 Prophet owns forecast runs, saved inputs, artifacts, releases, exports and hourly
 slots. Production uses one image for `prophet` (worker) and `prophet-api` (HTTP).
 It reads Clio over HTTP and never accesses Clio tables. See
-[setup](../../README.md#local-development) and [commands](../../docs/commands.md).
+[setup](../../README_DEPLOY.md#local-development) and [commands](../../docs/commands.md).
 
 ## Configuration and inputs
 

@@ -15,7 +15,11 @@ BOUNDS = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000)
 _buffer = {}
 
 
-def record(route, method, status, duration_ms):
+def record(route, method, status, duration_ms, *, user_agent=''):
+    # Own health probes are operational checks, not API usage. Keep ordinary
+    # /ping calls and other routes visible even when they use the same agent.
+    if route == '/ping' and method == 'GET' and user_agent == 'Argus-Monitor/1':
+        return
     # Route templates only, never arbitrary paths, query strings or identifiers.
     hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     bucket = next((b for b in BOUNDS if duration_ms <= b), -1)

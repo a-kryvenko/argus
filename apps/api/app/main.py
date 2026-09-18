@@ -118,4 +118,5 @@ async def add_processing_time_header(request: Request, call_next):
     finally:
         route = request.scope.get('route')
         record(getattr(route, 'path', '__unmatched__'), request.method, status_code,
-               (time.perf_counter() - start_time) * 1000)
+               (time.perf_counter() - start_time) * 1000,
+               user_agent=request.headers.get('user-agent', ''))

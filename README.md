@@ -33,6 +33,6 @@ that backend and its model files.
 - [API documentation](https://argussun.com/api/v1/docs)
 - [Development, configuration and deployment](README_DEPLOY.md)
 
-## Author
+---
 
-Andrii Kryvenko
+> Argus Sunwatch is an independently designed and developed project. I am responsible for the system architecture, scientific data pipelines, forecasting methodology and experiments, backend services, APIs, infrastructure, deployment, and web application.

@@ -1,8 +1,6 @@
 # Argus Sunwatch
 
-[Argus Sunwatch](https://argussun.com/) displays solar wind observations, Kp/Dst
-indices and forecasts. A FastAPI backend serves stored data; a Next.js frontend
-provides charts, forecast probabilities and model evaluation metrics.
+[Argus Sunwatch](https://argussun.com/). End-to-end space-weather forecasting platform integrating real-time observational ingestion, normalized scientific datasets, model execution, forecast publication, evaluation, APIs and user-facing visualization.
 
 ## Data and forecasts
 

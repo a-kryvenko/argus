@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import httpx
 import pytest
 import pandas as pd
-from forecast.calculation import ForecastResult
+from forecast.api import ForecastResult
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.observation import Observation, ObservationPoint
 from argus_prophet import observations

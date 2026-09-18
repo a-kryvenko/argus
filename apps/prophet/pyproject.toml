@@ -9,8 +9,9 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "sqlalchemy>=2.0,<3",
   "alembic>=1.16,<2",
-  "forecast",
-  "forecast-core>=0.2.0",
+  "forecast>=0.2.0",
+  "joblib>=1.5.3",
+  "forecast-core>=0.3.0",
   "httpx>=0.28,<1",
   "sentry-sdk>=2.61.1",
 ]

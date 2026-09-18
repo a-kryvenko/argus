@@ -1,20 +1,43 @@
-"""Generation catalog; the versioned public release contract remains independent."""
+"""Single generation catalog; the public release contract remains independent."""
 from dataclasses import dataclass
+from importlib import import_module
+
+
+@dataclass(frozen=True)
+class Model:
+    artifact: str
+    service: str | None = None
+
+    def service_class(self):
+        if self.service is None:
+            raise ValueError(f'{self.artifact} does not use a model bundle')
+        module, name = self.service.rsplit('.', 1)
+        return getattr(import_module(module), name)
 
 
 @dataclass(frozen=True)
 class Product:
-    artifacts: tuple[str, ...]
+    models: tuple[Model, ...]
     backend: str = 'models'
+
+    @property
+    def artifacts(self) -> tuple[str, ...]:
+        return tuple(model.artifact for model in self.models)
 
 
 PRODUCTS = {
-    'geomagnetic-activity': Product(('kp_threshold', 'ap_quantile')),
-    'dst': Product(('dst_quantile',)),
-    'solar-wind-speed': Product(('plasma_speed_quantile', 'plasma_speed_threshold')),
-    'solar-wind-density': Product(('plasma_density_quantile',)),
-    'hmf': Product(('hmf_total_threshold', 'hmf_southward_threshold')),
-    'atmospheric-density': Product(('atmospheric_density',), backend='density'),
+    'geomagnetic-activity': Product((
+        Model('kp_threshold', 'forecast_core.api.KPProbaFS'),
+        Model('ap_quantile', 'forecast_core.api.APFS'))),
+    'dst': Product((Model('dst_quantile', 'forecast_core.api.DstFS'),)),
+    'solar-wind-speed': Product((
+        Model('plasma_speed_quantile', 'forecast.api.SWSpeedFS'),
+        Model('plasma_speed_threshold', 'forecast.api.SWSpeedProbaFS'))),
+    'solar-wind-density': Product((Model('plasma_density_quantile', 'forecast.api.SWDensityFS'),)),
+    'hmf': Product((
+        Model('hmf_total_threshold', 'forecast_core.api.HMFTotalProbaFS'),
+        Model('hmf_southward_threshold', 'forecast_core.api.HMFSouthProbaFS'))),
+    'atmospheric-density': Product((Model('atmospheric_density'),), backend='density'),
 }
 GENERATION_CHOICES = ('all', *PRODUCTS)
 

@@ -11,7 +11,7 @@ class SWSpeedFS(QuantileForecastService):
     target_name: str|None = "v"
 
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
-        from forecast_core.api import build_features
+        from forecast.features import build_features
 
         df = build_features(raw_observations_frame)
         return df
@@ -21,7 +21,7 @@ class SWSpeedProbaFS(ThresholdForecastService):
     target_name: str|None = "v"
 
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
-        from forecast_core.api import build_features
+        from forecast.features import build_features
 
         df = build_features(raw_observations_frame)
         return df
@@ -31,7 +31,7 @@ class SWDensityFS(QuantileForecastService):
     target_name: str|None = "n"
 
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
-        from forecast_core.api import build_features
+        from forecast.features import build_features
 
         df = build_features(raw_observations_frame)
         return df

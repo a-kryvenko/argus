@@ -3,7 +3,7 @@ name = "argus-clio"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "common", "clio", "forecast-core>=0.2.0",
+  "common", "clio", "forecast-core>=0.3.0",
   "fastapi>=0.115", "uvicorn>=0.30", "sentry-sdk>=2.61.1",
   "alembic>=1.16,<2", "sqlalchemy>=2.0,<3", "psycopg[binary]>=3.2,<4",
 ]
@@ -22,9 +22,10 @@ where = ["src"]
 argus_clio = ["migrations/script.py.mako"]
 
 [tool.uv.sources]
+forecast = { workspace = true, editable = true }
 common = { workspace = true, editable = true }
 clio = { workspace = true, editable = true }
 forecast-core = { path = "../../packages/forecast-core", editable = true }
 
 [tool.uv.workspace]
-members = ["../../packages/common", "../../packages/clio"]
+members = ["../../packages/common", "../../packages/clio", "../../packages/forecast"]

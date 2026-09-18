@@ -87,7 +87,7 @@ class DefaultForecastService(ABC):
         return frame
 
     def _apply_lead_buckets(self, df, lead_buckets):
-        from forecast_core.api import uses_overlapping_buckets
+        from forecast.quantiles import uses_overlapping_buckets
 
         if uses_overlapping_buckets(lead_buckets):
             return
@@ -149,7 +149,7 @@ class QuantileForecastService(DefaultForecastService):
         models: dict,
         features: list
     ) -> pd.DataFrame:
-        from forecast_core.api import (
+        from forecast.quantiles import (
             apply_quantile_calibration,
             predict_overlapping_quantiles,
             uses_overlapping_buckets,

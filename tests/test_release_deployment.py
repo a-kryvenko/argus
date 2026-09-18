@@ -53,7 +53,7 @@ def changed_components(before, after):
 
 @pytest.mark.parametrize('path,expected', [
     ('apps/intelligence/src/argus_intelligence/cli.py', {'intelligence'}),
-    ('packages/forecast/src/forecast/example.py', {'prophet'}),
+    ('packages/forecast/src/forecast/example.py', {'clio', 'prophet'}),
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
     ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'intelligence'}),
     ('packages/forecast-core/src/forecast_core/api.py', {'clio', 'prophet'}),

@@ -11,8 +11,8 @@
 | `apps/web` | Next.js frontend |
 | `packages/common` | Configuration and shared contracts |
 | `packages/clio` | Public provider fetching and parsing |
-| `packages/forecast` | Forecast interfaces and product definitions |
-| `packages/forecast-core` | Proprietary models, preparation and calibration; separate Git repository |
+| `packages/forecast` | Public solar-wind inference, features and shared calculation primitives |
+| `packages/forecast-core` | Private non-solar-wind models, training and calibration; uses the public forecast library |
 | `packages/intelligence-core` | Proprietary impact calculations; separate repository not yet created |
 
 Data flows from providers through Clio → Prophet → Intelligence. API reads Clio
@@ -53,7 +53,12 @@ All packages live in `packages/`. Proprietary `forecast-core` and
 `intelligence-core` are excluded from the public Git repository and maintained
 in separate repositories. The repository for `intelligence-core` has not been
 created yet; its local source stays private.
-The public Python workspace resolves without private repositories.
+The public Python workspace resolves without private repositories. Solar-wind
+speed and density inference run entirely in `forecast`, including feature building
+and quantile blending. The private backend depends on that public library; the
+public library never imports private code. Prophet's product catalog resolves
+public and private adapters lazily, without a second model enumeration.
+See the [public package example and tests](../packages/forecast/README.md).
 `packages/forecast-core` is an ignored, separate Git checkout required by Clio
 and Prophet builds. Keep its version consistent with both application lockfiles;
 push private changes before deploying dependent public code. CI pins one private

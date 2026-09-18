@@ -5,7 +5,7 @@ from time import perf_counter
 
 from common.schemas.forecast_inputs import ForecastInputs
 from argus_prophet.services.density_observations import load_density_drivers
-from forecast.calculation import ForecastResult
+from forecast.api import ForecastResult
 from forecast_core.api import (
     AtmosphericDensityForecastService,
 )

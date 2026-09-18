@@ -74,6 +74,7 @@ dependencies = [
     { name = "forecast" },
     { name = "forecast-core" },
     { name = "httpx" },
+    { name = "joblib" },
     { name = "psycopg", extra = ["binary"] },
     { name = "sentry-sdk" },
     { name = "sqlalchemy" },
@@ -88,6 +89,7 @@ requires-dist = [
     { name = "forecast", editable = "../../packages/forecast" },
     { name = "forecast-core", editable = "../../packages/forecast-core" },
     { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "joblib", specifier = ">=1.5.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "sentry-sdk", specifier = ">=2.61.1" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
@@ -312,41 +314,43 @@ wheels = [
 
 [[package]]
 name = "forecast"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "../../packages/forecast" }
 dependencies = [
     { name = "common" },
-    { name = "joblib" },
-    { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+models = [
+    { name = "joblib" },
+    { name = "lightgbm" },
     { name = "scikit-learn" },
-    { name = "scipy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "common", editable = "../../packages/common" },
-    { name = "joblib", specifier = ">=1.5.3" },
-    { name = "lightgbm", specifier = ">=4.6.0" },
+    { name = "joblib", marker = "extra == 'models'", specifier = ">=1.5.3" },
+    { name = "lightgbm", marker = "extra == 'models'", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=2.2" },
-    { name = "pyarrow", specifier = ">=24.0.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "scikit-learn", specifier = ">=1.5" },
-    { name = "scipy", specifier = ">=1.13" },
+    { name = "pandas", specifier = ">=2.2,<3" },
+    { name = "scikit-learn", marker = "extra == 'models'", specifier = ">=1.5" },
 ]
+provides-extras = ["models"]
 
 [[package]]
 name = "forecast-core"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "../../packages/forecast-core" }
 dependencies = [
     { name = "astropy" },
     { name = "clio" },
     { name = "common" },
+    { name = "forecast" },
+    { name = "joblib" },
+    { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
@@ -362,6 +366,9 @@ requires-dist = [
     { name = "astropy", specifier = ">=7.2.0" },
     { name = "clio" },
     { name = "common" },
+    { name = "forecast", specifier = ">=0.2.0" },
+    { name = "joblib", specifier = ">=1.5.3" },
+    { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "pandas", specifier = ">=2.2,<3" },
     { name = "pyarrow", specifier = ">=24.0.0" },

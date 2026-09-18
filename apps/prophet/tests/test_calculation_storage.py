@@ -15,8 +15,8 @@ from common.exceptions import ConfigurationException
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.forecast_release import ForecastArtifact
 from common.schemas.observation import Observation, ObservationPoint
-from forecast.calculation import calculate_forecast
-from forecast.inference.geomagnetic_fs import DstFS
+from forecast.api import calculate_forecast
+from forecast_core.api import DstFS
 from argus_prophet import generation, ledger
 from argus_prophet.models import load_model
 

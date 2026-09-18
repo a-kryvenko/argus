@@ -3,12 +3,13 @@ import hashlib
 import io
 from pathlib import Path
 
-import joblib
 from common.exceptions import ConfigurationException
-from forecast.inference._forecast_service import DefaultForecastService
+from forecast.api import DefaultForecastService
 
 
 def load_model(service: type[DefaultForecastService], *, workdir: Path, registry: dict):
+    # Scheduling and storage tests import this module without the model runtime.
+    import joblib
     entry = registry.get(service.registry_name)
     if not entry:
         raise ConfigurationException(f'Not found registry for {service.registry_name}')

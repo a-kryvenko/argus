@@ -4,8 +4,7 @@ from datetime import UTC
 from argus_prophet.products import PRODUCTS
 from common.config import get_config
 from argus_prophet.models import load_model
-from forecast.calculation import ForecastResult, calculate_forecast
-from forecast.forecast_services import ForecastService
+from forecast.api import ForecastResult, calculate_forecast
 
 
 def calculate(product: str, *, inputs, recorder):
@@ -16,9 +15,8 @@ def calculate(product: str, *, inputs, recorder):
         store_result(recorder, calculate_density(inputs=inputs, issue_time=issue_time))
         return
     config = get_config()
-    services = {service.value.registry_name: service.value for service in ForecastService}
-    for artifact in definition.artifacts:
-        service, model_info = load_model(services[artifact], workdir=config.workdir,
+    for model in definition.models:
+        service, model_info = load_model(model.service_class(), workdir=config.workdir,
                                          registry=config.models_registry['models'])
         result = calculate_forecast(service, inputs.observations,
                                     issue_time=issue_time, model_info=model_info)

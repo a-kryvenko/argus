@@ -1388,32 +1388,31 @@ wheels = [
 
 [[package]]
 name = "forecast"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "packages/forecast" }
 dependencies = [
     { name = "common" },
-    { name = "joblib" },
-    { name = "lightgbm" },
     { name = "numpy" },
     { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+models = [
+    { name = "joblib" },
+    { name = "lightgbm" },
     { name = "scikit-learn" },
-    { name = "scipy" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "common", editable = "packages/common" },
-    { name = "joblib", specifier = ">=1.5.3" },
-    { name = "lightgbm", specifier = ">=4.6.0" },
+    { name = "joblib", marker = "extra == 'models'", specifier = ">=1.5.3" },
+    { name = "lightgbm", marker = "extra == 'models'", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=2.2" },
-    { name = "pyarrow", specifier = ">=24.0.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "scikit-learn", specifier = ">=1.5" },
-    { name = "scipy", specifier = ">=1.13" },
+    { name = "pandas", specifier = ">=2.2,<3" },
+    { name = "scikit-learn", marker = "extra == 'models'", specifier = ">=1.5" },
 ]
+provides-extras = ["models"]
 
 [[package]]
 name = "fqdn"

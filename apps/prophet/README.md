@@ -16,7 +16,10 @@ CSV results. Model binaries are not archived; retain them separately for replay.
 
 ## Generation
 
-`products.py` defines supported products, their artifacts and backends.
+`products.py` defines supported products, their artifacts, backend adapter paths
+and calculation modes. Solar-wind adapters come from the public `forecast.api`;
+other model adapters come from `forecast_core.api`. Classes are imported only
+when a selected product is calculated. There is no separate model enumeration.
 `generation.calculate` is the shared runner for scheduled execution and local
 development. It requires a saved input snapshot and run recorder; product-specific
 launch scripts and unrecorded CSV generation paths have been removed from Prophet. Public release contracts remain
@@ -37,7 +40,7 @@ The public HTTP release format is unchanged.
 ## Calculation and storage boundary
 
 `models.load_model` reads configured model bundles and fingerprints the exact bytes
-loaded. `forecast.calculation.calculate_forecast` accepts an already loaded service,
+loaded. `forecast.api.calculate_forecast` accepts an already loaded service,
 observations and explicit issue time; it returns a `ForecastResult` containing a
 DataFrame and model metadata without configuration, database or filesystem access.
 `services.density_forecast.calculate_density` returns the same result structure.

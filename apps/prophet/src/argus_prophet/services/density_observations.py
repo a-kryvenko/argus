@@ -2,17 +2,13 @@
 import pandas as pd
 from datetime import datetime
 from common.schemas.forecast_inputs import ForecastInputs
-from forecast.exceptions import ArtifactNotReadyError
 from forecast_core.api import (
-    SOLAR_LAGS_DAYS, DriverDataUnavailable, prepare_density_drivers,
+    prepare_density_drivers,
 )
 
 
 def observed_driver_frame(measurements: pd.DataFrame, issue_time: datetime) -> pd.DataFrame:
-    try:
-        return prepare_density_drivers(measurements, issue_time)
-    except DriverDataUnavailable as exc:
-        raise ArtifactNotReadyError(str(exc)) from exc
+    return prepare_density_drivers(measurements, issue_time)
 
 
 def load_density_drivers(inputs: ForecastInputs, issue_time: datetime) -> pd.DataFrame:

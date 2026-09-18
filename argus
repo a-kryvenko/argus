@@ -13,7 +13,7 @@ Usage: ./argus <command> (environment: $mode)
   <service> migration create -m MESSAGE [--autogenerate] (dev only)
   <service> migration current | history | downgrade REVISION
   clio refresh [all|observations|solar-wind|geomagnetic]
-  clio aggregate [--limit N] | clio status
+  clio aggregate [--limit N] | clio status | clio worker
   prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
   prophet status [PRODUCT]
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
@@ -71,6 +71,9 @@ case "$command" in
         esac ;;
     user) [[ "$service" == api ]] || fail 'user belongs to api'; exec "$backend" api user "$@" ;;
     aggregate) [[ "$service" == clio ]] || fail 'aggregate belongs to clio'; exec "$backend" clio aggregate "$@" ;;
+    worker)
+        [[ "$service" == clio && $# == 0 ]] || fail 'Usage: ./argus clio worker'
+        exec "$backend" clio worker ;;
     refresh|status) ;;
     *) fail 'Unknown service command; use ./argus help' ;;
 esac

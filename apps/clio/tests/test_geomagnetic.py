@@ -67,10 +67,10 @@ def test_watch_retries_each_source_on_its_own_schedule(monkeypatch, metric, peri
     monkeypatch.setattr(command, 'ingest_source', AsyncMock(side_effect=OSError('offline')))
     monkeypatch.setattr(command, 'monotonic', lambda: 100)
     sleep = AsyncMock(side_effect=asyncio.CancelledError)
-    monkeypatch.setattr(command.asyncio, 'sleep', sleep)
+    monkeypatch.setattr(command, 'wait_for_next_poll', sleep)
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(command.watch_source(metric))
-    sleep.assert_awaited_once_with(period)
+    assert sleep.await_args.args[1] == period
 
 
 def test_api_rejects_invalid_ranges_before_querying(monkeypatch):

@@ -124,7 +124,8 @@ def test_every_docker_copy_source_participates_in_image_identity():
 
 
 @pytest.mark.parametrize('migration,fail', [(None, False), ('clio', False), ('clio', True), ('intelligence', False)])
-def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail):
+@pytest.mark.parametrize('legacy_clio', [False, True])
+def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail, legacy_clio):
     import os
     import shutil
     root, bundle, bin_dir = [tmp_path / name for name in ('host', 'bundle', 'tools')]
@@ -144,6 +145,7 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail):
     docker = bin_dir / 'docker'
     docker.write_text('''#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$CALL_LOG"
+if [[ "$*" == *'config --services' ]]; then printf '%s\\n' $INSTALLED_SERVICES; fi
 if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; then exit 1; fi
 ''')
     docker.chmod(0o755)
@@ -152,7 +154,9 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
     rsync.chmod(0o755)
     result = subprocess.run(['bash', str(bundle / 'deploy.sh'), str(root)],
                             env={**os.environ, 'PATH': str(bin_dir) + ':' + os.environ['PATH'],
-                                 'CALL_LOG': str(log), 'FAIL_MIGRATION': str(int(fail))},
+                                 'CALL_LOG': str(log), 'FAIL_MIGRATION': str(int(fail)),
+                                 'INSTALLED_SERVICES': 'api clio prophet prophet-api intelligence ' + (
+                                     'solar-wind geomagnetic clio-refresh clio-aggregate' if legacy_clio else 'clio-worker')},
                             capture_output=True, text=True)
     assert (result.returncode != 0) == fail, result.stderr
     calls = log.read_text().splitlines()
@@ -165,9 +169,25 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
         assert '--dbname=' not in calls[backup]  # Back up all domain databases and owners.
         backups = list((root / 'backups').glob('pre-migration-*.sql'))
         assert len(backups) == 1 and backups[0].stat().st_mode & 0o777 == 0o600
-        assert calls[stop].endswith('stop intelligence' if migration == 'intelligence' else 'stop clio solar-wind geomagnetic clio-refresh clio-aggregate')
+        expected = ['intelligence'] if migration == 'intelligence' else ['clio']
+        if migration == 'clio' and not legacy_clio:
+            expected.append('clio-worker')
+        if legacy_clio:
+            expected.extend(['solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'])
+        assert calls[stop].endswith('stop ' + ' '.join(expected))
     else:
-        assert not any(' stop ' in call or 'pg_dumpall' in call or '-migrate' in call for call in calls)
+        assert not any('pg_dumpall' in call or '-migrate' in call for call in calls)
+        assert any(' stop ' in call for call in calls) == legacy_clio
+    retired = 'solar-wind geomagnetic clio-refresh clio-aggregate'
+    if legacy_clio:
+        drain = next(i for i, call in enumerate(calls) if ' stop ' in call)
+        remove = next(i for i, call in enumerate(calls) if call.endswith('rm -f ' + retired))
+        assert drain < remove
+        if not fail:
+            start = next(i for i, call in enumerate(calls) if 'up -d --wait --wait-timeout' in call)
+            assert remove < start
+    else:
+        assert not any(' rm ' in call for call in calls)
     assert (root / '.release-fingerprints.tsv').read_text() == (fingerprints if fail else (bundle / 'fingerprints.tsv').read_text())
     assert not fail or not any('nginx -s reload' in call for call in calls)
     assert (root / '.argus-mode').read_text() == 'prod\n'

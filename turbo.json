@@ -33,11 +33,7 @@
       "cache": false,
       "persistent": true
     },
-    "dev:solar-wind": {
-      "cache": false,
-      "persistent": true
-    },
-    "dev:geomagnetic": {
+    "dev:worker": {
       "cache": false,
       "persistent": true
     }

@@ -37,6 +37,7 @@ Execution stops on the first error. Omitting the product for `status` also selec
 | `./argus clio refresh [source]` | Collect or update observations |
 | `./argus clio aggregate [--limit N]` | Process queued aggregates |
 | `./argus clio status` | Show collection progress and source freshness |
+| `./argus clio worker` | Run both collectors and scheduled normalization/aggregation in the foreground |
 | `./argus prophet refresh [product]` | Generate and publish forecasts |
 | `./argus prophet status [product]` | Show the current release and latest generation attempt |
 | `./argus intelligence refresh [product]` | Process available forecasts once, currently in stub mode |
@@ -45,6 +46,10 @@ Execution stops on the first error. Omitting the product for `status` also selec
 Clio sources: `observations` (normalized observations and input history),
 `solar-wind`, `geomagnetic`, `all`. With `all`, both collectors run first,
 followed by `observations`.
+
+Clio manual commands use the same locks as the worker and do not advance its
+scheduled completion markers. They also work when the worker is stopped.
+`pnpm dev` includes the Clio worker; production Compose starts it automatically.
 
 Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
 `hmf`, `atmospheric-density`, `all`. Selecting `dst` or `solar-wind-density` for
@@ -71,7 +76,7 @@ Shows the last 100 lines by default; `-f` follows new output.
 Locally, reads `data/logs/<service>.log` for `api`, `clio`, `prophet` or
 `intelligence`. Without a service, reads all available local log files.
 
-In production, reads Docker Compose logs. `clio` includes its collectors and
-schedulers; `prophet` includes its worker and HTTP service. Other supported
+In production, reads Docker Compose logs. `clio` includes `clio` and `clio-worker`;
+`prophet` includes its worker and HTTP service. Other supported
 services: `api`, `intelligence`, `frontend`, `nginx`, `postgres`, `redis`, `alloy`.
 Without a service, shows all Compose logs.

@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev dev:solar-wind dev:geomagnetic --concurrency 7",
+    "dev": "turbo run dev dev:worker --concurrency 7",
     "dev:api": "turbo run dev --filter=api",
     "dev:web": "turbo run dev --filter=web",
     "db:migrate": "./argus api migrate",

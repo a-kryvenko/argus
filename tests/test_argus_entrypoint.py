@@ -67,6 +67,13 @@ def test_clio_all_is_one_cycle_per_source(entry):
     assert calls == [['clio', 'collect', 'solar-wind'], ['clio', 'collect', 'geomagnetic'], ['clio', 'refresh']]
 
 
+def test_clio_worker_routes_to_selected_environment(entry):
+    _, run = entry
+    result, calls = run('clio', 'worker')
+    assert result.returncode == 0
+    assert calls == [['clio', 'worker']]
+
+
 def test_refresh_stops_on_failure(entry):
     _, run = entry
     result, calls = run('clio', 'refresh', fail=True)

@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "../../scripts/dev/run clio serve --host 127.0.0.1 --port 8001",
-    "dev:solar-wind": "../../scripts/dev/run clio collect solar-wind --watch",
-    "dev:geomagnetic": "../../scripts/dev/run clio collect geomagnetic --watch"
+    "dev:worker": "../../scripts/dev/run clio worker"
   }
 }

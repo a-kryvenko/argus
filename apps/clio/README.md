@@ -46,10 +46,25 @@ inputs are separate and may be propagated or filled.
 
 ## Scheduling and consistency
 
-Production runs HTTP, two collectors, hourly refresh at `:00 UTC` and aggregation
-every five minutes. Failed scheduled jobs retry every 60 seconds. Restarts catch
+Production runs two containers: `clio` (HTTP) and `clio-worker` (`clio worker`).
+The worker supervises the existing two collectors and two schedules in separate
+child processes: hourly refresh at `:00 UTC` and aggregation every five minutes.
+Their schedules, source locks and completion markers are unchanged; there is no
+message broker, new job table or in-memory backlog. Collection stays independent
+of normalization and aggregation. Failed scheduled jobs retry every 60 seconds. Restarts catch
 up only the latest due slot. Manual jobs share locks but do not advance scheduled
 completion markers. Work is idempotent/retriable, not exactly once.
+
+Run `./argus clio worker` in the foreground locally; `pnpm dev` also starts it.
+Production Compose starts it automatically. Manual `refresh` and `aggregate`
+commands run independently, using the same existing locks, without needing the
+worker. Refresh and aggregation may run concurrently, as before.
+
+If any child exits, even successfully, the worker stops its peers and exits with
+an error so Docker can restart the service. Task failures handled by the existing
+loops keep their normal retry behavior. SIGTERM/SIGINT stops new cycles, allows
+active work to finish, and waits up to 570 seconds across all children before
+killing and reaping remaining processes (Compose grace period: 10 minutes).
 
 Each provider uses a separate transaction and advisory lock. Locked sources are
 skipped; one source failure does not roll back another. Collection attempts commit
@@ -70,8 +85,10 @@ Combined source status prioritizes: `collector_stalled` (unfinished >120s),
 A source without attempts is `not_started`. Collection and data status remain separate.
 
 `/health/live` checks HTTP liveness; `/health/ready` checks migrated storage.
-Collectors use per-container heartbeat files, checked every 30s after a 120s
-startup period, with three retries. Upstream errors alone do not fail liveness
+Collectors use separate heartbeat files inside the worker container.
+`clio check-health worker` checks both collectors, every 30s after a 120s
+startup period, with three retries. It checks collector progress, not scheduler
+completion; scheduler failures remain visible in logs. Upstream errors alone do not fail liveness
 while polling continues. One-shot collection does not write watch heartbeats.
 Docker's unhealthy status alone does not restart a container.
 

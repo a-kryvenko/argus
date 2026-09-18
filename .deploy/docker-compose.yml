@@ -118,33 +118,15 @@ services:
       retries: 3
       start_period: 30s
 
-  solar-wind:
+  clio-worker:
     <<: *clio-runtime
-    command: ["clio", "collect", "solar-wind", "--watch"]
+    command: ["clio", "worker"]
     healthcheck:
-      test: ["CMD", "clio", "check-health", "solar-wind"]
+      test: ["CMD", "clio", "check-health", "worker"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 120s
-
-  geomagnetic:
-    <<: *clio-runtime
-    command: ["clio", "collect", "geomagnetic", "--watch"]
-    healthcheck:
-      test: ["CMD", "clio", "check-health", "geomagnetic"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 120s
-
-  clio-refresh:
-    <<: *clio-runtime
-    command: ["clio", "schedule", "refresh"]
-
-  clio-aggregate:
-    <<: *clio-runtime
-    command: ["clio", "schedule", "aggregate"]
 
   db-provision:
     image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}

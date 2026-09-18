@@ -6,8 +6,14 @@ from argus_clio.services.collector_heartbeat import check_heartbeat
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('collector', choices=['solar-wind', 'geomagnetic'])
-    result = check_heartbeat(parser.parse_args().collector)
+    parser.add_argument('collector', choices=['solar-wind', 'geomagnetic', 'worker'])
+    collector = parser.parse_args().collector
+    if collector == 'worker':
+        collectors = {name: check_heartbeat(name) for name in ('solar-wind', 'geomagnetic')}
+        result = {'healthy': all(item['healthy'] for item in collectors.values()),
+                  'collectors': collectors}
+    else:
+        result = check_heartbeat(collector)
     print(json.dumps(result))
     raise SystemExit(0 if result['healthy'] else 1)
 

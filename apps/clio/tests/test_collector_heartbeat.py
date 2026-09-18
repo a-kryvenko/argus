@@ -1,4 +1,6 @@
 import json
+import sys
+import pytest
 from argus_clio.services import collector_heartbeat as service
 
 
@@ -46,3 +48,16 @@ def test_invalid_or_other_collectors_heartbeat_cannot_mask_failure(tmp_path):
                     json.dumps({'collector':'solar-wind','active':True,'sources':{'solar_wind_mag':{'started':float('nan'), 'finished':None}}})]:
         path.write_text(payload)
         assert not service.check_heartbeat('solar-wind', path, now=100)['healthy']
+
+
+@pytest.mark.parametrize('unhealthy', [None, 'solar-wind', 'geomagnetic'])
+def test_worker_health_requires_both_collectors(monkeypatch, capsys, unhealthy):
+    from argus_clio.commands import check_collector_health as command
+    monkeypatch.setattr(sys, 'argv', ['clio check-health', 'worker'])
+    monkeypatch.setattr(command, 'check_heartbeat', lambda name: {'healthy': name != unhealthy})
+    with pytest.raises(SystemExit) as result:
+        command.main()
+    assert result.value.code == (0 if unhealthy is None else 1)
+    payload = json.loads(capsys.readouterr().out)
+    assert payload['healthy'] == (unhealthy is None)
+    assert set(payload['collectors']) == {'solar-wind', 'geomagnetic'}

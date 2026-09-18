@@ -34,10 +34,11 @@ def main():
     for name in ['refresh', 'aggregate', 'audit', 'cleanup', 'check-health', 'migrate']:
         commands.add_parser(name, add_help=False)
     commands.add_parser('status', help='Show stored collection progress and source freshness')
+    commands.add_parser('worker', help='Run collectors and scheduled jobs together')
     schedule = commands.add_parser('schedule')
     schedule.add_argument('job', choices=['refresh', 'aggregate'])
     args, remainder = parser.parse_known_args()
-    if args.command in ('serve', 'schedule', 'status') and remainder:
+    if args.command in ('serve', 'schedule', 'status', 'worker') and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
     from common.config import get_config
     get_config()
@@ -72,7 +73,10 @@ def main():
         cli.run_cmd(config, options)
         return
     from argus_clio.commands._runner import run_command
-    if args.command == 'collect':
+    if args.command == 'worker':
+        from argus_clio.worker import work
+        run_command(work)
+    elif args.command == 'collect':
         run_command(lambda: invoke(args.source, remainder))
     elif args.command == 'schedule':
         from argus_clio.scheduler import work
@@ -82,3 +86,7 @@ def main():
         run_command(lambda: execute(args.command, lambda: invoke(args.command, remainder)))
     else:
         run_command(lambda: invoke(args.command, remainder))
+
+
+if __name__ == '__main__':
+    main()

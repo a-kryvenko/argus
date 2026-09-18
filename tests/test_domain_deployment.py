@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
-    domains = {'api': ['api'], 'clio': ['clio', 'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'],
+    domains = {'api': ['api'], 'clio': ['clio', 'clio-worker'],
                'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence']}
     for domain, names in domains.items():
         for name in [*names, domain + '-migrate']:
@@ -26,6 +26,9 @@ def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
     assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
     assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
+    assert services['clio-worker']['command'] == ['clio', 'worker']
+    assert services['clio-worker']['healthcheck']['test'] == ['CMD', 'clio', 'check-health', 'worker']
+    assert not {'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'} & services.keys()
 
 
 def test_no_application_jobs_remain_in_cron():

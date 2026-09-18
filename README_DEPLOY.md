@@ -70,11 +70,12 @@ docker compose --env-file .env --env-file .env.local up -d --wait
 pnpm dev
 ```
 
-`pnpm dev` starts the frontend, API, Clio HTTP, Prophet HTTP and both observation
-collectors. Schedulers and Intelligence do not start automatically locally;
-production Compose includes the collectors and workers. PostgreSQL and Redis
-run in Docker. The API and frontend reload code changes; restart collectors
-after changing their code.
+`pnpm dev` starts the frontend, API, Clio HTTP, Prophet HTTP and the Clio worker
+(both observation collectors, hourly normalization and five-minute aggregation).
+Prophet generation and Intelligence do not start automatically locally;
+production Compose includes their workers. PostgreSQL and Redis run in Docker.
+The API and frontend reload code changes; restart the Clio worker after changing
+its code. Run it separately with `./argus clio worker`.
 
 `docker compose down` stops local infrastructure. Adding `--volumes` deletes
 the local database and Redis volumes.
@@ -229,6 +230,11 @@ Actions uploads a release bundle and invokes its `deploy.sh /var/www`:
 Unchanged containers stay running unless shared mounted configuration requires a
 restart. Actions serializes deployments; host flock excludes concurrent maintenance.
 Phase timing in deploy logs identifies download, backup, migration and startup costs.
+
+When upgrading from separate Clio background containers, deployment stops and
+removes `solar-wind`, `geomagnetic`, `clio-refresh` and `clio-aggregate` before
+starting `clio-worker`. This also happens when no migrations changed. Existing
+observation data and scheduling markers stay in PostgreSQL.
 
 ## Recovery
 

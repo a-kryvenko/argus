@@ -23,6 +23,10 @@ if [[ -f "$root/.release-images.env" ]]; then
 fi
 installed+=(-f "$root/docker-compose.yml")
 "${candidate[@]}" config --quiet
+installed_services="$("${installed[@]}" config --services)"
+has_installed_service() {
+    [[ $'\n'"$installed_services"$'\n' == *$'\n'"$1"$'\n'* ]]
+}
 
 # Compare with the last successful application, never the previous Git tag.
 changed() {
@@ -40,14 +44,29 @@ for domain in api clio prophet intelligence; do
         case "$domain" in
             intelligence) stop+=(intelligence) ;;
             api) stop+=(api) ;;
-            clio) stop+=(clio solar-wind geomagnetic clio-refresh clio-aggregate) ;;
+            clio) stop+=(clio clio-worker) ;;
             prophet) stop+=(prophet prophet-api) ;;
         esac
     fi
 done
 if changed configs; then
-    stop+=(api clio solar-wind geomagnetic clio-refresh clio-aggregate prophet prophet-api)
+    stop+=(api clio clio-worker prophet prophet-api)
 fi
+# Drain and remove the four old Clio containers before starting the unified
+# worker, even when this release has no database/config changes.
+retired=()
+for service in solar-wind geomagnetic clio-refresh clio-aggregate; do
+    if has_installed_service "$service"; then
+        retired+=("$service")
+        stop+=("$service")
+    fi
+done
+existing_stop=()
+for service in "${stop[@]}"; do
+    if has_installed_service "$service"; then
+        existing_stop+=("$service")
+    fi
+done
 printf 'Migrations: %s\n' "${migrations[*]:-none}"
 phase download-images
 "${candidate[@]}" pull --policy missing
@@ -55,8 +74,11 @@ if ((${#migrations[@]})); then
     "${candidate[@]}" pull --policy missing "${migrations[@]}"
 fi
 phase drain-writers
-if ((${#stop[@]})); then
-    "${installed[@]}" stop "${stop[@]}"
+if ((${#existing_stop[@]})); then
+    "${installed[@]}" stop "${existing_stop[@]}"
+fi
+if ((${#retired[@]})); then
+    "${installed[@]}" rm -f "${retired[@]}"
 fi
 if ((${#migrations[@]})); then
     phase database-backup

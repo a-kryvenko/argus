@@ -19,6 +19,10 @@ Data flows from providers through Clio → Prophet → Intelligence. API reads C
 and Prophet contracts. Reads never collect data or generate forecasts. Live CSVs
 are exports of Prophet releases; model evaluation metrics are static artifacts.
 
+Clio deploys as HTTP plus one worker container. The worker supervises the existing
+collector and scheduler processes; it adds no queue or storage model. Each loop
+keeps its own database locks and timing, so normalization cannot block collection.
+
 Clio ingestion accesses private calibration through a lazy adapter; its HTTP read
 path does not import the backend. API and Intelligence install without private
 code and cannot import other applications' runtimes. Private impact calculations

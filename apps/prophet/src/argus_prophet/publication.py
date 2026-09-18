@@ -31,15 +31,19 @@ def publish_run(conn, run_id):
     with conn.cursor(row_factory=dict_row) as cursor:
         # Serializes pointer decisions, including repeatable historical promotion.
         cursor.execute("SELECT pg_advisory_xact_lock(736218, 1)")
-        cursor.execute("SELECT status,started_at FROM prophet.forecast_run WHERE id=%s", (run_id,))
+        cursor.execute("SELECT status,started_at,product FROM prophet.forecast_run WHERE id=%s", (run_id,))
         run = cursor.fetchone()
         if run is None or run['status'] not in ('succeeded', 'partial'):
             return []
         cursor.execute("SELECT * FROM prophet.forecast_artifact WHERE run_id=%s AND status='stored'", (run_id,))
         rows = {row['name']: row for row in cursor.fetchall()}
         published = []
-        for product, names in PRODUCT_ARTIFACTS.items():
+        products = PRODUCT_ARTIFACTS if run['product'] == 'all' else {
+            run['product']: PRODUCT_ARTIFACTS[run['product']]}
+        for product, names in products.items():
             if not set(names).issubset(rows):
+                if run['product'] != 'all':
+                    raise ValueError(f'Incomplete artifacts for {product}')
                 continue
             cursor.execute('''SELECT r.issue_time, f.started_at, r.run_id FROM prophet.current_forecast c
                 JOIN prophet.forecast_release r ON r.id=c.release_id
@@ -62,7 +66,6 @@ def publish_run(conn, run_id):
                 continue
             cursor.execute('''INSERT INTO prophet.current_forecast(product,release_id) VALUES (%s,%s)
                 ON CONFLICT(product) DO UPDATE SET release_id=excluded.release_id''', (product, release.release_id))
-            cursor.execute('INSERT INTO prophet.forecast_export(release_id) VALUES (%s)', (release.release_id,))
             published.append(release.release_id)
         return published
 

@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
-import importlib
 from unittest.mock import Mock
 
 import httpx
 import pytest
+import pandas as pd
+from forecast.calculation import ForecastResult
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.observation import Observation, ObservationPoint
 from argus_prophet import observations
@@ -57,41 +58,47 @@ def test_rejects_incompatible_contract(monkeypatch):
         observations.load_inputs(NOW)
 
 
-@pytest.mark.parametrize('name', ['generate_wind_forecast', 'generate_hmf_forecast', 'generate_kp_forecast'])
-def test_product_commands_use_owner_observations(monkeypatch, name):
-    command = importlib.import_module(f'argus_prophet.commands.{name}')
-    stored = stored_inputs().observations
-    monkeypatch.setattr(command, 'load_sensor_observations', Mock(return_value=stored))
-    director = Mock()
-    monkeypatch.setattr(command, 'ForecastDirector', Mock(return_value=director))
-    monkeypatch.setattr(command.ForecastServiceRegistry, 'get', Mock())
-    command.main()
-    assert director.refresh_forecasts.call_args.args[1] is stored
+def mock_models(monkeypatch):
+    from argus_prophet import generation
+    load = Mock(side_effect=lambda service, **_: (service, {}))
+    compute = Mock(side_effect=lambda service, *args, **kwargs:
+                   ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
+    monkeypatch.setattr(generation, 'load_model', load)
+    monkeypatch.setattr(generation, 'calculate_forecast', compute)
+    return compute
 
 
-def test_full_run_shares_one_read_with_density(monkeypatch):
-    from argus_prophet.commands import generate_forecast as command
+@pytest.mark.parametrize('selection,artifacts', [
+    ('solar-wind-speed', ['plasma_speed_quantile', 'plasma_speed_threshold']),
+    ('geomagnetic-activity', ['kp_threshold', 'ap_quantile']),
+    ('hmf', ['hmf_total_threshold', 'hmf_southward_threshold']),
+    ('dst', ['dst_quantile']),
+    ('solar-wind-density', ['plasma_density_quantile']),
+])
+def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
+    from argus_prophet import generation
     inputs = stored_inputs()
-    read = Mock(return_value=inputs)
-    monkeypatch.setattr(command, 'load_inputs', read)
-    director = Mock()
-    monkeypatch.setattr(command, 'ForecastDirector', Mock(return_value=director))
-    monkeypatch.setattr(command.ForecastServiceRegistry, 'get', Mock())
-    density = Mock()
-    monkeypatch.setattr(command, 'generate_density', density)
-    command.main()
-    read.assert_called_once_with()
-    assert director.refresh_forecasts.call_args.args[1] is inputs.observations
-    density.assert_called_once_with(inputs, recorder=None)
+    recorder = Mock()
+    compute = mock_models(monkeypatch)
+    generation.calculate(selection, inputs=inputs, recorder=recorder)
+    assert [call.args[0].registry_name for call in compute.call_args_list] == artifacts
+    for call in compute.call_args_list:
+        assert call.args[1] is inputs.observations
+        assert call.kwargs['issue_time'] == NOW
+    assert [call.args[0] for call in recorder.store.call_args_list] == artifacts
 
 
-def test_kp_command_calculates_both_sources_of_geomagnetic_product(monkeypatch):
-    from argus_prophet.commands import generate_kp_forecast as command
-    inputs = stored_inputs()
-    director = Mock()
-    monkeypatch.setattr(command, 'ForecastDirector', Mock(return_value=director))
-    monkeypatch.setattr(command.ForecastServiceRegistry, 'get', lambda name: name)
-    command.main(inputs=inputs)
-    assert director.refresh_forecasts.call_args.args[0] == [
-        command.ForecastService.KP_INDEX_THRESHOLD, command.ForecastService.AP_INDEX_QUANTILE,
-    ]
+def test_catalog_matches_public_contract():
+    from argus_prophet.products import PRODUCTS
+    from common.schemas.forecast_release import PRODUCT_ARTIFACTS
+    assert set(PRODUCTS) == set(PRODUCT_ARTIFACTS) - {'solar-radiation'}
+    for name, product in PRODUCTS.items():
+        assert product.artifacts == PRODUCT_ARTIFACTS[name]
+
+
+
+def test_status_selections_include_canonical_names_and_historical_aliases():
+    from argus_prophet.products import attempt_selections
+    assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
+    assert attempt_selections('dst') == ['all', 'dst']
+    assert attempt_selections('solar-radiation') == []

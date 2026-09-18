@@ -95,14 +95,7 @@ fi
 [[ "$service" != api ]] || fail 'API supports migrate, migration and user'
 case "$selection" in all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density) ;; *) fail 'Unknown or unsupported product' ;; esac
 if [[ "$service" == prophet && "$command" == refresh ]]; then
-    case "$selection" in
-        all|solar-wind-density|dst) product=all ;;
-        solar-wind-speed) product=wind ;;
-        geomagnetic-activity) product=kp ;;
-        atmospheric-density) product=density ;;
-        hmf) product=hmf ;;
-    esac
-    exec "$backend" prophet generate "$product"
+    exec "$backend" prophet generate "$selection"
 fi
 [[ "$command" != refresh ]] || command=process
 if [[ "$selection" == all ]]; then

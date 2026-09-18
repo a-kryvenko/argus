@@ -1,47 +1,38 @@
 models:
   plasma_speed_quantile:
     model: argus-plasma-speed-q-v2-smooth
-    forecast_path: data/forecast/plasma/speed_quantile.csv
     metrics: data/metrics/plasma/speed_quantile
   
   plasma_speed_threshold:
     model: argus-plasma-speed-t-v2
-    forecast_path: data/forecast/plasma/speed_proba.csv
     metrics: data/metrics/plasma/speed_proba
 
   plasma_density_quantile:
     model: argus-plasma-den-q-v2
-    forecast_path: data/forecast/plasma/density_quantile.csv
     metrics: data/metrics/plasma/density_quantile
 
   kp_threshold:
     model: argus-kp-t-v2
-    forecast_path: data/forecast/geomagnetic/kp_proba.csv
     metrics: data/metrics/geomagnetic/kp_proba
 
   ap_quantile:
     model: argus-ap-q-v2
-    forecast_path: data/forecast/geomagnetic/ap_quantile.csv
     metrics: data/metrics/geomagnetic/ap_quantile
 
   dst_quantile:
     model: argus-dst-q-v2
-    forecast_path: data/forecast/geomagnetic/dst_quantile.csv
     metrics: data/metrics/geomagnetic/dst_quantile
 
   hmf_total_threshold:
     model: argus-bt-t-v2
-    forecast_path: data/forecast/hmf/total_proba.csv
     metrics: data/metrics/hmf/total_proba
   
   hmf_southward_threshold:
     model: argus-bs-t-v2
-    forecast_path: data/forecast/hmf/southward_proba.csv
     metrics: data/metrics/hmf/southward_proba
 
   f10_7_quantile:
     model: argus-f10_7-q-v1
-    forecast_path: data/forecast/radiation/f10_7_quantile.csv
     metrics: data/metrics/radiation/f10_7_quantile
 
   # GOES -> SOLFSMY observation calibration; not a forecast model.
@@ -68,27 +59,22 @@ models:
   
   s10_quantile:
     model: argus-s10-q-v1
-    forecast_path: data/forecast/radiation/s10_quantile.csv
     metrics: data/metrics/radiation/s10_quantile
   
   m10_quantile:
     model: argus-m10-q-v1
-    forecast_path: data/forecast/radiation/m10_quantile.csv
     metrics: data/metrics/radiation/m10_quantile
   
   y10_quantile:
     model: argus-y10-q-v1
-    forecast_path: data/forecast/radiation/y10_quantile.csv
     metrics: data/metrics/radiation/y10_quantile
 
   dtc:
     active_versions: null
-    forecast_path: data/forecast/dtc/live.csv
     metrics: data/metrics/dtc
 
   atmospheric_density:
     history_cache: data/observations/jb2008
     max_age_hours: 6
     active_versions: null
-    forecast_path: data/forecast/atmospheric-density/live.csv
     metrics: data/metrics/atmospheric-density

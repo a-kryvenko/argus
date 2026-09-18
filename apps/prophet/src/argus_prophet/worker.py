@@ -7,11 +7,12 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 from argus_prophet.db.session import connect, open_connection, writer_session
+from argus_prophet.products import PRODUCTS
 
 logger = logging.getLogger(__name__)
 # Distinct from the publication transaction lock (736218, 1) and Clio job locks.
 GENERATION_LOCK = (736218, 2)
-COMPLETED = ('succeeded', 'partial', 'imported')
+COMPLETED = ('succeeded', 'imported')
 
 
 class GenerationBusy(RuntimeError):
@@ -45,7 +46,19 @@ def due_slot(now: datetime) -> datetime:
     return (now.astimezone(UTC) - timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)
 
 
-def run_due(generate: Callable[[datetime], None], now: datetime) -> bool:
+def completed_products(conn, slot) -> set[str]:
+    """Durable per-product success, including releases from historical batch runs."""
+    rows = conn.execute("""SELECT product FROM prophet.forecast_run
+        WHERE scheduled_slot=%s AND status='succeeded' AND product<>'all'
+        UNION
+        SELECT r.product FROM prophet.forecast_release r
+        JOIN prophet.forecast_run f ON f.id=r.run_id
+        WHERE f.scheduled_slot=%s AND f.product='all' AND f.status IN ('succeeded','partial')""",
+        (slot, slot)).fetchall()
+    return {row[0] for row in rows}
+
+
+def run_due(generate: Callable[[datetime, tuple[str, ...]], None], now: datetime) -> bool:
     with generation_lock():
         slot = due_slot(now)
         with connect(writing=True) as conn:
@@ -53,7 +66,12 @@ def run_due(generate: Callable[[datetime], None], now: datetime) -> bool:
                                     (list(COMPLETED),)).fetchone()[0]
         if previous is not None and previous >= slot:
             return False
-        generate(slot)
+        with connect(writing=True) as conn:
+            completed = completed_products(conn, slot)
+        pending = tuple(product for product in PRODUCTS if product not in completed)
+        if not pending:
+            return False
+        generate(slot, pending)
         # Completion must have committed with the release, not after this callback.
         with connect(writing=True) as conn:
             result = conn.execute('SELECT status FROM prophet.forecast_slot WHERE slot=%s', (slot,)).fetchone()
@@ -71,7 +89,7 @@ def list_slots(limit=20):
         return cursor.fetchall()
 
 
-def work(generate: Callable[[datetime], None], export: Callable[[], None] | None = None) -> None:
+def work(generate: Callable[[datetime, tuple[str, ...]], None]) -> None:
     stopped = threading.Event()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, lambda *_: stopped.set())
@@ -85,12 +103,4 @@ def work(generate: Callable[[datetime], None], export: Callable[[], None] | None
             logger.exception('Forecast generation failed; retrying in 60 seconds')
             import sentry_sdk
             sentry_sdk.capture_exception()
-        if export is not None:
-            try:
-                with generation_lock():
-                    export()
-            except GenerationBusy:
-                logger.info('CSV export deferred while another writer is running')
-            except Exception:
-                logger.exception('CSV export failed; retrying in 60 seconds without recalculation')
         stopped.wait(60)

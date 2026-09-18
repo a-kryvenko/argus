@@ -6,7 +6,7 @@
 | --- | --- |
 | `apps/api` | Public HTTP, dashboard authentication and API statistics; reads Clio and Prophet over HTTP |
 | `apps/clio` | Observation collection, storage, aggregation, scheduling and internal reads |
-| `apps/prophet` | Forecast generation, input snapshots, releases, exports and scheduling |
+| `apps/prophet` | Forecast generation, input snapshots, releases and scheduling |
 | `apps/intelligence` | Consumes Prophet releases; records attempts and deduplicated stub results |
 | `apps/web` | Next.js frontend |
 | `packages/common` | Configuration and shared contracts |
@@ -16,8 +16,10 @@
 | `packages/intelligence-core` | Proprietary impact calculations; separate repository not yet created |
 
 Data flows from providers through Clio → Prophet → Intelligence. API reads Clio
-and Prophet contracts. Reads never collect data or generate forecasts. Live CSVs
-are exports of Prophet releases; model evaluation metrics are static artifacts.
+and Prophet contracts. Reads never collect data or generate forecasts. Forecast
+artifacts are stored in PostgreSQL; model evaluation metrics are static files.
+Prophet publishes each product independently and retries only failed products
+within the current hourly slot. It does not export forecast files.
 
 Clio deploys as HTTP plus one worker container. The worker supervises the existing
 collector and scheduler processes; it adds no queue or storage model. Each loop

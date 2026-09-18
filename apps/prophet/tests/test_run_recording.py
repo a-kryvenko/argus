@@ -1,93 +1,110 @@
-from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import Mock
-import importlib
+from unittest.mock import Mock, call
 
-import pandas as pd
 import pytest
 
-from argus_prophet import cli
-from forecast.ForecastDirector import ForecastDirector
+from argus_prophet import cli, generation, ledger, observations
+from argus_prophet.products import PRODUCTS
 
 
 def setup_run(monkeypatch):
-    from argus_prophet import ledger, observations
-    recorder = Mock(run_id='test-run')
-    monkeypatch.setattr(ledger.RunRecorder, 'begin', Mock(return_value=recorder))
+    recorders = {name: Mock(run_id=name) for name in PRODUCTS}
+    begin = Mock(side_effect=lambda name, *args, **kwargs: recorders[name])
+    monkeypatch.setattr(ledger.RunRecorder, 'begin', begin)
+    monkeypatch.setattr(ledger, 'provenance', lambda _: {})
     inputs = object()
-    monkeypatch.setattr(observations, 'load_inputs', Mock(return_value=inputs))
+    read = Mock(return_value=inputs)
+    monkeypatch.setattr(observations, 'load_inputs', read)
     command = Mock()
-    monkeypatch.setattr(cli.importlib, 'import_module', Mock(return_value=command))
-    return recorder, inputs, command
+    monkeypatch.setattr(generation, 'calculate', command)
+    return recorders, inputs, command, read, begin
 
 
-def test_execution_records_snapshot_before_computation(monkeypatch):
-    recorder, inputs, command = setup_run(monkeypatch)
-    command.main.side_effect = lambda **kwargs: recorder.snapshot.assert_called_once_with(inputs)
-    cli.generate('all', trigger='scheduled')
-    command.main.assert_called_once_with(inputs=inputs, recorder=recorder)
-    recorder.finish.assert_called_once_with()
+def test_full_cycle_reads_once_and_publishes_each_product_before_next(monkeypatch):
+    recorders, inputs, command, read, begin = setup_run(monkeypatch)
+    seen = []
+    def compute(name, **kwargs):
+        recorders[name].snapshot.assert_called_once_with(inputs)
+        if seen:
+            recorders[seen[-1]].finish.assert_called_once_with()
+        seen.append(name)
+    command.side_effect = compute
+    cli.generate('all')
+    read.assert_called_once_with()
+    assert seen == list(PRODUCTS)
+    for name, recorder in recorders.items():
+        recorder.snapshot.assert_called_once_with(inputs)
+        recorder.finish.assert_called_once_with()
+    assert [c.args[0] for c in begin.call_args_list] == list(PRODUCTS)
 
 
-def test_execution_failure_is_recorded_and_propagated(monkeypatch):
-    recorder, _, command = setup_run(monkeypatch)
+@pytest.mark.parametrize('failed_product', ['geomagnetic-activity', 'atmospheric-density'])
+def test_model_failure_does_not_block_other_products(monkeypatch, failed_product):
+    recorders, _, command, read, _ = setup_run(monkeypatch)
     failure = ValueError('model failed')
-    command.main.side_effect = failure
-    with pytest.raises(ValueError, match='model failed'):
+    def compute(name, **kwargs):
+        if name == failed_product:
+            raise failure
+    command.side_effect = compute
+    with pytest.raises(cli.GenerationFailed) as error:
         cli.generate('all')
-    recorder.finish.assert_called_once_with(error=failure)
+    assert error.value.failures == {failed_product: failure}
+    assert command.call_count == len(PRODUCTS)
+    read.assert_called_once_with()
+    for name, recorder in recorders.items():
+        if name == failed_product:
+            recorder.finish.assert_called_once_with(error=failure)
+        else:
+            recorder.finish.assert_called_once_with()
 
 
-def test_snapshot_write_failure_prevents_computation(monkeypatch):
-    recorder, _, command = setup_run(monkeypatch)
-    recorder.snapshot.side_effect = RuntimeError('database unavailable')
-    with pytest.raises(RuntimeError, match='database unavailable'):
+def test_publication_failure_is_recorded_and_other_products_continue(monkeypatch):
+    recorders, _, command, _, _ = setup_run(monkeypatch)
+    failure = ValueError('checksum mismatch')
+    recorders['dst'].finish.side_effect = [failure, None]
+    with pytest.raises(cli.GenerationFailed):
         cli.generate('all')
-    command.main.assert_not_called()
+    assert recorders['dst'].finish.call_args_list == [call(), call(error=failure)]
+    assert command.call_count == len(PRODUCTS)
 
 
-def frame_writer(monkeypatch, path, stored, written):
-    module = importlib.import_module('forecast.ForecastDirector')
-    monkeypatch.setattr(module, 'forecast_to_dataframe', lambda _: pd.DataFrame({'issue_time': ['new'], 'value': [2]}))
-    service = SimpleNamespace(registry_name='test', forecast=lambda _: None)
-    ForecastDirector(stored, written)._build_forecast(path, service, object(), {'sha256': 'model-hash'})
+def test_snapshot_failure_prevents_that_product_calculation(monkeypatch):
+    recorders, _, command, _, _ = setup_run(monkeypatch)
+    failure = RuntimeError('database unavailable')
+    recorders['dst'].snapshot.side_effect = failure
+    with pytest.raises(cli.GenerationFailed):
+        cli.generate('dst')
+    recorders['dst'].finish.assert_called_once_with(error=failure)
+    command.assert_not_called()
 
 
-def test_result_is_stored_before_live_csv_replacement(tmp_path, monkeypatch):
-    path = tmp_path / 'live.csv'
-    path.write_text('issue_time,value\nold,1\n')
-    events = []
-    def store(name, temporary, metadata, rows, columns):
-        assert 'old,1' in path.read_text()
-        assert 'new,2' in Path(temporary).read_text()
-        assert metadata['sha256'] == 'model-hash' and rows == 1
-        events.append('stored')
-    def written(name):
-        assert 'new,2' in path.read_text()
-        events.append('csv')
-    frame_writer(monkeypatch, path, store, written)
-    assert events == ['stored', 'csv']
+def test_lost_writer_stops_cycle_without_starting_more_products(monkeypatch):
+    recorders, _, command, _, begin = setup_run(monkeypatch)
+    first = next(iter(PRODUCTS))
+    command.side_effect = RuntimeError('connection lost')
+    recorders[first].finish.side_effect = RuntimeError('lock lost')
+    with pytest.raises(RuntimeError, match='lock lost'):
+        cli.generate('all')
+    assert begin.call_count == 1
 
 
-def test_database_failure_keeps_previous_live_csv(tmp_path, monkeypatch):
-    path = tmp_path / 'live.csv'
-    original = 'issue_time,value\nold,1\n'
-    path.write_text(original)
-    written = Mock()
-    with pytest.raises(RuntimeError, match='database unavailable'):
-        frame_writer(monkeypatch, path, Mock(side_effect=RuntimeError('database unavailable')), written)
-    assert path.read_text() == original
-    written.assert_not_called()
+def test_shared_input_failure_records_all_selected_products_and_reads_once(monkeypatch):
+    recorders, _, command, read, _ = setup_run(monkeypatch)
+    failure = RuntimeError('Clio unavailable')
+    read.side_effect = failure
+    with pytest.raises(cli.GenerationFailed) as error:
+        cli.generate('all')
+    assert set(error.value.failures) == set(PRODUCTS)
+    read.assert_called_once_with()
+    command.assert_not_called()
+    for recorder in recorders.values():
+        recorder.snapshot.assert_not_called()
+        recorder.finish.assert_called_once_with(error=failure)
 
 
-def test_recorded_calculation_does_not_publish_live_csv(tmp_path, monkeypatch):
-    path = tmp_path / 'live.csv'
-    path.write_text('previous release')
-    module = importlib.import_module('forecast.ForecastDirector')
-    monkeypatch.setattr(module, 'forecast_to_dataframe', lambda _: pd.DataFrame({'value': [2]}))
-    stored = Mock()
-    service = SimpleNamespace(registry_name='test', forecast=lambda _: None)
-    ForecastDirector(on_result=stored, publish_csv=False)._build_forecast(path, service, object())
-    stored.assert_called_once()
-    assert path.read_text() == 'previous release'
-    assert not path.with_name('live.csv.tmp').exists()
+def test_retry_subset_does_not_create_successful_product_attempts(monkeypatch):
+    recorders, inputs, command, read, begin = setup_run(monkeypatch)
+    cli.generate_products(('dst', 'atmospheric-density'), 'scheduled', scheduled_slot='slot')
+    assert [c.args[0] for c in begin.call_args_list] == ['dst', 'atmospheric-density']
+    assert all(c.kwargs['scheduled_slot'] == 'slot' for c in begin.call_args_list)
+    read.assert_called_once_with()
+    recorders['solar-wind-speed'].finish.assert_not_called()

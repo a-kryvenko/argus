@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
@@ -43,8 +43,11 @@ class DefaultForecastService(ABC):
     def _forecast_row(self, row) -> dict:
         """Extract exatt forecasted fields from forecast dataframe row"""
 
-    def forecast(self, observations: Observation):
-        issue_time = datetime.now(UTC)
+    def forecast(self, observations: Observation, *, issue_time: datetime | None = None):
+        issue_time = issue_time or datetime.now(UTC)
+        if issue_time.tzinfo is None or issue_time.utcoffset() is None:
+            raise ValueError("Forecast issue_time must be timezone-aware")
+        issue_time = issue_time.astimezone(UTC)
 
         frame = self._prepare_frame(
             observations=observations,
@@ -66,7 +69,7 @@ class DefaultForecastService(ABC):
         return self.forecast_from_df(frame)
 
     def _prepare_frame(self, observations: Observation, issue_time: datetime, lead_hours: int) -> pd.DataFrame:
-        forecast_start_time = issue_time - timedelta(minutes=issue_time.minute, seconds=issue_time.second)
+        forecast_start_time = issue_time.replace(minute=0, second=0, microsecond=0)
 
         df = observations_to_dataframe(observations)
 
@@ -75,6 +78,7 @@ class DefaultForecastService(ABC):
         last_row = df.iloc[[-1]].copy()
 
         frame = pd.concat([last_row] * lead_hours, ignore_index=True)
+        frame["issue_time"] = issue_time
         frame["lead_hours"] = range(1, lead_hours + 1)
         frame["valid_time"] = forecast_start_time + pd.to_timedelta(
             frame["lead_hours"], unit="h"

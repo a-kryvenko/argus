@@ -29,9 +29,34 @@ import importlib.util
 assert importlib.util.find_spec('app') is None
 assert importlib.util.find_spec('argus_clio') is None
 import argus_prophet.db.session
-import argus_prophet.commands.generate_forecast
-import argus_prophet.commands.generate_atmospheric_density_forecast
+import argus_prophet.generation
+import argus_prophet.services.density_forecast
 '''
     result = subprocess.run([str(python), '-c', code], cwd=tmp_path,
                             env=environment, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_removed_aliases_are_rejected_before_starting_a_run(monkeypatch):
+    import pytest
+    from unittest.mock import Mock
+    from argus_prophet import cli, ledger
+    begin = Mock()
+    monkeypatch.setattr(ledger.RunRecorder, 'begin', begin)
+    for alias in ('wind', 'kp', 'density'):
+        monkeypatch.setattr(sys, 'argv', ['prophet', 'generate', alias])
+        with pytest.raises(SystemExit) as error:
+            cli.main()
+        assert error.value.code == 2
+        with pytest.raises(ValueError, match='Unsupported forecast product'):
+            cli.generate(alias)
+    begin.assert_not_called()
+
+
+def test_removed_export_command_is_rejected(monkeypatch):
+    import pytest
+    from argus_prophet import cli
+    monkeypatch.setattr(sys, 'argv', ['prophet', 'export'])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2

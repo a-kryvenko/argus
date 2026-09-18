@@ -35,23 +35,25 @@ def provenance(config):
 class RunRecorder:
     def __init__(self, run_id):
         self.run_id = run_id
-        self.skipped = False
 
     @classmethod
-    def begin(cls, product, trigger, config, *, scheduled_slot=None):
+    def begin(cls, product, trigger, config, *, scheduled_slot=None, details=None):
         from psycopg.types.json import Jsonb
+        from argus_prophet.products import PRODUCTS
+        if product not in PRODUCTS:
+            raise ValueError('Expected one supported forecast product')
         run_id = uuid4()
         if (trigger == 'scheduled') != (scheduled_slot is not None):
             raise ValueError('Scheduled attempts require a slot; manual attempts must not have one')
         scope = str(config.workdir.resolve())
-        details = provenance(config)
+        details = provenance(config) if details is None else details
         with connect(writing=True) as conn:
             if scheduled_slot is not None:
                 result = conn.execute("""INSERT INTO prophet.forecast_slot(slot,status,attempts,started_at)
                     VALUES (%s,'running',1,%s) ON CONFLICT(slot) DO UPDATE
                     SET status='running',attempts=forecast_slot.attempts+1,
                         started_at=EXCLUDED.started_at,finished_at=NULL,error=NULL
-                    WHERE forecast_slot.status IN ('failed','interrupted') RETURNING slot""",
+                    WHERE forecast_slot.status IN ('failed','partial','interrupted') RETURNING slot""",
                     (scheduled_slot, datetime.now(UTC)))
                 if result.fetchone() is None:
                     raise RuntimeError('Scheduled slot is already active or complete')
@@ -74,35 +76,21 @@ class RunRecorder:
             if result.rowcount != 1:
                 raise RuntimeError('Run snapshot can only be recorded once')
 
-    def store(self, name, path, model_info, row_count, columns):
-        from psycopg.types.json import Jsonb
+    def store(self, name, content: bytes, model_info, row_count, columns):
         if row_count < 1:
             raise ValueError('Cannot record an empty forecast')
-        content = Path(path).read_bytes()
+        from psycopg.types.json import Jsonb
+        compressed = gzip.compress(content, mtime=0)
+        digest = hashlib.sha256(content).hexdigest()
         with connect(writing=True) as conn:
             conn.execute("""INSERT INTO prophet.forecast_artifact
                 (run_id,name,status,created_at,csv_gzip,sha256,row_count,columns,model_info)
                 VALUES (%s,%s,'stored',%s,%s,%s,%s,%s,%s)""",
-                         (self.run_id, name, datetime.now(UTC), gzip.compress(content, mtime=0),
-                          hashlib.sha256(content).hexdigest(), row_count, Jsonb(list(columns)), Jsonb(model_info)))
-
-    def csv_written(self, name):
-        with connect(writing=True) as conn:
-            result = conn.execute("""UPDATE prophet.forecast_artifact SET csv_written_at=%s
-                WHERE run_id=%s AND name=%s AND status='stored'""", (datetime.now(UTC), self.run_id, name))
-            if result.rowcount != 1:
-                raise RuntimeError('CSV acknowledgement has no stored artifact')
-
-    def skip(self, name, reason):
-        from psycopg.types.json import Jsonb
-        with connect(writing=True) as conn:
-            conn.execute("""INSERT INTO prophet.forecast_artifact
-                (run_id,name,status,created_at,model_info,error) VALUES (%s,%s,'skipped',%s,%s,%s)""",
-                         (self.run_id, name, datetime.now(UTC), Jsonb({}), str(reason)[:2000]))
-        self.skipped = True
+                         (self.run_id, name, datetime.now(UTC), compressed,
+                          digest, row_count, Jsonb(list(columns)), Jsonb(model_info)))
 
     def finish(self, error=None):
-        status = 'failed' if error is not None else 'partial' if self.skipped else 'succeeded'
+        status = 'failed' if error is not None else 'succeeded'
         message = f'{type(error).__name__}: {error}'[:2000] if error is not None else None
         with connect(writing=True) as conn:
             result = conn.execute("""UPDATE prophet.forecast_run SET status=%s,finished_at=%s,error=%s
@@ -114,8 +102,14 @@ class RunRecorder:
                 publish_run(conn, self.run_id)
             slot = result.fetchone()[0]
             if slot is not None:
+                from argus_prophet.worker import completed_products
+                from argus_prophet.products import PRODUCTS
+                completed = completed_products(conn, slot)
+                pending = set(PRODUCTS) - completed
+                slot_status = 'succeeded' if not pending else 'partial' if completed else 'failed'
+                slot_error = 'Pending products: ' + ', '.join(sorted(pending)) if pending else None
                 changed = conn.execute("""UPDATE prophet.forecast_slot SET status=%s,finished_at=%s,error=%s
-                    WHERE slot=%s AND status='running'""", (status, datetime.now(UTC), message, slot))
+                    WHERE slot=%s AND status='running'""", (slot_status, datetime.now(UTC), slot_error, slot))
                 if changed.rowcount != 1:
                     raise RuntimeError('Scheduled slot is no longer active')
 
@@ -141,12 +135,11 @@ def describe_run(run_id, include_inputs=False):
         if include_inputs:
             cursor.execute('SELECT input_snapshot FROM prophet.forecast_run WHERE id=%s', (run_id,))
             result['input_snapshot'] = cursor.fetchone()['input_snapshot']
-        cursor.execute('''SELECT name,status,created_at,csv_written_at,sha256,row_count,columns,model_info,error
+        cursor.execute('''SELECT name,status,created_at,sha256,row_count,columns,model_info,error
             FROM prophet.forecast_artifact WHERE run_id=%s ORDER BY name''', (run_id,))
         result['artifacts'] = cursor.fetchall()
-        cursor.execute('''SELECT r.id,r.product,r.published_at,r.issue_time,e.attempts,e.exported_at,e.error,
+        cursor.execute('''SELECT r.id,r.product,r.published_at,r.issue_time,
             (c.release_id IS NOT NULL) AS is_current FROM prophet.forecast_release r
-            JOIN prophet.forecast_export e ON e.release_id=r.id
             LEFT JOIN prophet.current_forecast c ON c.release_id=r.id
             WHERE r.run_id=%s ORDER BY r.product''', (run_id,))
         result['releases'] = cursor.fetchall()

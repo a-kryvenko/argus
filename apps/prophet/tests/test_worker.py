@@ -15,7 +15,7 @@ def test_hourly_boundary_uses_utc_and_rejects_naive_time():
         worker.due_slot(before.replace(tzinfo=None))
 
 
-def fake_storage(monkeypatch, rows):
+def fake_storage(monkeypatch, rows, completed=()):
     conn = Mock()
     conn.execute.side_effect = [Mock(fetchone=Mock(return_value=row)) for row in rows]
     @contextmanager
@@ -23,6 +23,7 @@ def fake_storage(monkeypatch, rows):
         yield conn
     monkeypatch.setattr(worker, 'connect', connect)
     monkeypatch.setattr(worker, 'generation_lock', nullcontext)
+    monkeypatch.setattr(worker, 'completed_products', lambda conn, slot: set(completed))
     return conn
 
 
@@ -40,7 +41,7 @@ def test_latest_slot_is_passed_to_generation_without_replaying_missed_hours(monk
     fake_storage(monkeypatch, [(now - timedelta(days=3),), ('succeeded',)])
     generate = Mock()
     assert worker.run_due(generate, now)
-    generate.assert_called_once_with(worker.due_slot(now))
+    generate.assert_called_once_with(worker.due_slot(now), tuple(worker.PRODUCTS))
 
 
 def test_callback_cannot_claim_success_without_atomic_slot_completion(monkeypatch):
@@ -53,22 +54,30 @@ def test_callback_cannot_claim_success_without_atomic_slot_completion(monkeypatc
 
 
 
-def test_worker_retries_exports_even_when_generation_slot_completed(monkeypatch):
+def test_partial_slot_retries_only_products_without_durable_success(monkeypatch):
+    now = datetime(2026, 9, 12, 10, 10, tzinfo=UTC)
+    completed = set(worker.PRODUCTS) - {'dst'}
+    fake_storage(monkeypatch, [(None,), ('succeeded',)], completed=completed)
+    generate = Mock()
+    assert worker.run_due(generate, now)
+    generate.assert_called_once_with(worker.due_slot(now), ('dst',))
+
+
+def test_worker_retries_failed_generation_every_minute(monkeypatch):
     class StopAfterThree:
         count = 0
         def is_set(self):
             return self.count == 3
         def set(self):
             self.count = 3
-        def wait(self, _):
+        def wait(self, seconds):
+            assert seconds == 60
             self.count += 1
     monkeypatch.setattr(worker.threading, 'Event', StopAfterThree)
     monkeypatch.setattr(worker.signal, 'signal', lambda *_: None)
-    monkeypatch.setattr(worker, 'generation_lock', nullcontext)
-    run_due = Mock(return_value=False)
-    monkeypatch.setattr(worker, 'run_due', run_due)
-    generate = Mock()
-    export = Mock(side_effect=[OSError('disk full'), None, None])
-    worker.work(generate, export=export)
-    generate.assert_not_called()
-    assert run_due.call_count == 3 and export.call_count == 3
+    due = Mock(side_effect=[ValueError('model failed'), True, False])
+    monkeypatch.setattr(worker, 'run_due', due)
+    import sentry_sdk
+    monkeypatch.setattr(sentry_sdk, 'capture_exception', Mock())
+    worker.work(Mock())
+    assert due.call_count == 3

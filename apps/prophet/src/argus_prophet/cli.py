@@ -1,51 +1,72 @@
-"""Prophet forecasting, publication, CSV export and internal read service."""
+"""Prophet forecasting, publication and internal read service."""
 import argparse
-import importlib
 import logging
 
-PRODUCTS = {
-    'all': 'generate_forecast',
-    'wind': 'generate_wind_forecast',
-    'kp': 'generate_kp_forecast',
-    'hmf': 'generate_hmf_forecast',
-    'density': 'generate_atmospheric_density_forecast',
-}
+from argus_prophet.products import GENERATION_CHOICES, select_products
+
+
+class GenerationFailed(RuntimeError):
+    def __init__(self, failures):
+        self.failures = failures
+        super().__init__('Forecast generation failed for: ' + ', '.join(failures))
 
 
 def generate(product: str, trigger='manual', *, scheduled_slot=None) -> None:
+    generate_products(select_products(product), trigger, scheduled_slot=scheduled_slot)
+
+
+def generate_products(products, trigger='manual', *, scheduled_slot=None) -> None:
+    from argus_prophet.products import PRODUCTS
+    from argus_prophet.generation import calculate
     from common.config import get_config
-    from argus_prophet.ledger import RunRecorder
+    from argus_prophet.ledger import RunRecorder, provenance
     from argus_prophet.observations import load_inputs
-    recorder = RunRecorder.begin(product, trigger, get_config(), scheduled_slot=scheduled_slot)
-    logging.info('Prophet run %s started (%s)', recorder.run_id, product)
-    try:
-        inputs = load_inputs()
-        recorder.snapshot(inputs)
-        command = importlib.import_module(f'argus_prophet.commands.{PRODUCTS[product]}')
-        command.main(inputs=inputs, recorder=recorder)
-        recorder.finish()
-    except BaseException as exc:
+    if not products or len(set(products)) != len(products) or any(name not in PRODUCTS for name in products):
+        raise ValueError('Expected distinct supported forecast products')
+    config = get_config()
+    details = provenance(config)
+    inputs = None
+    input_error = None
+    failures = {}
+    for product in products:
+        recorder = RunRecorder.begin(product, trigger, config, scheduled_slot=scheduled_slot,
+                                     details=details)
+        logging.info('Prophet run %s started (%s)', recorder.run_id, product)
         try:
+            if inputs is None and input_error is None:
+                try:
+                    inputs = load_inputs()
+                except Exception as exc:
+                    input_error = exc
+            if input_error is not None:
+                raise input_error
+            recorder.snapshot(inputs)
+            calculate(product, inputs=inputs, recorder=recorder)
+            recorder.finish()
+        except BaseException as exc:
+            # If failure recording also fails (e.g. lost lock/DB connection), stop.
+            # A new writer must recover this attempt before any more work starts.
             recorder.finish(error=exc)
-        except Exception:
-            logging.exception('Could not record failure for run %s', recorder.run_id)
-        raise
-    else:
-        logging.info('Prophet run %s completed', recorder.run_id)
+            if not isinstance(exc, Exception):
+                raise
+            failures[product] = exc
+            logging.exception('Prophet run %s failed (%s)', recorder.run_id, product)
+        else:
+            logging.info('Prophet run %s published (%s)', recorder.run_id, product)
+    if failures:
+        raise GenerationFailed(failures)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     generate_parser = commands.add_parser('generate', help='Generate forecasts once')
-    generate_parser.add_argument('product', nargs='?', choices=PRODUCTS, default='all')
+    generate_parser.add_argument('product', nargs='?', choices=GENERATION_CHOICES, default='all')
     commands.add_parser('worker', help='Generate hourly at :10 UTC; retry failures')
     commands.add_parser('migrate', add_help=False)
     serve = commands.add_parser('serve', help='Serve published forecast contracts')
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
-    export_parser = commands.add_parser('export', help='Retry pending current CSV exports')
-    export_parser.add_argument('--force', action='store_true', help='Restore all current CSVs from published releases')
     slots = commands.add_parser('slots', help='List hourly slots and attempt counts')
     slots.add_argument('--limit', type=int, default=20)
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
@@ -98,16 +119,13 @@ def main() -> None:
         print(json.dumps(result, default=str, indent=2))
         return
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    from argus_prophet.commands._runner import run_command
+    from argus_prophet.runtime import run_command
     from argus_prophet.worker import generation_lock, work
-    from argus_prophet.exports import export_current
     if args.command == 'worker':
-        run_command(lambda: work(lambda slot: generate('all', trigger='scheduled', scheduled_slot=slot), export=export_current))
+        run_command(lambda: work(lambda slot, products: generate_products(
+            products, trigger='scheduled', scheduled_slot=slot)))
     else:
         def once():
             with generation_lock():
-                if args.command == 'generate':
-                    generate(args.product)
-                # Failure here is an export failure: the committed release survives.
-                export_current(force=args.force if args.command == 'export' else False)
+                generate(args.product)
         run_command(once)

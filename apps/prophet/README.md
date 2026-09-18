@@ -1,6 +1,6 @@
 # Prophet
 
-Prophet owns forecast runs, saved inputs, artifacts, releases, exports and hourly
+Prophet owns forecast runs, saved inputs, artifacts, releases and hourly
 slots. Production uses one image for `prophet` (worker) and `prophet-api` (HTTP).
 It reads Clio over HTTP and never accesses Clio tables. See
 [setup](../../README_DEPLOY.md#local-development) and [commands](../../docs/commands.md).
@@ -14,13 +14,59 @@ is read once per full generation, including density, with 180s read and 10s conn
 timeouts. Prophet saves the exact response, dependency/model hashes and compressed
 CSV results. Model binaries are not archived; retain them separately for replay.
 
+## Generation
+
+`products.py` defines supported products, their artifacts and backends.
+`generation.calculate` is the shared runner for scheduled execution and local
+development. It requires a saved input snapshot and run recorder; product-specific
+launch scripts and unrecorded CSV generation paths have been removed from Prophet. Public release contracts remain
+independent and tests check that the generation catalog matches them.
+
+Every product in a cycle receives the same snapshot and `issue_time`: the snapshot's
+`as_of` floored to the UTC hour. ML output records this explicit issue time, not the
+last observation timestamp. Input age remains available separately in diagnostics.
+Model bundles still determine forecast horizons and model configuration remains in
+`configs/models_registry.yaml`. Generation does not train models.
+
+Use `./argus prophet refresh [product]` for local development. Only canonical
+product names and `all` are accepted. Historical short names are recognized only
+when reading old run records. Selecting Dst or solar-wind density computes only
+that product.
+The public HTTP release format is unchanged.
+
+## Calculation and storage boundary
+
+`models.load_model` reads configured model bundles and fingerprints the exact bytes
+loaded. `forecast.calculation.calculate_forecast` accepts an already loaded service,
+observations and explicit issue time; it returns a `ForecastResult` containing a
+DataFrame and model metadata without configuration, database or filesystem access.
+`services.density_forecast.calculate_density` returns the same result structure.
+
+The generation runner serializes each result once to UTF-8 CSV in memory and passes
+bytes to `RunRecorder.store`, which compresses and hashes them for PostgreSQL.
+Generation creates no output files, temporary CSVs or file archives. Filesystem
+export and its retry/tracking subsystem have been removed. There is no
+`ForecastDirector`, file-reading fallback or storage callback in calculation code.
+
 ## Publication and HTTP
 
-Run states: `running`, `succeeded`, `partial`, `failed`, `interrupted`.
-A product publishes only when all required artifacts share one run/issue time.
-Run completion, publication and scheduled-slot completion commit together.
-Failed runs retain previous releases; optional density skips allow other products
-to advance. Manual runs do not advance scheduled slots.
+Each product has its own run: `running`, `succeeded`, `failed` or `interrupted`.
+Historical `partial` batch runs remain readable. A product publishes only when all
+its required artifacts share one run/issue time. An incomplete product cannot be
+marked successful. Product completion, publication and the hourly slot's aggregate
+status commit in one transaction.
+
+The cycle continues after model, input-validation or publication errors for an
+individual product. Successful products publish immediately; failed products keep
+their previous release. Missing density inputs follow the same failure policy as
+any other product. A failed cycle returns a nonzero exit status after attempting
+all selected products. Database/lock loss that prevents recording a failure stops
+the cycle, and the next writer recovers abandoned work.
+
+Clio is read once per cycle, and the identical response is saved in each product's
+run; dependency/source provenance is collected once. If Clio fails, each selected
+product gets a failed attempt and no calculation runs. Status reads distinguish
+that product's attempt from unrelated products' successes.
 
 Bearer-authenticated routes under `/internal/v1/forecasts/{product}`:
 
@@ -38,25 +84,32 @@ Geomagnetic generation includes both Kp and Ap.
 
 ## Scheduling and recovery
 
-The worker generates the latest due hour at `:10 UTC`, retries every 60 seconds
-and does not replay missed hours. Partial runs complete their slot; export failures
-do not reopen it. Slots are scheduling records, not forecast issue times or release IDs.
+The worker generates the latest due hour at `:10 UTC` and retries every 60 seconds.
+Only products without a successful scheduled attempt in that slot are retried.
+A new cycle reads a fresh snapshot for these products. Once every supported product
+succeeds, the slot is `succeeded`; otherwise it is `partial` (some successes) or
+`failed` (none). Slot `attempts` counts product attempts for new runs. Historical
+batch slot counters are retained as recorded.
 
-A PostgreSQL session advisory lock serializes generation and export. All writes
-reuse its unpooled connection in short transactions; no transaction spans model
-execution. Use direct or session-pooled PostgreSQL, not transaction pooling.
-After session loss an old writer cannot reconnect silently. The next lock owner
-marks abandoned runs/slots interrupted. SIGTERM permits the active job to finish
-within Compose's grace period.
+On restart, committed products are not recalculated. Historical batch releases
+also count as product successes. Manual runs do not consume scheduled work. A new
+due hour starts a full cycle and abandons retries for older hours; missed hours are
+not replayed. Slots are scheduling records, not issue times or release IDs.
 
-CSV exports retry independently of committed publication. Replacements are atomic
-per file, not across a product or with database acknowledgement. Writers verify
-their lock before replacement; superseded releases cannot overwrite newer exports.
-There is no automatic run/release/archive retention.
+A PostgreSQL session advisory lock serializes generation. All writes reuse its
+unpooled connection in short transactions; no transaction spans model execution.
+Use direct or session-pooled PostgreSQL, not transaction pooling. After session
+loss an old writer cannot reconnect silently. The next lock owner marks abandoned
+runs/slots interrupted. SIGTERM permits the active cycle to finish within Compose's
+grace period. There is no automatic run/release retention.
+
+Migration `20260918_prophet_no_exports` removes `forecast_export` and
+`forecast_artifact.csv_written_at`, retaining all releases and compressed artifact
+bytes. Apply migrations before starting the updated worker and read service.
 
 Advanced recovery uses the internal adapter `scripts/dev/run` locally or
 `scripts/prod/run` on the server: `prophet runs`, `prophet show-run <uuid>`,
-`prophet slots`, `prophet export [--force]`. Preserve database, image and model
+`prophet slots`. Preserve database, image and model
 artifacts together when restoring; see [deployment](../../README_DEPLOY.md#recovery).
 
 ## Readiness diagnostics

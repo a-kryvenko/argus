@@ -85,7 +85,7 @@ def test_shared_product_name(entry):
     _, run = entry
     result, calls = run('prophet', 'refresh', 'geomagnetic-activity')
     assert result.returncode == 0
-    assert calls == [['prophet', 'generate', 'kp']]
+    assert calls == [['prophet', 'generate', 'geomagnetic-activity']]
 
 
 def test_intelligence_refresh_all(entry):
@@ -109,3 +109,11 @@ def test_autogenerate_requires_service_metadata(entry, service):
     result, calls = run(service, 'migration', 'create', '-m', 'new fields', '--autogenerate')
     assert result.returncode == 2
     assert not calls
+
+
+@pytest.mark.parametrize('product', ['dst', 'solar-wind-density', 'solar-wind-speed', 'atmospheric-density'])
+def test_prophet_refresh_selects_exact_product(entry, product):
+    _, run = entry
+    result, calls = run('prophet', 'refresh', product)
+    assert result.returncode == 0, result.stderr
+    assert calls == [['prophet', 'generate', product]]

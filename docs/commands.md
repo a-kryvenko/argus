@@ -30,7 +30,9 @@ handwritten migrations.
 ## Refresh and status
 
 `refresh` runs once and exits. Omitting the source or product selects `all`.
-Execution stops on the first error. Omitting the product for `status` also selects `all`.
+Clio execution stops on the first error. Prophet attempts every selected product
+and publishes successes independently; it exits with an error if any product fails.
+Omitting the product for `status` also selects `all`.
 
 | Command | Purpose |
 | --- | --- |
@@ -52,8 +54,8 @@ scheduled completion markers. They also work when the worker is stopped.
 `pnpm dev` includes the Clio worker; production Compose starts it automatically.
 
 Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
-`hmf`, `atmospheric-density`, `all`. Selecting `dst` or `solar-wind-density` for
-Prophet refresh invokes the shared generator and also updates other products.
+`hmf`, `atmospheric-density`, `all`. Prophet refresh calculates only the selected
+product; `all` calculates every supported product using one observation snapshot.
 `solar-radiation` is not supported by these commands.
 
 ## Users

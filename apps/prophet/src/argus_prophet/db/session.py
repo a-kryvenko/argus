@@ -36,11 +36,6 @@ def require_writer():
     return conn
 
 
-def check_writer():
-    # Detect server-side session loss before external file replacement, too.
-    require_writer().execute('SELECT 1')
-
-
 @contextmanager
 def writer_session(conn):
     if _writer_session.get() is not None:

@@ -73,21 +73,6 @@ def test_missing_release_storage_failure_and_missing_configuration(monkeypatch):
         assert client.get('/internal/v1/forecasts/dst/latest', headers=headers).status_code == 503
 
 
-def test_atomic_export_keeps_distinct_backups_and_can_be_retried(tmp_path):
-    from argus_prophet.exports import write_csv
-    one, two = tmp_path / 'one.csv', tmp_path / 'two.csv'
-    one.write_bytes(b'old-one')
-    two.write_bytes(b'old-two')
-    release_id = uuid4()
-    write_csv(one, b'new-one', release_id)
-    write_csv(two, b'new-two', release_id)
-    write_csv(one, b'new-one', release_id)
-    assert one.read_bytes() == b'new-one' and two.read_bytes() == b'new-two'
-    assert (tmp_path / 'archive' / f'one-before-{release_id}.csv').read_bytes() == b'old-one'
-    assert (tmp_path / 'archive' / f'two-before-{release_id}.csv').read_bytes() == b'old-two'
-    assert not list(tmp_path.glob('*.tmp'))
-
-
 @pytest.mark.parametrize('value', ['nan', 'inf', 'not-a-number'])
 def test_nonfinite_or_invalid_predictions_cannot_be_published(value):
     with pytest.raises(ValueError):

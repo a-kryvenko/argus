@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       private_commit: ${{ steps.plan.outputs.private_commit }}
+      intelligence_core_commit: ${{ steps.plan.outputs.intelligence_core_commit }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -41,6 +42,14 @@ jobs:
           path: packages/forecast-core
           ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
           persist-credentials: false
+      - name: Resolve the private intelligence core once for this release
+        uses: actions/checkout@v6
+        with:
+          repository: a-kryvenko/argus-intelligence-core
+          ref: master
+          path: packages/intelligence-core
+          ssh-key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
+          persist-credentials: false
       - name: Compute image identities and migration fingerprints
         id: plan
         env:
@@ -52,6 +61,7 @@ jobs:
           plan = json.load(open('release-plan.json'))
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('private_commit=' + plan['private_commit'] + '\n')
+              output.write('intelligence_core_commit=' + plan['intelligence_core_commit'] + '\n')
           PY
       - uses: actions/upload-artifact@v4
         with:
@@ -110,6 +120,15 @@ jobs:
           ref: ${{ needs.plan.outputs.private_commit }}
           path: packages/forecast-core
           ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          persist-credentials: false
+      - name: Check out the exact private intelligence core used by the plan
+        if: steps.cache.outputs.exists != 'true' && matrix.component == 'intelligence'
+        uses: actions/checkout@v6
+        with:
+          repository: a-kryvenko/argus-intelligence-core
+          ref: ${{ needs.plan.outputs.intelligence_core_commit }}
+          path: packages/intelligence-core
+          ssh-key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
           persist-credentials: false
       - uses: docker/setup-buildx-action@v3
         if: steps.cache.outputs.exists != 'true'

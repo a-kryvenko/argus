@@ -17,8 +17,8 @@ def imports(path):
 
 def test_package_dependency_direction():
     forbidden = {
-        'common': {'app', 'clio', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
-        'clio': {'app', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
+        'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
+        'clio': {'app', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
         'forecast': {'app', 'clio', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
     }
     violations = []
@@ -121,10 +121,10 @@ def test_intelligence_uses_shared_contracts_and_owns_its_storage():
         for module in imports(path):
             assert module.split('.')[0] not in {
                 'app', 'argus_clio', 'argus_prophet', 'clio', 'forecast',
-                'forecast_core', 'intelligence_core',
+                'forecast_core',
             }, (path, module)
     config = tomllib.loads((ROOT / 'apps/intelligence/pyproject.toml').read_text())
-    assert set(config['project']['dependencies']) == {'common', 'httpx>=0.28,<1', 'psycopg[binary]>=3.2,<4', 'sqlalchemy>=2.0,<3', 'alembic>=1.16,<2'}
+    assert set(config['project']['dependencies']) == {'common', 'intelligence-core>=0.1.0', 'httpx>=0.28,<1', 'psycopg[binary]>=3.2,<4', 'sqlalchemy>=2.0,<3', 'alembic>=1.16,<2'}
 
 
 def test_existing_domains_do_not_depend_on_intelligence_runtime():

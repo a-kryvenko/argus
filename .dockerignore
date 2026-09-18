@@ -35,6 +35,7 @@ docker-compose.yml
 **/.venv
 **/__pycache__
 **/.pytest_cache
-packages/intelligence-core
+packages/intelligence-core/tests
+packages/intelligence-core/examples
 packages/forecast-core/tests
 packages/forecast-core/examples

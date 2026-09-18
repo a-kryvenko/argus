@@ -49,12 +49,16 @@ def plan(root, *, rebuild=''):
     private = root / 'packages/forecast-core'
     private_sha = subprocess.check_output(['git', '-C', str(private), 'rev-parse', 'HEAD'], text=True).strip()
     private_hash = digest(private, ['.'], private=True)
+    intelligence_core = root / 'packages/intelligence-core'
+    intelligence_core_sha = subprocess.check_output(['git', '-C', str(intelligence_core), 'rev-parse', 'HEAD'], text=True).strip()
+    intelligence_core_hash = digest(intelligence_core, ['.'], private=True)
     result = {'version': 1, 'commit': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(),
-              'private_commit': private_sha, 'components': {}, 'migrations': {},
+              'private_commit': private_sha, 'intelligence_core_commit': intelligence_core_sha, 'components': {}, 'migrations': {},
               'config_hash': digest(root, ['configs'])}
     for name, prefixes in INPUTS.items():
         source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'])
-        identity = hashlib.sha256((source + (private_hash if name in ('clio', 'prophet') else '') + rebuild).encode()).hexdigest()
+        backend_hash = private_hash if name in ('clio', 'prophet') else intelligence_core_hash if name == 'intelligence' else ''
+        identity = hashlib.sha256((source + backend_hash + rebuild).encode()).hexdigest()
         result['components'][name] = {'repository': 'ghcr.io/a-kryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
     result['migrations'] = {name: digest(root, paths) for name, paths in MIGRATIONS.items()}
     return result

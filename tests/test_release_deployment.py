@@ -33,7 +33,7 @@ def tracked_repo(path, files):
 
 @pytest.fixture
 def source(tmp_path):
-    files = {'.gitignore': 'packages/forecast-core/\n', '.dockerignore': '**/.venv\n', 'docs/example.md': 'docs',
+    files = {'.gitignore': 'packages/forecast-core/\npackages/intelligence-core/\n', '.dockerignore': '**/.venv\n', 'docs/example.md': 'docs',
              'packages/common/src/common/shared.py': 'shared',
              'packages/forecast/src/forecast/example.py': 'forecast', 'apps/web/app/page.tsx': 'page',
              'apps/prophet/src/argus_prophet/worker.py': 'worker',
@@ -43,6 +43,7 @@ def source(tmp_path):
     files.update({f'.deploy/{name}.Dockerfile': 'FROM scratch' for name in release.IMAGES})
     tracked_repo(tmp_path, files)
     tracked_repo(tmp_path / 'packages/forecast-core', {'src/forecast_core/api.py': 'private'})
+    tracked_repo(tmp_path / 'packages/intelligence-core', {'src/intelligence_core/api.py': 'private intelligence'})
     return tmp_path
 
 
@@ -56,6 +57,7 @@ def changed_components(before, after):
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
     ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'intelligence'}),
     ('packages/forecast-core/src/forecast_core/api.py', {'clio', 'prophet'}),
+    ('packages/intelligence-core/src/intelligence_core/api.py', {'intelligence'}),
     ('apps/prophet/src/argus_prophet/worker.py', {'prophet'}), ('configs/project.yaml', set()),
 ])
 def test_only_actual_consumers_rebuild(source, path, expected):
@@ -114,6 +116,8 @@ def test_every_docker_copy_source_participates_in_image_identity():
             for source in words[1:-1]:
                 if source == 'packages/forecast-core' and component in ('clio', 'prophet'):
                     continue
+                if source == 'packages/intelligence-core' and component == 'intelligence':
+                    continue
                 assert any(source == prefix or source.startswith(prefix + '/') for prefix in prefixes), (component, source)
 
 
@@ -171,3 +175,10 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
     assert (root / 'bin/argus').resolve() == root / 'argus'
     assert (root / 'scripts/prod/run').is_file()
     assert (root / 'scripts/prod/logs').is_file()
+
+
+def test_plan_pins_both_private_repositories(source):
+    plan = release.plan(source)
+    for package, key in [('forecast-core', 'private_commit'), ('intelligence-core', 'intelligence_core_commit')]:
+        expected = subprocess.check_output(['git', '-C', str(source / 'packages' / package), 'rev-parse', 'HEAD'], text=True).strip()
+        assert plan[key] == expected

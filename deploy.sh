@@ -100,6 +100,7 @@ fi
 
 commit_and_push_if_needed "notebooks" "$MESSAGE"
 commit_and_push_if_needed "packages/forecast-core" "$MESSAGE"
+commit_and_push_if_needed "packages/intelligence-core" "$MESSAGE"
 commit_and_push_if_needed "." "$MESSAGE"
 
 if [[ -n "$TAG" ]]; then

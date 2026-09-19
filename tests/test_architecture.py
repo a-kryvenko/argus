@@ -3,6 +3,9 @@ import ast
 from pathlib import Path
 import subprocess
 import tomllib
+import re
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -19,7 +22,7 @@ def test_package_dependency_direction():
     forbidden = {
         'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
         'clio': {'app', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
-        'forecast': {'app', 'clio', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
+        'forecast': {'app', 'clio', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
     }
     violations = []
     for package, blocked in forbidden.items():
@@ -28,6 +31,32 @@ def test_package_dependency_direction():
                 if module.split('.')[0] in blocked:
                     violations.append(f'{path.relative_to(ROOT)} imports {module}')
     assert not violations, '\n'.join(violations)
+
+
+def dependency_names(config):
+    dependencies = list(config['project']['dependencies'])
+    for extra in config['project'].get('optional-dependencies', {}).values():
+        dependencies.extend(extra)
+    return {re.split(r'[\s\[<>=!~;@]', dependency, maxsplit=1)[0].lower().replace('_', '-')
+            for dependency in dependencies}
+
+
+@pytest.mark.parametrize(('path', 'allowed', 'required'), [
+    ('packages/forecast', {'common'}, {'common'}),
+    ('apps/api', {'common'}, {'common'}),
+    ('apps/prophet', {'common', 'forecast', 'forecast-core'},
+     {'common', 'forecast', 'forecast-core'}),
+    ('packages/forecast-core', {'common', 'forecast'}, {'forecast'}),
+])
+def test_declared_package_boundaries(path, allowed, required):
+    manifest = ROOT / path / 'pyproject.toml'
+    if not manifest.exists() and path == 'packages/forecast-core':
+        pytest.skip('Private checkout is not required for public CI')
+    names = dependency_names(tomllib.loads(manifest.read_text()))
+    internal = {'common', 'clio', 'forecast', 'forecast-core', 'intelligence-core',
+                'argus-api', 'argus-clio', 'argus-prophet', 'argus-intelligence'}
+    assert names & internal <= allowed, (path, names & internal - allowed)
+    assert required <= names, (path, required - names)
 
 
 def test_api_only_uses_private_integration_surface():
@@ -100,7 +129,7 @@ def test_clio_owns_storage_and_uses_only_private_adapter():
         for module in imports(path):
             assert module.split('.')[0] not in {'app', 'argus_prophet', 'intelligence_core'}, (path, module)
             if module.startswith('forecast_core'):
-                assert path.name == 'calibration.py' and module == 'forecast_core.api', (path, module)
+                assert path.name == 'calibration.py' and module == 'forecast_core.calibration', (path, module)
 
 
 def test_runtime_sql_does_not_read_foreign_domain_tables():
@@ -139,4 +168,21 @@ def test_api_environment_does_not_include_forecast_package():
     assert 'forecast' not in config['tool']['uv']['sources']
     assert '../../packages/forecast' not in config['tool']['uv']['workspace']['members']
     lock = tomllib.loads((ROOT / 'apps/api/uv.lock').read_text())
-    assert not {'forecast', 'forecast-core', 'clio'} & {package['name'] for package in lock['package']}
+    assert not {'forecast', 'forecast-core', 'clio', 'argus-prophet', 'argus-clio', 'argus-intelligence'} & {package['name'] for package in lock['package']}
+
+
+def test_only_clio_domain_imports_provider_library():
+    for root in ('apps/api/app', 'apps/prophet/src', 'apps/intelligence/src',
+                 'packages/common/src', 'packages/forecast/src', 'packages/forecast-core/src'):
+        for path in (ROOT / root).rglob('*.py'):
+            assert all(module.split('.')[0] not in {'clio', 'argus_clio'}
+                       for module in imports(path)), path
+    lock = tomllib.loads((ROOT / 'apps/prophet/uv.lock').read_text())
+    assert not {'clio', 'argus-clio'} & {package['name'] for package in lock['package']}
+
+
+def test_clio_uses_base_backend_and_prophet_requests_models():
+    clio = tomllib.loads((ROOT / 'apps/clio/pyproject.toml').read_text())
+    prophet = tomllib.loads((ROOT / 'apps/prophet/pyproject.toml').read_text())
+    assert any(d.startswith('forecast-core>=') for d in clio['project']['dependencies'])
+    assert any(d.startswith('forecast-core[models]>=') for d in prophet['project']['dependencies'])

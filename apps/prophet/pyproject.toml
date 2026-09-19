@@ -11,7 +11,7 @@ dependencies = [
   "alembic>=1.16,<2",
   "forecast>=0.2.0",
   "joblib>=1.5.3",
-  "forecast-core>=0.3.0",
+  "forecast-core[models]>=0.4.0",
   "httpx>=0.28,<1",
   "sentry-sdk>=2.61.1",
 ]
@@ -28,12 +28,11 @@ where = ["src"]
 
 [tool.uv.sources]
 common = { workspace = true, editable = true }
-clio = { workspace = true, editable = true }
 forecast = { workspace = true, editable = true }
 forecast-core = { path = "../../packages/forecast-core", editable = true }
 
 [tool.uv.workspace]
-members = ["../../packages/common", "../../packages/clio", "../../packages/forecast"]
+members = ["../../packages/common", "../../packages/forecast"]
 
 [tool.setuptools.package-data]
 argus_prophet = ["migrations/script.py.mako"]

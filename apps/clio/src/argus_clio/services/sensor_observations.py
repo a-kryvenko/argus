@@ -12,7 +12,7 @@ from clio.observations import (
     load_bootstrap_measurements as _load_bootstrap_measurements, load_live_measurements,
     OBSERVATION_METRICS, REQUIRED_METRICS, SOLAR_INDEX_METRICS,
 )
-from argus_clio.services.calibration import (
+from argus_clio.services.derived_observations import (
     normalize_measurements,
     load_solar_index_measurements as _load_solar_index_measurements,
 

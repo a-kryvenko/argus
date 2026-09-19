@@ -2,7 +2,7 @@
 
 Clio owns observations, normalization, aggregation, collection diagnostics and
 scheduled ingestion. `packages/clio` provides public provider parsing; ingestion
-uses private calibration through `services/calibration.py`. HTTP reads do not
+owns GOES/GFZ history downloads and the JB2008 history cache, and uses private calibration through `services/calibration.py`. HTTP reads do not
 load the private backend. See [setup](../../README_DEPLOY.md#local-development) and
 [commands](../../docs/commands.md).
 
@@ -109,3 +109,7 @@ Details default to 200 while totals remain complete. Storage estimates scan the
 entire raw table and identify records older than `--retention-days` (default 90).
 They do not certify safe deletion or predict reclaimed disk space. Run off-peak;
 statements have a 60s timeout. Cleanup must revalidate records when deleting them.
+
+Provider-fetching notebooks live locally in `apps/clio/notebooks/` (ignored, as
+were the original root notebooks). Training consumes the resulting datasets.
+Only this domain imports the `clio` provider library; consumers use HTTP.

@@ -6,7 +6,6 @@ RUN apt-get update \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /var/www/apps/prophet
 COPY packages/common /var/www/packages/common
-COPY packages/clio /var/www/packages/clio
 COPY packages/forecast /var/www/packages/forecast
 COPY packages/forecast-core /var/www/packages/forecast-core
 COPY apps/prophet/pyproject.toml apps/prophet/uv.lock ./

@@ -872,7 +872,6 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "xarray" },
 ]
 
 [package.metadata]
@@ -882,7 +881,6 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">2.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml" },
-    { name = "xarray", specifier = ">=2026.4.0" },
 ]
 
 [[package]]

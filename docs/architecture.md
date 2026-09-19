@@ -25,7 +25,9 @@ Clio deploys as HTTP plus one worker container. The worker supervises the existi
 collector and scheduler processes; it adds no queue or storage model. Each loop
 keeps its own database locks and timing, so normalization cannot block collection.
 
-Clio ingestion accesses private calibration through a lazy adapter; its HTTP read
+Clio ingestion accesses `forecast_core.calibration` through a lazy adapter;
+its base dependencies exclude model runtimes. Prophet installs the `[models]`
+extra of `forecast-core`; its HTTP read
 path does not import the backend. API and Intelligence install without private
 code and cannot import other applications' runtimes. Private impact calculations
 are not integrated; `packages/intelligence-core` is not an application dependency.
@@ -48,6 +50,22 @@ advisory locks serialize supported writers; Prophet and Intelligence reuse the
 lock connection for writes and require direct or session-pooled PostgreSQL.
 
 ## Dependencies and configuration
+
+Python dependency boundaries (distinct from HTTP service calls):
+
+| Consumer | Internal package dependencies |
+| --- | --- |
+| `forecast` | `common` only |
+| API | `common` only; calls Prophet over HTTP without installing it |
+| `forecast-core` | `forecast`, `common` |
+| Prophet | `forecast`, `forecast-core`, `common` |
+
+Only the Clio application imports the provider library `clio`. Other services
+receive observations over HTTP. Clio owns archive loading and caching; the private
+backend exposes calibration computations over supplied data. Libraries must not depend on
+application runtimes. Architecture tests check imports, declared dependencies
+(including extras), and the API lockfile; private manifest checks run when its
+checkout is available.
 
 All packages live in `packages/`. Proprietary `forecast-core` and
 `intelligence-core` are excluded from the public Git repository and maintained

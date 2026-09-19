@@ -53,6 +53,7 @@ yarn-error.log*
 
 # Proprietary parts
 /notebooks/
+/apps/clio/notebooks/
 /packages/forecast-core/
 /packages/intelligence-core/
 

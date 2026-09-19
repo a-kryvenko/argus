@@ -1,26 +1,16 @@
-"""Compatibility adapter for private derived observation preparation.
-
-Provider parsing remains in the public clio library. Calibration, historical
-solar estimates and the legacy model-input normalization remain private; this
-adapter is used only by ingestion, never by the observation HTTP read path.
-"""
+"""Lazy access to private calibration computations; no provider IO."""
 
 
-def normalize_measurements(measurements):
-    from forecast_core.api import normalize_measurements as normalize
-    return normalize(measurements)
+def load_solar_index_calibrations(path):
+    from forecast_core.calibration import load_solar_index_calibrations as load
+    return load(path)
 
 
-def load_solar_index_measurements(now):
-    from forecast_core.api import load_solar_index_measurements as load
-    return load(now)
+def extract_solar_indices(goes, calibration):
+    from forecast_core.calibration import extract_solar_indices as extract
+    return extract(goes, calibration)
 
 
-def load_density_history(now):
-    from forecast_core.api import load_density_history as load
-    return load(now)
-
-
-def merge_history(history, existing):
-    from forecast_core.api import merge_history as merge
-    return merge(history, existing)
+def extract_solar_index_observations(goes, calibrations, now):
+    from forecast_core.calibration import extract_solar_index_observations as extract
+    return extract(goes, calibrations, now)

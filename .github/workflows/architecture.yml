@@ -20,8 +20,9 @@ jobs:
           cache-dependency-path: |
             packages/*/pyproject.toml
             .github/workflows/architecture.yml
-      - name: Install public packages only
-        run: python -m pip install -e packages/common -e packages/forecast pytest httpx
+      - name: Install public packages and test dependencies
+        # The serialization tests exercise the optional joblib model format.
+        run: python -m pip install -e packages/common -e packages/forecast pytest httpx 'joblib>=1.5.3'
       - name: Check boundaries and public imports
         env:
           PYTHONPATH: apps/intelligence/src
@@ -64,7 +65,7 @@ jobs:
       - name: Install public observation runtime and test dependencies
         run: >-
           python -m pip install -e packages/common -e packages/clio -e packages/forecast
-          pytest pyarrow sqlalchemy 'psycopg[binary]' alembic fastapi uvicorn httpx sentry-sdk
+          pytest pyarrow 'scipy>=1.13' sqlalchemy 'psycopg[binary]' alembic fastapi uvicorn httpx sentry-sdk
       - name: Check separate databases, ownership and scheduling
         run: python -m pytest -q tests/test_prophet_imports.py tests/test_database_urls.py tests/integration/test_domain_storage.py tests/integration/test_prophet_ledger.py tests/integration/test_prophet_scheduler.py tests/integration/test_intelligence_worker.py apps/clio/tests/test_density_history.py
       - name: Check aggregation, retention and collection recovery

@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -8,6 +9,24 @@ import pytest
 from common.schemas.forecast_release import ForecastRelease, ForecastArtifact
 from app.services import forecasts_client, forecast_products
 from app.services.forecast_errors import ArtifactNotReadyError
+
+
+def test_wind_speed_serializes_as_integers_without_rounding_probabilities():
+    variable = forecast_products.Variable('v', 'plasma_speed_quantile', 'km/s', 'v', (450,), True)
+    result = forecast_products._variable_forecast(variable, {
+        'v_q10': 380.2, 'v_q50': 420.7, 'v_q90': 480.9, 'p_v_ge_450': 0.23456,
+    })
+    data = json.loads(result.model_dump_json())
+    assert data['continuous'] == {'q10': 380, 'q50': 421, 'q90': 481}
+    assert all(type(value) is int for value in data['continuous'].values())
+    assert type(data['binary'][0]['threshold']) is int
+    assert data['binary'][0]['probability'] == 0.23456
+
+
+def test_other_forecast_variables_keep_fractional_values():
+    variable = forecast_products.Variable('n', 'plasma_density_quantile', 'cm^-3', 'n', quantiles=True)
+    result = forecast_products._variable_forecast(variable, {'n_q10': 1.2, 'n_q50': 3.7, 'n_q90': 8.9})
+    assert json.loads(result.model_dump_json())['continuous'] == {'q10': 1.2, 'q50': 3.7, 'q90': 8.9}
 
 
 def payload():

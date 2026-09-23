@@ -112,11 +112,13 @@ def _number(value) -> float | None:
 
 def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
     continuous = None
+    speed = variable.name == "v" and variable.unit == "km/s"
+    value = round if speed else float
     if variable.quantiles:
         continuous = QuantileForecast(
-            q10=row[f"{variable.source_prefix}_q10"],
-            q50=row[f"{variable.source_prefix}_q50"],
-            q90=row[f"{variable.source_prefix}_q90"],
+            q10=value(row[f"{variable.source_prefix}_q10"]),
+            q50=value(row[f"{variable.source_prefix}_q50"]),
+            q90=value(row[f"{variable.source_prefix}_q90"]),
         )
     binary = []
     for threshold in variable.thresholds:
@@ -124,7 +126,7 @@ def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
             row[f"p_{variable.source_prefix}_ge_{threshold:g}"]
         )
         if probability is not None:
-            binary.append(BinaryForecast(threshold=threshold, probability=probability))
+            binary.append(BinaryForecast(threshold=int(threshold) if speed else threshold, probability=probability))
     return VariableForecast(unit=variable.unit, continuous=continuous, binary=binary)
 
 

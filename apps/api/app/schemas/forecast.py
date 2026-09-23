@@ -14,17 +14,17 @@ VARIABLES_DESCRIPTION = (
 
 
 class QuantileForecast(BaseModel):
-    """Quantile forecast in the parent variable's units, not probabilities."""
+    """Quantile forecast in the parent variable's units; wind speed is rounded to integer km/s."""
 
-    q10: float = Field(description="Predicted 10th percentile (quantile 0.1).", examples=[380.0])
-    q50: float = Field(description="Predicted median (quantile 0.5).", examples=[420.0])
-    q90: float = Field(description="Predicted 90th percentile (quantile 0.9).", examples=[480.0])
+    q10: int | float = Field(description="Predicted 10th percentile (quantile 0.1).", examples=[380.0])
+    q50: int | float = Field(description="Predicted median (quantile 0.5).", examples=[420.0])
+    q90: int | float = Field(description="Predicted 90th percentile (quantile 0.9).", examples=[480.0])
 
 
 class BinaryForecast(BaseModel):
     """Probability that the variable is greater than or equal to a threshold."""
 
-    threshold: float = Field(description="Inclusive threshold in the parent variable's units.", examples=[450.0])
+    threshold: int | float = Field(description="Inclusive threshold in the parent variable's units.", examples=[450.0])
     probability: float = Field(description="Probability of value >= threshold, from 0 to 1 (not percent).", examples=[0.25])
 
 
@@ -61,11 +61,11 @@ class Forecast(BaseModel):
         "predictions": [{
             "valid_time": "2026-09-05T01:00:00Z", "lead_hours": 1,
             "variables": {"v": {"unit": "km/s", "continuous": {
-                "q10": 380.0, "q50": 420.0, "q90": 480.0,
+                "q10": 380, "q50": 420, "q90": 480,
             }, "binary": [
-                {"threshold": 450.0, "probability": 0.25},
-                {"threshold": 500.0, "probability": 0.05},
-                {"threshold": 600.0, "probability": 0.01},
+                {"threshold": 450, "probability": 0.25},
+                {"threshold": 500, "probability": 0.05},
+                {"threshold": 600, "probability": 0.01},
             ]}},
         }],
     }]})

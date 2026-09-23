@@ -1,0 +1,61 @@
+{
+  "train_start": "2023-01-01T00:00:00Z",
+  "refit_end": "2025-01-01T00:00:00Z",
+  "test_end": "2026-01-01T00:00:00Z",
+  "data_years": [
+    2023,
+    2024,
+    2025
+  ],
+  "validation_quarters": [
+    2,
+    3,
+    4
+  ],
+  "horizon_buckets": [
+    [
+      1,
+      6
+    ],
+    [
+      7,
+      24
+    ],
+    [
+      25,
+      48
+    ],
+    [
+      49,
+      72
+    ],
+    [
+      73,
+      96
+    ],
+    [
+      97,
+      120
+    ]
+  ],
+  "shrinkage_candidates": [
+    0,
+    0.25,
+    0.5,
+    1
+  ],
+  "ridge_alpha": 100,
+  "fixed_delay_hours": 96,
+  "window_radius_hours": 24,
+  "window_sigma_hours": 12,
+  "latest_from_horizon": 96,
+  "max_latest_age_hours": 36,
+  "name": "selected_fixed_window_ridge_v1",
+  "archive_start": "2022-12-01T00:00:00Z",
+  "archive_end_exclusive": "2026-01-01T00:00:00Z",
+  "aia_cadence_hours": 6,
+  "assumed_latency_hours": 2,
+  "pair_tolerance_hours": 12,
+  "issue_stride_hours": 6,
+  "note": "Selected research model, not deployed. Historical2025 repeatedly explored. Same observed labels, no target filling, fixed DLinear trained1995-1999."
+}

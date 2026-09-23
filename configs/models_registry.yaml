@@ -6,11 +6,11 @@ models:
 
   plasma_speed_quantile:
     model: argus-plasma-speed-aia-ridge-v1
-    metrics: data/metrics/plasma/aia_ridge/speed_quantile
+    metrics: data/metrics/plasma/speed_quantile
   
   plasma_speed_threshold:
     model: argus-plasma-speed-aia-ridge-v1
-    metrics: data/metrics/plasma/aia_ridge/speed_proba
+    metrics: data/metrics/plasma/speed_proba
 
   plasma_density_quantile:
     model: argus-plasma-den-q-v2

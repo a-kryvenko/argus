@@ -2,7 +2,7 @@ from pathlib import Path
 import sys,json
 import numpy as np
 import pandas as pd
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'experiments/aia_wind'))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts/training/aia_wind'))
 from alignment import align
 from run_experiment import PLAN,training,residual
 import stream_ridge

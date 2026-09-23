@@ -13,7 +13,9 @@ export default function ContinuousMetrics({
   const continuous = data.variables[variable]?.continuous;
   if (!continuous || continuous.by_lead_hour.length === 0) return null;
 
-  const metricNames = Object.keys(continuous.by_lead_hour[0].values);
+  const metricNames = Object.keys(continuous.by_lead_hour[0].values).filter(
+    metric => metric !== "n",
+  );
   return (
     <>
       {metricNames.map(metric => (

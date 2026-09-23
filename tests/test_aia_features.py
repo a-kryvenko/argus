@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'experiments/aia_wind'))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts/training/aia_wind'))
 from aia_features import LAT_GRID,LON_GRID,aligned_change,attach_features,segment_dark,build_features
 from backtest import load_year
 

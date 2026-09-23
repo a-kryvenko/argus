@@ -1,11 +1,16 @@
 models:
+  plasma_speed_dlinear:
+    model: argus-plasma-speed-dlinear-v1
+    artifact_path: data/models/argus-plasma-speed-dlinear-v1.joblib
+    metrics: data/metrics/dlinear
+
   plasma_speed_quantile:
-    model: argus-plasma-speed-q-v2-smooth
-    metrics: data/metrics/plasma/speed_quantile
+    model: argus-plasma-speed-aia-ridge-v1
+    metrics: data/metrics/plasma/aia_ridge/speed_quantile
   
   plasma_speed_threshold:
-    model: argus-plasma-speed-t-v2
-    metrics: data/metrics/plasma/speed_proba
+    model: argus-plasma-speed-aia-ridge-v1
+    metrics: data/metrics/plasma/aia_ridge/speed_proba
 
   plasma_density_quantile:
     model: argus-plasma-den-q-v2

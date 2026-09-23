@@ -38,7 +38,7 @@ def lifecycle(monkeypatch):
 def test_worker_starts_independent_loops_and_drains_all_on_stop(lifecycle):
     children, launch, handlers = lifecycle
     worker.work()
-    assert launch.call_count == 4
+    assert launch.call_count == 5
     assert [call.args[0][3:] for call in launch.call_args_list] == [list(c) for c in worker.COMMANDS]
     for child in children:
         child.terminate.assert_called_once()

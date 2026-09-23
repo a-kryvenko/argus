@@ -24,5 +24,5 @@ def load_inputs(as_of: datetime | None = None) -> ForecastInputs:
     if inputs.as_of != as_of:
         raise RuntimeError('Observation service returned a different as_of')
     if not inputs.observations.points:
-        raise RuntimeError('No stored observations available in the last 30 days; check ingestion')
+        raise RuntimeError('No stored observations available in the requested history range; check ingestion')
     return inputs

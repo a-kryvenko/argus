@@ -8,6 +8,7 @@ def test_calendar_slots_are_aligned():
     now = datetime(2026, 9, 12, 12, 19, 45, tzinfo=UTC)
     assert slot_for('aggregate', now) == now.replace(minute=15, second=0)
     assert slot_for('refresh', now) == now.replace(minute=0, second=0)
+    assert slot_for('aia', now) == now.replace(minute=0, second=0)
 
 
 def test_clio_uses_only_its_own_database_settings(monkeypatch):

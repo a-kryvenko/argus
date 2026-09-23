@@ -134,3 +134,14 @@ Normalization can fill old source values into recent rows, so
 Diagnostics do not add generation gates. Per-product freshness/history requirements
 and breach behavior still need definition; successful processing is not scientific
 validation or proof of fresh sensors.
+
+
+## Wind model rollout
+
+Both wind-speed outputs now resolve to `argus-plasma-speed-aia-ridge-v1.joblib`.
+Deploy that artifact and the matching registry together. Clio must first migrate
+`20260923_aia_snapshot` and start hourly AIA collection. Its optional `aia_frames`
+input is passed alongside observed speed history; absence falls back to DLinear.
+The serialized artifact includes all model dependencies and uncertainty samples.
+Historical2025 metrics are under `data/metrics/plasma/aia_ridge`; nominal intervals
+are empirically undercovered (about73% at96h for nominal80%), not guaranteed coverage.

@@ -12,6 +12,7 @@ COMMANDS = (
     ('collect', 'geomagnetic', '--watch'),
     ('schedule', 'refresh'),
     ('schedule', 'aggregate'),
+    ('schedule', 'aia'),
 )
 # Leave time to reap children before Compose's ten-minute stop deadline.
 STOP_TIMEOUT_SECONDS = 570

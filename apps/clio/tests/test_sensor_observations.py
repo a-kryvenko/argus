@@ -167,6 +167,7 @@ def test_refresh_integrates_solar_indices_and_serializes_nullable_values(monkeyp
         ingested.append(frame)
 
     async def load(session, since):
+        assert since == now - timedelta(days=60)
         return pd.concat(ingested, ignore_index=True)
 
     session = SimpleNamespace(execute=AsyncMock(), commit=AsyncMock())

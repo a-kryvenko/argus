@@ -9,7 +9,8 @@ from clio.dataloaders.swpc_loader import SWPC_Loader
 REQUIRED_METRICS = SWPC_Loader.METRICS
 SOLAR_INDEX_METRICS = ("s10", "m10", "y10")
 OBSERVATION_METRICS = (*REQUIRED_METRICS, *SOLAR_INDEX_METRICS)
-HISTORY_DAYS = 30
+# Rotation DLinear needs 57 days of context plus a bounded fill buffer.
+HISTORY_DAYS = 60
 LIVE_SOURCE_DAYS = 6
 
 load_live_measurements = SWPC_Loader.load_measurements
@@ -49,5 +50,4 @@ def load_bootstrap_measurements(now: datetime) -> pd.DataFrame:
         end_date=now - timedelta(days=LIVE_SOURCE_DAYS - 1),
     )
     return wide_to_measurements(historical)
-
 

@@ -11,6 +11,7 @@ from common.schemas.observation import Observation, ObservationPoint
 from clio.observations import (
     load_bootstrap_measurements as _load_bootstrap_measurements, load_live_measurements,
     OBSERVATION_METRICS, REQUIRED_METRICS, SOLAR_INDEX_METRICS,
+    HISTORY_DAYS,
 )
 from argus_clio.services.derived_observations import (
     normalize_measurements,
@@ -21,7 +22,6 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-HISTORY_DAYS = 30
 UPSERT_BATCH_SIZE = 5_000
 logger = logging.getLogger(__name__)
 

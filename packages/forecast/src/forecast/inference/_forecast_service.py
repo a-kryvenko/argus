@@ -15,6 +15,14 @@ class DefaultForecastService(ABC):
 
     def __init__(self, models_bundle: dict):
         self.models_bundle = models_bundle
+        self._dlinear = None
+        if 'dlinear_v' in models_bundle.get('feature_columns', []):
+            from forecast.inference.rotation_dlinear import RotationDLinearForecaster
+
+            dependency = models_bundle.get('feature_models', {}).get('dlinear_v')
+            if dependency is None or 'bundle' not in dependency:
+                raise ValueError('Models using dlinear_v must embed their fitted DLinear bundle')
+            self._dlinear = RotationDLinearForecaster(dependency['bundle'])
 
     @abstractmethod
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
@@ -43,16 +51,19 @@ class DefaultForecastService(ABC):
     def _forecast_row(self, row) -> dict:
         """Extract exatt forecasted fields from forecast dataframe row"""
 
-    def forecast(self, observations: Observation, *, issue_time: datetime | None = None):
+    def forecast(self, observations: Observation, *, issue_time: datetime | None = None,
+                 speed_history: pd.DataFrame | None = None):
         issue_time = issue_time or datetime.now(UTC)
         if issue_time.tzinfo is None or issue_time.utcoffset() is None:
             raise ValueError("Forecast issue_time must be timezone-aware")
         issue_time = issue_time.astimezone(UTC)
 
+        extra = {'speed_history': speed_history} if speed_history is not None else {}
         frame = self._prepare_frame(
             observations=observations,
             issue_time=issue_time,
-            lead_hours=self.models_bundle["lead_hours"]
+            lead_hours=self.models_bundle["lead_hours"],
+            **extra,
         )
 
         self._apply_lead_buckets(
@@ -68,10 +79,17 @@ class DefaultForecastService(ABC):
 
         return self.forecast_from_df(frame)
 
-    def _prepare_frame(self, observations: Observation, issue_time: datetime, lead_hours: int) -> pd.DataFrame:
+    def _prepare_frame(self, observations: Observation, issue_time: datetime, lead_hours: int,
+                       speed_history: pd.DataFrame | None = None) -> pd.DataFrame:
         forecast_start_time = issue_time.replace(minute=0, second=0, microsecond=0)
 
         df = observations_to_dataframe(observations)
+        dlinear_history = None
+        if self._dlinear is not None:
+            source = df if speed_history is None else speed_history
+            dlinear_history = source[['issue_time', 'v']].copy()
+            dlinear_history['issue_time'] = pd.to_datetime(dlinear_history.issue_time, utc=True)
+            dlinear_history = dlinear_history.loc[dlinear_history.issue_time <= forecast_start_time]
 
         df = self._build_features(df)
 
@@ -83,6 +101,15 @@ class DefaultForecastService(ABC):
         frame["valid_time"] = forecast_start_time + pd.to_timedelta(
             frame["lead_hours"], unit="h"
         )
+
+        if self._dlinear is not None:
+            requests = pd.DataFrame({'issue_time': [forecast_start_time] * lead_hours,
+                                     'lead_hours': frame['lead_hours'].to_numpy()})
+            predictions = self._dlinear.add_rotation_v(requests, dlinear_history, column='dlinear_v')
+            if predictions.dlinear_v.isna().all():
+                raise ValueError('Insufficient hourly speed history for dlinear_v; '
+                                 'supply the configured rotation windows (57 days plus fill buffer for v1)')
+            frame['dlinear_v'] = predictions.dlinear_v.to_numpy()
 
         return frame
 

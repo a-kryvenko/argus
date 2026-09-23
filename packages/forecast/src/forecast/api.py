@@ -5,3 +5,4 @@ from forecast.inference._forecast_service import (
     DefaultForecastService, QuantileForecastService, ThresholdForecastService,
 )
 from forecast.inference.plasma_fs import SWDensityFS, SWSpeedFS, SWSpeedProbaFS
+from forecast.inference.rotation_dlinear import RotationDLinearForecaster

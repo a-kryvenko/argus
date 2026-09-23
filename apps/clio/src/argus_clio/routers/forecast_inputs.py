@@ -6,13 +6,15 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from argus_clio.db import get_db_session
 from argus_clio.db.models import Measurement
-from argus_clio.services.sensor_observations import load_normalized_observations
-from common.schemas.forecast_inputs import DENSITY_METRICS, ForecastInputs, SourceMeasurement
+from argus_clio.services.sensor_observations import HISTORY_DAYS, load_normalized_observations
+from common.schemas.forecast_inputs import DENSITY_METRICS, ForecastInputs, SourceMeasurement, SpeedObservation
+
+from argus_clio.services.aia import load_aia_features
 
 security = HTTPBearer(auto_error=False)
 
@@ -40,7 +42,7 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout = '60s'"))
         observations = await load_normalized_observations(
-            session, since=as_of - timedelta(days=30), until=as_of,
+            session, since=as_of - timedelta(days=HISTORY_DAYS), until=as_of,
         )
         rows = (await session.execute(
             select(Measurement.metric, Measurement.value, Measurement.observed_at)
@@ -52,10 +54,21 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         )).all()
         if len(rows) > 250_000:
             raise HTTPException(503, 'Forecast input range exceeds the supported batch size')
+        # DLinear must receive observed speed, not the interpolated wide layer.
+        hour = func.date_trunc('hour', Measurement.observed_at)
+        speed_rows = (await session.execute(
+            select(hour.label('issue_time'), func.avg(Measurement.value).label('v'))
+            .where(Measurement.metric == 'v',
+                   Measurement.observed_at >= as_of - timedelta(days=HISTORY_DAYS),
+                   Measurement.observed_at <= as_of)
+            .group_by(hour).order_by(hour)
+        )).all()
+        aia_frames = await load_aia_features(session, as_of)
         return ForecastInputs(
-            as_of=as_of, read_at=now, observations=observations,
+            as_of=as_of, read_at=now, observations=observations, aia_frames=aia_frames,
             measurements=[SourceMeasurement(metric=row.metric, value=row.value,
                                             observed_at=row.observed_at) for row in rows],
+            speed_observations=[SpeedObservation(issue_time=row.issue_time, v=row.v) for row in speed_rows],
         )
     finally:
         await session.rollback()

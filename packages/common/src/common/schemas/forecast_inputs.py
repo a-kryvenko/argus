@@ -14,9 +14,27 @@ class SourceMeasurement(BaseModel):
     observed_at: AwareDatetime
 
 
+class SpeedObservation(BaseModel):
+    """Observed hourly speed, without interpolation or gap filling."""
+    issue_time: AwareDatetime
+    v: FiniteFloat
+
+
+class AIAFeatureFrame(BaseModel):
+    """Six-hour model input derived from the hourly owner archive as of the read."""
+    slot_at: AwareDatetime
+    observed_at: AwareDatetime
+    available_at: AwareDatetime
+    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    features: dict[str, FiniteFloat | None]
+
+
 class ForecastInputs(BaseModel):
     schema_version: Literal[1] = 1
     as_of: AwareDatetime
     read_at: AwareDatetime
     observations: Observation
     measurements: list[SourceMeasurement] = Field(default_factory=list)
+    speed_observations: list[SpeedObservation] = Field(default_factory=list)
+
+    aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)

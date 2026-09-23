@@ -102,3 +102,34 @@ def test_status_selections_include_canonical_names_and_historical_aliases():
     assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
     assert attempt_selections('dst') == ['all', 'dst']
     assert attempt_selections('solar-radiation') == []
+
+
+def test_dlinear_models_receive_raw_speed_history(monkeypatch):
+    from types import SimpleNamespace
+    from common.schemas.forecast_inputs import SpeedObservation
+    from argus_prophet import generation
+    inputs = stored_inputs()
+    inputs.speed_observations = [SpeedObservation(issue_time=NOW, v=399.)]
+    compute = mock_models(monkeypatch)
+    monkeypatch.setattr(generation, 'load_model', lambda service, **kwargs:
+        (SimpleNamespace(registry_name=service.registry_name, _dlinear=object()), {}))
+    generation.calculate('solar-wind-speed', inputs=inputs, recorder=Mock())
+    for call in compute.call_args_list:
+        raw = call.kwargs['speed_history']
+        assert raw.v.tolist() == [399.]
+        assert raw.issue_time.tolist() == [NOW]
+
+
+def test_aia_models_receive_owner_features_without_filesystem_access(monkeypatch):
+    from types import SimpleNamespace
+    from common.schemas.forecast_inputs import AIAFeatureFrame
+    from argus_prophet import generation
+    inputs = stored_inputs()
+    inputs.aia_frames = [AIAFeatureFrame(slot_at=NOW,observed_at=NOW,available_at=NOW,sha256='a'*64,features={'aia_area_sector':.2})]
+    compute = mock_models(monkeypatch)
+    monkeypatch.setattr(generation,'load_model',lambda service,**kwargs:(SimpleNamespace(registry_name=service.registry_name,_dlinear=object(),uses_aia=True),{}))
+    generation.calculate('solar-wind-speed',inputs=inputs,recorder=Mock())
+    for call in compute.call_args_list:
+        frame=call.kwargs['aia_features']
+        assert frame.aia_area_sector.tolist()==[.2]
+        assert frame.available_at.tolist()==[NOW]

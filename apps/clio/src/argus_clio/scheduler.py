@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from argus_clio.db.session import get_database_url
 
-JOBS = {'refresh': (60, 730200), 'aggregate': (5, 730201)}
+JOBS = {'refresh': (60, 730200), 'aggregate': (5, 730201), 'aia': (60, 730202)}
 logger = logging.getLogger(__name__)
 
 

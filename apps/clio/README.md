@@ -113,3 +113,34 @@ statements have a 60s timeout. Cleanup must revalidate records when deleting the
 Provider-fetching notebooks live locally in `apps/clio/notebooks/` (ignored, as
 were the original root notebooks). Training consumes the resulting datasets.
 Only this domain imports the `clio` provider library; consumers use HTTP.
+
+
+## Hourly AIA193 collection
+
+The supervised worker now also runs `clio schedule aia` hourly (`:00 UTC`).
+It requests **every hourly slot**, including01/02/03/04/05UTC, and retains original
+FITS at `data/observations/aia193` (override: `ARGUS_AIA_ARCHIVE`). The normal mounted
+Clio data volume must persist. The first run warms up40days, recent images first;
+subsequent runs skip complete snapshots and retry missing slots within40days.
+Missing404 observations are never filled. QC-rejected originals and reasons remain
+on disk and are excluded from model inputs. Transient failures retry through the scheduler.
+No image retention/deletion is added. Four download workers, bounded requests and files.
+
+Run the database migration **before** starting the new HTTP/worker images:
+
+```bash
+clio migrate upgrade head
+clio collect aia                 # one bounded40day warmup; also scheduled automatically
+clio collect aia --history-days 1  # bounded manual collection, same advisory lock
+clio schedule aia                # normally already part of clio worker
+```
+
+`aia_snapshot` records slot, actual observation time, actual received-at availability,
+SHA256 and local paths. Historical downloads are available only from their real receipt;
+we never backdate availability to an assumed2h latency. Forecast inputs select only
+00/06/12/18UTC snapshots and temporal pairs, strictly received before as_of.
+Clio derives sector/24h/rotation features from its own cache and returns them through
+`/internal/v1/observations/forecast-inputs` as optional `aia_frames`. Prophet does not
+read Clio disk. A40day bounded source read supports rotation history and the target-time
+window; only10days of model features are sent. Archive persistence is separate from
+model sampling, so changing the future model cadence does not require re-downloading.

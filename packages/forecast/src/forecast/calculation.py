@@ -16,6 +16,11 @@ class ForecastResult:
 
 
 def calculate_forecast(service: DefaultForecastService, observations: Observation, *,
-                       issue_time: datetime, model_info: dict) -> ForecastResult:
-    forecast = service.forecast(observations, issue_time=issue_time)
+                       issue_time: datetime, model_info: dict,
+                       speed_history: pd.DataFrame | None = None,
+                       aia_features: pd.DataFrame | None = None) -> ForecastResult:
+    extra = {'speed_history': speed_history} if speed_history is not None else {}
+    if aia_features is not None:
+        extra['aia_features'] = aia_features
+    forecast = service.forecast(observations, issue_time=issue_time, **extra)
     return ForecastResult(service.registry_name, forecast_to_dataframe(forecast), model_info)

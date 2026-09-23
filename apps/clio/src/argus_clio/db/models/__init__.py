@@ -10,3 +10,5 @@ __all__ = ["SolarWindAggregate", "SolarWindAggregatePending", "SolarWindRetiredH
 from argus_clio.db.models.scheduled_job import ScheduledJob
 
 from argus_clio.db.models.measurement_receipt import MeasurementReceipt
+
+from argus_clio.db.models.aia_snapshot import AIASnapshot

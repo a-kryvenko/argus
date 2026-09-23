@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "common", "clio", "forecast-core>=0.4.0",
-  "pyarrow>=24.0.0",
+  "pyarrow>=24.0.0", "scipy>=1.13", "astropy>=6", "sunpy[map]>=6",
   "fastapi>=0.115", "uvicorn>=0.30", "sentry-sdk>=2.61.1",
   "alembic>=1.16,<2", "sqlalchemy>=2.0,<3", "psycopg[binary]>=3.2,<4",
 ]

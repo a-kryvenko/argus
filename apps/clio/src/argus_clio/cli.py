@@ -7,7 +7,7 @@ import sys
 
 
 COMMANDS = {
-    'solar-wind': 'collect_solar_wind', 'geomagnetic': 'collect_geomagnetic',
+    'solar-wind': 'collect_solar_wind', 'geomagnetic': 'collect_geomagnetic', 'aia': 'collect_aia',
     'refresh': 'refresh_observations', 'aggregate': 'aggregate_solar_wind',
     'audit': 'audit_solar_wind', 'cleanup': 'cleanup_solar_wind',
     'check-health': 'check_collector_health',
@@ -30,13 +30,13 @@ def main():
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
     collect = commands.add_parser('collect', add_help=False)
-    collect.add_argument('source', choices=['solar-wind', 'geomagnetic'])
+    collect.add_argument('source', choices=['solar-wind', 'geomagnetic', 'aia'])
     for name in ['refresh', 'aggregate', 'audit', 'cleanup', 'check-health', 'migrate']:
         commands.add_parser(name, add_help=False)
     commands.add_parser('status', help='Show stored collection progress and source freshness')
     commands.add_parser('worker', help='Run collectors and scheduled jobs together')
     schedule = commands.add_parser('schedule')
-    schedule.add_argument('job', choices=['refresh', 'aggregate'])
+    schedule.add_argument('job', choices=['refresh', 'aggregate', 'aia'])
     args, remainder = parser.parse_known_args()
     if args.command in ('serve', 'schedule', 'status', 'worker') and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
@@ -77,7 +77,11 @@ def main():
         from argus_clio.worker import work
         run_command(work)
     elif args.command == 'collect':
-        run_command(lambda: invoke(args.source, remainder))
+        if args.source == 'aia' and not any(arg in ('-h', '--help') for arg in remainder):
+            from argus_clio.scheduler import execute
+            run_command(lambda: execute('aia', lambda: invoke(args.source, remainder)))
+        else:
+            run_command(lambda: invoke(args.source, remainder))
     elif args.command == 'schedule':
         from argus_clio.scheduler import work
         run_command(lambda: work(args.job, lambda: invoke(args.job)))

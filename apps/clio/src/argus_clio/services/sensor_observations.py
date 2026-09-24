@@ -34,7 +34,7 @@ async def _database_is_empty(session: AsyncSession) -> bool:
 async def _upsert_measurements(
     session: AsyncSession,
     measurements: pd.DataFrame,
-    *, track_receipt: bool = True,
+    *, track_receipt: bool = True, replace_existing: bool = True,
 ) -> None:
     if measurements.empty:
         return
@@ -58,10 +58,13 @@ async def _upsert_measurements(
 
     for offset in range(0, len(records), UPSERT_BATCH_SIZE):
         statement = insert(Measurement).values(records[offset:offset + UPSERT_BATCH_SIZE])
-        statement = statement.on_conflict_do_update(
-            constraint="uq_measurement_metric",
-            set_={"value": statement.excluded.value},
-        )
+        if replace_existing:
+            statement = statement.on_conflict_do_update(
+                constraint="uq_measurement_metric",
+                set_={"value": statement.excluded.value},
+            )
+        else:
+            statement = statement.on_conflict_do_nothing(constraint="uq_measurement_metric")
         await session.execute(statement)
 
     # Metadata and observations commit together; older backfills cannot replace

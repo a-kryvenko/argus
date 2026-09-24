@@ -117,3 +117,10 @@ def test_prophet_refresh_selects_exact_product(entry, product):
     result, calls = run('prophet', 'refresh', product)
     assert result.returncode == 0, result.stderr
     assert calls == [['prophet', 'generate', product]]
+
+
+def test_clio_backfill_passes_range(entry):
+    _, run = entry
+    result, calls = run('clio', 'backfill', '--from', '2026-08-31', '--to', '2026-09-09')
+    assert result.returncode == 0, result.stderr
+    assert calls == [['clio', 'backfill', '--from', '2026-08-31', '--to', '2026-09-09']]

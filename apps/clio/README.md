@@ -144,3 +144,25 @@ Clio derives sector/24h/rotation features from its own cache and returns them th
 read Clio disk. A40day bounded source read supports rotation history and the target-time
 window; only10days of model features are sent. Archive persistence is separate from
 model sampling, so changing the future model cadence does not require re-downloading.
+
+## Historical backfill
+
+`./argus clio backfill --from 2026-08-31 --to 2026-09-09` restores missing
+measurements in an existing database and rebuilds normalized observations in that
+range. Dates mean midnight UTC; timezone-aware whole hours are also accepted.
+`--from` is inclusive, `--to` exclusive, at most 31 days per invocation.
+
+The command shares the refresh lock. OMNI supplies core observation metrics;
+ACE supplies additional plasma values only (its GSE magnetic fields are not
+substituted for GSM). The existing GFZ/GOES archive path supplies available solar
+indices using configured calibration. Source failures are reported; available
+sources can still be saved. No valid measurements from any source is an error.
+Existing measurements and collection receipt timestamps are preserved. All database
+changes commit together. Repeated runs can add newly available archive records.
+
+The JSON result reports downloaded measurement count (including existing records),
+normalized hour count, source errors and missing **observed** hours per core metric.
+Normalization follows the existing interpolation policy; normalized rows do not
+prove raw history completeness. Daily indices need not have hourly observations.
+Check the reported speed gaps before retrying Prophet; archives may not yet cover
+recent dates. Backfill does not generate forecasts or AIA images.

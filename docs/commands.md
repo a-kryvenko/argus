@@ -82,3 +82,12 @@ In production, reads Docker Compose logs. `clio` includes `clio` and `clio-worke
 `prophet` includes its worker and HTTP service. Other supported
 services: `api`, `intelligence`, `frontend`, `nginx`, `postgres`, `redis`, `alloy`.
 Without a service, shows all Compose logs.
+
+Restore missing historical observations (UTC, exclusive end, maximum 31 days):
+
+```bash
+./argus clio backfill --from 2026-08-31 --to 2026-09-09
+```
+
+Existing measurements are preserved. The output reports source failures and
+remaining raw observation gaps; see the Clio README for archive coverage limits.

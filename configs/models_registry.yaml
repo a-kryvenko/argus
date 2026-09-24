@@ -29,8 +29,8 @@ models:
     metrics: data/metrics/geomagnetic/dst_quantile
 
   hmf_total_threshold:
-    model: argus-bt-t-v2
-    metrics: data/metrics/hmf/total_proba
+    model: argus-bt-t-v3
+    metrics: data/metrics/hmf/total_proba_v3
   
   hmf_southward_threshold:
     model: argus-bs-t-v2

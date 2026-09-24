@@ -20,6 +20,7 @@ def client_with_session(monkeypatch):
     loader = AsyncMock(return_value=Observation(points=[]))
     monkeypatch.setattr(routes, 'load_normalized_observations', loader)
     monkeypatch.setattr(routes, 'load_aia_features', AsyncMock(return_value=[]))
+    monkeypatch.setattr(routes, 'solar_history', AsyncMock(return_value={'series': {}}))
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.get_db_session] = lambda: session
@@ -45,6 +46,11 @@ def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
     payload = response.json()
     assert payload['schema_version'] == 1
     assert payload['aia_frames'] == []
+    assert payload['solar_wind_hourly'] == {'series': {}}
+    args = routes.solar_history.call_args.args
+    assert args[0] is session and args[1] == ['bx','by','bz','v','n','t']
+    assert args[3] == NOW and (NOW-args[2]).total_seconds() == 168*3600
+    assert args[4] == 3600
     routes.load_aia_features.assert_awaited_once_with(session, NOW)
     assert payload['measurements'][0]['metric'] == 'dst'
     assert payload['speed_observations'][0]['v'] == 420.

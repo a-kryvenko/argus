@@ -38,3 +38,6 @@ class ForecastInputs(BaseModel):
     speed_observations: list[SpeedObservation] = Field(default_factory=list)
 
     aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)
+
+    # Native, unfilled hourly Clio solar-wind history for IMF inference.
+    solar_wind_hourly: dict | None = None

@@ -148,7 +148,11 @@ def load_forecast(product: Product) -> Forecast:
     if not frames:
         raise ArtifactNotReadyError(product.target)
 
-    base_frame = frames[0][1]
+    issue_time = frames[0][1].iloc[0]['issue_time']
+    # Products may contain variables with different supported horizons.
+    base_frame = pd.concat([frame for _, frame in frames
+                            if frame.iloc[0]['issue_time'] == issue_time], ignore_index=True)
+    base_frame = base_frame.drop_duplicates('lead_hours').sort_values('lead_hours')
     base_frame = base_frame[
         base_frame["lead_hours"] <= product.max_horizon_hours
     ]

@@ -18,6 +18,13 @@ def calculate(product: str, *, inputs, recorder):
     for model in definition.models:
         service, model_info = load_model(model.service_class(), workdir=config.workdir,
                                          registry=config.models_registry['models'])
+        if getattr(service, 'uses_hourly_imf', False):
+            if inputs.solar_wind_hourly is None:
+                raise ValueError('Clio hourly IMF history is required')
+            frame = service.forecast_hourly(inputs.solar_wind_hourly,
+                                           issue_time=issue_time, as_of=inputs.read_at)
+            store_result(recorder, ForecastResult(service.registry_name, frame, model_info))
+            continue
         extra = {}
         if getattr(service, '_dlinear', None) is not None:
             import pandas as pd

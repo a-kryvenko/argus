@@ -60,7 +60,8 @@ def test_rejects_incompatible_contract(monkeypatch):
 
 def mock_models(monkeypatch):
     from argus_prophet.services.generation import calculation as generation
-    load = Mock(side_effect=lambda service, **_: (service, {}))
+    from types import SimpleNamespace
+    load = Mock(side_effect=lambda service, **_: (SimpleNamespace(registry_name=service.registry_name), {}))
     compute = Mock(side_effect=lambda service, *args, **kwargs:
                    ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
     monkeypatch.setattr(generation, 'load_model', load)
@@ -133,3 +134,21 @@ def test_aia_models_receive_owner_features_without_filesystem_access(monkeypatch
         frame=call.kwargs['aia_features']
         assert frame.aia_area_sector.tolist()==[.2]
         assert frame.available_at.tolist()==[NOW]
+
+
+def test_hourly_imf_uses_clio_snapshot_and_read_time(monkeypatch):
+    from types import SimpleNamespace
+    from argus_prophet.services.generation import calculation as generation
+    inputs = stored_inputs()
+    inputs.solar_wind_hourly = {'series': {}}
+    total = SimpleNamespace(registry_name='hmf_total_threshold', uses_hourly_imf=True,
+                            forecast_hourly=Mock(return_value=pd.DataFrame({'lead_hours':[1]})))
+    south = SimpleNamespace(registry_name='hmf_southward_threshold')
+    monkeypatch.setattr(generation, 'load_model', Mock(side_effect=[(total,{}),(south,{})]))
+    compute = Mock(return_value=ForecastResult(south.registry_name,pd.DataFrame({'lead_hours':[1]}),{}))
+    monkeypatch.setattr(generation, 'calculate_forecast', compute)
+    recorder = Mock()
+    generation.calculate('hmf',inputs=inputs,recorder=recorder)
+    total.forecast_hourly.assert_called_once_with(inputs.solar_wind_hourly, issue_time=NOW, as_of=inputs.read_at)
+    assert compute.call_count == 1
+    assert [c.args[0] for c in recorder.store.call_args_list] == ['hmf_total_threshold','hmf_southward_threshold']

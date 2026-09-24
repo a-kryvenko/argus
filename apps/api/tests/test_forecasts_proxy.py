@@ -77,3 +77,22 @@ def test_missing_token_fails_without_http(monkeypatch):
     monkeypatch.delenv('FORECASTS_SERVICE_TOKEN', raising=False)
     with pytest.raises(ArtifactNotReadyError, match='not configured'):
         forecasts_client.read_release('dst')
+
+
+def test_hmf_preserves_southward_after_total_horizon(monkeypatch):
+    import pandas as pd
+    product = forecast_products.get_product('hmf', 'private')
+    issue = pd.Timestamp('2026-09-24T00:00Z')
+    frames = []
+    for variable, horizon in zip(product.variables, [24, 48]):
+        frame = pd.DataFrame({'lead_hours': range(1,horizon+1)})
+        frame['issue_time'] = issue
+        frame['valid_time'] = issue + pd.to_timedelta(frame.lead_hours, unit='h')
+        for threshold in [5,10,15]:
+            frame[f'p_{variable.name}_ge_{threshold}'] = .1
+        frames.append((variable,frame))
+    monkeypatch.setattr(forecast_products, '_load_variable_frames', lambda _:frames)
+    result = forecast_products.load_forecast(product)
+    assert result.horizon_hours == 48
+    assert set(result.predictions[23].variables) == {'bt','bs'}
+    assert set(result.predictions[24].variables) == {'bs'}

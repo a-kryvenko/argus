@@ -4,7 +4,7 @@ import asyncio
 import logging
 from argus_clio.commands._runner import run_command
 from argus_clio.db.session import dispose_engine
-from argus_clio.services.solar_wind_aggregation import aggregate_pending
+from argus_clio.services.solar_wind.aggregation import aggregate_pending
 
 
 async def collect(limit):
@@ -15,10 +15,10 @@ async def collect(limit):
         await dispose_engine()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--limit', type=int, default=240, help='Maximum source hours per run (default 240)')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.limit < 1:
         parser.error('--limit must be positive')
     logging.basicConfig(level=logging.INFO)

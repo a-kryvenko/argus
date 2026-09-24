@@ -11,10 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from argus_clio.db import get_db_session
 from argus_clio.db.models import Measurement
-from argus_clio.services.sensor_observations import HISTORY_DAYS, load_normalized_observations
+from argus_clio.services.observations.normalized import HISTORY_DAYS, load_normalized_observations
 from common.schemas.forecast_inputs import DENSITY_METRICS, ForecastInputs, SourceMeasurement, SpeedObservation
 
-from argus_clio.services.aia import load_aia_features
+from argus_clio.services.aia.features import load_aia_features
 
 security = HTTPBearer(auto_error=False)
 

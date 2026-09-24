@@ -14,7 +14,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from argus_clio.db.models import SolarWindObservation, GeomagneticObservation, ObservationSourceStatus
-from argus_clio.services import solar_wind, geomagnetic
+from argus_clio.services.solar_wind import observations as solar_wind
+from argus_clio.services import geomagnetic
 
 
 

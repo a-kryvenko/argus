@@ -4,7 +4,9 @@ import math
 from statistics import mean
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from argus_clio.services import solar_wind, geomagnetic
+from argus_clio.services.solar_wind import observations as solar_wind
+from argus_clio.services import geomagnetic
+from argus_clio.services.collection.specs import WIND_STALE_AFTER_SECONDS
 
 MIN_COVERAGE = 0.8
 LOOKBACK_MINUTES = 75
@@ -24,7 +26,7 @@ def change_one_hour(points: list[dict], now: datetime) -> dict:
         return unavailable('missing_latest')
     last = points[-1]
     end = last['observed_at']
-    if (now-end).total_seconds() > solar_wind.STALE_AFTER_SECONDS:
+    if (now-end).total_seconds() > WIND_STALE_AFTER_SECONDS:
         return unavailable('stale', as_of=end)
     by_time = {point['observed_at']: point for point in points if valid(point)}
     windows = [[by_time.get(end-timedelta(minutes=minute)) for minute in range(a, b)]
@@ -47,7 +49,7 @@ def southward_duration(points: list[dict], now: datetime) -> dict:
         return unavailable('missing_latest')
     last = points[-1]
     end = last['observed_at']
-    if (now-end).total_seconds() > solar_wind.STALE_AFTER_SECONDS:
+    if (now-end).total_seconds() > WIND_STALE_AFTER_SECONDS:
         return unavailable('stale', as_of=end)
     if last['value'] >= 0:
         return {'status': 'available', 'value': 0, 'unit': 'sampled_minutes', 'as_of': end}

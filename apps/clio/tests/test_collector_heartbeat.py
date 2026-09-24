@@ -1,7 +1,7 @@
 import json
 import sys
 import pytest
-from argus_clio.services import collector_heartbeat as service
+from argus_clio.services.collection import heartbeat as service
 
 
 def test_missing_progress_file_is_unhealthy(tmp_path):

@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 import math
 from sqlalchemy import select
 from argus_clio.db.models import SolarWindAggregate, SolarWindAggregatePending
-from argus_clio.services.solar_wind import METADATA, metadata
-from argus_clio.services.solar_wind_aggregation import VERSION
+from argus_clio.services.solar_wind.observations import METADATA, metadata
+from argus_clio.services.solar_wind.aggregation import VERSION
 
 
 async def history(session, metrics, start, end, seconds, now=None):

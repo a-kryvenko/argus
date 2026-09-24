@@ -4,9 +4,9 @@ import asyncio
 import json
 import logging
 from argus_clio.commands._runner import run_command
-from argus_clio.commands.audit_solar_wind import utc_hour
+from argus_clio.commands._arguments import utc_hour
 from argus_clio.db.session import dispose_engine
-from argus_clio.services.solar_wind_retention import cleanup
+from argus_clio.services.solar_wind.retention import cleanup
 
 
 async def run(args):
@@ -27,14 +27,14 @@ async def run(args):
         await dispose_engine()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true', help='Delete verified raw hours; otherwise report only')
     parser.add_argument('--retention-days', type=int, default=90, help='Minimum 90 days')
     parser.add_argument('--limit', type=int, default=24, help='Source hours to examine, 1–240 (default 24)')
     parser.add_argument('--from', dest='start', type=utc_hour, help='Optional inclusive UTC hour')
     parser.add_argument('--json', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.retention_days < 90 or not 1 <= args.limit <= 240:
         parser.error('--retention-days must be at least 90; --limit must be 1–240')
     logging.basicConfig(level=logging.INFO)

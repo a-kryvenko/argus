@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 from time import monotonic
 
-from argus_clio.services.collector_specs import collector_sources, overdue_after, ATTEMPT_TIMEOUT_SECONDS
+from argus_clio.services.collection.specs import collector_sources, overdue_after, ATTEMPT_TIMEOUT_SECONDS
 
 
 def heartbeat_path(collector: str) -> Path:

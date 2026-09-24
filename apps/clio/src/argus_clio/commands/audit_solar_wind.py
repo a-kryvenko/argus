@@ -5,21 +5,9 @@ from datetime import UTC, datetime, timedelta
 import json
 
 from argus_clio.commands._runner import run_command
+from argus_clio.commands._arguments import utc_hour
 from argus_clio.db.session import dispose_engine, get_session_factory
-from argus_clio.services.aggregation_audit import audit
-
-
-def utc_hour(value):
-    try:
-        result = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        if result.tzinfo is None:
-            raise ValueError('timezone required')
-        result = result.astimezone(UTC)
-        if result.minute or result.second or result.microsecond:
-            raise ValueError('whole UTC hour required')
-        return result
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
+from argus_clio.services.solar_wind.audit import audit
 
 
 async def check(args, now):
@@ -49,7 +37,7 @@ async def check(args, now):
         await dispose_engine()
 
 
-def main():
+def main(argv=None):
     now = datetime.now(UTC)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--from', dest='start', type=utc_hour, help='Inclusive whole UTC hour, default seven days before to')
@@ -57,7 +45,7 @@ def main():
     parser.add_argument('--retention-days', type=int, default=90)
     parser.add_argument('--detail-limit', type=int, default=200)
     parser.add_argument('--json', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args.start = args.start or args.end-timedelta(days=7)
     if not timedelta(0) < args.end-args.start <= timedelta(days=31) or args.end > now:
         parser.error('Choose a positive closed range of at most 31 days')

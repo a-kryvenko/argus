@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from argus_clio.services.history_coverage import coverage
+from argus_clio.services.coverage import coverage
 
 START = datetime(2026, 9, 1, tzinfo=UTC)
 

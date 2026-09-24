@@ -2,9 +2,24 @@
 
 Clio owns observations, normalization, aggregation, collection diagnostics and
 scheduled ingestion. `packages/clio` provides public provider parsing; ingestion
-owns GOES/GFZ history downloads and the JB2008 history cache, and uses private calibration through `services/calibration.py`. HTTP reads do not
+owns GOES/GFZ history downloads and the JB2008 history cache, and uses private calibration through `services/observations/calibration.py`. HTTP reads do not
 load the private backend. See [setup](../../README_DEPLOY.md#local-development) and
 [commands](../../docs/commands.md).
+
+## Service layout
+
+`src/argus_clio/services/` groups related operations by domain:
+
+- `solar_wind/`: native observations, aggregate calculation (`aggregation.py`),
+  aggregate reads (`history.py`), consistency checks (`audit.py`) and retention.
+- `aia/`: image collection, archive location and forecast feature reads.
+- `observations/`: normalized model inputs, shared persistence, backfill,
+  solar-index calibration and density history.
+- `collection/`: source specifications, attempt status, heartbeat and monitoring.
+
+`geomagnetic.py` handles native Kp/Dst. `summary.py` combines source summaries;
+`coverage.py` calculates coverage for both solar wind and geomagnetic history.
+Import the concrete modules; package initializers do not re-export services.
 
 ## Configuration and interfaces
 
@@ -53,7 +68,7 @@ Their schedules, source locks and completion markers are unchanged; there is no
 message broker, new job table or in-memory backlog. Collection stays independent
 of normalization and aggregation. Failed scheduled jobs retry every 60 seconds. Restarts catch
 up only the latest due slot. Manual jobs share locks but do not advance scheduled
-completion markers. Work is idempotent/retriable, not exactly once.
+completion markers. Source and job lock keys are defined in `db/locks.py` and do not overlap. Work is idempotent/retriable, not exactly once.
 
 Run `./argus clio worker` in the foreground locally; `pnpm dev` also starts it.
 Production Compose starts it automatically. Manual `refresh` and `aggregate`
@@ -146,6 +161,9 @@ window; only10days of model features are sent. Archive persistence is separate f
 model sampling, so changing the future model cadence does not require re-downloading.
 
 ## Historical backfill
+
+An empty measurement table is bootstrapped from provider history. The legacy
+`live_sensors.csv` bootstrap and its configuration setting are no longer used.
 
 `./argus clio backfill --from 2026-08-31 --to 2026-09-09` restores missing
 measurements in an existing database and rebuilds normalized observations in that

@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.models.monitoring import MonitorState, TrafficMetric
 from app.services import edge_traffic, project_monitoring
-from argus_clio.services.sensor_observations import _upsert_measurements
+from argus_clio.services.observations.normalized import _upsert_measurements
 from argus_clio.db.models import MeasurementReceipt
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -110,7 +110,7 @@ async def verify(dsn):
             await db.commit()
             receipt = await db.get(MeasurementReceipt, 'dst')
             received = receipt.received_at
-            from argus_clio.services.monitoring import monitoring_status
+            from argus_clio.services.collection.monitoring import monitoring_status
             status = await monitoring_status(db)
             dst = next(m for m in status['measurements'] if m['metric'] == 'dst')
             assert dst['latest_observation_at'] == now and dst['received_at'] == received

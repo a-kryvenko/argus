@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from argus_clio.db.models import ObservationSourceStatus
-from argus_clio.services.collector_specs import SOURCE_SPECS, ATTEMPT_TIMEOUT_SECONDS, overdue_after
+from argus_clio.services.collection.specs import SOURCE_SPECS, ATTEMPT_TIMEOUT_SECONDS, overdue_after
 
 logger = logging.getLogger(__name__)
 

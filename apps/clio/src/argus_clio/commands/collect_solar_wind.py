@@ -7,8 +7,9 @@ from time import monotonic
 from argus_clio.commands._runner import run_command
 from argus_clio.commands._shutdown import stop_on_signal, wait_for_next_poll
 from argus_clio.db.session import dispose_engine
-from argus_clio.services.collector_heartbeat import CollectorHeartbeat
-from argus_clio.services.solar_wind import refresh_solar_wind
+from argus_clio.services.collection.heartbeat import CollectorHeartbeat
+from argus_clio.services.solar_wind.observations import refresh_solar_wind
+from argus_clio.services.collection.specs import WIND_POLL_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +35,17 @@ async def collect(watch: bool) -> None:
                             heartbeat.finished(source_id)
                 if not watch:
                     return
-                await wait_for_next_poll(stopped, max(1, 60 - (monotonic() - started)))
+                await wait_for_next_poll(stopped, max(1, WIND_POLL_SECONDS - (monotonic() - started)))
     finally:
         if heartbeat:
             heartbeat.stop()
         await dispose_engine()
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--watch", action="store_true", help="Poll each source every 60 seconds")
-    args = parser.parse_args()
+    parser.add_argument("--watch", action="store_true", help=f"Poll each source every {WIND_POLL_SECONDS} seconds")
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
     asyncio.run(collect(args.watch))
 

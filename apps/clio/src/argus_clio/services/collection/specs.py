@@ -2,13 +2,15 @@
 from clio.dataloaders.solar_wind_loader import SOURCES as WIND_SOURCES
 from clio.dataloaders.geomagnetic_loader import SOURCES as INDEX_SOURCES, INTERVAL_SECONDS, POLL_SECONDS
 
+WIND_POLL_SECONDS = 60
+WIND_STALE_AFTER_SECONDS = 600
 ATTEMPT_TIMEOUT_SECONDS = 120
 SOURCE_SPECS = {
     'solar_wind_mag': {'label': 'Solar wind magnetic field', 'collector': 'solar-wind',
-                       'poll_seconds': 60, 'stale_after_seconds': 600, 'freshness_basis': 'observed_at',
+                       'poll_seconds': WIND_POLL_SECONDS, 'stale_after_seconds': WIND_STALE_AFTER_SECONDS, 'freshness_basis': 'observed_at',
                        'source_url': WIND_SOURCES['mag']},
     'solar_wind_plasma': {'label': 'Solar wind plasma', 'collector': 'solar-wind',
-                          'poll_seconds': 60, 'stale_after_seconds': 600, 'freshness_basis': 'observed_at',
+                          'poll_seconds': WIND_POLL_SECONDS, 'stale_after_seconds': WIND_STALE_AFTER_SECONDS, 'freshness_basis': 'observed_at',
                           'source_url': WIND_SOURCES['plasma']},
     **{metric: {'label': 'Estimated Kp' if metric == 'kp' else 'Real-time Dst', 'collector': 'geomagnetic',
                 'poll_seconds': POLL_SECONDS[metric], 'stale_after_seconds': INTERVAL_SECONDS[metric] + 3600,

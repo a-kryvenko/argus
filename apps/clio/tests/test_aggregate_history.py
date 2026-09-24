@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from argus_clio.services.aggregate_history import history
+from argus_clio.services.solar_wind.history import history
 from argus_clio.routers import solar_wind as routes
 
 START = datetime(2026, 9, 1, tzinfo=UTC)

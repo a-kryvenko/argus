@@ -7,7 +7,7 @@ from time import monotonic
 from argus_clio.commands._runner import run_command
 from argus_clio.commands._shutdown import stop_on_signal, wait_for_next_poll
 from argus_clio.db.session import dispose_engine
-from argus_clio.services.collector_heartbeat import CollectorHeartbeat
+from argus_clio.services.collection.heartbeat import CollectorHeartbeat
 from argus_clio.services.geomagnetic import ingest_source, refresh_geomagnetic
 from clio.dataloaders.geomagnetic_loader import POLL_SECONDS
 
@@ -46,10 +46,10 @@ async def collect(watch: bool) -> None:
         await dispose_engine()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--watch', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
     asyncio.run(collect(args.watch))
 

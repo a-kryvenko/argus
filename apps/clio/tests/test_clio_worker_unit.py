@@ -10,7 +10,7 @@ import pytest
 from argus_clio import worker
 from argus_clio.commands import collect_solar_wind, collect_geomagnetic
 from argus_clio.commands._shutdown import stop_on_signal, wait_for_next_poll
-from argus_clio.services.collector_heartbeat import check_heartbeat
+from argus_clio.services.collection.heartbeat import check_heartbeat
 
 
 @pytest.fixture

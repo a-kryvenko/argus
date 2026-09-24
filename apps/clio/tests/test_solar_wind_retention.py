@@ -2,8 +2,8 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 import asyncio
 import pytest
-from argus_clio.services.solar_wind_aggregation import summarize, VERSION
-from argus_clio.services.solar_wind_retention import verify_hour, cleanup
+from argus_clio.services.solar_wind.aggregation import summarize, VERSION
+from argus_clio.services.solar_wind.retention import verify_hour, cleanup
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 NOW = START+timedelta(days=100)

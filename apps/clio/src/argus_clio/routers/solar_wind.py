@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from argus_clio.db import get_db_session
 from common.schemas.response import success_response
-from argus_clio.services import solar_wind, aggregate_history
+from argus_clio.services.solar_wind import observations as solar_wind
+from argus_clio.services.solar_wind import history as aggregate_history
 from typing import Literal
 
 router = APIRouter(prefix="/internal/v1/observations/solar-wind", tags=["observations"])

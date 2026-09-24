@@ -12,7 +12,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from argus_clio.db.models import SolarWindObservation, SolarWindAggregate, SolarWindAggregatePending, SolarWindRetiredHour
-from argus_clio.services import solar_wind_retention as retention, solar_wind_aggregation as aggregation
+from argus_clio.services.solar_wind import retention
+from argus_clio.services.solar_wind import aggregation
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 NOW = START+timedelta(days=100, minutes=30)

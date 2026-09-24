@@ -11,7 +11,7 @@ from clio.dataloaders.goes_history_loader import (
 )
 from clio.dataloaders.gfz_loader import load_gfz_f107
 from common.config import get_config
-from argus_clio.services.calibration import extract_solar_indices, load_solar_index_calibrations
+from argus_clio.services.observations.calibration import extract_solar_indices, load_solar_index_calibrations
 
 logger = logging.getLogger(__name__)
 COLUMNS = ["metric", "value", "observed_at"]
@@ -29,7 +29,7 @@ def merge_history(history: pd.DataFrame, observations: pd.DataFrame) -> pd.DataF
     return pd.concat([history[COLUMNS], observations[COLUMNS]], ignore_index=True)
 
 
-def _download_history(start, end, config) -> pd.DataFrame:
+def download_solar_index_history(start, end, config) -> pd.DataFrame:
     # Both providers supply observations. No input-forecast files are consulted.
     logger.info("JB2008: downloading observed F10.7 history from GFZ")
     flux = load_gfz_f107(start, end)
@@ -80,7 +80,7 @@ def load_density_history(issue_time) -> pd.DataFrame:
         if fetched is not None and pd.Timestamp(fetched).floor("D") == issue.floor("D"):
             return cached.loc[cached.observed_at.between(start, issue)]
     try:
-        downloaded = _download_history(start, issue, config)
+        downloaded = download_solar_index_history(start, issue, config)
     except (requests.RequestException, OSError, ValueError, KeyError, RuntimeError):
         logger.exception("JB2008 history refresh failed; retaining cached observations")
         return cached.loc[cached.observed_at.between(start, issue)]

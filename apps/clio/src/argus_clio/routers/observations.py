@@ -1,6 +1,6 @@
 from argus_clio.db import get_db_session
 from common.schemas.response import error_response, success_response
-from argus_clio.services.sensor_observations import load_normalized_observations
+from argus_clio.services.observations.normalized import load_normalized_observations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 

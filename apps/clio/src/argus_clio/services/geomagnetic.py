@@ -9,19 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.dataloaders.geomagnetic_loader import SOURCES, INTERVAL_SECONDS, POLL_SECONDS, fetch_records
 from argus_clio.db.models import GeomagneticObservation
 from argus_clio.db.session import get_session_factory
-from argus_clio.services.collection_status import track_attempt
-from argus_clio.services.history_coverage import coverage
+from argus_clio.db.locks import SOURCE_LOCKS
+from argus_clio.services.collection.specs import SOURCE_SPECS
+from argus_clio.services.collection.status import track_attempt
+from argus_clio.services.coverage import coverage
 
 logger = logging.getLogger(__name__)
-# Allow the next native interval plus one hour of publication grace.
-# Measure from interval END, not from start or polling time.
-STALE_AFTER_SECONDS = {metric: seconds + 3600 for metric, seconds in INTERVAL_SECONDS.items()}
 
 
 async def ingest_source(metric: str) -> None:
     async with get_session_factory()() as session:
         lock = await session.execute(text('SELECT pg_try_advisory_xact_lock(:key)'),
-                                     {'key': 730200 if metric == 'kp' else 730201})
+                                     {'key': SOURCE_LOCKS[metric]})
         if not lock.scalar_one():
             return
         async with track_attempt(metric, session, get_session_factory()) as attempt:
@@ -56,7 +55,7 @@ def metadata(metric: str) -> dict:
             'source_url': SOURCES[metric], 'resolution_seconds': INTERVAL_SECONDS[metric],
             'poll_seconds': POLL_SECONDS[metric],
             'data_status': 'estimated' if metric == 'kp' else 'realtime',
-            'stale_after_seconds': STALE_AFTER_SECONDS[metric], 'freshness_basis': 'interval_end',
+            'stale_after_seconds': SOURCE_SPECS[metric]['stale_after_seconds'], 'freshness_basis': 'interval_end',
             'time_basis': 'source_interval_start', 'gap_filling': 'none'}
 
 
@@ -79,7 +78,7 @@ async def latest(session: AsyncSession, now: datetime | None = None) -> dict:
         series[metric] = {**metadata(metric), 'latest': sample(record, now) if record is not None else None,
                           'lag_seconds': lag,
                           'status': 'missing' if record is None or record.value is None else
-                          'stale' if lag > STALE_AFTER_SECONDS[metric] else 'fresh'}
+                          'stale' if lag > SOURCE_SPECS[metric]['stale_after_seconds'] else 'fresh'}
     return {'generated_at': now, 'series': series}
 
 

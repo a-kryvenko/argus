@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import pytest
-from argus_clio.services.observation_summary import change_one_hour, southward_duration
+from argus_clio.services.summary import change_one_hour, southward_duration
 
 NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 

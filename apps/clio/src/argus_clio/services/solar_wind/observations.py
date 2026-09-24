@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.dataloaders.solar_wind_loader import FIELDS, SOURCES, fetch_records
 from argus_clio.db.models import SolarWindObservation
 from argus_clio.db.session import get_session_factory
-from argus_clio.services.collection_status import track_attempt
-from argus_clio.services.history_coverage import coverage
+from argus_clio.db.locks import SOURCE_LOCKS
+from argus_clio.services.collection.specs import WIND_STALE_AFTER_SECONDS
+from argus_clio.services.collection.status import track_attempt
+from argus_clio.services.coverage import coverage
 
 logger = logging.getLogger(__name__)
 METADATA = {
@@ -23,14 +25,13 @@ METADATA = {
     "n": ("plasma", "Proton density", "cm⁻³", None),
     "t": ("plasma", "Proton temperature", "K", None),
 }
-STALE_AFTER_SECONDS = 600
 
 
 async def ingest_source(kind: str) -> None:
     async with get_session_factory()() as session:
         # Transaction-scoped lock also prevents duplicate collectors on multiple hosts.
         lock = await session.execute(text("SELECT pg_try_advisory_xact_lock(:key)"),
-                                     {"key": 730100 if kind == "mag" else 730101})
+                                     {"key": SOURCE_LOCKS[f"solar_wind_{kind}"]})
         if not lock.scalar_one():
             logger.info("Solar wind %s ingestion is already running", kind)
             return
@@ -68,7 +69,7 @@ def metadata(metric: str) -> dict:
             "source": "NOAA SWPC RTSW", "source_url": SOURCES[kind],
             "location": "L1", "time_basis": "measurement", "propagated": False,
             "resolution_seconds": 60, "aggregation": "source_1_minute",
-            "selection": "NOAA active spacecraft", "stale_after_seconds": STALE_AFTER_SECONDS}
+            "selection": "NOAA active spacecraft", "stale_after_seconds": WIND_STALE_AFTER_SECONDS}
 
 
 def sample(record: SolarWindObservation, metric: str) -> dict:
@@ -100,7 +101,7 @@ async def latest(session: AsyncSession, metrics: list[str], now: datetime | None
         age = max(0, int((now - record.observed_at).total_seconds())) if record is not None else None
         series[metric] = {**metadata(metric), "latest": point, "age_seconds": age,
                           "status": "missing" if point is None or point["value"] is None else
-                          "stale" if age > STALE_AFTER_SECONDS else "fresh"}
+                          "stale" if age > WIND_STALE_AFTER_SECONDS else "fresh"}
     return {"generated_at": now, "series": series}
 
 

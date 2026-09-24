@@ -26,9 +26,9 @@ def test_ingestion_refreshes_live_and_persists_optional_history(monkeypatch, mis
     upsert = AsyncMock()
     monkeypatch.setattr(ingestion, 'refresh_normalized_observations', refresh)
     monkeypatch.setattr(ingestion, 'load_density_history', fetch)
-    monkeypatch.setattr(ingestion, '_upsert_measurements', upsert)
-    monkeypatch.setattr(ingestion, '_load_measurements', AsyncMock(return_value=history))
-    ingestion.main()
+    monkeypatch.setattr(ingestion, 'upsert_measurements', upsert)
+    monkeypatch.setattr(ingestion, 'load_measurements', AsyncMock(return_value=history))
+    ingestion.main([])
     refresh.assert_awaited_once()
     fetch.assert_called_once()
     if missing_history:

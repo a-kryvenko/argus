@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from common.schemas.forecast_inputs import AIAFeatureFrame
 from argus_clio.db.models.aia_snapshot import AIASnapshot
-from argus_clio.services.aia_archive import archive_root
+from argus_clio.services.aia.archive import archive_root
 from clio.aia_features import sectors, weighted_mean, aligned_change, ROTATION_HOURS
 
 logger = logging.getLogger(__name__)

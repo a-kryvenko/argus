@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 import argparse
 import pytest
 
-from argus_clio.commands.audit_solar_wind import utc_hour
-from argus_clio.services.aggregation_audit import differences
+from argus_clio.commands._arguments import utc_hour
+from argus_clio.services.solar_wind.audit import differences
 
 
 def test_comparison_tolerates_only_float_noise_and_reports_field_paths():

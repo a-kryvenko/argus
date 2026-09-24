@@ -6,7 +6,8 @@ import pandas as pd
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from argus_clio.services import backfill as service, sensor_observations
+from argus_clio.services.observations import backfill as service
+from argus_clio.services.observations import store as observation_store
 from argus_clio.commands.backfill_observations import boundary
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
@@ -19,7 +20,7 @@ def test_history_clips_range_prefers_omni_and_excludes_ace_magnetic(monkeypatch)
     monkeypatch.setattr(service.OMNIWeb_Loader, 'load', Mock(return_value=omni))
     monkeypatch.setattr(service.SPDF_Loader, 'load', Mock(return_value=ace))
     monkeypatch.setattr(service, 'get_config', lambda: object())
-    monkeypatch.setattr(service, '_download_history', Mock(side_effect=OSError('archive unavailable')))
+    monkeypatch.setattr(service, 'download_solar_index_history', Mock(side_effect=OSError('archive unavailable')))
     frame, errors = service.load_history(START, END)
     assert frame.set_index('metric').value.to_dict() == {'v': 420., 'n': 5.}
     assert set(frame.observed_at) == {START}
@@ -30,7 +31,7 @@ def test_all_sources_unavailable_fails(monkeypatch):
     monkeypatch.setattr(service.OMNIWeb_Loader, 'load', Mock(side_effect=RuntimeError('missing')))
     monkeypatch.setattr(service.SPDF_Loader, 'load', Mock(side_effect=ValueError('missing')))
     monkeypatch.setattr(service, 'get_config', lambda: object())
-    monkeypatch.setattr(service, '_download_history', Mock(side_effect=OSError('missing')))
+    monkeypatch.setattr(service, 'download_solar_index_history', Mock(side_effect=OSError('missing')))
     with pytest.raises(RuntimeError, match='No backfill sources'):
         service.load_history(START, END)
 
@@ -38,7 +39,7 @@ def test_all_sources_unavailable_fails(monkeypatch):
 def test_insert_only_preserves_existing_values_and_receipts():
     session = AsyncMock()
     frame = pd.DataFrame([{'metric': 'v', 'value': 420., 'observed_at': START}])
-    asyncio.run(sensor_observations._upsert_measurements(session, frame, track_receipt=False, replace_existing=False))
+    asyncio.run(observation_store.upsert_measurements(session, frame, track_receipt=False, replace_existing=False))
     assert session.execute.await_count == 1
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
     assert 'ON CONFLICT ON CONSTRAINT uq_measurement_metric DO NOTHING' in sql
@@ -48,13 +49,13 @@ def test_backfill_rebuilds_from_stored_values_and_reports_raw_gaps(monkeypatch):
     frame = pd.DataFrame([{'metric': 'v', 'value': 420., 'observed_at': START}])
     monkeypatch.setattr(service, 'load_history', lambda *_: (frame, []))
     insert = AsyncMock()
-    monkeypatch.setattr(service, '_upsert_measurements', insert)
+    monkeypatch.setattr(service, 'upsert_measurements', insert)
     session = AsyncMock()
     stored = [('v', 450., START)]
     session.execute.return_value = Mock(all=lambda: stored)
     normalize = Mock(return_value=pd.DataFrame())
     monkeypatch.setattr(service, 'normalize_measurements', normalize)
-    monkeypatch.setattr(service, '_upsert_normalized_observations', AsyncMock())
+    monkeypatch.setattr(service, 'upsert_normalized_observations', AsyncMock())
     result = asyncio.run(service.backfill(session, START, END))
     assert normalize.call_args.args[0].value.tolist() == [450.]
     assert insert.call_args.kwargs == {'track_receipt': False, 'replace_existing': False}

@@ -5,7 +5,7 @@ import math
 from sqlalchemy import select, text
 
 from argus_clio.db.models import SolarWindObservation, SolarWindAggregate, SolarWindAggregatePending
-from argus_clio.services.solar_wind_aggregation import VERSION, summarize
+from argus_clio.services.solar_wind.aggregation import VERSION, summarize
 
 
 def differences(expected, actual, path=''):

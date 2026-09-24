@@ -23,3 +23,14 @@ def test_clio_uses_only_its_own_database_settings(monkeypatch):
     assert get_database_url().username == 'argus_clio'
     assert get_database_url().database == 'argus_clio'
     assert get_database_url().password == 'raw@password:/%'
+
+
+def test_source_and_job_locks_never_overlap():
+    from argus_clio.db.locks import SOURCE_LOCKS, JOB_LOCKS
+    from argus_clio.services.collection.specs import SOURCE_SPECS
+    from argus_clio.scheduler import JOBS
+
+    assert set(SOURCE_LOCKS) == set(SOURCE_SPECS)
+    assert set(JOB_LOCKS) == set(JOBS)
+    keys = [*SOURCE_LOCKS.values(), *JOB_LOCKS.values()]
+    assert len(set(keys)) == len(keys)

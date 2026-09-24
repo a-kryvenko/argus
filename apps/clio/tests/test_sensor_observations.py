@@ -9,14 +9,15 @@ import pytest
 pytest.importorskip("forecast_core", reason="Private calibration checkout required")
 
 from argus_clio.db.models import Measurement, NormalizedObservation
-from argus_clio.services.sensor_observations import (
+from clio.observations import (
     OBSERVATION_METRICS,
     REQUIRED_METRICS,
     SOLAR_INDEX_METRICS,
-    normalize_measurements,
 )
-from argus_clio.services import sensor_observations as service
-from argus_clio.services import derived_observations as processing
+from argus_clio.services.observations import normalized as service
+from argus_clio.services.observations import derived as processing
+from argus_clio.services.observations.derived import normalize_measurements
+from argus_clio.services.observations.store import upsert_normalized_observations
 from forecast_core.data_pipelines.solar_indices import (
     INDEX_FEATURE_COLUMNS,
     REQUIRED_GOES_COLUMNS,
@@ -123,7 +124,7 @@ def calibrated_goes(monkeypatch, tmp_path):
 
 def test_live_goes_is_calibrated_and_only_current_snapshot_is_ingested(calibrated_goes):
     now = datetime(2026, 9, 5, 2, 45, tzinfo=UTC)
-    result = service._load_solar_index_measurements(now)
+    result = processing.load_solar_index_measurements(now)
     calibrated_goes.assert_called_once_with(end=now)
     assert set(result["metric"]) == set(SOLAR_INDEX_METRICS)
     assert result["value"].tolist() == [101, 101, 101]
@@ -138,7 +139,7 @@ def test_missing_calibration_does_not_fetch_or_invent_indices(monkeypatch, tmp_p
     ))
     fetch = Mock()
     monkeypatch.setattr(processing, "fetch_goes", fetch)
-    assert service._load_solar_index_measurements(datetime(2026, 9, 5, tzinfo=UTC)).empty
+    assert processing.load_solar_index_measurements(datetime(2026, 9, 5, tzinfo=UTC)).empty
     fetch.assert_not_called()
     assert len(caplog.records) == 1
     warning = caplog.records[0]
@@ -152,7 +153,7 @@ def test_goes_failure_leaves_optional_indices_absent(calibrated_goes):
     from requests import RequestException
 
     calibrated_goes.side_effect = RequestException("GOES unavailable")
-    assert service._load_solar_index_measurements(datetime(2026, 9, 5, tzinfo=UTC)).empty
+    assert processing.load_solar_index_measurements(datetime(2026, 9, 5, tzinfo=UTC)).empty
 
 
 def test_refresh_integrates_solar_indices_and_serializes_nullable_values(monkeypatch, calibrated_goes):
@@ -177,9 +178,9 @@ def test_refresh_integrates_solar_indices_and_serializes_nullable_values(monkeyp
         session.execute.return_value = Mock()
         session.execute.return_value.scalars.return_value.all.return_value = records
 
-    monkeypatch.setattr(service, "_upsert_measurements", ingest)
-    monkeypatch.setattr(service, "_load_measurements", load)
-    monkeypatch.setattr(service, "_upsert_normalized_observations", store)
+    monkeypatch.setattr(service, "upsert_measurements", ingest)
+    monkeypatch.setattr(service, "load_measurements", load)
+    monkeypatch.setattr(service, "upsert_normalized_observations", store)
     result = asyncio.run(service.refresh_normalized_observations(session, now))
     assert len(result.points) == 1
     assert result.points[0].s10 == 101.0
@@ -193,7 +194,7 @@ def test_normalized_upsert_writes_sql_null_for_missing_indices():
     frame = frame[frame["metric"].isin(REQUIRED_METRICS)]
     normalized = normalize_measurements(frame)
     session = SimpleNamespace(execute=AsyncMock())
-    asyncio.run(service._upsert_normalized_observations(session, normalized))
+    asyncio.run(upsert_normalized_observations(session, normalized))
     statement = session.execute.call_args.args[0]
     parameters = statement.compile().params
     assert all(parameters[f"{name}_m0"] is None for name in SOLAR_INDEX_METRICS)

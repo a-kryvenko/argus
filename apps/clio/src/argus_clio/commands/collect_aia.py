@@ -2,7 +2,7 @@
 import argparse
 import asyncio
 
-from argus_clio.services.aia_collection import collect_aia
+from argus_clio.services.aia.collection import collect_aia
 from argus_clio.db.session import dispose_engine
 
 
@@ -13,8 +13,8 @@ async def collect(history_days: int) -> None:
         await dispose_engine()
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--history-days', type=int, default=40)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     asyncio.run(collect(args.history_days))

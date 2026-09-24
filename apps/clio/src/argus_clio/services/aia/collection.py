@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from argus_clio.db.models.aia_snapshot import AIASnapshot
 from argus_clio.db.session import get_session_factory
-from argus_clio.services.aia_archive import archive_root
+from argus_clio.services.aia.archive import archive_root
 from clio.dataloaders.aia import fetch_snapshot, hourly_slots
 
 logger = logging.getLogger(__name__)

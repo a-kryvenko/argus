@@ -9,7 +9,7 @@ from sqlalchemy.dialects import postgresql
 
 from argus_clio.db.models import SolarWindObservation
 from argus_clio.routers import solar_wind as routes
-from argus_clio.services import solar_wind as service
+from argus_clio.services.solar_wind import observations as service
 
 NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
 

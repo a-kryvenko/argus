@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from argus_clio.db.models import SolarWindObservation, SolarWindAggregate, SolarWindAggregatePending
-from argus_clio.services import solar_wind_aggregation as service
-from argus_clio.services.aggregation_audit import audit
+from argus_clio.services.solar_wind import aggregation as service
+from argus_clio.services.solar_wind.audit import audit
 
 
 

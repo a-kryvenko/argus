@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from argus_clio.db import get_db_session
 from common.schemas.response import success_response
-from argus_clio.services.observation_summary import summary
+from argus_clio.services.summary import summary
 
 router = APIRouter(prefix='/internal/v1/observations', tags=['observations'])
 

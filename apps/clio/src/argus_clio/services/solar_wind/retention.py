@@ -5,8 +5,8 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.exc import DBAPIError
 from argus_clio.db.models import SolarWindObservation, SolarWindAggregate, SolarWindAggregatePending, SolarWindRetiredHour
 from argus_clio.db.session import get_session_factory
-from argus_clio.services.aggregation_audit import differences
-from argus_clio.services.solar_wind_aggregation import VERSION, summarize
+from argus_clio.services.solar_wind.audit import differences
+from argus_clio.services.solar_wind.aggregation import VERSION, summarize
 
 logger = logging.getLogger(__name__)
 

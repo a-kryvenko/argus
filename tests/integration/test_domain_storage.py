@@ -123,7 +123,8 @@ def test_scheduler_retries_restarts_and_serializes_jobs(database, monkeypatch):
     for key, value in environment.items():
         if key.startswith('CLIO_DB_'):
             monkeypatch.setenv(key, value)
-    from argus_clio.scheduler import execute, JobBusy, JOBS
+    from argus_clio.scheduler import execute, JobBusy
+    from argus_clio.db.locks import JOB_LOCKS
     now = datetime(2026, 9, 12, 12, tzinfo=UTC)
     calls = []
     def fail():
@@ -134,7 +135,7 @@ def test_scheduler_retries_restarts_and_serializes_jobs(database, monkeypatch):
     assert not execute('refresh', lambda: calls.append(2), scheduled=True, now=now)
     assert calls == [1]
     with runtime(dsns, 'clio', urls) as conn:
-        conn.execute('SELECT pg_advisory_lock(%s)', (JOBS['refresh'][1],))
+        conn.execute('SELECT pg_advisory_lock(%s)', (JOB_LOCKS['refresh'],))
         with pytest.raises(JobBusy):
             execute('refresh', lambda: calls.append(3), now=now)
     assert execute('refresh', lambda: calls.append(4), scheduled=True, now=now + timedelta(hours=1))

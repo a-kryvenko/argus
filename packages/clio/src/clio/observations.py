@@ -1,8 +1,6 @@
 """Retrieve source observations; no model calibration or gap filling."""
 from datetime import datetime, timedelta
-from pathlib import Path
 import pandas as pd
-from common.config import get_config
 from clio.dataloaders.spdf_loader import SPDF_Loader
 from clio.dataloaders.swpc_loader import SWPC_Loader
 
@@ -35,16 +33,6 @@ def wide_to_measurements(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_bootstrap_measurements(now: datetime) -> pd.DataFrame:
-    config = get_config()
-    legacy_path = config.project_config.get("paths", {}).get("live_sensors")
-    if legacy_path:
-        legacy_path = config.workdir / Path(legacy_path)
-        if legacy_path.is_file():
-            legacy = pd.read_csv(legacy_path, parse_dates=["issue_time"])
-            measurements = wide_to_measurements(legacy)
-            if not measurements.empty:
-                return measurements
-
     historical = SPDF_Loader.load(
         start_date=now - timedelta(days=HISTORY_DAYS),
         end_date=now - timedelta(days=LIVE_SOURCE_DAYS - 1),

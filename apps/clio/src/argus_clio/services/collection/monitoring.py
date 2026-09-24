@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from argus_clio.db.models import Measurement, MeasurementReceipt, ScheduledJob
 from clio.observations import OBSERVATION_METRICS
-from argus_clio.services.collection_status import source_status
+from argus_clio.services.collection.status import source_status
 
 async def monitoring_status(session):
     now = datetime.now(UTC)

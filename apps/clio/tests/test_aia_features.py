@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock,Mock
 import asyncio
 import numpy as np
 import pytest
-from argus_clio.services.aia import feature_frames,load_aia_features
+from argus_clio.services.aia.features import feature_frames,load_aia_features
 
 
 def test_six_hour_features_ignore_hourly_frames_and_late_receipts(tmp_path):

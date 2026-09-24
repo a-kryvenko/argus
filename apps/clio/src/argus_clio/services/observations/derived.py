@@ -6,18 +6,16 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from clio.observations import wide_to_measurements as _wide_to_measurements
-from clio.dataloaders.swpc_loader import SWPC_Loader
+from clio.observations import (
+    wide_to_measurements, REQUIRED_METRICS, SOLAR_INDEX_METRICS, OBSERVATION_METRICS,
+)
 from clio.dataloaders.goes_loader import fetch_goes
 from common.config import get_config
-from argus_clio.services.calibration import (
+from argus_clio.services.observations.calibration import (
     extract_solar_index_observations,
     load_solar_index_calibrations,
 )
 from requests import RequestException
-REQUIRED_METRICS = SWPC_Loader.METRICS
-SOLAR_INDEX_METRICS = ("s10", "m10", "y10")
-OBSERVATION_METRICS = (*REQUIRED_METRICS, *SOLAR_INDEX_METRICS)
 logger = logging.getLogger(__name__)
 
 
@@ -104,6 +102,6 @@ def load_solar_index_measurements(now: datetime) -> pd.DataFrame:
             pd.Timestamp(now).floor("h"), latest, last_valid, len(valid), len(goes),
         )
         return empty
-    return _wide_to_measurements(estimates)
+    return wide_to_measurements(estimates)
 
 

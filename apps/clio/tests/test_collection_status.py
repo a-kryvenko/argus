@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import SQLAlchemyError
 
 from argus_clio.db.models import ObservationSourceStatus
-from argus_clio.services import collection_status as service
+from argus_clio.services.collection import status as service
 from argus_clio.routers import collection_status as routes
 
 NOW = datetime(2026, 9, 8, 12, tzinfo=UTC)

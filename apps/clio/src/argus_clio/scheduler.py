@@ -5,9 +5,10 @@ import threading
 from datetime import UTC, datetime
 from collections.abc import Callable
 
+from argus_clio.db.locks import JOB_LOCKS
 from argus_clio.db.session import get_database_url
 
-JOBS = {'refresh': (60, 730200), 'aggregate': (5, 730201), 'aia': (60, 730202)}
+JOBS = {'refresh': 60, 'aggregate': 5, 'aia': 60}
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +17,7 @@ class JobBusy(RuntimeError):
 
 
 def slot_for(job: str, now: datetime) -> datetime:
-    minutes, _ = JOBS[job]
+    minutes = JOBS[job]
     now = now.astimezone(UTC)
     return now.replace(minute=now.minute // minutes * minutes, second=0, microsecond=0)
 
@@ -26,7 +27,7 @@ def execute(job: str, run: Callable[[], None], *, scheduled: bool = False, now=N
     url = get_database_url()
     with psycopg.connect(url.set(drivername='postgresql').render_as_string(hide_password=False), autocommit=True,
                          options='-csearch_path=clio,pg_catalog,pg_temp') as conn:
-        if not conn.execute('SELECT pg_try_advisory_lock(%s)', (JOBS[job][1],)).fetchone()[0]:
+        if not conn.execute('SELECT pg_try_advisory_lock(%s)', (JOB_LOCKS[job],)).fetchone()[0]:
             raise JobBusy(f'Clio {job} is already running')
         slot = slot_for(job, now or datetime.now(UTC))
         if scheduled:

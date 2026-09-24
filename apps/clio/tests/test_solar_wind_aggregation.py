@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 import pytest
-from argus_clio.services.solar_wind_aggregation import summarize
+from argus_clio.services.solar_wind.aggregation import summarize
 
 START = datetime(2026, 9, 1, tzinfo=UTC)
 

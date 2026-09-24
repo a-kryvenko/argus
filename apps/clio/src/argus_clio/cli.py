@@ -3,7 +3,6 @@ import argparse
 import importlib
 import logging
 from pathlib import Path
-import sys
 
 
 COMMANDS = {
@@ -15,15 +14,10 @@ COMMANDS = {
 
 
 def invoke(name, arguments=()):
-    previous = sys.argv
-    sys.argv = [f'clio {name}', *arguments]
-    try:
-        importlib.import_module(f'argus_clio.commands.{COMMANDS[name]}').main()
-    finally:
-        sys.argv = previous
+    importlib.import_module(f'argus_clio.commands.{COMMANDS[name]}').main(list(arguments))
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     serve = commands.add_parser('serve')
@@ -37,7 +31,7 @@ def main():
     commands.add_parser('worker', help='Run collectors and scheduled jobs together')
     schedule = commands.add_parser('schedule')
     schedule.add_argument('job', choices=['refresh', 'aggregate', 'aia'])
-    args, remainder = parser.parse_known_args()
+    args, remainder = parser.parse_known_args(argv)
     if args.command in ('serve', 'schedule', 'status', 'worker') and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
     from common.config import get_config
@@ -47,7 +41,7 @@ def main():
         import asyncio
         import json
         from argus_clio.db.session import get_session_factory, dispose_engine
-        from argus_clio.services.collection_status import source_status
+        from argus_clio.services.collection.status import source_status
         async def read_status():
             try:
                 async with get_session_factory()() as session:

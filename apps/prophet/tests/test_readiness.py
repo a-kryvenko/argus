@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from common.schemas.forecast_inputs import ForecastInputs, SourceMeasurement
 from common.schemas.observation import Observation, ObservationPoint
-from argus_prophet.readiness import input_diagnostics
+from argus_prophet.services.releases.status import input_diagnostics
 
 NOW = datetime(2026, 9, 13, 10, tzinfo=UTC)
 
@@ -49,7 +49,7 @@ def test_empty_inputs_are_not_reported_as_healthy():
 
 
 def test_existing_density_age_boundary_and_unconfigured_products():
-    from argus_prophet.readiness import classify_freshness
+    from argus_prophet.services.releases.status import classify_freshness
     assert classify_freshness(None, NOW, 6) == 'unavailable'
     assert classify_freshness(NOW - timedelta(hours=6), NOW, 6) == 'within_age_limit'
     assert classify_freshness(NOW - timedelta(hours=6, seconds=1), NOW, 6) == 'stale'

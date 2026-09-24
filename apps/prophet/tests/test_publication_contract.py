@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from common.schemas.forecast_release import ForecastArtifact, ForecastRelease
 from argus_prophet import main
-from argus_prophet.publication import ReleaseNotFound
+from argus_prophet.services.releases.publication import ReleaseNotFound
 
 
 def artifact(name='dst_quantile', value='-10'):
@@ -88,7 +88,7 @@ def test_missing_prediction_columns_are_rejected():
 
 
 def test_status_contract_requires_auth_and_does_not_change_latest_reads(monkeypatch):
-    from argus_prophet import readiness
+    from argus_prophet.services.releases import status as readiness
     monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
     monkeypatch.setattr(readiness, 'product_status', lambda product: dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
         release_age_hours=None, existing_public_max_age_hours=None, freshness='unavailable',

@@ -7,7 +7,7 @@ import pandas as pd
 from forecast.api import ForecastResult
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.observation import Observation, ObservationPoint
-from argus_prophet import observations
+from argus_prophet.services import inputs as observations
 
 NOW = datetime(2026, 9, 12, 12, tzinfo=UTC)
 
@@ -59,7 +59,7 @@ def test_rejects_incompatible_contract(monkeypatch):
 
 
 def mock_models(monkeypatch):
-    from argus_prophet import generation
+    from argus_prophet.services.generation import calculation as generation
     load = Mock(side_effect=lambda service, **_: (service, {}))
     compute = Mock(side_effect=lambda service, *args, **kwargs:
                    ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
@@ -76,7 +76,7 @@ def mock_models(monkeypatch):
     ('solar-wind-density', ['plasma_density_quantile']),
 ])
 def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
-    from argus_prophet import generation
+    from argus_prophet.services.generation import calculation as generation
     inputs = stored_inputs()
     recorder = Mock()
     compute = mock_models(monkeypatch)
@@ -89,7 +89,7 @@ def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
 
 
 def test_catalog_matches_public_contract():
-    from argus_prophet.products import PRODUCTS
+    from argus_prophet.services.generation.products import PRODUCTS
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     assert set(PRODUCTS) == set(PRODUCT_ARTIFACTS) - {'solar-radiation'}
     for name, product in PRODUCTS.items():
@@ -98,7 +98,7 @@ def test_catalog_matches_public_contract():
 
 
 def test_status_selections_include_canonical_names_and_historical_aliases():
-    from argus_prophet.products import attempt_selections
+    from argus_prophet.services.generation.products import attempt_selections
     assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
     assert attempt_selections('dst') == ['all', 'dst']
     assert attempt_selections('solar-radiation') == []
@@ -107,7 +107,7 @@ def test_status_selections_include_canonical_names_and_historical_aliases():
 def test_dlinear_models_receive_raw_speed_history(monkeypatch):
     from types import SimpleNamespace
     from common.schemas.forecast_inputs import SpeedObservation
-    from argus_prophet import generation
+    from argus_prophet.services.generation import calculation as generation
     inputs = stored_inputs()
     inputs.speed_observations = [SpeedObservation(issue_time=NOW, v=399.)]
     compute = mock_models(monkeypatch)
@@ -123,7 +123,7 @@ def test_dlinear_models_receive_raw_speed_history(monkeypatch):
 def test_aia_models_receive_owner_features_without_filesystem_access(monkeypatch):
     from types import SimpleNamespace
     from common.schemas.forecast_inputs import AIAFeatureFrame
-    from argus_prophet import generation
+    from argus_prophet.services.generation import calculation as generation
     inputs = stored_inputs()
     inputs.aia_frames = [AIAFeatureFrame(slot_at=NOW,observed_at=NOW,available_at=NOW,sha256='a'*64,features={'aia_area_sector':.2})]
     compute = mock_models(monkeypatch)

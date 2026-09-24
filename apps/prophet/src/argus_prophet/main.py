@@ -11,7 +11,7 @@ from common.config import get_config
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
 from common.schemas.forecast_status import ForecastStatus
 from argus_prophet.db.session import connect
-from argus_prophet.publication import read_release, ReleaseNotFound
+from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 
 get_config()
 app = FastAPI(title='Prophet forecast service', version='1')
@@ -56,7 +56,7 @@ def historical(product: str, release_id: UUID):
 def status(product: str):
     if product not in PRODUCT_ARTIFACTS:
         raise HTTPException(404, 'Unknown forecast product')
-    from argus_prophet.readiness import product_status
+    from argus_prophet.services.releases.status import product_status
     try:
         return product_status(product)
     except Exception:

@@ -29,8 +29,8 @@ import importlib.util
 assert importlib.util.find_spec('app') is None
 assert importlib.util.find_spec('argus_clio') is None
 import argus_prophet.db.session
-import argus_prophet.generation
-import argus_prophet.services.density_forecast
+import argus_prophet.services.generation.calculation
+import argus_prophet.services.density.forecast
 '''
     result = subprocess.run([str(python), '-c', code], cwd=tmp_path,
                             env=environment, capture_output=True, text=True)
@@ -40,7 +40,9 @@ import argus_prophet.services.density_forecast
 def test_removed_aliases_are_rejected_before_starting_a_run(monkeypatch):
     import pytest
     from unittest.mock import Mock
-    from argus_prophet import cli, ledger
+    from argus_prophet.services.generation import cycle
+    from argus_prophet import cli
+    from argus_prophet.services import runs as ledger
     begin = Mock()
     monkeypatch.setattr(ledger.RunRecorder, 'begin', begin)
     for alias in ('wind', 'kp', 'density'):
@@ -49,7 +51,7 @@ def test_removed_aliases_are_rejected_before_starting_a_run(monkeypatch):
             cli.main()
         assert error.value.code == 2
         with pytest.raises(ValueError, match='Unsupported forecast product'):
-            cli.generate(alias)
+            cycle.generate(alias)
     begin.assert_not_called()
 
 

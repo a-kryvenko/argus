@@ -95,7 +95,7 @@ def product_status(product, *, now=None):
             FROM prophet.current_forecast c JOIN prophet.forecast_release r ON r.id=c.release_id
             JOIN prophet.forecast_run f ON f.id=r.run_id WHERE c.product=%s''', (product,))
         current = cursor.fetchone()
-        from argus_prophet.products import attempt_selections
+        from argus_prophet.services.generation.products import attempt_selections
         cursor.execute("""SELECT id AS run_id,status,started_at,finished_at,error,
             provenance->'input_diagnostics' AS input_diagnostics FROM prophet.forecast_run
             WHERE product=ANY(%s) ORDER BY started_at DESC,id DESC LIMIT 1""", (attempt_selections(product),))

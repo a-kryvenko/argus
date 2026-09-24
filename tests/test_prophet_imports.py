@@ -21,8 +21,12 @@ class BlockModelRuntime:
         if fullname.split('.')[0] in blocked:
             raise ModuleNotFoundError(fullname, name=fullname)
 sys.meta_path.insert(0, BlockModelRuntime())
-from argus_prophet import cli, generation, models, products
-assert callable(cli.generate_products)
+from argus_prophet.services.generation import cycle
+from argus_prophet import cli
+from argus_prophet.services.generation import calculation as generation
+from argus_prophet.services.generation import models
+from argus_prophet.services.generation import products
+assert callable(cycle.generate_products)
 assert callable(generation.calculate)
 assert callable(models.load_model)
 assert products.select_products('solar-wind-speed') == ('solar-wind-speed',)

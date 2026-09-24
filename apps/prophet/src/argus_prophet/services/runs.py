@@ -39,7 +39,7 @@ class RunRecorder:
     @classmethod
     def begin(cls, product, trigger, config, *, scheduled_slot=None, details=None):
         from psycopg.types.json import Jsonb
-        from argus_prophet.products import PRODUCTS
+        from argus_prophet.services.generation.products import PRODUCTS
         if product not in PRODUCTS:
             raise ValueError('Expected one supported forecast product')
         run_id = uuid4()
@@ -66,7 +66,7 @@ class RunRecorder:
     def snapshot(self, inputs):
         from psycopg.types.json import Jsonb
         payload = inputs.model_dump(mode='json')
-        from argus_prophet.readiness import input_diagnostics
+        from argus_prophet.services.releases.status import input_diagnostics
         diagnostics = input_diagnostics(inputs)
         with connect(writing=True) as conn:
             result = conn.execute("""UPDATE prophet.forecast_run SET input_snapshot=%s,input_sha256=%s,
@@ -98,12 +98,12 @@ class RunRecorder:
             if result.rowcount != 1:
                 raise RuntimeError("Run is no longer running")
             if error is None:
-                from argus_prophet.publication import publish_run
+                from argus_prophet.services.releases.publication import publish_run
                 publish_run(conn, self.run_id)
             slot = result.fetchone()[0]
             if slot is not None:
                 from argus_prophet.worker import completed_products
-                from argus_prophet.products import PRODUCTS
+                from argus_prophet.services.generation.products import PRODUCTS
                 completed = completed_products(conn, slot)
                 pending = set(PRODUCTS) - completed
                 slot_status = 'succeeded' if not pending else 'partial' if completed else 'failed'

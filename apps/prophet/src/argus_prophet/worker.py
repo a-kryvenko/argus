@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 from argus_prophet.db.session import connect, open_connection, writer_session
-from argus_prophet.products import PRODUCTS
+from argus_prophet.services.generation.products import PRODUCTS
 
 logger = logging.getLogger(__name__)
 # Distinct from the publication transaction lock (736218, 1) and Clio job locks.

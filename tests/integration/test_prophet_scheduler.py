@@ -9,11 +9,11 @@ import psycopg
 import pytest
 
 from argus_prophet.db.session import require_writer
-from argus_prophet.ledger import RunRecorder
-from argus_prophet.products import PRODUCTS
-from argus_prophet.publication import read_release, ReleaseNotFound
+from argus_prophet.services.runs import RunRecorder
+from argus_prophet.services.generation.products import PRODUCTS
+from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 from argus_prophet.worker import generation_lock, run_due, due_slot, GenerationBusy
-from argus_prophet import cli
+from argus_prophet.services.generation import cycle as generation_cycle
 
 NOW = datetime(2026, 9, 13, 10, 10, tzinfo=UTC)
 
@@ -33,7 +33,7 @@ def generate(config, *, fail=(), seen=None):
                 store_product(run, names=PRODUCTS[product].artifacts, issue=slot.isoformat())
                 run.finish()
         if failures:
-            raise cli.GenerationFailed(failures)
+            raise generation_cycle.GenerationFailed(failures)
     return calculate
 
 
@@ -45,7 +45,7 @@ def test_partial_cycle_publishes_successes_and_retries_only_failures(recorder_da
         manual.finish()
     old_dst = read_release('dst')
     failed = {'dst', 'atmospheric-density'}
-    with pytest.raises(cli.GenerationFailed):
+    with pytest.raises(generation_cycle.GenerationFailed):
         run_due(generate(config, fail=failed), NOW)
     assert read_release('dst') == old_dst
     speed = read_release('solar-wind-speed')
@@ -62,7 +62,7 @@ def test_partial_cycle_publishes_successes_and_retries_only_failures(recorder_da
 
 def test_new_hour_drops_old_retries_and_does_not_replay_missed_hours(recorder_database):
     dsn, passwords, config = recorder_database
-    with pytest.raises(cli.GenerationFailed):
+    with pytest.raises(generation_cycle.GenerationFailed):
         run_due(generate(config, fail=('dst',)), NOW)
     seen = []
     assert run_due(generate(config, seen=seen), NOW + timedelta(hours=3))
@@ -74,7 +74,7 @@ def test_new_hour_drops_old_retries_and_does_not_replay_missed_hours(recorder_da
 
 def test_all_failed_products_retry_and_keep_history(recorder_database):
     dsn, passwords, config = recorder_database
-    with pytest.raises(cli.GenerationFailed):
+    with pytest.raises(generation_cycle.GenerationFailed):
         run_due(generate(config, fail=PRODUCTS), NOW)
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT status FROM prophet.forecast_slot').fetchone()[0] == 'failed'
@@ -178,7 +178,8 @@ def test_real_cycle_records_shared_inputs_and_retries_failed_product(recorder_da
     from common import config as common_config
     from common.schemas.forecast_inputs import ForecastInputs
     from common.schemas.observation import Observation
-    from argus_prophet import observations, generation
+    from argus_prophet.services import inputs as observations
+    from argus_prophet.services.generation import calculation as generation
     from unittest.mock import Mock
     dsn, passwords, config = recorder_database
     monkeypatch.setattr(common_config, 'get_config', lambda: config)
@@ -194,8 +195,8 @@ def test_real_cycle_records_shared_inputs_and_retries_failed_product(recorder_da
         store_product(recorder, names=PRODUCTS[product].artifacts, issue=due_slot(NOW).isoformat())
     monkeypatch.setattr(generation, 'calculate', calculate)
     def cycle(slot, products):
-        cli.generate_products(products, 'scheduled', scheduled_slot=slot)
-    with pytest.raises(cli.GenerationFailed):
+        generation_cycle.generate_products(products, 'scheduled', scheduled_slot=slot)
+    with pytest.raises(generation_cycle.GenerationFailed):
         run_due(cycle, NOW)
     assert seen == list(PRODUCTS)
     assert load.call_count == 1

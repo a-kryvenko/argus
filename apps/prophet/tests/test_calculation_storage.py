@@ -17,8 +17,9 @@ from common.schemas.forecast_release import ForecastArtifact
 from common.schemas.observation import Observation, ObservationPoint
 from forecast.api import calculate_forecast
 from forecast_core.api import DstFS
-from argus_prophet import generation, ledger
-from argus_prophet.models import load_model
+from argus_prophet.services.generation import calculation as generation
+from argus_prophet.services import runs as ledger
+from argus_prophet.services.generation.models import load_model
 
 ISSUE = datetime(2026, 9, 18, 12, tzinfo=UTC)
 
@@ -124,7 +125,7 @@ def test_empty_result_is_rejected_before_database_access(monkeypatch):
 
 def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch, tmp_path):
     from common import config
-    from argus_prophet.services import density_forecast
+    from argus_prophet.services.density import forecast as density_forecast
     from forecast_core.api import AtmosphericDensityForecastService
 
     drivers = pd.DataFrame([{

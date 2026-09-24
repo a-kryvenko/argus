@@ -9,8 +9,8 @@ import psycopg
 import pytest
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.observation import Observation
-from argus_prophet.ledger import RunRecorder, describe_run
-from argus_prophet.publication import read_release, ReleaseNotFound
+from argus_prophet.services.runs import RunRecorder, describe_run
+from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ def test_publication_failure_does_not_roll_back_another_product(recorder_setup):
 
 
 def test_status_reports_product_failure_not_unrelated_success(recorder_setup):
-    from argus_prophet.readiness import product_status
+    from argus_prophet.services.releases.status import product_status
     _, _, config = recorder_setup
     run = RunRecorder.begin('dst', 'manual', config)
     now = datetime(2026, 9, 13, 1, tzinfo=UTC)

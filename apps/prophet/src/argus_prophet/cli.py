@@ -2,62 +2,10 @@
 import argparse
 import logging
 
-from argus_prophet.products import GENERATION_CHOICES, select_products
+from argus_prophet.services.generation.products import GENERATION_CHOICES
 
 
-class GenerationFailed(RuntimeError):
-    def __init__(self, failures):
-        self.failures = failures
-        super().__init__('Forecast generation failed for: ' + ', '.join(failures))
-
-
-def generate(product: str, trigger='manual', *, scheduled_slot=None) -> None:
-    generate_products(select_products(product), trigger, scheduled_slot=scheduled_slot)
-
-
-def generate_products(products, trigger='manual', *, scheduled_slot=None) -> None:
-    from argus_prophet.products import PRODUCTS
-    from argus_prophet.generation import calculate
-    from common.config import get_config
-    from argus_prophet.ledger import RunRecorder, provenance
-    from argus_prophet.observations import load_inputs
-    if not products or len(set(products)) != len(products) or any(name not in PRODUCTS for name in products):
-        raise ValueError('Expected distinct supported forecast products')
-    config = get_config()
-    details = provenance(config)
-    inputs = None
-    input_error = None
-    failures = {}
-    for product in products:
-        recorder = RunRecorder.begin(product, trigger, config, scheduled_slot=scheduled_slot,
-                                     details=details)
-        logging.info('Prophet run %s started (%s)', recorder.run_id, product)
-        try:
-            if inputs is None and input_error is None:
-                try:
-                    inputs = load_inputs()
-                except Exception as exc:
-                    input_error = exc
-            if input_error is not None:
-                raise input_error
-            recorder.snapshot(inputs)
-            calculate(product, inputs=inputs, recorder=recorder)
-            recorder.finish()
-        except BaseException as exc:
-            # If failure recording also fails (e.g. lost lock/DB connection), stop.
-            # A new writer must recover this attempt before any more work starts.
-            recorder.finish(error=exc)
-            if not isinstance(exc, Exception):
-                raise
-            failures[product] = exc
-            logging.exception('Prophet run %s failed (%s)', recorder.run_id, product)
-        else:
-            logging.info('Prophet run %s published (%s)', recorder.run_id, product)
-    if failures:
-        raise GenerationFailed(failures)
-
-
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     generate_parser = commands.add_parser('generate', help='Generate forecasts once')
@@ -78,7 +26,7 @@ def main() -> None:
     from uuid import UUID
     show.add_argument('run_id', type=UUID)
     show.add_argument('--inputs', action='store_true', help='Include the saved observation snapshot')
-    args, remaining = parser.parse_known_args()
+    args, remaining = parser.parse_known_args(argv)
     if args.command == 'migrate':
         from pathlib import Path
         from common.config import get_config
@@ -103,11 +51,11 @@ def main() -> None:
     if args.command in ('runs', 'show-run', 'slots', 'status'):
         import json
         from common.config import get_config
-        from argus_prophet.ledger import list_runs, describe_run
+        from argus_prophet.services.runs import list_runs, describe_run
         get_config()
         try:
             if args.command == 'status':
-                from argus_prophet.readiness import product_status
+                from argus_prophet.services.releases.status import product_status
                 result = product_status(args.product).model_dump(mode='json')
             elif args.command == 'slots':
                 from argus_prophet.worker import list_slots
@@ -119,6 +67,7 @@ def main() -> None:
         print(json.dumps(result, default=str, indent=2))
         return
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    from argus_prophet.services.generation.cycle import generate, generate_products
     from argus_prophet.runtime import run_command
     from argus_prophet.worker import generation_lock, work
     if args.command == 'worker':

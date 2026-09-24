@@ -5,6 +5,22 @@ slots. Production uses one image for `prophet` (worker) and `prophet-api` (HTTP)
 It reads Clio over HTTP and never accesses Clio tables. See
 [setup](../../README_DEPLOY.md#local-development) and [commands](../../docs/commands.md).
 
+## Service layout
+
+`src/argus_prophet/services/` groups forecast operations by responsibility:
+
+- `generation/`: product catalog, model loading, calculation and the product cycle.
+  `cycle.py` reads one input snapshot and records each selected product's outcome;
+  `calculation.py` computes and serializes an individual product.
+- `density/`: atmospheric density input preparation and calculation.
+- `releases/`: publication, release reads and status diagnostics.
+- `inputs.py`: the Clio HTTP input client.
+- `runs.py`: run recording, input snapshots, artifacts and provenance.
+
+`cli.py` dispatches commands, `worker.py` owns scheduling and the generation lock,
+and `main.py` serves HTTP. Package initializers do not re-export service modules;
+model backends remain lazily imported when their product is calculated.
+
 ## Configuration and inputs
 
 Configure `PROPHET_DB_*`, `OBSERVATIONS_URL`, `OBSERVATIONS_SERVICE_TOKEN` and
@@ -16,11 +32,11 @@ CSV results. Model binaries are not archived; retain them separately for replay.
 
 ## Generation
 
-`products.py` defines supported products, their artifacts, backend adapter paths
+`services/generation/products.py` defines supported products, their artifacts, backend adapter paths
 and calculation modes. Solar-wind adapters come from the public `forecast.api`;
 other model adapters come from `forecast_core.api`. Classes are imported only
 when a selected product is calculated. There is no separate model enumeration.
-`generation.calculate` is the shared runner for scheduled execution and local
+`services.generation.calculation.calculate` is the shared runner for scheduled execution and local
 development. It requires a saved input snapshot and run recorder; product-specific
 launch scripts and unrecorded CSV generation paths have been removed from Prophet. Public release contracts remain
 independent and tests check that the generation catalog matches them.
@@ -39,11 +55,11 @@ The public HTTP release format is unchanged.
 
 ## Calculation and storage boundary
 
-`models.load_model` reads configured model bundles and fingerprints the exact bytes
+`services.generation.models.load_model` reads configured model bundles and fingerprints the exact bytes
 loaded. `forecast.api.calculate_forecast` accepts an already loaded service,
 observations and explicit issue time; it returns a `ForecastResult` containing a
 DataFrame and model metadata without configuration, database or filesystem access.
-`services.density_forecast.calculate_density` returns the same result structure.
+`services.density.forecast.calculate_density` returns the same result structure.
 
 The generation runner serializes each result once to UTF-8 CSV in memory and passes
 bytes to `RunRecorder.store`, which compresses and hashes them for PostgreSQL.

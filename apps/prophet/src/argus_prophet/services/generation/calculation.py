@@ -1,9 +1,9 @@
 """One calculation path for scheduled runs and local development."""
 from datetime import UTC
 
-from argus_prophet.products import PRODUCTS
+from argus_prophet.services.generation.products import PRODUCTS
 from common.config import get_config
-from argus_prophet.models import load_model
+from argus_prophet.services.generation.models import load_model
 from forecast.api import ForecastResult, calculate_forecast
 
 
@@ -11,7 +11,7 @@ def calculate(product: str, *, inputs, recorder):
     definition = PRODUCTS[product]
     issue_time = inputs.as_of.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     if definition.backend == 'density':
-        from argus_prophet.services.density_forecast import calculate_density
+        from argus_prophet.services.density.forecast import calculate_density
         store_result(recorder, calculate_density(inputs=inputs, issue_time=issue_time))
         return
     config = get_config()

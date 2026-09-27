@@ -20,6 +20,11 @@ def main(argv=None) -> None:
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     status_parser = commands.add_parser('status', help='Inspect current release age and input diagnostics')
     status_parser.add_argument('product', choices=PRODUCT_ARTIFACTS)
+    from argus_prophet.services.verification import PRODUCTS as VERIFIED_PRODUCTS
+    for command in ('verify', 'verification-report'):
+        verification = commands.add_parser(command, help='Verify published forecasts against later observations')
+        verification.add_argument('product', nargs='?', default='solar-wind-speed', choices=(*VERIFIED_PRODUCTS, 'all'))
+        verification.add_argument('--days', type=int, choices=range(1, 26), default=7)
     runs = commands.add_parser('runs', help='List recorded executions')
     runs.add_argument('--limit', type=int, default=20)
     show = commands.add_parser('show-run', help='Show execution evidence')
@@ -44,6 +49,19 @@ def main(argv=None) -> None:
         return
     if remaining:
         parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+    if args.command in ('verify', 'verification-report'):
+        import json
+        from common.config import get_config
+        from argus_prophet.services.verification import verify, verification_report
+        get_config()
+        if args.command == 'verify':
+            from argus_prophet.worker import generation_lock
+            with generation_lock():
+                result = verify(args.product, days=args.days)
+        else:
+            result = verification_report(args.product, days=args.days)
+        print(json.dumps(result, default=str, indent=2, allow_nan=False))
+        return
     if args.command == 'serve':
         import uvicorn
         uvicorn.run('argus_prophet.main:app', host=args.host, port=args.port)

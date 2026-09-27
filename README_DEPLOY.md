@@ -133,32 +133,6 @@ checkout secrets referenced by [deploy.yml](.github/workflows/deploy.yml).
 It generates `.release-images.env` with five digest-pinned image references;
 do not override them with competing image settings.
 
-## Private application images (GHCR)
-
-Application images are published to `ghcr.io/a-kryvenko/argus-*`. Actions publishes
-with its automatic `GITHUB_TOKEN` and job-level `packages: write` permission;
-no personal write token is needed. Images are linked to this repository.
-Do not assume newly published packages are private: the first GHCR release's
-Clio image was confirmed anonymously downloadable. Verify each package's
-**Private** visibility and anonymous access denial before treating it as private.
-The existing deployment workflow does not enforce this requirement.
-
-### Isolated visibility diagnostic
-
-`GHCR visibility probe` runs manually from Actions, or when its workflow file is
-pushed to `master`. It creates a uniquely named `argus-visibility-probe-*` package
-using the production `GITHUB_TOKEN`, source label and attestation action. Its
-scratch image contains only a diagnostic text file. It does not check out source,
-access the private backend, or deploy anything.
-
-The run summary compares package visibility from the GitHub API with anonymous
-manifest access before and after the attestation step. Green requires `private`
-and anonymous `denied` in both phases, plus a successful attestation. API/network
-errors are inconclusive and fail the check. No new secrets are required. Probe
-packages remain available for inspection and may be deleted manually afterwards.
-This diagnostic does not change the existing application packages or establish
-that their visibility is private.
-
 ### Production credentials
 
 Before the first GHCR deployment, add these repository Actions secrets:

@@ -1,5 +1,17 @@
 # Command reference
 
+Two supported forecast workflows, their protocols and MLflow/site publication:
+[Forecast workflows](forecast-workflows.md).
+
+```bash
+./argus observe solar-wind-speed
+./argus prophet verify solar-wind-speed
+./argus prophet verification-report solar-wind-speed
+```
+
+Model evaluation, MLflow export and optional website metrics saving are separate
+cells in `notebooks/evaluate_models.ipynb`; there is no model evaluation CLI.
+
 Run `./argus` from the project root locally or `/var/www` in production.
 Command arguments are identical in both environments.
 

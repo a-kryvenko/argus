@@ -124,3 +124,27 @@ def test_clio_backfill_passes_range(entry):
     result, calls = run('clio', 'backfill', '--from', '2026-08-31', '--to', '2026-09-09')
     assert result.returncode == 0, result.stderr
     assert calls == [['clio', 'backfill', '--from', '2026-08-31', '--to', '2026-09-09']]
+
+
+def test_observe_collects_generates_then_verifies_actual_releases(entry):
+    _, run = entry
+    result, calls = run('observe', 'solar-wind-speed')
+    assert result.returncode == 0, result.stderr
+    assert calls == [['clio', 'collect', 'solar-wind'], ['clio', 'collect', 'geomagnetic'],
+                     ['clio', 'aggregate'], ['clio', 'refresh'], ['prophet', 'generate', 'solar-wind-speed'],
+                     ['prophet', 'verify', 'solar-wind-speed'],
+                     ['prophet', 'verification-report', 'solar-wind-speed']]
+
+
+def test_verification_does_not_generate_or_collect(entry):
+    _, run = entry
+    result, calls = run('prophet', 'verify', 'dst', '--days', '14')
+    assert result.returncode == 0
+    assert calls == [['prophet', 'verify', 'dst', '--days', '14']]
+
+
+def test_unsupported_observation_target_fails_before_collection(entry):
+    _, run = entry
+    result, calls = run('observe', 'atmospheric-density')
+    assert result.returncode == 2
+    assert calls == []

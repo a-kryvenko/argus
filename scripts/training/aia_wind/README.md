@@ -85,10 +85,11 @@ Notebook: `notebooks/4_aia_wind_residual.ipynb`, по умолчанию тол�
 `run_experiment.py` сохраняет имя для проверки хешей замороженного протокола.
 Исторические пути входных данных `data/experiments/...` также сохранены: они записаны в протоколе и не означают наличие экспериментального runtime-кода.
 
-Оценить текущий сервисный артефакт без переобучения:
+Оценка текущего сервисного артефакта, запись в MLflow и необязательное обновление
+метрик сайта выполняются отдельными ячейками `notebooks/evaluate_models.ipynb`.
+Выберите `plasma_speed_quantile` и `plasma_speed_threshold`.
 
-```bash
-.venv/bin/python scripts/training/aia_wind/export_model.py evaluate
-```
-
-Сводка метрик: `data/metrics/plasma/README.md`.
+Сводка исторических метрик: `data/metrics/plasma/README.md`.
+Два процесса: [forecast-workflows](../../../docs/forecast-workflows.md).
+`export_model.py` остаётся исходным скриптом экспорта/аудита обученного артефакта;
+его оценка записывает CSV в `data/metrics/plasma`.

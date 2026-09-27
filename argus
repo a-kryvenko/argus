@@ -17,6 +17,8 @@ Usage: ./argus <command> (environment: $mode)
   clio aggregate [--limit N] | clio status | clio worker
   prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
   prophet status [PRODUCT]
+  observe [solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|all]
+  prophet verify [PRODUCT] [--days 7] | prophet verification-report [PRODUCT] [--days 7]
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
   api user <arguments>
   logs [SERVICE] [--tail N] [-f]
@@ -31,6 +33,25 @@ products=(solar-wind-speed solar-wind-density geomagnetic-activity dst hmf atmos
 case "${1:-help}" in
     help|-h|--help) usage; exit 0 ;;
     logs) shift; exec "$root/scripts/$mode/logs" "$@" ;;
+    observe)
+        shift
+        [[ $# -le 1 ]] || fail 'Usage: ./argus observe [product]'
+        selection="${1:-solar-wind-speed}"
+        case "$selection" in solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|all) ;; *) fail 'No observation verification protocol for this product' ;; esac
+        run clio collect solar-wind
+        run clio collect geomagnetic
+        run clio aggregate
+        run clio refresh
+        if [[ "$selection" == all ]]; then
+            for product in solar-wind-speed solar-wind-density geomagnetic-activity dst hmf; do
+                run prophet generate "$product"
+            done
+        else
+            run prophet generate "$selection"
+        fi
+        run prophet verify "$selection"
+        run prophet verification-report "$selection"
+        exit ;;
     db)
         shift
         case "${1:-}" in
@@ -44,6 +65,9 @@ case "${1:-help}" in
 esac
 command="${1:-}"; [[ $# == 0 ]] || shift
 case "$command" in
+    verify|verification-report)
+        [[ "$service" == prophet ]] || fail 'Verification belongs to prophet'
+        exec "$backend" prophet "$command" "$@" ;;
     migrate)
         [[ $# == 0 ]] || fail 'Use migration current/history/create/downgrade; migrate applies head'
         exec "$backend" "$service" migrate upgrade head ;;

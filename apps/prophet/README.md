@@ -5,6 +5,12 @@ slots. Production uses one image for `prophet` (worker) and `prophet-api` (HTTP)
 It reads Clio over HTTP and never accesses Clio tables. See
 [setup](../../README_DEPLOY.md#local-development) and [commands](../../docs/commands.md).
 
+Published-release verification: `./argus prophet verify [product] [--days 7]` and
+`./argus prophet verification-report [product]`. Apply migration
+`20260926_prophet_verification` first. Verification uses original Clio measurements
+over HTTP and stores scored pairs/metrics in Prophet, separately from website
+model metrics. See the [two forecast workflows](../../docs/forecast-workflows.md).
+
 ## Service layout
 
 `src/argus_prophet/services/` groups forecast operations by responsibility:

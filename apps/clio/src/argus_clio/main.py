@@ -19,7 +19,7 @@ get_config()
 
 @asynccontextmanager
 async def lifespan(_):
-    from argus_clio.commands._runner import setup_sentry
+    from common.runtime import setup_sentry
     setup_sentry()
     try:
         yield

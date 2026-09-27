@@ -13,7 +13,16 @@ Model evaluation, MLflow export and optional website metrics saving are separate
 cells in `notebooks/evaluate_models.ipynb`; there is no model evaluation CLI.
 
 Run `./argus` from the project root locally or `/var/www` in production.
-Command arguments are identical in both environments.
+Command arguments are identical in both environments. Python operations are exposed
+through `./argus`; the former pnpm `app:*` / `db:*` aliases have been removed.
+Service CLIs validate their own arguments; shell adapters handle Compose,
+migrations and cross-service workflows.
+
+Use `./argus clio --help` or `./argus prophet --help` for service commands.
+Clio handlers share one event-loop/connection cleanup boundary.
+`clio refresh` collects both live sources and normalizes observations;
+`clio refresh observations` only runs the model-observation refresh. Scheduled
+refresh retains the latter behavior.
 
 ## Help
 
@@ -59,7 +68,8 @@ handwritten migrations.
 `refresh` runs once and exits. Omitting the source or product selects `all`.
 Clio execution stops on the first error. Prophet attempts every selected product
 and publishes successes independently; it exits with an error if any product fails.
-Omitting the product for `status` also selects `all`.
+Omitting the product for `status` also selects `all`. Multi-product status and
+Intelligence refresh return a JSON array from one service invocation.
 
 | Command | Purpose |
 | --- | --- |

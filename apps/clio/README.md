@@ -1,5 +1,7 @@
 # Clio
 
+[Разбор потоков данных и дальнейших упрощений](../../docs/clio-data-flow.md).
+
 Clio owns observations, normalization, aggregation, collection diagnostics and
 scheduled ingestion. `packages/clio` provides public provider parsing; ingestion
 owns GOES/GFZ history downloads and the JB2008 history cache, and uses private calibration through `services/observations/calibration.py`. HTTP reads do not
@@ -110,7 +112,7 @@ Docker's unhealthy status alone does not restart a container.
 
 ## Aggregation audit
 
-`pnpm app:audit-solar-wind` compares stored five-minute/hourly aggregates with raw
+`./argus clio audit` compares stored five-minute/hourly aggregates with raw
 records over the last seven days. `--from` / `--to` accept whole UTC hours, at most
 31 days per run; `--json` and `--detail-limit` control output.
 
@@ -163,7 +165,8 @@ model sampling, so changing the future model cadence does not require re-downloa
 
 ## Historical backfill
 
-An empty measurement table is bootstrapped from provider history. The legacy
+An empty measurement table uses the same `load_history()` as backfill: OMNI,
+ACE plasma and calibrated solar indices. Both paths preserve existing measurements. The legacy
 `live_sensors.csv` bootstrap and its configuration setting are no longer used.
 
 `./argus clio backfill --from 2026-08-31 --to 2026-09-09` restores missing
@@ -185,3 +188,8 @@ Normalization follows the existing interpolation policy; normalized rows do not
 prove raw history completeness. Daily indices need not have hourly observations.
 Check the reported speed gaps before retrying Prophet; archives may not yet cover
 recent dates. Backfill does not generate forecasts or AIA images.
+
+Model refresh reuses Kp and raw `a_running` (Ap) from `geomagnetic_observation`;
+it does not download Kp again. Native interval starts and fractional Kp values are
+preserved in `measurement`. Run the geomagnetic collector before refreshing model
+observations (`./argus clio refresh all` already does this). Dst loading is unchanged.

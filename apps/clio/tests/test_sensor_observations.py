@@ -156,15 +156,25 @@ def test_goes_failure_leaves_optional_indices_absent(calibrated_goes):
     assert processing.load_solar_index_measurements(datetime(2026, 9, 5, tzinfo=UTC)).empty
 
 
-def test_refresh_integrates_solar_indices_and_serializes_nullable_values(monkeypatch, calibrated_goes):
+@pytest.mark.parametrize("empty_database", [False, True])
+def test_refresh_integrates_solar_indices_and_serializes_nullable_values(monkeypatch, calibrated_goes, empty_database):
     now = datetime(2026, 9, 5, 2, 45, tzinfo=UTC)
     live = pd.DataFrame(_measurement_rows(now.replace(minute=0)))
     live = live[live["metric"].isin(REQUIRED_METRICS)]
-    monkeypatch.setattr(service, "load_live_measurements", lambda: live)
-    monkeypatch.setattr(service, "_database_is_empty", AsyncMock(return_value=False))
+    fetch_live = Mock(return_value=live)
+    history = Mock(return_value=(live.iloc[:0], {}))
+    kp = AsyncMock(return_value=live.iloc[:0])
+    monkeypatch.setattr(service, "load_live_measurements", fetch_live)
+    monkeypatch.setattr(service, "load_history", history)
+    monkeypatch.setattr(service, "load_kp_measurements", kp)
+    monkeypatch.setattr(service, "_database_is_empty", AsyncMock(return_value=empty_database))
     ingested = []
 
-    async def ingest(session, frame):
+    async def ingest(session, frame, **kwargs):
+        if frame is history.return_value[0]:
+            assert kwargs == {'replace_existing': False, 'track_receipt': False}
+        if frame is kp.return_value:
+            assert kwargs == {'track_receipt': False}
         ingested.append(frame)
 
     async def load(session, since):
@@ -182,6 +192,12 @@ def test_refresh_integrates_solar_indices_and_serializes_nullable_values(monkeyp
     monkeypatch.setattr(service, "load_measurements", load)
     monkeypatch.setattr(service, "upsert_normalized_observations", store)
     result = asyncio.run(service.refresh_normalized_observations(session, now))
+    fetch_live.assert_called_once_with(include_kp=False)
+    kp.assert_awaited_once_with(session, since=now - timedelta(days=6), until=now)
+    if empty_database:
+        history.assert_called_once_with(now - timedelta(days=60), now - timedelta(days=5))
+    else:
+        history.assert_not_called()
     assert len(result.points) == 1
     assert result.points[0].s10 == 101.0
     assert result.points[0].m10 == 101.0

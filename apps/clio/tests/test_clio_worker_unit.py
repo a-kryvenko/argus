@@ -101,9 +101,12 @@ def test_solar_wind_finishes_active_collection_on_sigterm(monkeypatch, tmp_path)
 
     monkeypatch.setattr(collect_solar_wind, 'refresh_solar_wind', refresh)
     dispose = AsyncMock()
-    monkeypatch.setattr(collect_solar_wind, 'dispose_engine', dispose)
+    from argus_clio import cli
+    from argus_clio.db import session
+    from types import SimpleNamespace
+    monkeypatch.setattr(session, 'dispose_engine', dispose)
     previous = signal.getsignal(signal.SIGTERM)
-    asyncio.run(asyncio.wait_for(collect_solar_wind.collect(True), timeout=2))
+    cli.invoke('solar-wind', SimpleNamespace(watch=True))
     assert events == ['started', 'saved']
     dispose.assert_awaited_once()
     assert check_heartbeat('solar-wind')['reason'] == 'collector_stopped'

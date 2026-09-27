@@ -1,7 +1,5 @@
 """Retrieve source observations; no model calibration or gap filling."""
-from datetime import datetime, timedelta
 import pandas as pd
-from clio.dataloaders.spdf_loader import SPDF_Loader
 from clio.dataloaders.swpc_loader import SWPC_Loader
 
 REQUIRED_METRICS = SWPC_Loader.METRICS
@@ -30,12 +28,3 @@ def wide_to_measurements(frame: pd.DataFrame) -> pd.DataFrame:
         .rename(columns={timestamp_column: "observed_at"})
         .dropna(subset=["observed_at", "value"])
     )
-
-
-def load_bootstrap_measurements(now: datetime) -> pd.DataFrame:
-    historical = SPDF_Loader.load(
-        start_date=now - timedelta(days=HISTORY_DAYS),
-        end_date=now - timedelta(days=LIVE_SOURCE_DAYS - 1),
-    )
-    return wide_to_measurements(historical)
-

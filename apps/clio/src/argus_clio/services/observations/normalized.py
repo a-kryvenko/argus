@@ -6,9 +6,10 @@ from datetime import UTC, datetime, timedelta
 from argus_clio.db.models import Measurement, NormalizedObservation
 from common.schemas.observation import Observation, ObservationPoint
 from clio.observations import (
-    load_bootstrap_measurements, load_live_measurements,
-    HISTORY_DAYS,
+    load_live_measurements, HISTORY_DAYS, LIVE_SOURCE_DAYS,
 )
+from argus_clio.services.observations.backfill import load_history
+from argus_clio.services.geomagnetic import load_kp_measurements
 from argus_clio.services.observations.derived import (
     normalize_measurements,
     load_solar_index_measurements,
@@ -37,11 +38,16 @@ async def refresh_normalized_observations(
         now = now.replace(tzinfo=UTC)
 
     if await _database_is_empty(session):
-        bootstrap = await asyncio.to_thread(load_bootstrap_measurements, now)
-        await upsert_measurements(session, bootstrap, track_receipt=False)
+        bootstrap, _ = await asyncio.to_thread(
+            load_history, now - timedelta(days=HISTORY_DAYS),
+            now - timedelta(days=LIVE_SOURCE_DAYS - 1),
+        )
+        await upsert_measurements(session, bootstrap, replace_existing=False, track_receipt=False)
 
-    live = await asyncio.to_thread(load_live_measurements)
+    live = await asyncio.to_thread(load_live_measurements, include_kp=False)
     await upsert_measurements(session, live)
+    kp = await load_kp_measurements(session, since=now - timedelta(days=LIVE_SOURCE_DAYS), until=now)
+    await upsert_measurements(session, kp, track_receipt=False)
     solar = await asyncio.to_thread(load_solar_index_measurements, now)
     await upsert_measurements(session, solar)
 

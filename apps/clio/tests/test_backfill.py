@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql
 
 from argus_clio.services.observations import backfill as service
 from argus_clio.services.observations import store as observation_store
-from argus_clio.commands.backfill_observations import boundary
+from argus_clio.commands._arguments import boundary
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
 END = START + timedelta(days=1)
@@ -32,7 +32,7 @@ def test_all_sources_unavailable_fails(monkeypatch):
     monkeypatch.setattr(service.SPDF_Loader, 'load', Mock(side_effect=ValueError('missing')))
     monkeypatch.setattr(service, 'get_config', lambda: object())
     monkeypatch.setattr(service, 'download_solar_index_history', Mock(side_effect=OSError('missing')))
-    with pytest.raises(RuntimeError, match='No backfill sources'):
+    with pytest.raises(RuntimeError, match='No history sources'):
         service.load_history(START, END)
 
 

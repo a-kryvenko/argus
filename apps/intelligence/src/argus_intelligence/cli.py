@@ -8,6 +8,9 @@ from uuid import UUID
 import httpx
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
 
+# Solar radiation has a reserved contract but no published product yet.
+PROCESS_PRODUCTS = tuple(product for product in PRODUCT_ARTIFACTS if product != 'solar-radiation')
+
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
 
@@ -39,17 +42,18 @@ def check(product, *, release_id=None, transport=None):
             'note': 'HTTP integration and release contract validated; model readiness and satellite risks are not assessed.'}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     checker = commands.add_parser('check')
     checker.add_argument('product', choices=PRODUCT_ARTIFACTS, nargs='?', default='solar-wind-speed')
     checker.add_argument('--release-id', type=UUID)
     for command in ('worker', 'process', 'status'):
-        sub = commands.add_parser(command)
-        sub.add_argument('product', choices=PRODUCT_ARTIFACTS, nargs='?', default='solar-wind-speed')
+        sub = commands.add_parser(command, aliases=['refresh'] if command == 'process' else [])
+        sub.add_argument('product', choices=PRODUCT_ARTIFACTS if command == 'worker' else ('all', *PROCESS_PRODUCTS),
+                         nargs='?', default='solar-wind-speed' if command == 'worker' else 'all')
     commands.add_parser('migrate', add_help=False)
-    args, remaining = parser.parse_known_args()
+    args, remaining = parser.parse_known_args(argv)
     if args.command == 'migrate':
         from pathlib import Path
         from alembic.config import Config, CommandLine
@@ -65,13 +69,15 @@ def main():
         return
     if remaining:
         parser.error('Unrecognized arguments: ' + ' '.join(remaining))
-    if args.command in ('worker', 'process', 'status'):
+    if args.command in ('worker', 'process', 'refresh', 'status'):
         from argus_intelligence import worker
         try:
             if args.command == 'worker':
                 worker.worker(args.product)
                 return
-            result = worker.status(args.product) if args.command == 'status' else worker.process_once(args.product)
+            operation = worker.status if args.command == 'status' else worker.process_once
+            result = ([operation(product) for product in PROCESS_PRODUCTS]
+                      if args.product == 'all' else operation(args.product))
         except Exception:
             print(json.dumps({'service': 'intelligence', 'status': 'error', 'error': 'Database or release processing unavailable'}))
             raise SystemExit(1) from None

@@ -30,11 +30,11 @@ class SWPC_Loader:
         return df
 
     @staticmethod
-    def load_measurements(start_date: datetime | None = None) -> pd.DataFrame:
+    def load_measurements(start_date: datetime | None = None, *, include_kp: bool = True) -> pd.DataFrame:
         """Fetch source records in the narrow raw-measurement format."""
 
         frames = []
-        for frame in SWPC_Loader._fetch_source_frames():
+        for frame in SWPC_Loader._fetch_source_frames(include_kp=include_kp):
             value_columns = [column for column in SWPC_Loader.METRICS if column in frame]
             narrow = frame.melt(
                 id_vars="issue_time",
@@ -62,10 +62,10 @@ class SWPC_Loader:
         return measurements.sort_values(["observed_at", "metric"]).reset_index(drop=True)
 
     @staticmethod
-    def _fetch_source_frames() -> tuple[pd.DataFrame, ...]:
+    def _fetch_source_frames(*, include_kp: bool = True) -> tuple[pd.DataFrame, ...]:
         return (
             SWPC_Loader._fetch_live_sensors(),
-            SWPC_Loader._fetch_live_kp(),
+            *((SWPC_Loader._fetch_live_kp(),) if include_kp else ()),
             SWPC_Loader._fetch_f10_7_flux(),
             SWPC_Loader._fetch_dst(),
         )

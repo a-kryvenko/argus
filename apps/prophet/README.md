@@ -132,8 +132,8 @@ Migration `20260918_prophet_no_exports` removes `forecast_export` and
 `forecast_artifact.csv_written_at`, retaining all releases and compressed artifact
 bytes. Apply migrations before starting the updated worker and read service.
 
-Advanced recovery uses the internal adapter `scripts/run` in both environments: `prophet runs`, `prophet show-run <uuid>`,
-`prophet slots`. Preserve database, image and model
+Advanced recovery uses `./argus prophet runs`, `./argus prophet show-run <uuid>`
+and `./argus prophet slots` in both environments. Preserve database, image and model
 artifacts together when restoring; see [deployment](../../README_DEPLOY.md#recovery).
 
 ## Readiness diagnostics
@@ -166,3 +166,8 @@ input is passed alongside observed speed history; absence falls back to DLinear.
 The serialized artifact includes all model dependencies and uncertainty samples.
 Historical2025 metrics are under `data/metrics/plasma`; nominal intervals
 are empirically undercovered (about73% at96h for nominal80%), not guaranteed coverage.
+
+When DLinear lacks observed speed history, generation reports the issue time,
+required UTC windows, missing hourly intervals and the model's forward-fill limit.
+The final generation error includes each failed product's reason. Normalized
+observations do not substitute for missing observed speed history.

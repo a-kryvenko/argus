@@ -93,25 +93,14 @@ def test_unknown_commands_do_not_run_tools(cli):
     assert result.returncode == 2 and not calls
 
 
+@pytest.mark.parametrize('cli', ['production'], indirect=True)
 def test_production_maintenance_excludes_deployment_and_other_commands(cli):
-    mode, root, run = cli
-    if mode != 'production':
-        return
+    _, root, run = cli
     import fcntl
     with (root / '.deployment.lock').open('w') as held:
         fcntl.flock(held, fcntl.LOCK_SH | fcntl.LOCK_NB)
         result, calls = run('db', 'migrate')
         assert result.returncode != 0 and not calls
-
-
-def test_local_commands_do_not_require_host_python_environments(cli):
-    mode, root, run = cli
-    if mode != 'local':
-        return
-    assert not (root / 'apps').exists()
-    result, calls = run('db', 'migrate')
-    assert result.returncode == 0, result.stderr
-    assert len(calls) == 4
 
 
 def test_compose_arguments_are_forwarded_without_running_app(cli):

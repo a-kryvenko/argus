@@ -99,3 +99,24 @@ def test_completed_kp_waits_for_next_native_interval_before_becoming_stale():
     assert asyncio.run(service.latest(session, NOW))['series']['kp']['status'] == 'fresh'
     session.execute.side_effect = results()
     assert asyncio.run(service.latest(session, NOW+timedelta(seconds=1)))['series']['kp']['status'] == 'stale'
+
+
+def test_stored_kp_projection_preserves_intervals_and_raw_ap():
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+    import pandas as pd
+    from argus_clio.services.geomagnetic import load_kp_measurements
+
+    clock = pd.date_range('2026-09-01', periods=5, freq='3h', tz='UTC')
+    records = [SimpleNamespace(interval_start=stamp, value=kp, raw=raw)
+               for stamp, kp, raw in zip(clock, [2.333, 3., None, 1., 4.],
+                   [{'a_running': '12'}, {}, {'a_running': 7}, {'a_running': 'bad'}, {'a_running': float('nan')}])]
+    result = Mock()
+    result.all.return_value = records
+    session = SimpleNamespace(scalars=AsyncMock(return_value=result))
+    frame = asyncio.run(load_kp_measurements(session, since=clock[0], until=clock[-1]))
+    assert frame[frame.metric == 'kp'].value.tolist() == [2.333, 3., 1., 4.]
+    assert frame[frame.metric == 'ap'].value.tolist() == [12., 7.]
+    assert frame[frame.metric == 'ap'].observed_at.tolist() == [clock[0], clock[2]]
+    assert frame[frame.metric == 'kp'].observed_at.tolist() == list(clock[[0, 1, 3, 4]])

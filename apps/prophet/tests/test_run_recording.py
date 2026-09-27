@@ -51,6 +51,7 @@ def test_model_failure_does_not_block_other_products(monkeypatch, failed_product
     with pytest.raises(cycle.GenerationFailed) as error:
         cycle.generate('all')
     assert error.value.failures == {failed_product: failure}
+    assert f"{failed_product}: model failed" in str(error.value)
     assert command.call_count == len(PRODUCTS)
     read.assert_called_once_with()
     for name, recorder in recorders.items():

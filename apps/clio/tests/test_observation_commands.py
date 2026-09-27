@@ -1,4 +1,7 @@
 from unittest.mock import AsyncMock, Mock
+from types import SimpleNamespace
+from argus_clio import cli
+from argus_clio.db import session as database
 
 import pandas as pd
 import pytest
@@ -12,7 +15,7 @@ def session_factory(monkeypatch, module):
     context.__aenter__.return_value = session
     monkeypatch.setattr(module, 'get_session_factory', lambda: lambda: context)
     dispose = AsyncMock()
-    monkeypatch.setattr(module, 'dispose_engine', dispose)
+    monkeypatch.setattr(database, 'dispose_engine', dispose)
     return session, dispose
 
 
@@ -28,7 +31,7 @@ def test_ingestion_refreshes_live_and_persists_optional_history(monkeypatch, mis
     monkeypatch.setattr(ingestion, 'load_density_history', fetch)
     monkeypatch.setattr(ingestion, 'upsert_measurements', upsert)
     monkeypatch.setattr(ingestion, 'load_measurements', AsyncMock(return_value=history))
-    ingestion.main([])
+    cli.invoke('observations', SimpleNamespace())
     refresh.assert_awaited_once()
     fetch.assert_called_once()
     if missing_history:

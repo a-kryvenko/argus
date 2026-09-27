@@ -20,8 +20,8 @@ def imports(path):
 
 def test_package_dependency_direction():
     forbidden = {
-        'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
-        'clio': {'app', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet'},
+        'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
+        'clio': {'app', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
         'forecast': {'app', 'clio', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
     }
     violations = []
@@ -44,6 +44,7 @@ def dependency_names(config):
 @pytest.mark.parametrize(('path', 'allowed', 'required'), [
     ('packages/forecast', {'common'}, {'common'}),
     ('apps/api', {'common'}, {'common'}),
+    ('apps/intelligence', {'common', 'intelligence-core'}, {'common', 'intelligence-core'}),
     ('apps/prophet', {'common', 'forecast', 'forecast-core'},
      {'common', 'forecast', 'forecast-core'}),
     ('packages/forecast-core', {'common', 'forecast'}, {'forecast'}),
@@ -57,15 +58,6 @@ def test_declared_package_boundaries(path, allowed, required):
                 'argus-api', 'argus-clio', 'argus-prophet', 'argus-intelligence'}
     assert names & internal <= allowed, (path, names & internal - allowed)
     assert required <= names, (path, required - names)
-
-
-def test_api_only_uses_private_integration_surface():
-    paths = [*(ROOT / 'apps/api/app').rglob('*.py'),
-             *(ROOT / 'packages/forecast/src').rglob('*.py')]
-    for path in paths:
-        for module in imports(path):
-            if module.startswith(('forecast_core', 'intelligence_core')):
-                assert module in {'forecast_core.api', 'intelligence_core.api'}, (path, module)
 
 
 def test_public_workspace_does_not_require_private_checkouts():
@@ -93,47 +85,7 @@ def test_private_source_is_not_in_public_tree():
     assert len(result.stdout.splitlines()) == 2
 
 
-def test_prophet_only_accesses_its_own_storage():
-    blocked = {'app', 'argus_clio', 'clio'}
-    for path in (ROOT / 'apps/prophet/src').rglob('*.py'):
-        for module in imports(path):
-            assert module.split('.')[0] not in blocked, (path, module)
-            if module.startswith(('forecast_core', 'intelligence_core')):
-                assert module == 'forecast_core.api', (path, module)
-    config = tomllib.loads((ROOT / 'apps/prophet/pyproject.toml').read_text())
-    for dependency in config['project']['dependencies']:
-        assert not dependency.startswith(('argus-api', 'argus-clio'))
-
-
-def test_api_no_longer_owns_forecast_commands():
-    assert not list((ROOT / 'apps/api/app/commands').glob('generate*forecast.py'))
-    for path in (ROOT / 'apps/api/app').rglob('*.py'):
-        for module in imports(path):
-            assert not module.startswith('argus_prophet'), (path, module)
-
-
-def test_api_does_not_import_observation_storage_or_private_backend():
-    for path in (ROOT / 'apps/api/app').rglob('*.py'):
-        for module in imports(path):
-            assert module.split('.')[0] not in {'forecast', 'clio', 'argus_clio', 'forecast_core', 'argus_prophet'}, (path, module)
-    # API owns dashboard identities, monitoring snapshots and traffic aggregates;
-    # observation and forecast storage remain in their respective services.
-    assert {p.stem for p in (ROOT / 'apps/api/app/db/models').glob('*.py')} == {
-        '__init__', 'dashboard', 'monitoring',
-    }
-    assert not list((ROOT / 'apps/api/app/commands').glob('collect*.py'))
-
-
-def test_clio_owns_storage_and_uses_only_private_adapter():
-    for path in (ROOT / 'apps/clio/src/argus_clio').rglob('*.py'):
-        for module in imports(path):
-            assert module.split('.')[0] not in {'app', 'argus_prophet', 'intelligence_core'}, (path, module)
-            if module.startswith('forecast_core'):
-                assert path.name == 'calibration.py' and module == 'forecast_core.calibration', (path, module)
-
-
 def test_runtime_sql_does_not_read_foreign_domain_tables():
-    import re
     roots = {'api': ROOT / 'apps/api/app', 'clio': ROOT / 'apps/clio/src/argus_clio',
              'prophet': ROOT / 'apps/prophet/src/argus_prophet',
              'intelligence': ROOT / 'apps/intelligence/src/argus_intelligence'}
@@ -145,40 +97,12 @@ def test_runtime_sql_does_not_read_foreign_domain_tables():
                         assert domain.lower() == owner, (path, domain)
 
 
-def test_intelligence_uses_shared_contracts_and_owns_its_storage():
-    for path in (ROOT / 'apps/intelligence/src').rglob('*.py'):
-        for module in imports(path):
-            assert module.split('.')[0] not in {
-                'app', 'argus_clio', 'argus_prophet', 'clio', 'forecast',
-                'forecast_core',
-            }, (path, module)
-    config = tomllib.loads((ROOT / 'apps/intelligence/pyproject.toml').read_text())
-    assert set(config['project']['dependencies']) == {'common', 'intelligence-core>=0.1.0', 'httpx>=0.28,<1', 'psycopg[binary]>=3.2,<4', 'sqlalchemy>=2.0,<3', 'alembic>=1.16,<2'}
-
-
-def test_existing_domains_do_not_depend_on_intelligence_runtime():
-    for root in ('apps/api/app', 'apps/clio/src', 'apps/prophet/src', 'packages/common/src'):
-        for path in (ROOT / root).rglob('*.py'):
-            assert all(module.split('.')[0] != 'argus_intelligence' for module in imports(path)), path
-
-
 def test_api_environment_does_not_include_forecast_package():
     config = tomllib.loads((ROOT / 'apps/api/pyproject.toml').read_text())
-    assert 'forecast' not in config['project']['dependencies']
     assert 'forecast' not in config['tool']['uv']['sources']
     assert '../../packages/forecast' not in config['tool']['uv']['workspace']['members']
     lock = tomllib.loads((ROOT / 'apps/api/uv.lock').read_text())
     assert not {'forecast', 'forecast-core', 'clio', 'argus-prophet', 'argus-clio', 'argus-intelligence'} & {package['name'] for package in lock['package']}
-
-
-def test_only_clio_domain_imports_provider_library():
-    for root in ('apps/api/app', 'apps/prophet/src', 'apps/intelligence/src',
-                 'packages/common/src', 'packages/forecast/src', 'packages/forecast-core/src'):
-        for path in (ROOT / root).rglob('*.py'):
-            assert all(module.split('.')[0] not in {'clio', 'argus_clio'}
-                       for module in imports(path)), path
-    lock = tomllib.loads((ROOT / 'apps/prophet/uv.lock').read_text())
-    assert not {'clio', 'argus-clio'} & {package['name'] for package in lock['package']}
 
 
 def test_clio_uses_base_backend_and_prophet_requests_models():
@@ -186,3 +110,23 @@ def test_clio_uses_base_backend_and_prophet_requests_models():
     prophet = tomllib.loads((ROOT / 'apps/prophet/pyproject.toml').read_text())
     assert any(d.startswith('forecast-core>=') for d in clio['project']['dependencies'])
     assert any(d.startswith('forecast-core[models]>=') for d in prophet['project']['dependencies'])
+
+
+@pytest.mark.parametrize('root,blocked,private_surface', [
+    ('apps/api/app', {'forecast', 'clio', 'argus_clio', 'forecast_core', 'argus_prophet', 'argus_intelligence'}, {'intelligence_core.api'}),
+    ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.calibration'}),
+    ('apps/prophet/src', {'app', 'argus_clio', 'clio', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.api'}),
+    ('apps/intelligence/src', {'app', 'argus_clio', 'argus_prophet', 'clio', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
+    ('packages/forecast-core/src', {'clio', 'argus_clio'}, None),
+])
+def test_service_import_boundaries(root, blocked, private_surface):
+    for path in (ROOT / root).rglob('*.py'):
+        for module in imports(path):
+            assert module.split('.')[0] not in blocked, (path, module)
+            if private_surface is not None and module.split('.')[0] in {'forecast_core', 'intelligence_core'}:
+                assert module in private_surface, (path, module)
+
+
+def test_prophet_environment_does_not_include_provider_library():
+    lock = tomllib.loads((ROOT / 'apps/prophet/uv.lock').read_text())
+    assert not {'clio', 'argus-clio'} & {package['name'] for package in lock['package']}

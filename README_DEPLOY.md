@@ -139,6 +139,7 @@ and load `.env`, then `.env.local`. Production additionally loads
 sets the container UID/GID to the local user.
 
 Docker Compose manages Python services; pnpm manages the frontend.
+Python operations use `./argus`; `package.json` contains frontend/tooling commands only.
 `./argus logs` reads Compose logs in both environments. One-off commands print
 to the terminal and remove their container on completion; frontend output remains
 in pnpm. The old `/var/www/bin/argus` path is a symlink

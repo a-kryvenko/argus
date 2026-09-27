@@ -13,7 +13,7 @@ from forecast.evaluation import TARGETS, match_observations, score, validate_pre
 from argus_prophet.db.session import connect
 from argus_prophet.services.releases.publication import read_release
 
-PRODUCTS = ('solar-wind-speed', 'solar-wind-density', 'geomagnetic-activity', 'dst', 'hmf')
+from argus_prophet.services.generation.products import VERIFIED_PRODUCTS as PRODUCTS
 
 
 def targets(frame, start, end):

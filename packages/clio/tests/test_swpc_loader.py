@@ -20,7 +20,7 @@ def test_load_measurements_preserves_source_timestamps(monkeypatch) -> None:
     monkeypatch.setattr(
         SWPC_Loader,
         "_fetch_source_frames",
-        staticmethod(lambda: (sensor_frame, index_frame)),
+        staticmethod(lambda **kwargs: (sensor_frame, index_frame)),
     )
 
     result = SWPC_Loader.load_measurements()
@@ -28,3 +28,16 @@ def test_load_measurements_preserves_source_timestamps(monkeypatch) -> None:
     assert set(result["metric"]) == {"bx", "by", "kp"}
     assert set(result["observed_at"]) == {first_time, second_time}
     assert len(result) == 5
+
+
+def test_model_refresh_skips_kp_download(monkeypatch):
+    from unittest.mock import Mock
+    empty = pd.DataFrame(columns=['issue_time'])
+    for name in ('_fetch_live_sensors', '_fetch_f10_7_flux', '_fetch_dst'):
+        monkeypatch.setattr(SWPC_Loader, name, Mock(return_value=empty))
+    kp = Mock(return_value=empty)
+    monkeypatch.setattr(SWPC_Loader, '_fetch_live_kp', kp)
+    SWPC_Loader.load_measurements(include_kp=False)
+    kp.assert_not_called()
+    SWPC_Loader.load_measurements()
+    kp.assert_called_once()

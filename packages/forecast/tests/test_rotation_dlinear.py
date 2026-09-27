@@ -87,3 +87,32 @@ def test_joblib_registry_round_trip_without_torch(tmp_path, monkeypatch):
     obs = observations()
     request = pd.DataFrame({'issue_time': [obs.issue_time[2]], 'lead_hours': [1]})
     assert model.add_rotation_v(request, obs).rotation_v.iloc[0] == 120.
+
+
+def test_strict_history_reports_exact_unfilled_hours():
+    model = RotationDLinearForecaster(bundle())
+    obs = observations()
+    request = pd.DataFrame({'issue_time': [obs.issue_time[2]], 'lead_hours': [1]})
+    obs.loc[2, 'v'] = np.nan
+    assert model.add_rotation_v(request, obs, require_history=True).rotation_v.iloc[0] == 110.
+    obs.loc[1, 'v'] = np.nan
+    with pytest.raises(ValueError) as caught:
+        model.add_rotation_v(request, obs, require_history=True)
+    message = str(caught.value)
+    assert '1/3 required hours remain missing' in message
+    assert 'forward-fill limited to 1 h' in message
+    assert 'Missing intervals (UTC, inclusive): 2025-01-01T02:00:00+00:00..2025-01-01T02:00:00+00:00 (1 h)' in message
+    assert 'Required windows (UTC, inclusive): 2025-01-01T00:00:00+00:00..2025-01-01T02:00:00+00:00' in message
+
+
+def test_strict_empty_history_reports_disjoint_windows():
+    artifact = bundle()
+    artifact['settings']['segments']['rotations'] = [[-4, -3], [0, 0]]
+    model = RotationDLinearForecaster(artifact)
+    request = pd.DataFrame({'issue_time': [pd.Timestamp('2025-01-01T04:00Z')], 'lead_hours': [1]})
+    with pytest.raises(ValueError) as caught:
+        model.add_rotation_v(request, pd.DataFrame(), require_history=True)
+    message = str(caught.value)
+    assert '3/3 required hours remain missing' in message
+    assert '2025-01-01T00:00:00+00:00..2025-01-01T01:00:00+00:00 (2 h)' in message
+    assert '2025-01-01T04:00:00+00:00..2025-01-01T04:00:00+00:00 (1 h)' in message

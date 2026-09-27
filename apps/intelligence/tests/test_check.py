@@ -56,3 +56,31 @@ def test_cli_failure_is_nonzero_and_does_not_leak_inputs(monkeypatch, capsys):
     assert result.value.code == 1
     output = capsys.readouterr().out
     assert 'secret-token' not in output and json.loads(output)['status'] == 'error'
+
+
+def test_refresh_all_is_handled_by_service_and_stops_on_failure(monkeypatch, capsys):
+    from unittest.mock import Mock
+    from argus_intelligence import worker
+    operation = Mock(side_effect=lambda product: {'product': product})
+    monkeypatch.setattr(worker, 'process_once', operation)
+    cli.main(['refresh'])
+    assert len(cli.PROCESS_PRODUCTS) == 6
+    assert [call.args[0] for call in operation.call_args_list] == list(cli.PROCESS_PRODUCTS)
+    assert len(json.loads(capsys.readouterr().out)) == len(cli.PROCESS_PRODUCTS)
+    operation.reset_mock()
+    operation.side_effect = ValueError('failed')
+    with pytest.raises(SystemExit) as result:
+        cli.main(['refresh'])
+    assert result.value.code == 1
+    assert operation.call_count == 1
+
+
+def test_invalid_refresh_product_does_not_process(monkeypatch):
+    from unittest.mock import Mock
+    from argus_intelligence import worker
+    operation = Mock()
+    monkeypatch.setattr(worker, 'process_once', operation)
+    with pytest.raises(SystemExit) as result:
+        cli.main(['refresh', 'unknown'])
+    assert result.value.code == 2
+    operation.assert_not_called()

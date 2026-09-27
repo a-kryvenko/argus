@@ -1,4 +1,4 @@
-"""Restore available historical measurements without replacing collected values."""
+"""Shared bootstrap/backfill history loading and insert-only historical recovery."""
 import asyncio
 import logging
 from datetime import timedelta
@@ -33,7 +33,7 @@ def load_history(start, end):
             frames.append(frame)
         except (RequestException, OSError, ValueError, KeyError, RuntimeError) as exc:
             errors.append(f'{name}: {exc}')
-            logger.warning('Backfill source %s unavailable: %s', name, exc)
+            logger.warning('History source %s unavailable: %s', name, exc)
 
     fetch('OMNI', lambda: wide_to_measurements(OMNIWeb_Loader.load(start, last)))
     # ACE magnetic fields in the existing loader are GSE, whereas observations
@@ -46,7 +46,7 @@ def load_history(start, end):
     fetch('ACE plasma', ace)
     fetch('solar indices', lambda: download_solar_index_history(pd.Timestamp(start), pd.Timestamp(end), get_config()))
     if not frames:
-        raise RuntimeError('No backfill sources available: ' + '; '.join(errors))
+        raise RuntimeError('No history sources available: ' + '; '.join(errors))
     frame = pd.concat(frames, ignore_index=True)
     frame.observed_at = pd.to_datetime(frame.observed_at, utc=True)
     frame.value = pd.to_numeric(frame.value, errors='coerce')

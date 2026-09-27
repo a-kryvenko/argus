@@ -62,3 +62,31 @@ def test_removed_export_command_is_rejected(monkeypatch):
     with pytest.raises(SystemExit) as error:
         cli.main()
     assert error.value.code == 2
+
+
+def test_refresh_alias_generates_selected_product(monkeypatch):
+    from contextlib import nullcontext
+    from unittest.mock import Mock
+    from argus_prophet import cli, worker
+    from argus_prophet.services.generation import cycle
+    from common import runtime
+    generate = Mock()
+    monkeypatch.setattr(cycle, 'generate', generate)
+    monkeypatch.setattr(worker, 'generation_lock', nullcontext)
+    monkeypatch.setattr(runtime, 'run_command', lambda run: run())
+    cli.main(['refresh', 'solar-wind-speed'])
+    generate.assert_called_once_with('solar-wind-speed')
+
+
+def test_status_all_uses_service_product_catalog(monkeypatch, capsys):
+    import json
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from argus_prophet import cli
+    from argus_prophet.services.releases import status
+    from argus_prophet.services.generation.products import PRODUCTS
+    read = Mock(side_effect=lambda product: SimpleNamespace(model_dump=lambda **kwargs: {'product': product}))
+    monkeypatch.setattr(status, 'product_status', read)
+    cli.main(['status'])
+    assert [call.args[0] for call in read.call_args_list] == list(PRODUCTS)
+    assert len(json.loads(capsys.readouterr().out)) == len(PRODUCTS)

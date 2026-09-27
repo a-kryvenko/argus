@@ -30,7 +30,6 @@ HELP
 }
 fail() { echo "$*" >&2; exit 2; }
 run() { "$backend" "$@"; }
-products=(solar-wind-speed solar-wind-density geomagnetic-activity dst hmf atmospheric-density)
 case "${1:-help}" in
     help|-h|--help) usage; exit 0 ;;
     compose) shift; exec "$backend" compose "$@" ;;
@@ -43,7 +42,7 @@ case "${1:-help}" in
         run clio collect solar-wind
         run clio collect geomagnetic
         run clio aggregate
-        run clio refresh
+        run clio refresh observations
         if [[ "$selection" == all ]]; then
             for product in solar-wind-speed solar-wind-density geomagnetic-activity dst hmf; do
                 run prophet generate "$product"
@@ -67,9 +66,6 @@ case "${1:-help}" in
 esac
 command="${1:-}"; [[ $# == 0 ]] || shift
 case "$command" in
-    verify|verification-report)
-        [[ "$service" == prophet ]] || fail 'Verification belongs to prophet'
-        exec "$backend" prophet "$command" "$@" ;;
     migrate)
         [[ $# == 0 ]] || fail 'Use migration current/history/create/downgrade; migrate applies head'
         exec "$backend" "$service" migrate upgrade head ;;
@@ -96,38 +92,5 @@ case "$command" in
             downgrade) [[ $# == 1 ]] || fail 'Specify one target revision'; exec "$backend" "$service" migrate downgrade "$@" ;;
             *) fail 'Expected migration create/current/history/downgrade' ;;
         esac ;;
-    user) [[ "$service" == api ]] || fail 'user belongs to api'; exec "$backend" api user "$@" ;;
-    backfill) [[ "$service" == clio ]] || fail 'backfill belongs to clio'; exec "$backend" clio backfill "$@" ;;
-    aggregate) [[ "$service" == clio ]] || fail 'aggregate belongs to clio'; exec "$backend" clio aggregate "$@" ;;
-    worker)
-        [[ "$service" == clio && $# == 0 ]] || fail 'Usage: ./argus clio worker'
-        exec "$backend" clio worker ;;
-    refresh|status) ;;
-    *) fail 'Unknown service command; use ./argus help' ;;
+    *) exec "$backend" "$service" "$command" "$@" ;;
 esac
-[[ $# -le 1 ]] || fail 'Specify at most one source/product'
-selection="${1:-all}"
-if [[ "$service" == clio ]]; then
-    if [[ "$command" == status ]]; then
-        [[ $# == 0 ]] || fail 'Usage: ./argus clio status'
-        exec "$backend" clio status
-    fi
-    case "$selection" in
-        all) run clio collect solar-wind; run clio collect geomagnetic; run clio refresh ;;
-        observations) run clio refresh ;;
-        solar-wind|geomagnetic) run clio collect "$selection" ;;
-        *) fail 'Unknown Clio source' ;;
-    esac
-    exit
-fi
-[[ "$service" != api ]] || fail 'API supports migrate, migration and user'
-case "$selection" in all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density) ;; *) fail 'Unknown or unsupported product' ;; esac
-if [[ "$service" == prophet && "$command" == refresh ]]; then
-    exec "$backend" prophet generate "$selection"
-fi
-[[ "$command" != refresh ]] || command=process
-if [[ "$selection" == all ]]; then
-    for product in "${products[@]}"; do run "$service" "$command" "$product"; done
-else
-    run "$service" "$command" "$selection"
-fi

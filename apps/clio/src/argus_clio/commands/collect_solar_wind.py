@@ -1,12 +1,8 @@
 """Collect minute solar wind samples once, or continuously with --watch."""
-import argparse
-import asyncio
 import logging
 from time import monotonic
 
-from argus_clio.commands._runner import run_command
 from argus_clio.commands._shutdown import stop_on_signal, wait_for_next_poll
-from argus_clio.db.session import dispose_engine
 from argus_clio.services.collection.heartbeat import CollectorHeartbeat
 from argus_clio.services.solar_wind.observations import refresh_solar_wind
 from argus_clio.services.collection.specs import WIND_POLL_SECONDS
@@ -14,7 +10,8 @@ from argus_clio.services.collection.specs import WIND_POLL_SECONDS
 logger = logging.getLogger(__name__)
 
 
-async def collect(watch: bool) -> None:
+async def run(args) -> None:
+    watch = args.watch
     heartbeat = CollectorHeartbeat('solar-wind') if watch else None
     try:
         with stop_on_signal(watch) as stopped:
@@ -29,6 +26,8 @@ async def collect(watch: bool) -> None:
                     if not watch:
                         raise
                     logger.exception("Solar wind collection incomplete; retrying next cycle")
+                    import sentry_sdk
+                    sentry_sdk.capture_exception()
                 finally:
                     if heartbeat:
                         for source_id in heartbeat.sources:
@@ -39,16 +38,3 @@ async def collect(watch: bool) -> None:
     finally:
         if heartbeat:
             heartbeat.stop()
-        await dispose_engine()
-
-
-def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--watch", action="store_true", help=f"Poll each source every {WIND_POLL_SECONDS} seconds")
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(collect(args.watch))
-
-
-if __name__ == "__main__":
-    run_command(main)

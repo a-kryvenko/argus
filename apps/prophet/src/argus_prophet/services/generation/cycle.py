@@ -7,7 +7,8 @@ from argus_prophet.services.generation.products import select_products
 class GenerationFailed(RuntimeError):
     def __init__(self, failures):
         self.failures = failures
-        super().__init__('Forecast generation failed for: ' + ', '.join(failures))
+        super().__init__('Forecast generation failed: ' + '; '.join(
+            f'{product}: {error}' for product, error in failures.items()))
 
 
 def generate(product: str, trigger='manual', *, scheduled_slot=None) -> None:

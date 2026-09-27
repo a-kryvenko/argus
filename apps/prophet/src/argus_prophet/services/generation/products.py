@@ -40,6 +40,7 @@ PRODUCTS = {
     'atmospheric-density': Product((Model('atmospheric_density'),), backend='density'),
 }
 GENERATION_CHOICES = ('all', *PRODUCTS)
+VERIFIED_PRODUCTS = tuple(name for name in PRODUCTS if name != 'atmospheric-density')
 
 
 def select_products(selection: str) -> tuple[str, ...]:

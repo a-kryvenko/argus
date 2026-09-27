@@ -105,10 +105,7 @@ class DefaultForecastService(ABC):
         if self._dlinear is not None:
             requests = pd.DataFrame({'issue_time': [forecast_start_time] * lead_hours,
                                      'lead_hours': frame['lead_hours'].to_numpy()})
-            predictions = self._dlinear.add_rotation_v(requests, dlinear_history, column='dlinear_v')
-            if predictions.dlinear_v.isna().all():
-                raise ValueError('Insufficient hourly speed history for dlinear_v; '
-                                 'supply the configured rotation windows (57 days plus fill buffer for v1)')
+            predictions = self._dlinear.add_rotation_v(requests, dlinear_history, column='dlinear_v', require_history=True)
             frame['dlinear_v'] = predictions.dlinear_v.to_numpy()
 
         return frame

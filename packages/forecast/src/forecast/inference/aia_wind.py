@@ -53,8 +53,7 @@ class AIAWindForecaster:
         if issue.tzinfo is None:raise ValueError('Timezone-aware issue_time required')
         issue=issue.tz_convert('UTC').floor('h');lead=np.arange(1,121)
         request=pd.DataFrame(dict(issue_time=issue,lead_hours=lead))
-        base=self.dlinear.add_rotation_v(request,speed_history,column='dlinear_v')
-        if not np.isfinite(base.dlinear_v).all():raise ValueError('Insufficient observed hourly speed history for DLinear')
+        base=self.dlinear.add_rotation_v(request,speed_history,column='dlinear_v',require_history=True)
         base['valid_time']=issue+pd.to_timedelta(lead,unit='h');base['target_v']=np.nan
         phase=2*np.pi*(issue.dayofyear-1)/365.25;base['calendar_sin']=np.sin(phase);base['calendar_cos']=np.cos(phase)
         solar=pd.DataFrame() if aia_features is None else aia_features.copy()

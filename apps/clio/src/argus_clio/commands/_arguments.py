@@ -16,3 +16,8 @@ def utc_hour(value):
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
+def boundary(value):
+    if len(value) == 10:
+        value += 'T00:00:00Z'
+    return utc_hour(value)
+

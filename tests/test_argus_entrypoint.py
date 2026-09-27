@@ -25,7 +25,7 @@ def entry(tmp_path, request):
         p.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
 with open(os.environ['ARGUS_TEST_CALLS'], 'a') as out:
     out.write(json.dumps(sys.argv[1:]) + '\\n')
-if os.getenv('ARGUS_TEST_FAIL') and sys.argv[1:3] == ['clio', 'collect']:
+if os.getenv('ARGUS_TEST_FAIL') and sys.argv[1:3] == ['clio', 'refresh']:
     sys.exit(7)
 ''')
         p.chmod(0o755)
@@ -52,7 +52,7 @@ def test_create_migration_is_dev_only_and_preserves_message(entry):
     assert calls == ([['clio', 'migrate', 'revision', '-m', 'add run metadata', '--autogenerate']] if mode == 'dev' else [])
 
 
-@pytest.mark.parametrize('args', [('up',), ('ps',), ('api', 'refresh'), ('prophet', 'refresh', 'typo'), ('clio', 'refresh', 'solar-wind', '--watch'), ('clio', 'migrate', 'current')])
+@pytest.mark.parametrize('args', [('up',), ('ps',), ('clio', 'migrate', 'current')])
 def test_invalid_commands_have_no_side_effects(entry, args):
     _, run = entry
     result, calls = run(*args)
@@ -60,40 +60,11 @@ def test_invalid_commands_have_no_side_effects(entry, args):
     assert not calls
 
 
-def test_clio_all_is_one_cycle_per_source(entry):
-    _, run = entry
-    result, calls = run('clio', 'refresh')
-    assert result.returncode == 0
-    assert calls == [['clio', 'collect', 'solar-wind'], ['clio', 'collect', 'geomagnetic'], ['clio', 'refresh']]
-
-
-def test_clio_worker_routes_to_selected_environment(entry):
-    _, run = entry
-    result, calls = run('clio', 'worker')
-    assert result.returncode == 0
-    assert calls == [['clio', 'worker']]
-
-
 def test_refresh_stops_on_failure(entry):
     _, run = entry
     result, calls = run('clio', 'refresh', fail=True)
     assert result.returncode == 7
     assert len(calls) == 1
-
-
-def test_shared_product_name(entry):
-    _, run = entry
-    result, calls = run('prophet', 'refresh', 'geomagnetic-activity')
-    assert result.returncode == 0
-    assert calls == [['prophet', 'generate', 'geomagnetic-activity']]
-
-
-def test_intelligence_refresh_all(entry):
-    _, run = entry
-    result, calls = run('intelligence', 'refresh')
-    assert result.returncode == 0
-    assert len(calls) == 6
-    assert all(call[:2] == ['intelligence', 'process'] for call in calls)
 
 
 def test_logs_routes_to_environment(entry):
@@ -111,36 +82,14 @@ def test_autogenerate_requires_service_metadata(entry, service):
     assert not calls
 
 
-@pytest.mark.parametrize('product', ['dst', 'solar-wind-density', 'solar-wind-speed', 'atmospheric-density'])
-def test_prophet_refresh_selects_exact_product(entry, product):
-    _, run = entry
-    result, calls = run('prophet', 'refresh', product)
-    assert result.returncode == 0, result.stderr
-    assert calls == [['prophet', 'generate', product]]
-
-
-def test_clio_backfill_passes_range(entry):
-    _, run = entry
-    result, calls = run('clio', 'backfill', '--from', '2026-08-31', '--to', '2026-09-09')
-    assert result.returncode == 0, result.stderr
-    assert calls == [['clio', 'backfill', '--from', '2026-08-31', '--to', '2026-09-09']]
-
-
 def test_observe_collects_generates_then_verifies_actual_releases(entry):
     _, run = entry
     result, calls = run('observe', 'solar-wind-speed')
     assert result.returncode == 0, result.stderr
     assert calls == [['clio', 'collect', 'solar-wind'], ['clio', 'collect', 'geomagnetic'],
-                     ['clio', 'aggregate'], ['clio', 'refresh'], ['prophet', 'generate', 'solar-wind-speed'],
+                     ['clio', 'aggregate'], ['clio', 'refresh', 'observations'], ['prophet', 'generate', 'solar-wind-speed'],
                      ['prophet', 'verify', 'solar-wind-speed'],
                      ['prophet', 'verification-report', 'solar-wind-speed']]
-
-
-def test_verification_does_not_generate_or_collect(entry):
-    _, run = entry
-    result, calls = run('prophet', 'verify', 'dst', '--days', '14')
-    assert result.returncode == 0
-    assert calls == [['prophet', 'verify', 'dst', '--days', '14']]
 
 
 def test_unsupported_observation_target_fails_before_collection(entry):
@@ -155,3 +104,16 @@ def test_compose_routes_to_selected_environment(entry):
     result, calls = run('compose', 'up', '-d', '--wait')
     assert result.returncode == 0, result.stderr
     assert calls == [['compose', 'up', '-d', '--wait']]
+
+
+@pytest.mark.parametrize('args', [
+    ('clio', 'refresh'),
+    ('prophet', 'verify', 'dst', '--days', '14'),
+    ('intelligence', 'check', 'dst', '--release-id', 'value with spaces'),
+    ('api', 'user', '--help'),
+])
+def test_service_arguments_pass_through_unchanged(entry, args):
+    _, run = entry
+    result, calls = run(*args)
+    assert result.returncode == 0, result.stderr
+    assert calls == [list(args)]

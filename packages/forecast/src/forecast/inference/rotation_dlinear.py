@@ -64,7 +64,7 @@ class RotationDLinearForecaster:
             raise ValueError("issue_time must contain nonmissing hourly timestamps")
         return times
 
-    def add_rotation_v(self, frame, observations, *, column="rotation_v"):
+    def add_rotation_v(self, frame, observations, *, column="rotation_v", require_history=False):
         """Return a copy of frame with one forecast per (issue_time, lead_hours)."""
         result = frame.copy()
         issue_times = self._times(frame["issue_time"])
@@ -74,6 +74,9 @@ class RotationDLinearForecaster:
             raise ValueError(f"lead_hours must be integers in 1..{self.horizon}")
         result[column] = np.nan
         if frame.empty or observations.empty:
+            if require_history and not frame.empty:
+                missing = issue_times[0] + pd.to_timedelta(self.offsets, unit="h")
+                raise self._history_error(issue_times[0], missing)
             return result
         obs = pd.DataFrame({"issue_time": self._times(observations["issue_time"]),
                             "v": observations["v"].to_numpy(dtype=np.float32)})
@@ -94,6 +97,10 @@ class RotationDLinearForecaster:
             indices = origins[begin:end, None] + self.offsets
             windows = history[indices]
             valid = np.isfinite(windows).all(axis=1)
+            if require_history and not valid.all():
+                row = np.flatnonzero(~valid)[0]
+                missing = clock[indices[row][~np.isfinite(windows[row])]]
+                raise self._history_error(unique_times[begin + row], missing)
             if valid.any():
                 pred = (windows[valid] @ self.weights.T + self.bias) * self.std + self.mean
                 if not np.isfinite(pred).all():
@@ -101,3 +108,22 @@ class RotationDLinearForecaster:
                 forecasts[begin + np.flatnonzero(valid)] = pred
         result[column] = forecasts[codes, leads.astype(int) - 1]
         return result
+
+    def _history_error(self, issue, missing):
+        """Bounded diagnostic using the exact post-fill inference window."""
+        groups = np.split(missing, np.flatnonzero(np.diff(missing.asi8) != pd.Timedelta(hours=1).value) + 1)
+        gaps = '; '.join(f'{group[0].isoformat()}..{group[-1].isoformat()} ({len(group)} h)'
+                         for group in groups[:5])
+        if len(groups) > 5:
+            gaps += f'; ... {len(groups) - 5} more intervals'
+        windows = '; '.join(
+            f'{(issue + pd.Timedelta(hours=start)).isoformat()}..{(issue + pd.Timedelta(hours=end)).isoformat()}'
+            for start, end in self.settings['segments']['rotations'])
+        return ValueError(
+            f'Insufficient hourly speed history for DLinear at {issue.isoformat()}: '
+            f'{len(missing)}/{len(self.offsets)} required hours remain missing after '
+            f'forward-fill limited to {self.ffill_limit} h. Missing intervals (UTC, inclusive): {gaps}. '
+            f'Required windows (UTC, inclusive): {windows}. '
+            'Restore observed speed in these intervals before retrying; '
+            'normalized/interpolated observations do not replace this history.'
+        )

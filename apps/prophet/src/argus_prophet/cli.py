@@ -2,13 +2,13 @@
 import argparse
 import logging
 
-from argus_prophet.services.generation.products import GENERATION_CHOICES
+from argus_prophet.services.generation.products import GENERATION_CHOICES, select_products
 
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
-    generate_parser = commands.add_parser('generate', help='Generate forecasts once')
+    generate_parser = commands.add_parser('generate', aliases=['refresh'], help='Generate forecasts once')
     generate_parser.add_argument('product', nargs='?', choices=GENERATION_CHOICES, default='all')
     commands.add_parser('worker', help='Generate hourly at :10 UTC; retry failures')
     commands.add_parser('migrate', add_help=False)
@@ -19,8 +19,8 @@ def main(argv=None) -> None:
     slots.add_argument('--limit', type=int, default=20)
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     status_parser = commands.add_parser('status', help='Inspect current release age and input diagnostics')
-    status_parser.add_argument('product', choices=PRODUCT_ARTIFACTS)
-    from argus_prophet.services.verification import PRODUCTS as VERIFIED_PRODUCTS
+    status_parser.add_argument('product', nargs='?', default='all', choices=GENERATION_CHOICES)
+    from argus_prophet.services.generation.products import VERIFIED_PRODUCTS
     for command in ('verify', 'verification-report'):
         verification = commands.add_parser(command, help='Verify published forecasts against later observations')
         verification.add_argument('product', nargs='?', default='solar-wind-speed', choices=(*VERIFIED_PRODUCTS, 'all'))
@@ -74,7 +74,8 @@ def main(argv=None) -> None:
         try:
             if args.command == 'status':
                 from argus_prophet.services.releases.status import product_status
-                result = product_status(args.product).model_dump(mode='json')
+                result = ([product_status(product).model_dump(mode='json') for product in select_products('all')]
+                          if args.product == 'all' else product_status(args.product).model_dump(mode='json'))
             elif args.command == 'slots':
                 from argus_prophet.worker import list_slots
                 result = list_slots(args.limit)
@@ -86,7 +87,7 @@ def main(argv=None) -> None:
         return
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     from argus_prophet.services.generation.cycle import generate, generate_products
-    from argus_prophet.runtime import run_command
+    from common.runtime import run_command
     from argus_prophet.worker import generation_lock, work
     if args.command == 'worker':
         run_command(lambda: work(lambda slot, products: generate_products(

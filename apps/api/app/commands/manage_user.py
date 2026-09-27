@@ -4,7 +4,7 @@ import asyncio
 from getpass import getpass
 from fastapi import HTTPException
 from sqlalchemy import select, delete
-from app.commands._runner import run_command
+from common.runtime import run_command
 from app.db.session import get_session_factory, dispose_engine
 from app.db.models.dashboard import User, Session
 from app.dashboard_auth import hash_password

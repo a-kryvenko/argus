@@ -97,3 +97,29 @@ async def history(session: AsyncSession, start: datetime, end: datetime, now: da
     for metric, item in series.items():
         item['coverage'] = coverage(item['points'], start, end, INTERVAL_SECONDS[metric], intervals=True, now=now)
     return {'from': start, 'to': end, 'selection': 'intervals_overlapping_[from,to)', 'series': series}
+
+
+async def load_kp_measurements(session: AsyncSession, *, since: datetime, until: datetime):
+    """Project stored NOAA Kp/Ap into model inputs without fetching or resampling."""
+    import math
+    import pandas as pd
+    records = (await session.scalars(select(GeomagneticObservation).where(
+        GeomagneticObservation.metric == 'kp',
+        GeomagneticObservation.interval_start >= since,
+        GeomagneticObservation.interval_start <= until,
+        GeomagneticObservation.received_at <= until,
+    ).order_by(GeomagneticObservation.interval_start))).all()
+    rows = []
+    for record in records:
+        # Preserve the provider's interval start and fractional Kp scale (0..9).
+        # Ap is supplied as a_running; never infer it from rounded Kp.
+        for metric, value in (('kp', record.value), ('ap', record.raw.get('a_running'))):
+            if value is None or isinstance(value, bool):
+                continue
+            try:
+                value = float(value)
+            except (ValueError, TypeError):
+                continue
+            if math.isfinite(value):
+                rows.append({'metric': metric, 'value': value, 'observed_at': record.interval_start})
+    return pd.DataFrame(rows, columns=['metric', 'value', 'observed_at'])

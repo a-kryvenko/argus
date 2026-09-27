@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Shared Docker Compose adapter for dev and production.
+set -euo pipefail
+root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
+mode=dev
+[[ ! -f "$root/.argus-mode" ]] || read -r mode < "$root/.argus-mode"
+case "$mode" in dev|prod) ;; *) echo 'Invalid .argus-mode: expected dev or prod' >&2; exit 2 ;; esac
+compose=(docker compose --project-directory "$root")
+for file in "$root/.env" "$root/.env.local"; do
+    if [[ "$mode" == prod || -f "$file" ]]; then compose+=(--env-file "$file"); fi
+done
+if [[ "$mode" == prod ]]; then
+    [[ ! -f "$root/.release-images.env" ]] || compose+=(--env-file "$root/.release-images.env")
+else
+    export LOCAL_UID="${LOCAL_UID:-$(id -u)}" LOCAL_GID="${LOCAL_GID:-$(id -g)}"
+fi
+compose+=(-f "$root/docker-compose.yml")
+usage() {
+    echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
+}
+lock() {
+    [[ "$mode" == prod ]] || return 0
+    exec 9>"$root/.deployment.lock"
+    flock "-$1n" 9
+}
+migrate() {
+    local domain="$1" target="$1"
+    shift
+    [[ "$mode" != prod ]] || target+="-migrate"
+    if [[ "$domain" == api ]]; then
+        "${compose[@]}" run --rm --no-deps "$target" .venv/bin/alembic "$@"
+    else
+        "${compose[@]}" run --rm --no-deps "$target" "$domain" migrate "$@"
+    fi
+}
+case "${1:-}" in
+    -h|--help|'') usage; exit 0 ;;
+    db)
+        shift
+        case "${1:-}" in
+            provision)
+                shift
+                lock x
+                exec "${compose[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/db/provision.py "$@"
+                ;;
+            migrate)
+                shift
+                [[ $# == 0 ]] || { usage >&2; exit 2; }
+                lock x
+                for domain in api clio prophet intelligence; do migrate "$domain" upgrade head; done
+                ;;
+            *) usage >&2; exit 2 ;;
+        esac
+        ;;
+    api|clio|prophet|intelligence)
+        domain="$1"
+        shift
+        if [[ "${1:-}" == migrate ]]; then
+            shift
+            lock x
+            migrate "$domain" "$@"
+        elif [[ "$domain" == api ]]; then
+            case "${1:-}" in
+                user)
+                    shift
+                    lock s
+                    exec "${compose[@]}" run --rm --no-deps api .venv/bin/python -m app.commands.manage_user "$@"
+                    ;;
+                serve)
+                    [[ "$mode" == dev ]] || { usage >&2; exit 2; }
+                    shift
+                    exec "${compose[@]}" run --rm --no-deps --service-ports api .venv/bin/uvicorn app.main:app "$@"
+                    ;;
+                *) usage >&2; exit 2 ;;
+            esac
+        else
+            lock s
+            exec "${compose[@]}" run --rm --no-deps "$domain" "$domain" "$@"
+        fi
+        ;;
+    compose)
+        shift
+        exec "${compose[@]}" "$@"
+        ;;
+    *) usage >&2; exit 2 ;;
+esac

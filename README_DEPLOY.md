@@ -18,16 +18,16 @@ Private impact calculations are not part of the public observation service.
 
 ## Local development
 
-Requires Docker Compose v2, Node.js 20.9+, pnpm 9, uv and Python 3.12.11.
-Forecast generation also requires the private `packages/forecast-core` checkout,
+Requires Docker Compose v2, Node.js 20.9+ and pnpm 9.
+Python services run in Docker; uv and a local Python environment are only needed
+for notebooks and host-side Python tests.
+Image builds require the private `packages/forecast-core` and
+`packages/intelligence-core` checkouts. Forecast generation also requires
 models and input files referenced by `configs/`. See [package setup](docs/architecture.md).
 
 ```bash
 pnpm install --frozen-lockfile
-uv sync --project apps/api --frozen
-uv sync --project apps/clio --frozen
-uv sync --project apps/prophet --frozen
-uv sync --project apps/intelligence --frozen
+mkdir -p data
 ```
 
 Configure `.env` and `.env.local`; local values take precedence:
@@ -36,13 +36,17 @@ Configure `.env` and `.env.local`; local values take precedence:
 | --- | --- |
 | `DB_HOST/PORT/NAME/USER/PASSWORD` | Administrator connection for database provisioning |
 | `API_DB_*`, `CLIO_DB_*`, `PROPHET_DB_*`, `INTELLIGENCE_DB_*` | Each service's `HOST`, `PORT`, `NAME`, `USER`, `PASSWORD` |
-| `OBSERVATIONS_URL` | Locally `http://127.0.0.1:8001` |
-| `FORECASTS_URL` | Locally `http://127.0.0.1:8002` |
+| `OBSERVATIONS_URL` | Set by dev Compose to `http://clio:8000` |
+| `FORECASTS_URL` | Set by dev Compose to `http://prophet-api:8000` |
+| `SDO_EMAIL` | Email used by Clio for SDO data requests |
 | `OBSERVATIONS_SERVICE_TOKEN` | Shared secret for Clio, API and Prophet |
 | `FORECASTS_SERVICE_TOKEN` | Shared secret for Prophet, API and Intelligence |
 | `DASHBOARD_ORIGINS`, `DASHBOARD_COOKIE_SECURE` | `http://localhost:3000`, `false` for local HTTP |
 
-The database host is `127.0.0.1` locally and `postgres` in production.
+Dev Compose sets database hosts to `postgres` and ports to `5432`, even if
+`.env.local` contains host-side connection settings. From notebooks or database
+tools on the host, connect to `127.0.0.1:5432`. HTTP ports remain API `8000`,
+Clio `8001`, Prophet `8002`, bound to localhost.
 Passwords are raw strings, without URL encoding. For existing databases, read
 [database ownership](docs/architecture.md#database-ownership) and
 [maintenance](#initial-databases-and-maintenance) before provisioning.
@@ -65,21 +69,49 @@ Provisioning creates missing databases/owners without changing existing password
 For a new installation:
 
 ```bash
-docker compose --env-file .env --env-file .env.local up -d --wait
+./argus compose build
+./argus compose up -d --wait postgres redis
 ./argus db provision --apply
 ./argus db migrate
+./argus compose up -d --wait
 pnpm dev
 ```
 
-`pnpm dev` starts the frontend, API, Clio HTTP, Prophet HTTP and the Clio worker
-(both observation collectors, hourly normalization and five-minute aggregation).
-Prophet generation and Intelligence do not start automatically locally;
-production Compose includes their workers. PostgreSQL and Redis run in Docker.
-The API and frontend reload code changes; restart the Clio worker after changing
-its code. Run it separately with `./argus clio worker`.
+`pnpm dev` starts only the frontend. Dev Compose starts API, Clio HTTP and worker,
+Prophet HTTP and worker, Intelligence, PostgreSQL and Redis, using the production
+Dockerfiles and lockfiles. Notebooks keep their local Python environment.
 
-`docker compose down` stops local infrastructure. Adding `--volumes` deletes
-the local database and Redis volumes.
+Source directories, shared packages, configs and data are mounted from the checkout;
+container `.venv` directories stay inside images. API, Clio HTTP and Prophet HTTP
+reload Python changes, including shared packages. Restart workers explicitly after
+editing their code; configuration changes also require a restart. Migration files
+created with `./argus` are written back to the checkout.
+
+```bash
+# Normal startup after initial setup (no rebuild for source edits):
+./argus compose up -d --wait
+pnpm dev
+
+# Apply worker code changes:
+./argus compose restart clio-worker prophet intelligence
+
+# After changing dependencies, package metadata or a Dockerfile (Prophet example):
+./argus compose build prophet
+./argus compose up -d prophet prophet-api
+
+./argus logs clio -f
+./argus compose down
+```
+
+`./argus compose` loads `.env` then `.env.local` and sets `LOCAL_UID` /
+`LOCAL_GID` to the current user so generated files remain editable. Direct
+`docker compose` commands are equivalent when given the same env files and user
+IDs (defaults: `1000:1000`). Keep `data/` writable by that user. Workers stop
+gracefully; a restart may wait for an active job to finish.
+
+`compose down` stops the local backend. Adding `--volumes` deletes the local
+database and Redis volumes. Stop any old host-side Python processes before the
+first Docker startup so ports `8000`–`8002` are available.
 
 ### Initial data population
 
@@ -100,12 +132,16 @@ do not generate forecasts on request.
 
 `./argus` is the shared local and production entrypoint. Without `.argus-mode`,
 it uses `dev`; deployment writes `prod` to that file. Other values are rejected.
-Development uses installed application environments through uv; production uses
-pinned Docker Compose images. Both load `.env`, then `.env.local`.
+Development uses locally built Docker images with mounted sources; production uses
+pinned Docker Compose images. Both use the shared `scripts/run` and `scripts/logs`
+and load `.env`, then `.env.local`. Production additionally loads
+`.release-images.env` and locks application operations against deployment; dev
+sets the container UID/GID to the local user.
 
-Process management stays with pnpm and Docker Compose. Python commands launched
-through `scripts/dev/run` write to the terminal and `data/logs/<service>.log`;
-frontend output remains in pnpm. The old `/var/www/bin/argus` path is a symlink
+Docker Compose manages Python services; pnpm manages the frontend.
+`./argus logs` reads Compose logs in both environments. One-off commands print
+to the terminal and remove their container on completion; frontend output remains
+in pnpm. The old `/var/www/bin/argus` path is a symlink
 to `/var/www/argus` and uses the same command syntax.
 
 See the [command reference](docs/commands.md) for operations, migrations and diagnostics.
@@ -197,7 +233,7 @@ Actions uploads a release bundle and invokes its `deploy.sh /var/www`:
 1. Lock deployment, validate Compose and download images.
 2. Compare schema/config fingerprints with the last successful release; stop affected writers.
 3. Before migrations, save `pg_dumpall` including roles to `/var/www/backups/` with mode 0600.
-4. Install configs, Compose, image references and root `argus` with `scripts/prod/`;
+4. Install configs, Compose, image references and root `argus` with `scripts/`;
    write `.argus-mode=prod`. Operator env, models and data remain separate.
 5. Wait for infrastructure, apply changed domain migrations and reconcile services.
 6. Reload nginx and record successful fingerprints.

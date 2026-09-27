@@ -96,9 +96,9 @@ for directory in configs nginx alloy; do
 done
 cp "$bundle/docker-compose.yml" "$root/docker-compose.yml"
 cp "$bundle/images.env" "$root/.release-images.env"
-mkdir -p "$root/scripts/prod" "$root/bin"
-install -m 755 "$bundle/scripts/prod/run" "$root/scripts/prod/run"
-install -m 755 "$bundle/scripts/prod/logs" "$root/scripts/prod/logs"
+mkdir -p "$root/scripts" "$root/bin"
+install -m 755 "$bundle/scripts/run" "$root/scripts/run"
+install -m 755 "$bundle/scripts/logs" "$root/scripts/logs"
 printf 'prod\n' > "$root/.argus-mode"
 install -m 755 "$bundle/argus" "$root/argus"
 ln -sfn ../argus "$root/bin/argus"

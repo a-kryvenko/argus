@@ -85,9 +85,10 @@ def test_migrations_are_fingerprinted_separately(source):
 @pytest.mark.parametrize('domain,command', [('prophet', 'status'), ('intelligence', 'check')])
 def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domain, command):
     root = tmp_path / 'host with spaces'
-    (root / 'scripts/prod').mkdir(parents=True)
-    wrapper = root / 'scripts/prod/run'
-    wrapper.write_bytes((ROOT / 'scripts/prod/run').read_bytes())
+    (root / 'scripts').mkdir(parents=True)
+    (root / '.argus-mode').write_text('prod\n')
+    wrapper = root / 'scripts/run'
+    wrapper.write_bytes((ROOT / 'scripts/run').read_bytes())
     (root / '.release-images.env').write_text('images')
     fake_bin = tmp_path / 'tools'
     fake_bin.mkdir()
@@ -133,7 +134,9 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, fail, lega
         directory.mkdir()
     shutil.copy2(ROOT / 'scripts/deployment/deploy.sh', bundle / 'deploy.sh')
     shutil.copy2(ROOT / 'argus', bundle / 'argus')
-    shutil.copytree(ROOT / 'scripts/prod', bundle / 'scripts/prod')
+    (bundle / 'scripts').mkdir()
+    for name in ('run', 'logs'):
+        shutil.copy2(ROOT / 'scripts' / name, bundle / 'scripts' / name)
     for name in ('configs', 'nginx', 'alloy'):
         (bundle / name).mkdir()
     fingerprints = 'intelligence same\napi same\nclio same\nprophet same\nconfigs same\nnginx same\nalloy same\n'
@@ -193,8 +196,8 @@ if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; 
     assert (root / '.argus-mode').read_text() == 'prod\n'
     assert (root / 'argus').read_bytes() == (ROOT / 'argus').read_bytes()
     assert (root / 'bin/argus').resolve() == root / 'argus'
-    assert (root / 'scripts/prod/run').is_file()
-    assert (root / 'scripts/prod/logs').is_file()
+    assert (root / 'scripts/run').is_file()
+    assert (root / 'scripts/logs').is_file()
 
 
 def test_plan_pins_both_private_repositories(source):
@@ -202,3 +205,13 @@ def test_plan_pins_both_private_repositories(source):
     for package, key in [('forecast-core', 'private_commit'), ('intelligence-core', 'intelligence_core_commit')]:
         expected = subprocess.check_output(['git', '-C', str(source / 'packages' / package), 'rev-parse', 'HEAD'], text=True).strip()
         assert plan[key] == expected
+
+
+def test_bundle_includes_only_shared_command_scripts(tmp_path):
+    plan_path = tmp_path / 'plan.json'
+    plan_path.write_text(json.dumps({'components': {}, 'migrations': {}, 'config_hash': 'test'}))
+    destination = tmp_path / 'release'
+    release.bundle(ROOT, plan_path, tmp_path, destination)
+    assert {p.name for p in (destination / 'scripts').iterdir()} == {'run', 'logs'}
+    for name in ('run', 'logs'):
+        assert (destination / 'scripts' / name).read_bytes() == (ROOT / 'scripts' / name).read_bytes()

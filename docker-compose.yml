@@ -1,6 +1,8 @@
+# Python images use the production Dockerfiles; source mounts keep edits live.
+# Set LOCAL_UID/LOCAL_GID if your Linux user is not 1000:1000.
 name: argus-sunwatch-dev
-
 services:
+
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -9,7 +11,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - 127.0.0.1:5432:5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +25,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - 127.0.0.1:6379:6379
     volumes:
       - redis_data:/data
     healthcheck:
@@ -32,6 +34,233 @@ services:
       timeout: 5s
       retries: 5
 
+  clio:
+    build: &clio-build
+      context: .
+      dockerfile: .deploy/clio.Dockerfile
+    image: argus-clio-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment: &clio-env
+      ARGUS_WORKDIR: /var/www
+      DEBUG: ${DEBUG:-false}
+      CLIO_DB_HOST: postgres
+      CLIO_DB_PORT: '5432'
+      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
+      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      SDO_EMAIL: ${SDO_EMAIL:-}
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+    volumes: &clio-volumes
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
+      - ./apps/clio/src:/var/www/apps/clio/src
+      - ./packages/common/src:/var/www/packages/common/src
+      - ./packages/clio/src:/var/www/packages/clio/src
+      - ./packages/forecast/src:/var/www/packages/forecast/src
+      - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
+    command: [".venv/bin/uvicorn", "argus_clio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
+    stop_grace_period: 10m
+    depends_on: &postgres-ready
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    ports:
+      - 127.0.0.1:8001:8000
+
+  clio-worker:
+    build: *clio-build
+    image: argus-clio-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment: *clio-env
+    volumes: *clio-volumes
+    command: ["clio", "worker"]
+    stop_grace_period: 10m
+    depends_on: *postgres-ready
+    healthcheck:
+      test: ["CMD", "clio", "check-health", "worker"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  prophet:
+    build: &prophet-build
+      context: .
+      dockerfile: .deploy/prophet.Dockerfile
+    image: argus-prophet-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      ARGUS_WORKDIR: /var/www
+      PROPHET_DB_HOST: postgres
+      PROPHET_DB_PORT: '5432'
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
+      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
+      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+    volumes: &prophet-volumes
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
+      - ./apps/prophet/src:/var/www/apps/prophet/src
+      - ./packages/common/src:/var/www/packages/common/src
+      - ./packages/forecast/src:/var/www/packages/forecast/src
+      - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
+    command: ["prophet", "worker"]
+    stop_grace_period: 10m
+    depends_on:
+      clio:
+        condition: service_healthy
+
+  prophet-api:
+    build: *prophet-build
+    image: argus-prophet-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      ARGUS_WORKDIR: /var/www
+      PROPHET_DB_HOST: postgres
+      PROPHET_DB_PORT: '5432'
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
+      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+    volumes: *prophet-volumes
+    command: [".venv/bin/uvicorn", "argus_prophet.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+    ports:
+      - 127.0.0.1:8002:8000
+
+  intelligence:
+    build:
+      context: .
+      dockerfile: .deploy/intelligence.Dockerfile
+    image: argus-intelligence-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      INTELLIGENCE_DB_HOST: postgres
+      INTELLIGENCE_DB_PORT: '5432'
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
+      FORECASTS_URL: http://prophet-api:8000
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      ARGUS_WORKDIR: /var/www
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
+      - ./apps/intelligence/src:/var/www/apps/intelligence/src
+      - ./packages/common/src:/var/www/packages/common/src
+      - ./packages/intelligence-core/src:/var/www/packages/intelligence-core/src
+    command: ["intelligence", "worker"]
+    stop_grace_period: 2m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      prophet-api:
+        condition: service_healthy
+
+  api:
+    build: &api-build
+      context: .
+      dockerfile: .deploy/api.Dockerfile
+    image: argus-api-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      ARGUS_WORKDIR: /var/www
+      DEBUG: ${DEBUG:-false}
+      API_DB_HOST: postgres
+      API_DB_PORT: '5432'
+      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
+      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+      FORECASTS_URL: http://prophet-api:8000
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS:-http://localhost:3000}
+      DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-false}
+      MONITORING_REDIS_URL: redis://redis:6379/0
+    volumes: &api-volumes
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
+      - ./apps/api/app:/var/www/apps/api/app
+      - ./apps/api/alembic:/var/www/apps/api/alembic
+      - ./apps/api/alembic.ini:/var/www/apps/api/alembic.ini:ro
+      - ./scripts/db/provision.py:/var/www/scripts/db/provision.py:ro
+      - ./packages/common/src:/var/www/packages/common/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      prophet-api:
+        condition: service_healthy
+    command: [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "app", "--reload-dir", "/var/www/packages"]
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ping', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ports:
+      - 127.0.0.1:8000:8000
+
+  db-provision:
+    build: *api-build
+    image: argus-api-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: ${DB_NAME:?DB_NAME is required}
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      API_DB_HOST: postgres
+      API_DB_PORT: '5432'
+      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
+      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      CLIO_DB_HOST: postgres
+      CLIO_DB_PORT: '5432'
+      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
+      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+      PROPHET_DB_HOST: postgres
+      PROPHET_DB_PORT: '5432'
+      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
+      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
+      INTELLIGENCE_DB_HOST: postgres
+      INTELLIGENCE_DB_PORT: '5432'
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
+      ARGUS_WORKDIR: /var/www
+    volumes: *api-volumes
+    command: [".venv/bin/python", "/var/www/scripts/db/provision.py", "--apply"]
+    profiles: ["maintenance"]
 volumes:
   postgres_data:
   redis_data:

@@ -23,6 +23,21 @@ Command arguments are identical in both environments.
 
 Shows available commands and the selected environment.
 
+## Service processes
+
+`./argus compose <arguments>` runs Docker Compose for the selected environment,
+loading its env files. In dev:
+
+```bash
+./argus compose up -d --wait
+pnpm dev                         # frontend, in this terminal
+./argus compose restart prophet # after editing worker code
+./argus compose down
+```
+
+For the first startup, provision and migrate the databases before starting Python
+services; see [local setup](../README_DEPLOY.md#local-development).
+
 ## Databases
 
 | Command | Purpose |
@@ -63,7 +78,7 @@ followed by `observations`.
 
 Clio manual commands use the same locks as the worker and do not advance its
 scheduled completion markers. They also work when the worker is stopped.
-`pnpm dev` includes the Clio worker; production Compose starts it automatically.
+Docker Compose starts the Clio worker in both dev and production.
 
 Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
 `hmf`, `atmospheric-density`, `all`. Prophet refresh calculates only the selected
@@ -87,13 +102,11 @@ Manage dashboard users; use `--help` for available actions and arguments.
 
 Shows the last 100 lines by default; `-f` follows new output.
 
-Locally, reads `data/logs/<service>.log` for `api`, `clio`, `prophet` or
-`intelligence`. Without a service, reads all available local log files.
-
-In production, reads Docker Compose logs. `clio` includes `clio` and `clio-worker`;
-`prophet` includes its worker and HTTP service. Other supported
-services: `api`, `intelligence`, `frontend`, `nginx`, `postgres`, `redis`, `alloy`.
-Without a service, shows all Compose logs.
+Reads Docker Compose logs in both environments. `clio` includes `clio` and
+`clio-worker`; `prophet` includes its worker and HTTP service. Other local services:
+`api`, `intelligence`, `postgres`, `redis`; `clio-worker` and `prophet-api` can also
+be selected individually. Production additionally supports `frontend`, `nginx`
+and `alloy`. Without a service, shows all Compose logs.
 
 Restore missing historical observations (UTC, exclusive end, maximum 31 days):
 

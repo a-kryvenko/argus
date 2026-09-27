@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 services=()
 if [[ -n "${1:-}" && "$1" != -* ]]; then
     case "$1" in
         prophet) services=(prophet prophet-api) ;;
         clio) services=(clio clio-worker) ;;
-        api|intelligence|frontend|nginx|postgres|redis|alloy) services=("$1") ;;
+        api|intelligence|clio-worker|prophet-api|postgres|redis|frontend|nginx|alloy) services=("$1") ;;
         *) echo 'Unknown service' >&2; exit 2 ;;
     esac
     shift
@@ -19,4 +19,4 @@ while (($#)); do
         *) echo 'Usage: ./argus logs [service] [--tail N] [-f]' >&2; exit 2 ;;
     esac
 done
-exec "$root/scripts/prod/run" compose logs "${args[@]}" "${services[@]}"
+exec "$root/scripts/run" compose logs "${args[@]}" "${services[@]}"

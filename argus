@@ -4,7 +4,7 @@ root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
 mode=dev
 [[ ! -f "$root/.argus-mode" ]] || read -r mode < "$root/.argus-mode"
 case "$mode" in dev|prod) ;; *) echo 'Invalid .argus-mode: expected dev or prod' >&2; exit 2 ;; esac
-backend="$root/scripts/$mode/run"
+backend="$root/scripts/run"
 usage() {
     cat <<HELP
 Usage: ./argus <command> (environment: $mode)
@@ -22,6 +22,7 @@ Usage: ./argus <command> (environment: $mode)
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
   api user <arguments>
   logs [SERVICE] [--tail N] [-f]
+  compose <Docker Compose arguments>
   help [command]
 Services: api, clio, prophet, intelligence.
 refresh runs once; omitted product/source means all supported products/sources.
@@ -32,7 +33,8 @@ run() { "$backend" "$@"; }
 products=(solar-wind-speed solar-wind-density geomagnetic-activity dst hmf atmospheric-density)
 case "${1:-help}" in
     help|-h|--help) usage; exit 0 ;;
-    logs) shift; exec "$root/scripts/$mode/logs" "$@" ;;
+    compose) shift; exec "$backend" compose "$@" ;;
+    logs) shift; exec "$root/scripts/logs" "$@" ;;
     observe)
         shift
         [[ $# -le 1 ]] || fail 'Usage: ./argus observe [product]'

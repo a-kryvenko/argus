@@ -70,7 +70,8 @@ of normalization and aggregation. Failed scheduled jobs retry every 60 seconds. 
 up only the latest due slot. Manual jobs share locks but do not advance scheduled
 completion markers. Source and job lock keys are defined in `db/locks.py` and do not overlap. Work is idempotent/retriable, not exactly once.
 
-Run `./argus clio worker` in the foreground locally; `pnpm dev` also starts it.
+Dev Compose starts `clio-worker`. For a foreground run, stop that service first
+and use `./argus clio worker`.
 Production Compose starts it automatically. Manual `refresh` and `aggregate`
 commands run independently, using the same existing locks, without needing the
 worker. Refresh and aggregation may run concurrently, as before.

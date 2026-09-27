@@ -2,7 +2,6 @@
   "name": "api",
   "version": "0.1.0",
   "scripts": {
-    "dev": "../../scripts/dev/run api serve --reload --host 127.0.0.1 --port 8000",
     "build": "echo 'Backend is Python - no build step'"
   }
 }

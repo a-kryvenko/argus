@@ -15,7 +15,8 @@ See [local setup](../../README_DEPLOY.md#local-development),
 Without a product, these commands cover all supported products; the production
 worker polls solar-wind-speed. Production Compose starts that worker automatically.
 
-For local worker development use `./scripts/dev/run intelligence worker`.
+Dev Compose starts the Intelligence worker. After code changes, use
+`./argus compose restart intelligence`.
 The internal adapter's `intelligence check [product] [--release-id UUID]` validates
 HTTP release retrieval without writing a ledger entry. Its `process` command is
 the underlying one-cycle operation exposed as `refresh`.

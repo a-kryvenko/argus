@@ -17,7 +17,7 @@ def entry(tmp_path, request):
     root.mkdir()
     shutil.copy2(ROOT / 'argus', root / 'argus')
     (root / '.argus-mode').write_text(request.param + '\n')
-    backend = root / 'scripts' / request.param
+    backend = root / 'scripts'
     backend.mkdir(parents=True)
     log = root / 'calls'
     for command in ('run', 'logs'):
@@ -148,3 +148,10 @@ def test_unsupported_observation_target_fails_before_collection(entry):
     result, calls = run('observe', 'atmospheric-density')
     assert result.returncode == 2
     assert calls == []
+
+
+def test_compose_routes_to_selected_environment(entry):
+    _, run = entry
+    result, calls = run('compose', 'up', '-d', '--wait')
+    assert result.returncode == 0, result.stderr
+    assert calls == [['compose', 'up', '-d', '--wait']]

@@ -80,7 +80,9 @@ def bundle(root, plan_path, images_path, destination):
     shutil.copytree(root / 'configs', destination / 'configs', dirs_exist_ok=True)
     shutil.copy2(root / 'scripts/deployment/deploy.sh', destination / 'deploy.sh')
     shutil.copy2(root / 'argus', destination / 'argus')
-    shutil.copytree(root / 'scripts/prod', destination / 'scripts/prod', dirs_exist_ok=True)
+    (destination / 'scripts').mkdir(exist_ok=True)
+    for name in ('run', 'logs'):
+        shutil.copy2(root / 'scripts' / name, destination / 'scripts' / name)
     (destination / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     fingerprints = {**manifest['migrations'], 'configs': manifest['config_hash'],
                     'nginx': digest(root, ['.deploy/nginx']), 'alloy': digest(root, ['.deploy/alloy'])}

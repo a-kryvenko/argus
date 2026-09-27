@@ -13,22 +13,19 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture(params=['local', 'production'])
 def cli(tmp_path, request):
     root = tmp_path / 'project with spaces'
-    folder = root / ('scripts/dev' if request.param == 'local' else 'scripts/prod')
+    folder = root / 'scripts'
     folder.mkdir(parents=True)
-    wrapper = folder / 'argus'
-    source = ROOT / ('scripts/dev/run' if request.param == 'local' else 'scripts/prod/run')
+    (root / '.argus-mode').write_text('dev\n' if request.param == 'local' else 'prod\n')
+    wrapper = folder / 'run'
+    source = ROOT / 'scripts/run'
     wrapper.write_bytes(source.read_bytes())
     wrapper.chmod(0o755)
-    for domain in ('api', 'clio', 'prophet', 'intelligence'):
-        executable = root / 'apps' / domain / '.venv/bin/python'
-        executable.parent.mkdir(parents=True)
-        executable.symlink_to(sys.executable)
     for name in ('.env', '.env.local', '.release-images.env'):
         (root / name).write_text('# fixture\n')
     bindir = tmp_path / 'tools'
     bindir.mkdir()
     log = tmp_path / 'calls.jsonl'
-    for name in ('uv', 'docker'):
+    for name in ('docker',):
         executable = bindir / name
         executable.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
 with open(os.environ['CALL_LOG'], 'a') as output:
@@ -52,13 +49,10 @@ def test_domain_arguments_and_environment_files(cli):
     args = calls[0]['args']
     assert args[-5:] == ['intelligence', 'check', 'dst', '--release-id', 'value with spaces']
     assert args.index(str(root / '.env')) < args.index(str(root / '.env.local'))
-    if mode == 'local':
-        assert '--no-sync' in args and '--frozen' in args
-        assert args[args.index('--project') + 1] == str(root / 'apps/intelligence')
-        assert calls[0]['cwd'] == str(root / 'apps/intelligence')
-        assert calls[0]['workdir'] == str(root)
-    else:
-        assert str(root / '.release-images.env') in args
+    assert args[:1] == ['compose']
+    assert args[args.index('--project-directory') + 1] == str(root)
+    assert args[args.index('run'):args.index('run') + 4] == ['run', '--rm', '--no-deps', 'intelligence']
+    assert (str(root / '.release-images.env') in args) == (mode == 'production')
 
 
 @pytest.mark.parametrize('apply', [False, True])
@@ -79,11 +73,9 @@ def test_all_migrations_are_sequential_and_stop_on_failure(cli, fail):
     assert len(calls) == (2 if fail else 4)
     for domain, call in zip(('api', 'clio', 'prophet', 'intelligence'), calls):
         args = call['args']
-        if mode == 'local':
-            assert args[-2:] == ['upgrade', 'head']
-            assert any(f'/apps/{domain}' in arg for arg in args)
-        else:
-            assert args[-1] == domain + '-migrate'
+        assert args[-2:] == ['upgrade', 'head']
+        target = domain if mode == 'local' else domain + '-migrate'
+        assert args[args.index('--no-deps') + 1] == target
 
 
 def test_specific_migration_uses_maintenance_service(cli):
@@ -112,11 +104,32 @@ def test_production_maintenance_excludes_deployment_and_other_commands(cli):
         assert result.returncode != 0 and not calls
 
 
-def test_local_migrate_checks_all_environments_before_starting(cli):
+def test_local_commands_do_not_require_host_python_environments(cli):
     mode, root, run = cli
     if mode != 'local':
         return
-    (root / 'apps/intelligence/.venv/bin/python').unlink()
+    assert not (root / 'apps').exists()
     result, calls = run('db', 'migrate')
-    assert result.returncode != 0 and not calls
-    assert 'uv sync --project apps/intelligence --frozen' in result.stderr
+    assert result.returncode == 0, result.stderr
+    assert len(calls) == 4
+
+
+def test_compose_arguments_are_forwarded_without_running_app(cli):
+    _, root, run = cli
+    result, calls = run('compose', 'up', '-d', '--wait', 'postgres', 'redis')
+    assert result.returncode == 0, result.stderr
+    assert len(calls) == 1
+    assert calls[0]['args'][-6:] == [str(root / 'docker-compose.yml'), 'up', '-d', '--wait', 'postgres', 'redis']
+
+
+@pytest.mark.parametrize('args', [('db', 'migrate'), ('prophet', 'status', 'dst'), ('api', 'user', '--help')])
+def test_deployment_lock_blocks_production_but_not_dev(cli, args):
+    import fcntl
+    mode, root, run = cli
+    with (root / '.deployment.lock').open('w') as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result, calls = run(*args)
+    if mode == 'production':
+        assert result.returncode != 0 and not calls
+    else:
+        assert result.returncode == 0 and calls

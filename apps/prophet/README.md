@@ -132,8 +132,7 @@ Migration `20260918_prophet_no_exports` removes `forecast_export` and
 `forecast_artifact.csv_written_at`, retaining all releases and compressed artifact
 bytes. Apply migrations before starting the updated worker and read service.
 
-Advanced recovery uses the internal adapter `scripts/dev/run` locally or
-`scripts/prod/run` on the server: `prophet runs`, `prophet show-run <uuid>`,
+Advanced recovery uses the internal adapter `scripts/run` in both environments: `prophet runs`, `prophet show-run <uuid>`,
 `prophet slots`. Preserve database, image and model
 artifacts together when restoring; see [deployment](../../README_DEPLOY.md#recovery).
 

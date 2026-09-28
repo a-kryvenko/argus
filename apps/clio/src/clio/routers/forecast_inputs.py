@@ -13,6 +13,7 @@ from clio.db import get_db_session
 from clio.db.models import Measurement
 from clio.observations.normalized import HISTORY_DAYS, load_normalized_observations
 from common.schemas.forecast_inputs import DENSITY_METRICS, ForecastInputs, SourceMeasurement, SpeedObservation
+from common.data.omni import OMNI_FILL_VALUES
 
 from clio.domains.aia.features import load_aia_features
 from clio.domains.solar_wind.history import history as solar_history
@@ -60,6 +61,8 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         speed_rows = (await session.execute(
             select(hour.label('issue_time'), func.avg(Measurement.value).label('v'))
             .where(Measurement.metric == 'v',
+                   Measurement.value >= 0,
+                   Measurement.value < OMNI_FILL_VALUES['v'],
                    Measurement.observed_at >= as_of - timedelta(days=HISTORY_DAYS),
                    Measurement.observed_at <= as_of)
             .group_by(hour).order_by(hour)

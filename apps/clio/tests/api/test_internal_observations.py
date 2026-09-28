@@ -63,6 +63,8 @@ def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
     assert (NOW - loader.call_args.kwargs['since']).days == 60
     speed_query = statements[3].args[0].compile(dialect=postgresql.dialect())
     assert speed_query.params['metric_1'] == 'v'
+    assert speed_query.params['value_1'] == 0
+    assert speed_query.params['value_2'] == 9999
     assert speed_query.params['observed_at_2'] == NOW
     assert (NOW - speed_query.params['observed_at_1']).days == 60
     assert 'avg(clio.measurement.value)' in str(speed_query)

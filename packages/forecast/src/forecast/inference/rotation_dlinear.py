@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from common.data.omni import OMNI_FILL_VALUES
 
 
 class RotationDLinearForecaster:
@@ -79,8 +80,10 @@ class RotationDLinearForecaster:
                 raise self._history_error(issue_times[0], missing)
             return result
         obs = pd.DataFrame({"issue_time": self._times(observations["issue_time"]),
-                            "v": observations["v"].to_numpy(dtype=np.float32)})
-        obs["v"] = obs["v"].replace([np.inf, -np.inf], np.nan)
+                            "v": observations["v"].to_numpy(dtype=np.float64)})
+        # Historical databases can retain provider fill values. Treat them as
+        # gaps before normalization and the existing bounded forward-fill.
+        obs["v"] = obs["v"].where(obs["v"].ge(0) & obs["v"].lt(OMNI_FILL_VALUES['v']))
         if (obs.groupby("issue_time")["v"].nunique(dropna=False) > 1).any():
             raise ValueError("Conflicting v observations at the same issue_time")
         series = obs.drop_duplicates("issue_time").set_index("issue_time")["v"].sort_index()

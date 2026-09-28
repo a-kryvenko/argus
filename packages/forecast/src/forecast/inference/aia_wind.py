@@ -3,6 +3,7 @@ from datetime import UTC,datetime
 import numpy as np
 import pandas as pd
 from common.adapters import observations_to_dataframe
+from common.data.omni import OMNI_FILL_VALUES
 from forecast.aia_alignment import align
 from forecast.inference.rotation_dlinear import RotationDLinearForecaster
 
@@ -23,6 +24,8 @@ def ridge_prediction(frame,bundle):
         delta=values@model['coefficient']+model['intercept']
         result[rows[active]]+=scale['scale']*delta[active];corrected[rows[active]]=True
     if not np.isfinite(result).all():raise ValueError('Nonfinite wind prediction')
+    if (np.abs(result)>=OMNI_FILL_VALUES['v']).any():
+        raise ValueError('Invalid wind prediction magnitude; check speed history and AIA features')
     return result,corrected
 
 

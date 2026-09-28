@@ -59,3 +59,18 @@ def test_shuffled_actual_receipts_do_not_require_observation_order():
     issue,history,solar=inputs();solar.available_at=issue-pd.Timedelta(minutes=1)
     out=AIAWindForecaster(bundle()).frame(issue,history,solar.sample(frac=1,random_state=2))
     np.testing.assert_allclose(out.v_q50,440.)
+
+
+def test_corrupt_aia_correction_cannot_publish_huge_finite_forecast():
+    issue,history,solar=inputs()
+    solar['aia_area_sector']=-1e29
+    with pytest.raises(ValueError,match='Invalid wind prediction magnitude'):
+        AIAWindForecaster(bundle()).frame(issue,history,solar)
+
+
+def test_speed_fill_value_does_not_become_forecast_or_threshold_probability():
+    issue,history,solar=inputs()
+    history.loc[history.index[-1],'v']=-1e31
+    out=AIAWindForecaster(bundle()).frame(issue,history,solar)
+    np.testing.assert_allclose(out.v_q50,440.)
+    assert out.p_v_ge_450.between(0,1,inclusive='neither').all()

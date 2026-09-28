@@ -50,6 +50,18 @@ def test_fill_limit_and_missing_history():
     assert model.add_rotation_v(request, obs.iloc[3:]).rotation_v.isna().all()
 
 
+@pytest.mark.parametrize('invalid', [-1e31, 1e31, -9999., 9999., np.inf, -np.inf])
+def test_provider_fill_values_use_bounded_gap_handling(invalid):
+    model = RotationDLinearForecaster(bundle())
+    obs = observations()
+    request = pd.DataFrame({'issue_time': [obs.issue_time[2]], 'lead_hours': [1]})
+    obs.loc[2, 'v'] = invalid
+    assert model.add_rotation_v(request, obs, require_history=True).rotation_v.iloc[0] == 110.
+    obs.loc[1, 'v'] = invalid
+    with pytest.raises(ValueError, match='Insufficient hourly speed history'):
+        model.add_rotation_v(request, obs, require_history=True)
+
+
 @pytest.mark.parametrize('lead', [0, 3, 1.5, np.nan])
 def test_reject_invalid_lead(lead):
     obs = observations()

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import requests
 
 import pandas as pd
+import numpy as np
 import cdflib
 import tempfile
 
@@ -9,6 +10,20 @@ SOLAR_WIND_URL_PATTERN = "https://spdf.gsfc.nasa.gov/pub/data/ace/swepam/level_2
 MAGNETIC_URL_PATTERN = "https://spdf.gsfc.nasa.gov/pub/data/ace/mag/level_2_cdaweb/mfi_k0/{year}/ac_k0_mfi_{ymd}_v01.cdf"
 
 class SPDF_Loader:
+    @staticmethod
+    def _values(cdf, name):
+        """Mask CDF fill values and validity bounds before hourly resampling."""
+        values = np.asarray(cdf.varget(name), dtype=float)
+        attrs = cdf.varattsget(name)
+        valid = np.isfinite(values)
+        if 'FILLVAL' in attrs:
+            valid &= values != attrs['FILLVAL']
+        if 'VALIDMIN' in attrs:
+            valid &= values >= attrs['VALIDMIN']
+        if 'VALIDMAX' in attrs:
+            valid &= values <= attrs['VALIDMAX']
+        return np.where(valid, values, np.nan)
+
     @staticmethod
     def load_plasma(start_date: datetime, end_date: datetime):
         """Hourly plasma samples, independent of magnetic archive availability."""
@@ -88,7 +103,7 @@ class SPDF_Loader:
         times = cdflib.cdfepoch.to_datetime(
             cdf.varget("Epoch")
         )
-        bgse = cdf.varget("BGSEc")
+        bgse = SPDF_Loader._values(cdf, "BGSEc")
         df = pd.DataFrame({
             "issue_time": times,
             "bx": bgse[:, 0],
@@ -105,9 +120,9 @@ class SPDF_Loader:
         )
         df = pd.DataFrame({
             "issue_time": times,
-            "v": cdf.varget("Vp"),
-            "n": cdf.varget("Np"),
-            "t": cdf.varget("Tpr")
+            "v": SPDF_Loader._values(cdf, "Vp"),
+            "n": SPDF_Loader._values(cdf, "Np"),
+            "t": SPDF_Loader._values(cdf, "Tpr")
         })
         df["issue_time"] = df["issue_time"].dt.tz_localize("UTC")
         return df

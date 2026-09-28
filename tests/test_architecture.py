@@ -10,6 +10,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_architecture_workflow_references_existing_local_paths():
+    workflow = (ROOT / '.github/workflows/architecture.yml').read_text()
+    paths = re.findall(r'(?<![\w/])(?:apps|packages|tests)/[\w/.-]+', workflow)
+    assert paths
+    missing = [path for path in paths if not (ROOT / path).exists()]
+    assert not missing, f'Architecture workflow references missing paths: {missing}'
+
+
 def imports(path):
     for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
         if isinstance(node, ast.Import):

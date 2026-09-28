@@ -510,6 +510,31 @@ test("unavailable monitoring is visible and does not break the page", async ({
   ).toBeVisible();
 });
 
+test("unconfigured traffic does not degrade healthy services", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          status: "disabled",
+          checked_at: new Date().toISOString(),
+          stale: false,
+          since: null,
+          recent_errors_5xx: 0,
+          resolution: "hour",
+          channels: null,
+        },
+      },
+    }),
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByText("All systems operational")).toBeVisible();
+  await expect(page.getByText(/Traffic collection is not configured/)).toBeVisible();
+  await expect(page.getByText(/Counts may be incomplete/)).toHaveCount(0);
+  await expect(page.getByText(/Collection started:/)).toHaveCount(0);
+});
+
 test("recent server errors override healthy service probes", async ({
   page,
 }) => {

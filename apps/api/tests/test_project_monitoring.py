@@ -119,7 +119,8 @@ def test_forecast_keeps_release_when_latest_generation_failed(monkeypatch):
     assert 'private' not in result['latest_attempt']['error']
 
 
-def test_traffic_heartbeat_must_be_recent_even_if_reader_is_running():
+def test_traffic_heartbeat_must_be_recent_even_if_reader_is_running(monkeypatch):
+    monkeypatch.setenv('MONITORING_TRAFFIC_LOG', '/var/log/nginx/traffic.jsonl')
     from unittest.mock import Mock
     db = AsyncMock()
     db.get.return_value = SimpleNamespace(checked_at=datetime.now(UTC), payload={
@@ -131,7 +132,8 @@ def test_traffic_heartbeat_must_be_recent_even_if_reader_is_running():
 
 
 @pytest.mark.parametrize('count', [0, 7])
-def test_recent_error_count_serializes_as_json_number(count):
+def test_recent_error_count_serializes_as_json_number(count, monkeypatch):
+    monkeypatch.setenv('MONITORING_TRAFFIC_LOG', '/var/log/nginx/traffic.jsonl')
     from decimal import Decimal
     from unittest.mock import Mock
     db = AsyncMock()
@@ -145,3 +147,14 @@ def test_recent_error_count_serializes_as_json_number(count):
     payload = json.loads(result.model_dump_json())
     assert type(payload['data']['recent_errors_5xx']) is int
     assert payload['data']['recent_errors_5xx'] == count
+
+
+def test_unconfigured_traffic_is_disabled_without_reading_old_counts(monkeypatch):
+    monkeypatch.delenv('MONITORING_TRAFFIC_LOG', raising=False)
+    db = AsyncMock()
+    result = asyncio.run(project_traffic('hour', db))
+    assert result.data['status'] == 'disabled'
+    assert result.data['stale'] is False
+    assert result.data['channels'] is None
+    assert result.data['recent_errors_5xx'] == 0
+    db.get.assert_not_awaited()

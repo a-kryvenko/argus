@@ -196,6 +196,10 @@ async def project_traffic(period: Literal['hour', 'day', 'week'] = 'day', db: As
     from app.services.edge_traffic import traffic_summary
     now = datetime.now(timezone.utc)
     resolution = 'minute' if period == 'hour' else 'hour'
+    if not os.getenv('MONITORING_TRAFFIC_LOG'):
+        return success_response({'recent_errors_5xx': 0, 'status': 'disabled',
+            'checked_at': now, 'stale': False, 'since': None,
+            'resolution': resolution, 'channels': None})
     until = now.replace(second=0, microsecond=0, **({'minute': 0} if resolution == 'hour' else {}))
     since = until - (timedelta(minutes=59) if period == 'hour' else timedelta(hours=23 if period == 'day' else 167))
     state = await db.get(MonitorState, 'traffic')

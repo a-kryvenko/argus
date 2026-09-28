@@ -234,7 +234,7 @@ export default function ProjectOverview() {
     !old &&
     project?.status === "ok" &&
     !trafficOld &&
-    traffic?.status === "ok" &&
+    (traffic?.status === "ok" || traffic?.status === "disabled") &&
     recentErrors === 0;
   return (
     <>
@@ -357,17 +357,27 @@ export default function ProjectOverview() {
           </select>
         </div>
         {errors.traffic && <Message>{errors.traffic}</Message>}
-        {(trafficOld || traffic?.status !== "ok") && (
-          <Message>
-            Traffic collection is unavailable, catching up or outdated. Counts
-            may be incomplete.
-          </Message>
+        {traffic &&
+          (trafficOld || !["ok", "disabled"].includes(traffic.status)) && (
+            <Message>
+              Traffic collection is unavailable, catching up or outdated. Counts
+              may be incomplete.
+            </Message>
+          )}
+        {traffic?.status === "disabled" ? (
+          <p className="text-sm text-muted-foreground">
+            Traffic collection is not configured for this environment. Request
+            counts are unavailable.
+          </p>
+        ) : (
+          traffic && (
+            <p className="text-xs text-muted-foreground">
+              Public page requests include bots. Static assets, dashboard pages and
+              monitoring probes are excluded. Collection started:{" "}
+              <Stamp value={traffic.since} />.
+            </p>
+          )
         )}
-        <p className="text-xs text-muted-foreground">
-          Public page requests include bots. Static assets, dashboard pages and
-          monitoring probes are excluded. Collection started:{" "}
-          <Stamp value={traffic?.since} />.
-        </p>
         {traffic?.channels && (
           <div className="grid gap-4 xl:grid-cols-2">
             {(["api", "site"] as const).map((channel) => {

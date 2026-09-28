@@ -1,9 +1,16 @@
-# Intelligence worker (stub)
+# Intelligence impact service and worker
+
+`intelligence serve` exposes authenticated on-demand circular LEO drag
+assessments, using Prophet's density release and the private `intelligence-core`
+backend. Compose runs this as `intelligence-api`, separately from the worker.
+See [LEO drag assessment](../../docs/leo-drag.md) for the contract, configuration,
+limits and example request.
 
 Intelligence polls the current `solar-wind-speed` release every 60 seconds through
 Prophet's HTTP contract. It validates the full release and saves a stub result in
-its own PostgreSQL schema. It does not calculate satellite risks or enforce model
-readiness. No private backend is installed.
+its own PostgreSQL schema. This worker path does not calculate satellite risks or
+enforce model readiness. The HTTP assessment path checks density readiness and
+uses the installed private backend.
 
 ## Configuration and operation
 

@@ -4,19 +4,18 @@
 
 | Component | Responsibility |
 | --- | --- |
-| `apps/api` | Public HTTP, dashboard authentication and API statistics; reads Clio and Prophet over HTTP |
+| `apps/api` | Public HTTP, dashboard authentication and API statistics; reads Clio, Prophet and Intelligence over HTTP |
 | `apps/clio` | Observation collection, storage, aggregation, scheduling and internal reads |
 | `apps/prophet` | Forecast generation, input snapshots, releases and scheduling |
-| `apps/intelligence` | Consumes Prophet releases; records attempts and deduplicated stub results |
+| `apps/intelligence` | Consumes Prophet releases; serves on-demand LEO drag assessments and records worker stub results |
 | `apps/web` | Next.js frontend |
 | `packages/common` | Configuration and shared contracts |
 | `packages/clio` | Public provider fetching and parsing |
 | `packages/forecast` | Public solar-wind inference, features and shared calculation primitives |
 | `packages/forecast-core` | Private non-solar-wind models, training and calibration; uses the public forecast library |
-| `packages/intelligence-core` | Proprietary impact calculations; separate repository not yet created |
+| `packages/intelligence-core` | Proprietary impact calculations; separate private repository |
 
-Data flows from providers through Clio → Prophet → Intelligence. API reads Clio
-and Prophet contracts. Reads never collect data or generate forecasts. Forecast
+Data flows from providers through Clio → Prophet → Intelligence. API reads Clio, Prophet and Intelligence contracts. Reads never collect data or generate forecasts. Forecast
 artifacts are stored in PostgreSQL; model evaluation metrics are static files.
 Prophet publishes each product independently and retries only failed products
 within the current hourly slot. It does not export forecast files.
@@ -28,9 +27,11 @@ keeps its own database locks and timing, so normalization cannot block collectio
 Clio ingestion accesses `forecast_core.calibration` through a lazy adapter;
 its base dependencies exclude model runtimes. Prophet installs the `[models]`
 extra of `forecast-core`; its HTTP read
-path does not import the backend. API and Intelligence install without private
-code and cannot import other applications' runtimes. Private impact calculations
-are not integrated; `packages/intelligence-core` is not an application dependency.
+path does not import the backend. API installs without private code; Intelligence depends on `intelligence-core`
+and uses its `api` boundary for on-demand drag calculations. Neither imports
+other applications' runtimes. `intelligence-api` reads the density release over
+HTTP and needs no database credentials; the existing worker remains a separate
+release-integration process.
 
 ## Database ownership
 
@@ -56,7 +57,8 @@ Python dependency boundaries (distinct from HTTP service calls):
 | Consumer | Internal package dependencies |
 | --- | --- |
 | `forecast` | `common` only |
-| API | `common` only; calls Prophet over HTTP without installing it |
+| API | `common` only; calls Prophet and Intelligence over HTTP without installing them |
+| Intelligence | `common`, private `intelligence-core`; calls Prophet over HTTP |
 | `forecast-core` | `forecast`, `common` |
 | Prophet | `forecast`, `forecast-core`, `common` |
 
@@ -69,8 +71,8 @@ checkout is available.
 
 All packages live in `packages/`. Proprietary `forecast-core` and
 `intelligence-core` are excluded from the public Git repository and maintained
-in separate repositories. The repository for `intelligence-core` has not been
-created yet; its local source stays private.
+in separate repositories. Both backend repositories remain private; numerical impact implementation and
+its documentation belong in `intelligence-core`.
 The public Python workspace resolves without private repositories. Solar-wind
 speed and density inference run entirely in `forecast`, including feature building
 and quantile blending. The private backend depends on that public library; the

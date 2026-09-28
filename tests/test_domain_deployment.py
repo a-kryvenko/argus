@@ -60,4 +60,15 @@ def test_intelligence_credentials_and_networks_are_scoped():
     assert set(services['intelligence-migrate']['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
     for name, service in services.items():
         if not name.startswith('intelligence') and name != 'db-provision':
-            assert not any(key.startswith('INTELLIGENCE_') for key in service.get('environment', {})), name
+            assert not any(key.startswith('INTELLIGENCE_DB_') for key in service.get('environment', {})), name
+
+
+def test_impact_service_is_internal_and_has_no_database_credentials():
+    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    runtime = services['intelligence-api']
+    assert runtime['command'] == ['intelligence', 'serve']
+    assert 'ports' not in runtime
+    assert set(runtime['networks']) == {'forecasts', 'impacts'}
+    assert not any('_DB_' in key for key in runtime['environment'])
+    assert services['api']['environment']['INTELLIGENCE_URL'] == 'http://intelligence-api:8000'
+    assert runtime['environment']['INTELLIGENCE_SERVICE_TOKEN'] == services['api']['environment']['INTELLIGENCE_SERVICE_TOKEN']

@@ -50,7 +50,7 @@ for domain in api clio prophet intelligence; do
     fi
 done
 if changed configs; then
-    stop+=(api clio clio-worker prophet prophet-api)
+    stop+=(api clio clio-worker prophet prophet-api intelligence-api)
 fi
 # Drain and remove the four old Clio containers before starting the unified
 # worker, even when this release has no database/config changes.

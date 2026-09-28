@@ -63,3 +63,8 @@ per-product forecast publication/generation status, host resources and separate
 API/site traffic on `/dashboard`. Clients have a separate placeholder landing
 page. See [project monitoring](../../docs/project-monitoring.md) for permissions,
 configuration, collection semantics, retention and deployment migrations.
+
+## LEO drag
+
+`POST /public/risks/leo-drag` proxies circular-orbit drag assessments to
+Intelligence. See [request example and limits](../../docs/leo-drag.md).

@@ -6,7 +6,7 @@ if [[ -n "${1:-}" && "$1" != -* ]]; then
     case "$1" in
         prophet) services=(prophet prophet-api) ;;
         clio) services=(clio clio-worker) ;;
-        api|intelligence|clio-worker|prophet-api|postgres|redis|frontend|nginx|alloy) services=("$1") ;;
+        api|intelligence|intelligence-api|clio-worker|prophet-api|postgres|redis|frontend|nginx|alloy) services=("$1") ;;
         *) echo 'Unknown service' >&2; exit 2 ;;
     esac
     shift

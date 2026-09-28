@@ -4,6 +4,7 @@ import {
   Layers3,
   LayoutDashboard,
   UsersRound,
+  Satellite,
 } from "lucide-react";
 export const navigation = [
   {
@@ -20,6 +21,17 @@ export const navigation = [
         title: "API statistics",
         icon: Activity,
         permission: "api_stats.read",
+      },
+    ],
+  },
+  {
+    title: "Risk assessments",
+    items: [
+      {
+        href: "/dashboard/risk/leo",
+        title: "LEO drag",
+        icon: Satellite,
+        permission: null,
       },
     ],
   },

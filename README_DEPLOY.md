@@ -41,6 +41,8 @@ Configure `.env` and `.env.local`; local values take precedence:
 | `SDO_EMAIL` | Email used by Clio for SDO data requests |
 | `OBSERVATIONS_SERVICE_TOKEN` | Shared secret for Clio, API and Prophet |
 | `FORECASTS_SERVICE_TOKEN` | Shared secret for Prophet, API and Intelligence |
+| `INTELLIGENCE_URL` | Compose sets `http://intelligence-api:8000` for API |
+| `INTELLIGENCE_SERVICE_TOKEN` | Shared secret for API and impact HTTP service; Compose falls back to `FORECASTS_SERVICE_TOKEN` |
 | `DASHBOARD_ORIGINS`, `DASHBOARD_COOKIE_SECURE` | `http://localhost:3000`, `false` for local HTTP |
 
 Dev Compose sets database hosts to `postgres` and ports to `5432`, even if
@@ -274,3 +276,4 @@ image builds and rollout are validated by the deployment workflow.
 - [Intelligence: processing and retries](apps/intelligence/README.md)
 - [API: access and public read semantics](apps/api/README.md)
 - [Atmospheric density API](apps/intelligence/jb2008-api.md)
+- [LEO drag assessment](docs/leo-drag.md)

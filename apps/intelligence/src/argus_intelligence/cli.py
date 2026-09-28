@@ -14,7 +14,7 @@ PROCESS_PRODUCTS = tuple(product for product in PRODUCT_ARTIFACTS if product != 
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
 
-def check(product, *, release_id=None, transport=None):
+def fetch_release(product, *, release_id=None, transport=None):
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unsupported product')
     url, token = os.getenv('FORECASTS_URL'), os.getenv('FORECASTS_SERVICE_TOKEN')
@@ -34,6 +34,11 @@ def check(product, *, release_id=None, transport=None):
     release = ForecastRelease.model_validate_json(content)
     if release.product != product or (release_id is not None and str(release.release_id) != str(release_id)):
         raise ValueError('Unexpected release')
+    return release
+
+
+def check(product, *, release_id=None, transport=None):
+    release = fetch_release(product, release_id=release_id, transport=transport)
     return {'contract_version': 1, 'service': 'intelligence', 'status': 'ok', 'mode': 'stub',
             'checked_at': datetime.now(UTC).isoformat(), 'product': product,
             'release_id': str(release.release_id), 'run_id': str(release.run_id),
@@ -52,8 +57,15 @@ def main(argv=None):
         sub = commands.add_parser(command, aliases=['refresh'] if command == 'process' else [])
         sub.add_argument('product', choices=PRODUCT_ARTIFACTS if command == 'worker' else ('all', *PROCESS_PRODUCTS),
                          nargs='?', default='solar-wind-speed' if command == 'worker' else 'all')
+    commands.add_parser('serve')
     commands.add_parser('migrate', add_help=False)
     args, remaining = parser.parse_known_args(argv)
+    if args.command == 'serve':
+        if remaining:
+            parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+        import uvicorn
+        uvicorn.run('argus_intelligence.main:app', host='0.0.0.0', port=8000)
+        return
     if args.command == 'migrate':
         from pathlib import Path
         from alembic.config import Config, CommandLine

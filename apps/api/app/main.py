@@ -16,6 +16,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.db.session import dispose_engine
 from app.routers.forecasts import router as forecasts_router
 from app.routers.atmospheric_density import router as atmospheric_density_router
+from app.routers.leo_drag import router as leo_drag_router
 from app.routers.healthcheck import router as healthcheck_router
 from app.routers.public.observations import router as observations_router
 from app.routers.public.solar_wind import router as solar_wind_router
@@ -96,6 +97,7 @@ app.include_router(dashboard_router, include_in_schema=False)
 app.include_router(healthcheck_router)
 
 app.include_router(atmospheric_density_router)
+app.include_router(leo_drag_router)
 app.include_router(forecasts_router)
 app.include_router(observations_router)
 app.include_router(solar_wind_router)

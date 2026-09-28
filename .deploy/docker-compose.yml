@@ -44,6 +44,29 @@ services:
         condition: service_healthy
     networks: [backend, forecasts]
 
+  intelligence-api:
+    image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
+    restart: unless-stopped
+    init: true
+    command: ["intelligence", "serve"]
+    environment:
+      ARGUS_WORKDIR: /var/www
+      FORECASTS_URL: http://prophet-api:8000
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
+    volumes:
+      - ./configs:/var/www/configs:ro
+    depends_on:
+      prophet-api:
+        condition: service_healthy
+    networks: [forecasts, impacts]
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   intelligence-migrate:
     image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
     profiles: ["maintenance"]
@@ -70,6 +93,8 @@ services:
       API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+      INTELLIGENCE_URL: http://intelligence-api:8000
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
       OBSERVATIONS_URL: http://clio:8000
@@ -103,6 +128,7 @@ services:
       backend:
       observations:
       forecasts:
+      impacts:
 
   clio:
     <<: *clio-runtime
@@ -373,4 +399,6 @@ networks:
   observations:
     driver: bridge
   forecasts:
+    driver: bridge
+  impacts:
     driver: bridge

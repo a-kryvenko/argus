@@ -178,6 +178,34 @@ services:
       prophet-api:
         condition: service_healthy
 
+  intelligence-api:
+    build:
+      context: .
+      dockerfile: .deploy/intelligence.Dockerfile
+    image: argus-intelligence-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    command: ["intelligence", "serve"]
+    environment:
+      ARGUS_WORKDIR: /var/www
+      FORECASTS_URL: http://prophet-api:8000
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./apps/intelligence/src:/var/www/apps/intelligence/src
+      - ./packages/common/src:/var/www/packages/common/src
+      - ./packages/intelligence-core/src:/var/www/packages/intelligence-core/src
+    depends_on:
+      prophet-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   api:
     build: &api-build
       context: .
@@ -194,6 +222,8 @@ services:
       API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+      INTELLIGENCE_URL: http://intelligence-api:8000
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
       OBSERVATIONS_URL: http://clio:8000

@@ -22,7 +22,7 @@ jobs:
             .github/workflows/architecture.yml
       - name: Install public packages and test dependencies
         # The serialization tests exercise the optional joblib model format.
-        run: python -m pip install -e packages/common -e packages/forecast pytest httpx 'joblib>=1.5.3' scikit-learn
+        run: python -m pip install -e packages/common -e packages/forecast pytest httpx fastapi 'joblib>=1.5.3' scikit-learn
       - name: Check boundaries and public imports
         env:
           PYTHONPATH: apps/intelligence/src

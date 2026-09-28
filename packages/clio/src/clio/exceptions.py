@@ -1,2 +1,0 @@
-class RemoteServerException(Exception):
-    pass

@@ -31,7 +31,7 @@ def test_installed_api_has_no_collector_or_private_backend():
 import importlib.util
 assert importlib.util.find_spec('forecast') is None
 assert importlib.util.find_spec('clio') is None
-assert importlib.util.find_spec('argus_clio') is None
+assert importlib.util.find_spec('clio') is None
 assert importlib.util.find_spec('forecast_core') is None
 assert importlib.util.find_spec('argus_prophet') is None
 import app.main

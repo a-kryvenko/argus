@@ -20,9 +20,8 @@ def imports(path):
 
 def test_package_dependency_direction():
     forbidden = {
-        'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
-        'clio': {'app', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
-        'forecast': {'app', 'clio', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_clio', 'argus_prophet', 'argus_intelligence'},
+        'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_prophet', 'argus_intelligence'},
+        'forecast': {'app', 'clio', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_prophet', 'argus_intelligence'},
     }
     violations = []
     for package, blocked in forbidden.items():
@@ -65,7 +64,7 @@ def test_public_workspace_does_not_require_private_checkouts():
     for member in config['tool']['uv']['workspace']['members']:
         assert (ROOT / member / 'pyproject.toml').is_file()
         assert 'core' not in member
-    for package in ('common', 'clio', 'forecast'):
+    for package in ('common', 'forecast'):
         config = tomllib.loads((ROOT / 'packages' / package / 'pyproject.toml').read_text())
         for dependency in config['project']['dependencies']:
             assert not dependency.startswith(('forecast-core', 'intelligence-core'))
@@ -86,7 +85,7 @@ def test_private_source_is_not_in_public_tree():
 
 
 def test_runtime_sql_does_not_read_foreign_domain_tables():
-    roots = {'api': ROOT / 'apps/api/app', 'clio': ROOT / 'apps/clio/src/argus_clio',
+    roots = {'api': ROOT / 'apps/api/app', 'clio': ROOT / 'apps/clio/src/clio',
              'prophet': ROOT / 'apps/prophet/src/argus_prophet',
              'intelligence': ROOT / 'apps/intelligence/src/argus_intelligence'}
     for owner, root in roots.items():
@@ -113,11 +112,11 @@ def test_clio_uses_base_backend_and_prophet_requests_models():
 
 
 @pytest.mark.parametrize('root,blocked,private_surface', [
-    ('apps/api/app', {'forecast', 'clio', 'argus_clio', 'forecast_core', 'argus_prophet', 'argus_intelligence'}, {'intelligence_core.api'}),
+    ('apps/api/app', {'forecast', 'clio', 'forecast_core', 'argus_prophet', 'argus_intelligence'}, {'intelligence_core.api'}),
     ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.calibration'}),
-    ('apps/prophet/src', {'app', 'argus_clio', 'clio', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.api'}),
-    ('apps/intelligence/src', {'app', 'argus_clio', 'argus_prophet', 'clio', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
-    ('packages/forecast-core/src', {'clio', 'argus_clio'}, None),
+    ('apps/prophet/src', {'app', 'clio', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.api'}),
+    ('apps/intelligence/src', {'app', 'clio', 'argus_prophet', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
+    ('packages/forecast-core/src', {'clio'}, None),
 ])
 def test_service_import_boundaries(root, blocked, private_surface):
     for path in (ROOT / root).rglob('*.py'):

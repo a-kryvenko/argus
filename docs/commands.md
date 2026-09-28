@@ -20,17 +20,17 @@ migrations and cross-service workflows.
 
 Use `./argus clio --help` or `./argus prophet --help` for service commands.
 Clio handlers share one event-loop/connection cleanup boundary.
-`clio refresh` collects both live sources and normalizes observations;
-`clio refresh observations` only runs the model-observation refresh. Scheduled
-refresh retains the latter behavior.
+`clio collect [METRIC ...]` fetches configured live observations;
+`clio normalize` only processes stored measurements.
 
 ## Help
 
 ```bash
-./argus help [command]
+./argus help
 ```
 
-Shows available commands and the selected environment.
+Shows available commands and the selected environment. For command-specific
+arguments use, for example, `./argus clio backfill --help`.
 
 ## Service processes
 
@@ -63,35 +63,53 @@ Services: `api`, `clio`, `prophet`, `intelligence`.
 `--autogenerate` is available for API and Clio. Prophet and Intelligence use
 handwritten migrations.
 
-## Refresh and status
+## Collection, generation and status
 
-`refresh` runs once and exits. Omitting the source or product selects `all`.
-Clio execution stops on the first error. Prophet attempts every selected product
-and publishes successes independently; it exits with an error if any product fails.
-Omitting the product for `status` also selects `all`. Multi-product status and
-Intelligence refresh return a JSON array from one service invocation.
+Clio `collect`, `backfill`, `normalize` and `aggregate` run once and exit.
+Omitting metrics from `collect` or `backfill` selects all configured observations.
+Metrics are positional and space-separated: `collect bx by bz`, without
+`--metrics` or commas. The old Clio `fetch-live`, `refresh` and
+`collect solar-wind/geomagnetic/aia` interfaces have been removed.
+
+Prophet `generate` (alias `refresh`) and Intelligence `process` (alias `refresh`)
+run once; omitting the product selects `all`. Prophet attempts every selected
+product and publishes successes independently; it exits with an error if any
+product fails. Omitting the product for their `status` commands also selects
+`all`. Multi-product status and Intelligence processing return a JSON array
+from one service invocation.
 
 | Command | Purpose |
 | --- | --- |
-| `./argus clio refresh [source]` | Collect or update observations |
+| `./argus clio normalize` | Normalize stored observations |
 | `./argus clio aggregate [--limit N]` | Process queued aggregates |
 | `./argus clio status` | Show collection progress and source freshness |
-| `./argus clio worker` | Run both collectors and scheduled normalization/aggregation in the foreground |
-| `./argus prophet refresh [product]` | Generate and publish forecasts |
+| `./argus clio worker` | Run native RTSW collection, normalization, aggregation and separate numeric/file live/backfill schedules |
+| `./argus clio collect [METRIC ...]` | Fetch selected observations using configured live priorities |
+| `./argus clio schedule live` | Run per-observation live schedules in the foreground |
+| `./argus clio backfill [METRIC ...] [--from DATE --to DATE]` | Fill missing observations using configured history depths |
+| `./argus clio schedule backfill` | Run per-observation backfill schedules in the foreground |
+| `./argus clio schedule normalize` | Periodically normalize stored observations |
+| `./argus clio schedule aggregate` | Periodically process queued aggregates |
+| `./argus clio schedule native-wind` | Continuously collect native RTSW sensor samples |
+| `./argus clio audit [--json]` | Inspect native solar-wind history and aggregation gaps |
+| `./argus clio cleanup [--json] [--apply]` | Preview native solar-wind retention cleanup; apply only with `--apply` |
+| `./argus clio check-health <solar-wind\|geomagnetic\|worker>` | Check collector health |
+| `./argus prophet generate [product]` | Generate and publish forecasts |
 | `./argus prophet status [product]` | Show the current release and latest generation attempt |
-| `./argus intelligence refresh [product]` | Process available forecasts once, currently in stub mode |
+| `./argus intelligence process [product]` | Process available forecasts once, currently in stub mode |
 | `./argus intelligence status [product]` | Show processing status |
 
-Clio sources: `observations` (normalized observations and input history),
-`solar-wind`, `geomagnetic`, `all`. With `all`, both collectors run first,
-followed by `observations`.
+An empty database needs `collect` / `backfill` before `normalize`.
 
 Clio manual commands use the same locks as the worker and do not advance its
 scheduled completion markers. They also work when the worker is stopped.
 Docker Compose starts the Clio worker in both dev and production.
+`schedule live` and `schedule backfill` accept `--kind numeric` or `--kind file`;
+the worker uses one scheduler and temporary executors with independent live
+lanes and at most two concurrent background jobs. Without positional metrics, manual commands include all configured kinds.
 
 Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
-`hmf`, `atmospheric-density`, `all`. Prophet refresh calculates only the selected
+`hmf`, `atmospheric-density`, `all`. Prophet generation calculates only the selected
 product; `all` calculates every supported product using one observation snapshot.
 `solar-radiation` is not supported by these commands.
 
@@ -114,15 +132,33 @@ Shows the last 100 lines by default; `-f` follows new output.
 
 Reads Docker Compose logs in both environments. `clio` includes `clio` and
 `clio-worker`; `prophet` includes its worker and HTTP service. Other local services:
-`api`, `intelligence`, `postgres`, `redis`; `clio-worker` and `prophet-api` can also
+`api`, `intelligence`, `intelligence-api`, `postgres`, `redis`; `clio-worker` and `prophet-api` can also
 be selected individually. Production additionally supports `frontend`, `nginx`
 and `alloy`. Without a service, shows all Compose logs.
 
-Restore missing historical observations (UTC, exclusive end, maximum 31 days):
+## Historical recovery
+
+Restore missing historical observations using each configured depth, or a UTC
+range with an exclusive end (maximum 31 days for explicit ranges):
 
 ```bash
-./argus clio backfill --from 2026-08-31 --to 2026-09-09
+./argus clio backfill
+./argus clio backfill kp dst f10_7
+./argus clio collect aia193
+./argus clio backfill aia193
+./argus clio backfill v n t --from 2026-08-31 --to 2026-09-09
 ```
 
+Both `--from` and `--to` must be supplied together. Dates mean midnight UTC;
+timestamps must include a timezone and fall on a whole UTC hour. The end must
+not be in the future. Without these flags, each metric uses its configured
+`backfill.days`.
+
 Existing measurements are preserved. The output reports source failures and
-remaining raw observation gaps; see the Clio README for archive coverage limits.
+remaining raw slots at each metric's cadence (hourly, three-hourly or daily).
+Only closed, fully contained slots are checked. The worker runs
+both `clio.observations.<metric>.schedules.live` and `schedules.backfill`
+automatically. See the Clio README for archive coverage limits.
+For AIA, missing derivative caches are rebuilt from retained originals; a lost
+original must match its recorded SHA256 before it is restored. Existing observations
+and first receipt timestamps are preserved.

@@ -16,7 +16,6 @@ resolution-markers = [
 [manifest]
 members = [
     "argus-clio",
-    "clio",
     "common",
     "forecast",
 ]
@@ -204,34 +203,48 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "astropy" },
-    { name = "clio" },
+    { name = "beautifulsoup4" },
+    { name = "cdflib" },
     { name = "common" },
     { name = "fastapi" },
     { name = "forecast-core" },
+    { name = "h5netcdf" },
+    { name = "h5py" },
+    { name = "numpy" },
+    { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pyarrow" },
+    { name = "requests" },
     { name = "scipy" },
     { name = "sentry-sdk" },
     { name = "sqlalchemy" },
     { name = "sunpy", extra = ["map"] },
     { name = "uvicorn" },
+    { name = "xarray" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2" },
     { name = "astropy", specifier = ">=6" },
-    { name = "clio", editable = "../../packages/clio" },
+    { name = "beautifulsoup4", specifier = ">=4.15.0" },
+    { name = "cdflib", specifier = ">=1.1.0" },
     { name = "common", editable = "../../packages/common" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "forecast-core", editable = "../../packages/forecast-core" },
+    { name = "h5netcdf", specifier = ">=1.8.1" },
+    { name = "h5py", specifier = ">=3.16.0" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pandas", specifier = ">=2.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pyarrow", specifier = ">=24.0.0" },
+    { name = "requests", specifier = ">=2.32" },
     { name = "scipy", specifier = ">=1.13" },
     { name = "sentry-sdk", specifier = ">=2.61.1" },
     { name = "sqlalchemy", specifier = ">=2.0,<3" },
     { name = "sunpy", extras = ["map"], specifier = ">=6" },
     { name = "uvicorn", specifier = ">=0.30" },
+    { name = "xarray", specifier = ">=2026.4.0" },
 ]
 
 [[package]]
@@ -416,35 +429,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9b/98/518d8e5081007684232226f475082b30087d0f585e8457db087298259f49/click-8.4.1.tar.gz", hash = "sha256:918b5633eddf6b41c32d4f454bf0de810065c74e3f7dbf8ee5452f8be88d3e96", size = 353007, upload-time = "2026-05-22T04:08:37.769Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/0d/67e5b4109ea4a837e80daa87c2c696711955e40449a97e8926672534def2/click-8.4.1-py3-none-any.whl", hash = "sha256:482be17c6991b8c19c5429a1e995d9b0efdbb63172824c41f99965dc0ade8ec2", size = 116639, upload-time = "2026-05-22T04:08:35.26Z" },
-]
-
-[[package]]
-name = "clio"
-version = "0.1.0"
-source = { editable = "../../packages/clio" }
-dependencies = [
-    { name = "beautifulsoup4" },
-    { name = "cdflib" },
-    { name = "common" },
-    { name = "h5netcdf" },
-    { name = "h5py" },
-    { name = "numpy" },
-    { name = "pandas" },
-    { name = "requests" },
-    { name = "xarray" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "beautifulsoup4", specifier = ">=4.15.0" },
-    { name = "cdflib", specifier = ">=1.1.0" },
-    { name = "common", editable = "../../packages/common" },
-    { name = "h5netcdf", specifier = ">=1.8.1" },
-    { name = "h5py", specifier = ">=3.16.0" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pandas", specifier = ">=2.2" },
-    { name = "requests", specifier = ">=2.32" },
-    { name = "xarray", specifier = ">=2026.4.0" },
 ]
 
 [[package]]

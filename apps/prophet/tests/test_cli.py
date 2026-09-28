@@ -27,7 +27,7 @@ def test_installed_environment_imports_without_observation_storage(tmp_path):
     code = '''
 import importlib.util
 assert importlib.util.find_spec('app') is None
-assert importlib.util.find_spec('argus_clio') is None
+assert importlib.util.find_spec('clio') is None
 import argus_prophet.db.session
 import argus_prophet.services.generation.calculation
 import argus_prophet.services.density.forecast

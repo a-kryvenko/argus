@@ -38,7 +38,7 @@ def source(tmp_path):
              'packages/forecast/src/forecast/example.py': 'forecast', 'apps/web/app/page.tsx': 'page',
              'apps/prophet/src/argus_prophet/worker.py': 'worker',
              'apps/intelligence/src/argus_intelligence/cli.py': 'cli',
-             'apps/clio/src/argus_clio/migrations/versions/test.py': 'migration',
+             'apps/clio/src/clio/migrations/versions/test.py': 'migration',
              'configs/project.yaml': 'config'}
     files.update({f'.deploy/{name}.Dockerfile': 'FROM scratch' for name in release.IMAGES})
     tracked_repo(tmp_path, files)
@@ -76,7 +76,7 @@ def test_deleted_sources_and_explicit_rebuild_are_not_missed(source):
 
 def test_migrations_are_fingerprinted_separately(source):
     before = release.plan(source)
-    (source / 'apps/clio/src/argus_clio/migrations/versions/test.py').write_text('new migration')
+    (source / 'apps/clio/src/clio/migrations/versions/test.py').write_text('new migration')
     after = release.plan(source)
     assert changed_components(before, after) == {'clio'}
     assert {name for name in before['migrations'] if before['migrations'][name] != after['migrations'][name]} == {'clio'}

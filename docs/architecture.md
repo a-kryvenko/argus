@@ -10,7 +10,7 @@
 | `apps/intelligence` | Consumes Prophet releases; serves on-demand LEO drag assessments and records worker stub results |
 | `apps/web` | Next.js frontend |
 | `packages/common` | Configuration and shared contracts |
-| `packages/clio` | Public provider fetching and parsing |
+| `apps/clio/src/clio/providers` | Public provider fetching and parsing, owned by Clio |
 | `packages/forecast` | Public solar-wind inference, features and shared calculation primitives |
 | `packages/forecast-core` | Private non-solar-wind models, training and calibration; uses the public forecast library |
 | `packages/intelligence-core` | Proprietary impact calculations; separate private repository |
@@ -42,7 +42,7 @@ access; cross-service reads use HTTP. Resources and server availability remain s
 | Service | Suggested database / owner | Schema | Migrations |
 | --- | --- | --- | --- |
 | API | `argus_api` | `api` | `apps/api/alembic` |
-| Clio | `argus_clio` | `clio` | `apps/clio/src/argus_clio/migrations` |
+| Clio | `clio` | `clio` | `apps/clio/src/clio/migrations` |
 | Prophet | `argus_prophet` | `prophet` | `apps/prophet/src/argus_prophet/migrations` |
 | Intelligence | `argus_intelligence` | `intelligence` | `apps/intelligence/src/argus_intelligence/migrations` |
 

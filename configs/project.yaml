@@ -1,6 +1,123 @@
 project:
   name: argus-sunwatch
 
+# Numeric and file observations use these sources, schedules and backfill depths.
+# Native RTSW remains a separate product; AIA uses file adapters.
+clio:
+  observations:
+    aia193:
+      sources:
+        live: [aia.nrt_193]
+        historical: [aia.synoptic_193]
+      schedules:
+        live: {every: 1h}
+        backfill: {every: 6h}
+      backfill: {days: 40}
+    bx:
+      sources:
+        live: [swpc.propagated_magnetic]
+        historical: [omni.hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    by:
+      sources:
+        live: [swpc.propagated_magnetic]
+        historical: [omni.hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    bz:
+      sources:
+        live: [swpc.propagated_magnetic]
+        historical: [omni.hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    v:
+      sources:
+        live: [swpc.propagated_plasma]
+        historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    n:
+      sources:
+        live: [swpc.propagated_plasma]
+        historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    t:
+      sources:
+        live: [swpc.propagated_plasma]
+        historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    kp:
+      sources:
+        live: [swpc.kp]
+        historical: [omni.hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    ap:
+      sources:
+        live: [swpc.kp]
+        historical: [omni.hourly]
+      schedules:
+        live: {every: 1m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    dst:
+      sources:
+        live: [swpc.dst]
+        historical: [omni.hourly]
+      schedules:
+        live: {every: 5m}
+        backfill: {every: 6h}
+      backfill: {days: 60}
+    f10_7:
+      sources:
+        live: [swpc.f107]
+        historical: [gfz.f107, omni.hourly]
+      schedules:
+        live: {every: 1h}
+        backfill: {every: 1d}
+      backfill: {days: 88}
+    s10:
+      sources:
+        live: [goes.calibrated_live]
+        historical: [goes.calibrated_daily]
+      schedules:
+        live: {every: 1h}
+        backfill: {every: 1d}
+      backfill: {days: 88}
+    m10:
+      sources:
+        live: [goes.calibrated_live]
+        historical: [goes.calibrated_daily]
+      schedules:
+        live: {every: 1h}
+        backfill: {every: 1d}
+      backfill: {days: 88}
+    y10:
+      sources:
+        live: [goes.calibrated_live]
+        historical: [goes.calibrated_daily]
+      schedules:
+        live: {every: 1h}
+        backfill: {every: 1d}
+      backfill: {days: 88}
+
 metrics:
   solar_wind_speed: data/metrics/wind_speed_by_lead.csv
   solar_wind_probability: data/metrics/wind_threshold_by_lead.csv

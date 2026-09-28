@@ -1,6 +1,6 @@
 """Exercise real migrations and monitoring persistence in a disposable Docker DB.
 
-PYTHONPATH=apps/api:apps/clio/src:packages/common/src:packages/clio/src:apps/api/.venv/lib/python3.12/site-packages .venv/bin/python apps/api/tests/integration/verify_project_monitoring.py
+PYTHONPATH=apps/api:apps/clio/src:packages/common/src:apps/api/.venv/lib/python3.12/site-packages .venv/bin/python apps/api/tests/integration/verify_project_monitoring.py
 No existing database or container is touched. The temporary container is stopped
 in finally, including after a failed assertion.
 """
@@ -25,8 +25,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.models.monitoring import MonitorState, TrafficMetric
 from app.services import edge_traffic, project_monitoring
-from argus_clio.services.observations.normalized import _upsert_measurements
-from argus_clio.db.models import MeasurementReceipt
+from clio.observations.normalized import _upsert_measurements
+from clio.db.models import MeasurementReceipt
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -59,7 +59,7 @@ async def verify(dsn):
     api = create_async_engine(dsn, connect_args={'options': '-csearch_path=api,pg_catalog,pg_temp'})
     clio = create_async_engine(dsn, connect_args={'options': '-csearch_path=clio,pg_catalog,pg_temp'})
     api_migrations = modules(ROOT/'apps/api/alembic/versions')
-    clio_migrations = modules(ROOT/'apps/clio/src/argus_clio/migrations/versions')
+    clio_migrations = modules(ROOT/'apps/clio/src/clio/migrations/versions')
     try:
         for name, engine, migrations in [('api', api, api_migrations), ('clio', clio, clio_migrations)]:
             async with engine.begin() as connection:
@@ -110,7 +110,7 @@ async def verify(dsn):
             await db.commit()
             receipt = await db.get(MeasurementReceipt, 'dst')
             received = receipt.received_at
-            from argus_clio.services.collection.monitoring import monitoring_status
+            from clio.monitoring.monitoring import monitoring_status
             status = await monitoring_status(db)
             dst = next(m for m in status['measurements'] if m['metric'] == 'dst')
             assert dst['latest_observation_at'] == now and dst['received_at'] == received

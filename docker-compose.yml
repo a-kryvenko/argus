@@ -43,6 +43,9 @@ services:
     user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
     environment: &clio-env
       ARGUS_WORKDIR: /var/www
+      # Scientific libraries need writable config/cache paths for arbitrary UIDs.
+      XDG_CONFIG_HOME: /tmp/clio-config
+      XDG_CACHE_HOME: /tmp/clio-cache
       DEBUG: ${DEBUG:-false}
       CLIO_DB_HOST: postgres
       CLIO_DB_PORT: '5432'
@@ -57,10 +60,9 @@ services:
       - ./data:/var/www/data
       - ./apps/clio/src:/var/www/apps/clio/src
       - ./packages/common/src:/var/www/packages/common/src
-      - ./packages/clio/src:/var/www/packages/clio/src
       - ./packages/forecast/src:/var/www/packages/forecast/src
       - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
-    command: [".venv/bin/uvicorn", "argus_clio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
+    command: [".venv/bin/uvicorn", "clio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
     stop_grace_period: 10m
     depends_on: &postgres-ready
       postgres:

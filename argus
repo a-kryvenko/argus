@@ -12,8 +12,8 @@ Usage: ./argus <command> (environment: $mode)
   <service> migrate
   <service> migration create -m MESSAGE [--autogenerate] (dev only)
   <service> migration current | history | downgrade REVISION
-  clio refresh [all|observations|solar-wind|geomagnetic]
-  clio backfill --from DATE --to DATE
+  clio collect [METRIC ...] | clio normalize
+  clio backfill [METRIC ...] [--from DATE --to DATE]
   clio aggregate [--limit N] | clio status | clio worker
   prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
   prophet status [PRODUCT]
@@ -39,10 +39,9 @@ case "${1:-help}" in
         [[ $# -le 1 ]] || fail 'Usage: ./argus observe [product]'
         selection="${1:-solar-wind-speed}"
         case "$selection" in solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|all) ;; *) fail 'No observation verification protocol for this product' ;; esac
-        run clio collect solar-wind
-        run clio collect geomagnetic
+        run clio collect
         run clio aggregate
-        run clio refresh observations
+        run clio normalize
         if [[ "$selection" == all ]]; then
             for product in solar-wind-speed solar-wind-density geomagnetic-activity dst hmf; do
                 run prophet generate "$product"

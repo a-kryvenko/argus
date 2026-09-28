@@ -59,7 +59,7 @@ def database(tmp_path):
                    'ARGUS_WORKDIR': str(tmp_path),
                    'PYTHONPATH': ':'.join(str(ROOT / path) for path in (
                        'apps/api', 'apps/clio/src', 'apps/prophet/src', 'apps/intelligence/src',
-                       'packages/common/src', 'packages/clio/src', 'packages/forecast/src'))}
+                       'packages/common/src', 'packages/forecast/src'))}
     try:
         provisioning.provision(admin_dsn, urls, apply=True)
         yield dsns, urls, environment
@@ -71,7 +71,7 @@ def database(tmp_path):
 
 
 def migrate(environment):
-    for command in ([sys.executable, '-c', 'from argus_clio.cli import main; main()', 'migrate', 'upgrade', 'head'],
+    for command in ([sys.executable, '-c', 'from clio.cli import main; main()', 'migrate', 'upgrade', 'head'],
                     [sys.executable, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini'), 'upgrade', 'head'],
                     [sys.executable, '-c', 'from argus_prophet.cli import main; main()', 'migrate', 'upgrade', 'head'],
                     [sys.executable, '-c', 'from argus_intelligence.cli import main; main()', 'migrate', 'upgrade', 'head']):
@@ -123,8 +123,8 @@ def test_scheduler_retries_restarts_and_serializes_jobs(database, monkeypatch):
     for key, value in environment.items():
         if key.startswith('CLIO_DB_'):
             monkeypatch.setenv(key, value)
-    from argus_clio.scheduler import execute, JobBusy
-    from argus_clio.db.locks import JOB_LOCKS
+    from clio.scheduling.jobs import execute, JobBusy
+    from clio.db.locks import JOB_LOCKS
     now = datetime(2026, 9, 12, 12, tzinfo=UTC)
     calls = []
     def fail():

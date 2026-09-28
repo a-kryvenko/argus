@@ -15,13 +15,13 @@ INPUTS = {
     'frontend': ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web'],
     'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/app', 'apps/api/alembic',
             'apps/api/alembic.ini', 'packages/common', 'scripts/db/provision.py'],
-    'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common', 'packages/clio', 'packages/forecast'],
+    'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common', 'packages/forecast'],
     'prophet': ['apps/prophet/pyproject.toml', 'apps/prophet/uv.lock', 'apps/prophet/src',
                 'packages/common', 'packages/forecast'],
 }
 MIGRATIONS = {'intelligence': ['apps/intelligence/src/argus_intelligence/migrations'],
               'api': ['apps/api/alembic', 'apps/api/alembic.ini'],
-              'clio': ['apps/clio/src/argus_clio/migrations'],
+              'clio': ['apps/clio/src/clio/migrations'],
               'prophet': ['apps/prophet/src/argus_prophet/migrations']}
 IGNORED = {'.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.next',
            '.turbo', 'dist', 'build', 'coverage', 'test-results', 'playwright-report'}

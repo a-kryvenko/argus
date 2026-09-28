@@ -40,7 +40,8 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "h5netcdf>=1.8.1",
     "hdf5plugin>=6.0.0",
-    "clio",
+    "cdflib>=1.1.0",
+    "beautifulsoup4>=4.15.0",
     "opencv-python>=4.13.0.92",
     "lightgbm>=4.6.0",
     "joblib>=1.5.3",
@@ -60,11 +61,9 @@ dev = [
 [tool.uv.sources]
 common = { workspace = true }
 forecast = { workspace = true }
-clio = { workspace = true, editable = true }
 
 [tool.uv.workspace]
 members = [
     "packages/common",
     "packages/forecast",
-    "packages/clio",
 ]

@@ -25,7 +25,7 @@ def entry(tmp_path, request):
         p.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
 with open(os.environ['ARGUS_TEST_CALLS'], 'a') as out:
     out.write(json.dumps(sys.argv[1:]) + '\\n')
-if os.getenv('ARGUS_TEST_FAIL') and sys.argv[1:3] == ['clio', 'refresh']:
+if os.getenv('ARGUS_TEST_FAIL') and sys.argv[1:3] == ['clio', 'collect']:
     sys.exit(7)
 ''')
         p.chmod(0o755)
@@ -60,9 +60,9 @@ def test_invalid_commands_have_no_side_effects(entry, args):
     assert not calls
 
 
-def test_refresh_stops_on_failure(entry):
+def test_collect_stops_on_failure(entry):
     _, run = entry
-    result, calls = run('clio', 'refresh', fail=True)
+    result, calls = run('clio', 'collect', fail=True)
     assert result.returncode == 7
     assert len(calls) == 1
 
@@ -86,8 +86,8 @@ def test_observe_collects_generates_then_verifies_actual_releases(entry):
     _, run = entry
     result, calls = run('observe', 'solar-wind-speed')
     assert result.returncode == 0, result.stderr
-    assert calls == [['clio', 'collect', 'solar-wind'], ['clio', 'collect', 'geomagnetic'],
-                     ['clio', 'aggregate'], ['clio', 'refresh', 'observations'], ['prophet', 'generate', 'solar-wind-speed'],
+    assert calls == [['clio', 'collect'],
+                     ['clio', 'aggregate'], ['clio', 'normalize'], ['prophet', 'generate', 'solar-wind-speed'],
                      ['prophet', 'verify', 'solar-wind-speed'],
                      ['prophet', 'verification-report', 'solar-wind-speed']]
 
@@ -107,7 +107,7 @@ def test_compose_routes_to_selected_environment(entry):
 
 
 @pytest.mark.parametrize('args', [
-    ('clio', 'refresh'),
+    ('clio', 'collect'),
     ('prophet', 'verify', 'dst', '--days', '14'),
     ('intelligence', 'check', 'dst', '--release-id', 'value with spaces'),
     ('api', 'user', '--help'),

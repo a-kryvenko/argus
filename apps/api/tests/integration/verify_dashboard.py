@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.session import get_db_session
 from app.db.models.dashboard import Session, ApiMetric
-from argus_clio.db.models.measurement import Measurement
-from argus_clio.db.models.normalized_observation import NormalizedObservation
+from clio.db.models.measurement import Measurement
+from clio.db.models.normalized_observation import NormalizedObservation
 from app.routers.dashboard import router, create_user, UserCreate
 from app.routers.public.observations import router as public_router
 from app.services import api_statistics
@@ -73,8 +73,8 @@ async def verify():
             async with factory() as db:
                 yield db
         app.dependency_overrides[get_db_session] = session
-        from argus_clio.main import app as clio_app
-        from argus_clio.db.session import get_db_session as clio_session
+        from clio.main import app as clio_app
+        from clio.db.session import get_db_session as clio_session
         clio_app.dependency_overrides[clio_session] = session
         clio_transport = ASGITransport(app=clio_app)
         transport = ASGITransport(app=app)

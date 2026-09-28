@@ -7,7 +7,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 PATHS = {
     'api': 'apps/api/app/db/session.py',
-    'clio': 'apps/clio/src/argus_clio/db/session.py',
+    'clio': 'apps/clio/src/clio/db/session.py',
     'prophet': 'apps/prophet/src/argus_prophet/db/session.py',
     'intelligence': 'apps/intelligence/src/argus_intelligence/db.py',
 }
@@ -74,11 +74,11 @@ def test_full_migration_chain_compiles_for_a_single_owner(domain, tmp_path):
                       dict(HOST='localhost', PORT='5432', NAME=domain, USER='owner', PASSWORD='p@ss:word/%').items()},
                    'PYTHONPATH': ':'.join(str(ROOT / p) for p in (
                        'apps/api', 'apps/clio/src', 'apps/prophet/src', 'apps/intelligence/src',
-                       'packages/common/src', 'packages/clio/src', 'packages/forecast/src'))}
+                       'packages/common/src', 'packages/forecast/src'))}
     if domain == 'api':
         command = [sys.executable, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini')]
     else:
-        command = [sys.executable, '-c', f'from argus_{domain}.cli import main; main()', 'migrate']
+        command = [sys.executable, '-c', f"from {'clio' if domain == 'clio' else 'argus_' + domain}.cli import main; main()", 'migrate']
     result = subprocess.run([*command, 'upgrade', 'head', '--sql'], env=environment,
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

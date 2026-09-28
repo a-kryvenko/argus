@@ -1,195 +1,120 @@
 # Clio
 
-[Разбор потоков данных и дальнейших упрощений](../../docs/clio-data-flow.md).
+Clio owns source ingestion, immutable historical recovery, native sensor data,
+normalization, file artifacts and the observations HTTP API. Python package:
+`apps/clio/src/clio`. PostgreSQL schema: `clio`.
 
-Clio owns observations, normalization, aggregation, collection diagnostics and
-scheduled ingestion. `packages/clio` provides public provider parsing; ingestion
-owns GOES/GFZ history downloads and the JB2008 history cache, and uses private calibration through `services/observations/calibration.py`. HTTP reads do not
-load the private backend. See [setup](../../README_DEPLOY.md#local-development) and
-[commands](../../docs/commands.md).
-
-## Service layout
-
-`src/argus_clio/services/` groups related operations by domain:
-
-- `solar_wind/`: native observations, aggregate calculation (`aggregation.py`),
-  aggregate reads (`history.py`), consistency checks (`audit.py`) and retention.
-- `aia/`: image collection, archive location and forecast feature reads.
-- `observations/`: normalized model inputs, shared persistence, backfill,
-  solar-index calibration and density history.
-- `collection/`: source specifications, attempt status, heartbeat and monitoring.
-
-`geomagnetic.py` handles native Kp/Dst. `summary.py` combines source summaries;
-`coverage.py` calculates coverage for both solar wind and geomagnetic history.
-Import the concrete modules; package initializers do not re-export services.
-
-## Configuration and interfaces
-
-Use `CLIO_DB_*` for Clio's database and `OBSERVATIONS_SERVICE_TOKEN` for internal
-HTTP authentication. Consumers configure `OBSERVATIONS_URL`.
-
-Routes under `/internal/v1/observations` require a bearer service token:
-`latest`, `history`, `status`, `summary`, `solar-wind/latest`, `solar-wind/history`,
-`geomagnetic/latest`, `geomagnetic/history`, `browse`, `forecast-inputs`.
-API forwards these reads with its own authorization; there is no SQL/provider fallback.
-
-`forecast-inputs?as_of=<aware timestamp>` returns normalized observations for
-`[as_of - 30 days, as_of]`, raw density measurements for `[as_of - 88 days, as_of]`,
-`as_of` and `read_at`. Both sets share a repeatable-read, read-only transaction.
-More than 250,000 raw measurements fails explicitly; statements time out after
-60 seconds. `read_at` is not a durable snapshot ID; Prophet archives the response.
-
-## Sources and storage
-
-| Source | Native data | Poll interval | Display freshness |
-| --- | --- | --- | --- |
-| NOAA RTSW | Minute L1 solar wind; GSM magnetic components | 60s | Measurement age ≤600s |
-| NOAA planetary Kp | Estimated fractional Kp, three-hour intervals | 60s | Interval-end lag ≤4h |
-| Kyoto Dst via NOAA | Realtime Dst in nT, hourly intervals | 300s | Interval-end lag ≤2h |
-
-Solar wind stores each `(kind, observed_at, spacecraft)` and NOAA's active selection.
-Magnetic and plasma streams select their active spacecraft independently; missing
-active data never falls back to inactive data. Geomagnetic records use
-`(metric, interval_start)`. Receipt time tracks changed records, not polling.
-Repeated records are no-ops; corrections replace previous values without revision history.
-Downtime recovery is limited by each provider's rolling history. No automatic deletion runs.
-
-Missing/nonfinite/sentinel values are null. Provider flags remain available;
-flagged numeric values are retained but excluded from charts and derived summaries.
-Kp with zero contributing stations is flagged. Other valid values are `unverified`,
-not independently validated. Kp is estimated and Dst realtime; both can be revised.
-Freshness and quality are independent. Native data retains gaps; normalized model
-inputs are separate and may be propagated or filled.
-
-## Scheduling and consistency
-
-Production runs two containers: `clio` (HTTP) and `clio-worker` (`clio worker`).
-The worker supervises the existing two collectors and two schedules in separate
-child processes: hourly refresh at `:00 UTC` and aggregation every five minutes.
-Their schedules, source locks and completion markers are unchanged; there is no
-message broker, new job table or in-memory backlog. Collection stays independent
-of normalization and aggregation. Failed scheduled jobs retry every 60 seconds. Restarts catch
-up only the latest due slot. Manual jobs share locks but do not advance scheduled
-completion markers. Source and job lock keys are defined in `db/locks.py` and do not overlap. Work is idempotent/retriable, not exactly once.
-
-Dev Compose starts `clio-worker`. For a foreground run, stop that service first
-and use `./argus clio worker`.
-Production Compose starts it automatically. Manual `refresh` and `aggregate`
-commands run independently, using the same existing locks, without needing the
-worker. Refresh and aggregation may run concurrently, as before.
-
-If any child exits, even successfully, the worker stops its peers and exits with
-an error so Docker can restart the service. Task failures handled by the existing
-loops keep their normal retry behavior. SIGTERM/SIGINT stops new cycles, allows
-active work to finish, and waits up to 570 seconds across all children before
-killing and reaping remaining processes (Compose grace period: 10 minutes).
-
-Each provider uses a separate transaction and advisory lock. Locked sources are
-skipped; one source failure does not roll back another. Collection attempts commit
-before fetching; observations and success commit together. Failure diagnostics
-commit after rollback. Database outages require logs/healthchecks because the
-unavailable database cannot record them. SIGTERM allows the active job to finish
-within the configured stop grace period.
-
-## Status and health
-
-`./argus clio status` reports attempts, successful responses/saves, measurement age,
-last error and consecutive failures. A retained error with zero consecutive failures
-is historical. Polling unchanged data does not make the observation fresher.
-
-Combined source status prioritizes: `collector_stalled` (unfinished >120s),
-`collector_overdue` (no attempt for two poll intervals +60s), `collection_error`,
-`collecting`, `source_delayed`, `data_unavailable`, `data_partial`, then `ok`.
-A source without attempts is `not_started`. Collection and data status remain separate.
-
-`/health/live` checks HTTP liveness; `/health/ready` checks migrated storage.
-Collectors use separate heartbeat files inside the worker container.
-`clio check-health worker` checks both collectors, every 30s after a 120s
-startup period, with three retries. It checks collector progress, not scheduler
-completion; scheduler failures remain visible in logs. Upstream errors alone do not fail liveness
-while polling continues. One-shot collection does not write watch heartbeats.
-Docker's unhealthy status alone does not restart a container.
-
-## Aggregation audit
-
-`./argus clio audit` compares stored five-minute/hourly aggregates with raw
-records over the last seven days. `--from` / `--to` accept whole UTC hours, at most
-31 days per run; `--json` and `--detail-limit` control output.
-
-The audit is repeatable-read/read-only and does not fetch, recalculate or delete.
-It checks aggregation version, statistics, coverage and pending work; integer
-counts are exact and float comparisons use 1e-9 relative/absolute tolerance.
-Missing raw hours are unverifiable. Hours absent from raw, aggregate and queue
-tables are outside scope; this is not proof of upstream completeness.
-
-Exit 1 means issues or command failure; exit 0 can mean `ok` or `no_data`.
-Details default to 200 while totals remain complete. Storage estimates scan the
-entire raw table and identify records older than `--retention-days` (default 90).
-They do not certify safe deletion or predict reclaimed disk space. Run off-peak;
-statements have a 60s timeout. Cleanup must revalidate records when deleting them.
-
-Provider-fetching notebooks live locally in `apps/clio/notebooks/` (ignored, as
-were the original root notebooks). Training consumes the resulting datasets.
-Only this domain imports the `clio` provider library; consumers use HTTP.
-
-
-## Hourly AIA193 collection
-
-The supervised worker now also runs `clio schedule aia` hourly (`:00 UTC`).
-It requests **every hourly slot**, including01/02/03/04/05UTC, and retains original
-FITS at `data/observations/aia193` (override: `ARGUS_AIA_ARCHIVE`). The normal mounted
-Clio data volume must persist. The first run warms up40days, recent images first;
-subsequent runs skip complete snapshots and retry missing slots within40days.
-Missing404 observations are never filled. QC-rejected originals and reasons remain
-on disk and are excluded from model inputs. Transient failures retry through the scheduler.
-No image retention/deletion is added. Four download workers, bounded requests and files.
-
-Run the database migration **before** starting the new HTTP/worker images:
+## Commands
 
 ```bash
-clio migrate upgrade head
-clio collect aia                 # one bounded40day warmup; also scheduled automatically
-clio collect aia --history-days 1  # bounded manual collection, same advisory lock
-clio schedule aia                # normally already part of clio worker
+./argus clio collect                       # All configured live observations
+./argus clio collect bx by bz v n t kp dst
+./argus clio collect aia193
+./argus clio backfill                      # Per-observation configured depth
+./argus clio backfill v n t --from 2026-08-04 --to 2026-08-05
+./argus clio normalize                     # Stored measurements only
+./argus clio aggregate
+./argus clio status
+./argus clio audit --json
+./argus clio cleanup --json                # Preview; --apply performs cleanup
+./argus clio migrate
 ```
 
-`aia_snapshot` records slot, actual observation time, actual received-at availability,
-SHA256 and local paths. Historical downloads are available only from their real receipt;
-we never backdate availability to an assumed2h latency. Forecast inputs select only
-00/06/12/18UTC snapshots and temporal pairs, strictly received before as_of.
-Clio derives sector/24h/rotation features from its own cache and returns them through
-`/internal/v1/observations/forecast-inputs` as optional `aia_frames`. Prophet does not
-read Clio disk. A40day bounded source read supports rotation history and the target-time
-window; only10days of model features are sent. Archive persistence is separate from
-model sampling, so changing the future model cadence does not require re-downloading.
+Metrics are positional, separated by spaces. `fetch-live`, `--metrics`, the old
+`collect aia/solar-wind/geomagnetic`, and `refresh` interface were removed.
+`serve`, `worker`, `schedule` and `check-health` are operational commands.
+Manual commands use the worker's locks but do not advance schedule markers.
 
-## Historical backfill
+## Layout and responsibilities
 
-An empty measurement table uses the same `load_history()` as backfill: OMNI,
-ACE plasma and calibrated solar indices. Both paths preserve existing measurements. The legacy
-`live_sensors.csv` bootstrap and its configuration setting are no longer used.
+- `commands/`: thin command handlers and output, no provider selection rules.
+- `scheduling/`: periodic execution, PostgreSQL locks and completion markers.
+- `ingestion/`: source registry, adapters, selection and monitoring-independent orchestration.
+- `providers/`: public provider transports and parsers; GONG is retained.
+- `observations/`: metric schema, live/backfill persistence, normalization and calibrated solar indices.
+- `domains/geomagnetic.py`: geomagnetic index intervals and persistence.
+- `domains/aia/`: immutable originals/receipts, artifact recovery, FITS extraction and stored features.
+- `domains/solar_wind/`: native RTSW data, aggregation, history, audit and retention.
+- `monitoring/`: source health, heartbeat and collection status.
+- `routers/`, `db/`, `migrations/`: HTTP contracts, persistence and migration history.
 
-`./argus clio backfill --from 2026-08-31 --to 2026-09-09` restores missing
-measurements in an existing database and rebuilds normalized observations in that
-range. Dates mean midnight UTC; timezone-aware whole hours are also accepted.
-`--from` is inclusive, `--to` exclusive, at most 31 days per invocation.
+The worker uses one scheduler process. Every task, including numeric live and
+native RTSW collection, runs in a temporary executor. Three independent live
+lanes and at most two background tasks can run concurrently; a lane never
+overlaps itself. Background tasks are ordered by waiting time. The scheduler
+retains advisory locks until executors exit and records completion from their
+reports. Provider libraries and working data are released on executor exit.
+Shutdown stops dispatch, drains active tasks for up to 570 seconds, then
+terminates remaining executors before releasing their locks. Starting an
+interpreter for each run trades CPU/startup time for lower idle memory.
+Standalone `schedule` commands remain available for diagnostics.
 
-The command shares the refresh lock. OMNI supplies core observation metrics;
-ACE supplies additional plasma values only (its GSE magnetic fields are not
-substituted for GSM). The existing GFZ/GOES archive path supplies available solar
-indices using configured calibration. Source failures are reported; available
-sources can still be saved. No valid measurements from any source is an error.
-Existing measurements and collection receipt timestamps are preserved. All database
-changes commit together. Repeated runs can add newly available archive records.
+Native RTSW and metric observations are distinct products. Do not mix spacecraft
+sample timestamps, propagated timestamps, coordinate frames, or aggregate windows.
+Reads do not fetch providers. Model calibration is accessed through
+`observations/calibration.py`; HTTP reads do not load the private backend.
+Training-only loaders, annual OMNI export and notebook tests live under
+`scripts/training`, outside the application runtime.
 
-The JSON result reports downloaded measurement count (including existing records),
-normalized hour count, source errors and missing **observed** hours per core metric.
-Normalization follows the existing interpolation policy; normalized rows do not
-prove raw history completeness. Daily indices need not have hourly observations.
-Check the reported speed gaps before retrying Prophet; archives may not yet cover
-recent dates. Backfill does not generate forecasts or AIA images.
+## Collection and backfill
 
-Model refresh reuses Kp and raw `a_running` (Ap) from `geomagnetic_observation`;
-it does not download Kp again. Native interval starts and fractional Kp values are
-preserved in `measurement`. Run the geomagnetic collector before refreshing model
-observations (`./argus clio refresh all` already does this). Dst loading is unchanged.
+`configs/project.yaml` defines `clio.observations`: each observation has ordered
+`sources.live` and `sources.historical`, schedules and `backfill.days`.
+Live collection groups shared source requests, checks freshness and falls back per
+metric. Backfill requests missing slots only and inserts with conflict-do-nothing;
+existing values, provenance and first receipt times are preserved. Normalized
+rows are derived and may be recomputed. Unpublished archive dates remain gaps,
+not source failures. Unknown/network failures remain visible in reports.
+
+Historical plasma priorities are OMNI, ACE, SOHO/CELIAS. SOHO uses five-minute
+proton moments from https://l1.umd.edu/. It converts each thermal speed to kelvin
+using `mp*(Vth*1000)^2/(2*kB)` before hourly averaging and requires six valid
+samples per metric/hour. Nonpositive and nonfinite samples are excluded. Annual
+ZIP downloads are reused within one invocation. SOHO timestamps are spacecraft
+measurement times, with no Earth-propagation correction or cross-instrument
+calibration; SOHO only fills missing observations.
+
+AIA live uses `aia.nrt_193`; historical backfill uses `aia.synoptic_193`.
+Live checks the current hour and previous three hours. Defaults: hourly live,
+six-hour backfill, 40-day history (maximum 60 days). Originals and receipts live
+in `data/observations/aia193` (`ARGUS_AIA_ARCHIVE` overrides the root).
+Missing originals must match the recorded SHA256; missing/corrupt derived caches
+are rebuilt from originals. Recovery retains the source and first availability.
+QC-rejected originals remain rejected. NRT allows only the additional QUALITY
+bit 30 (`Q_NRT`); archive quality remains strict. Per-slot locks serialize recovery.
+
+## Worker
+
+Seven supervised processes run independently:
+
+```text
+schedule native-wind
+schedule live --kind numeric
+schedule normalize
+schedule aggregate
+schedule live --kind file
+schedule backfill --kind numeric
+schedule backfill --kind file
+```
+
+Native collection retains its own cadence. Numeric and file schedules use separate
+locks so AIA warmup does not block numeric live collection. Observation markers
+remain `live.<metric>` / `backfill.<metric>`; existing normalization/aggregate
+markers and lock IDs are preserved. Logs report metrics, status and gap counts.
+`partial` can mean missing or QC-rejected data without transient source errors.
+
+## Tests
+
+```bash
+PYTHONPATH=apps/clio/src .venv/bin/python -m pytest --import-mode=importlib apps/clio/tests
+```
+
+Tests are grouped by `providers`, `ingestion`, `observations`, `aia`, `solar_wind`,
+`scheduling`, `cli`, `api`, and `integration`. Protect behaviour: units, quality,
+source fallback, freshness, insert-only backfill, artifact checksums, concurrency,
+API contracts and scheduler retries. Avoid preserving tests of removed wrappers.
+
+Integration tests require `TEST_DATABASE_ADMIN_DSN` pointing to an isolated test
+PostgreSQL server; otherwise pytest skips them. They create temporary schemas.
+Research/notebook tests are separately run from `scripts/training/tests` and may
+require local notebooks/private calibration dependencies.

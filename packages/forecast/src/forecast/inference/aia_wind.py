@@ -79,6 +79,15 @@ class AIAWindForecaster:
 
 
 class AIAWindServiceMixin:
+    def snapshot_options(self, inputs):
+        options = super().snapshot_options(inputs)
+        if self.uses_aia:
+            options['aia_features'] = pd.DataFrame([
+                {**point.features, 'slot_at': point.slot_at,
+                 'observed_at': point.observed_at, 'available_at': point.available_at}
+                for point in inputs.aia_frames])
+        return options
+
     def __init__(self,models_bundle):
         super().__init__(models_bundle)
         self.uses_aia=models_bundle.get('format')==FORMAT

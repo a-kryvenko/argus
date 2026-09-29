@@ -39,6 +39,7 @@ OBSERVATIONS = {
     **{metric: ObservationDefinition('sfu', resolution='1D', live_resolution='1h', max_age=timedelta(hours=2))
        for metric in ('s10', 'm10', 'y10')},
     'aia193': ObservationDefinition('FITS', kind='file', live_resolution='1h', max_age=timedelta(hours=3)),
+    'gong': ObservationDefinition('FITS', kind='file', live_resolution='1h', max_age=timedelta(hours=3)),
 }
 
 
@@ -66,6 +67,8 @@ PRODUCTS = {
     'goes.calibrated_live': Product(frozenset({'s10', 'm10', 'y10'}), frozenset({'live'})),
     'aia.synoptic_193': Product(frozenset({'aia193'}), frozenset({'historical'}), kind='file'),
     'aia.nrt_193': Product(frozenset({'aia193'}), frozenset({'live'}), kind='file'),
+    'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file'),
+    'gong.archive': Product(frozenset({'gong'}), frozenset({'historical'}), kind='file'),
 }
 
 

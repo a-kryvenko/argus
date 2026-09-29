@@ -10,8 +10,7 @@ from urllib.request import urlopen
 import requests
 from bs4 import BeautifulSoup
 
-ARCHIVE_URL = "https://gong.nso.edu/archive/oQR/zqs/"
-LIVE_URL = "https://services.swpc.noaa.gov/products/gong/zqs/"
+from clio.providers.gong import ARCHIVE_URL, LIVE_URL
 
 class GONG_Loader:
     def load_live(output_file: Path):

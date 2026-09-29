@@ -59,7 +59,7 @@ def database(tmp_path):
                    'ARGUS_WORKDIR': str(tmp_path),
                    'PYTHONPATH': ':'.join(str(ROOT / path) for path in (
                        'apps/api', 'apps/clio/src', 'apps/prophet/src', 'apps/intelligence/src',
-                       'packages/common/src', 'packages/forecast/src'))}
+                       'packages/common/src', 'packages/forecast/src')) + os.pathsep + os.environ.get('PYTHONPATH', '')}
     try:
         provisioning.provision(admin_dsn, urls, apply=True)
         yield dsns, urls, environment

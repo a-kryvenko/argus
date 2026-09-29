@@ -29,6 +29,8 @@ def generate_products(products, trigger='manual', *, scheduled_slot=None) -> Non
     input_error = None
     failures = {}
     for product in products:
+        from argus_prophet.scheduling.execution import before_dispatch
+        before_dispatch()
         recorder = RunRecorder.begin(product, trigger, config, scheduled_slot=scheduled_slot,
                                      details=details)
         logging.info('Prophet run %s started (%s)', recorder.run_id, product)

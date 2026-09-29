@@ -125,7 +125,9 @@ def test_empty_result_is_rejected_before_database_access(monkeypatch):
 
 def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch, tmp_path):
     from common import config
-    from argus_prophet.services.density import forecast as density_forecast
+    from importlib import import_module
+    density_forecast = import_module("forecast_core.models.AtmosphericDensityForecastService")
+    from forecast.api import calculate_snapshot
     from forecast_core.api import AtmosphericDensityForecastService
 
     drivers = pd.DataFrame([{
@@ -142,11 +144,12 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
     expected.insert(0, 'issue_time', ISSUE)
     expected.insert(2, 'lead_hours', [0, 1])
     monkeypatch.setattr(config, 'get_config', lambda: pytest.fail('Calculation must not load configuration'))
-    monkeypatch.setattr(density_forecast, 'load_density_drivers', lambda *args: drivers)
+    monkeypatch.setattr(density_forecast, 'observed_driver_frame', lambda *args: drivers)
     monkeypatch.setattr(AtmosphericDensityForecastService, 'forecast_grid', lambda *args, **kwargs: grid.copy())
     monkeypatch.chdir(tmp_path)
     inputs = ForecastInputs(as_of=ISSUE, read_at=ISSUE, observations=Observation(points=[]))
-    result = density_forecast.calculate_density(inputs=inputs, issue_time=ISSUE)
+    result = calculate_snapshot(AtmosphericDensityForecastService(), inputs, issue_time=ISSUE,
+        model_info={'backend': 'forecast_core', 'registry_name': 'atmospheric_density', 'issue_time': ISSUE.isoformat()})
     pd.testing.assert_frame_equal(result.frame, expected)
     assert list(tmp_path.iterdir()) == []
     assert result.model_info == {'backend': 'forecast_core', 'registry_name': 'atmospheric_density',

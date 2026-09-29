@@ -126,8 +126,21 @@ pre-2025 empirical error distributions. No research modules, FITS readers, PyTor
 or LightGBM are required for this artifact at prediction time. Supply 60 days of
 observed hourly `speed_history` and Clio's `aia_features` to `calculate_forecast`.
 Missing/stale/unsupported AIA falls back to DLinear and its own error distribution.
+Window aggregation preserves a missing feature if any selected image lacks it;
+it never averages each feature over a different subset of images. A missing
+required temporal feature therefore keeps the window on DLinear, even if another
+image has that feature. Training and serving share this alignment implementation.
 The point forecast is unchanged; per-hour errors are centered to anchor q50 to it.
 Q10/Q90 and P(V>=450/500/600) use this same distribution, with monotone thresholds.
 Error calibration reuses 2024 validation folds, so it is not independent calibration.
 On historical2025, nominal80% coverage at96h is about73%; thresholds are not claimed
 uniformly superior to the old classifier. Metrics/provenance: `data/metrics/plasma/aia_ridge`.
+
+## Saved snapshot adapter contract (0.3)
+
+`calculate_snapshot(service, inputs, issue_time=..., model_info=...)` accepts an
+adapter implementing `forecast_snapshot` and the shared `ForecastInputs` contract.
+The adapter prepares its own raw speed and AIA inputs; callers do not inspect
+private fields or model flags. The older `calculate_forecast` interface remains
+available for explicit observation-based examples. Both interfaces return
+`ForecastResult` and perform no storage or network operations.

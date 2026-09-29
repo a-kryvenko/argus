@@ -103,10 +103,9 @@ def test_polling_honors_subminute_configured_intervals(monkeypatch):
     from clio.config import Schedule
     cfg = config()
     cfg.observations['v'].schedules.backfill = Schedule(every='30s')
-    loop = Mock()
-    monkeypatch.setattr(scheduler, 'work_cycles', loop)
-    scheduler.work(cfg, Mock())
-    assert loop.call_args.kwargs['poll_seconds'] == 30
+    from clio.worker import observation_task
+    task = observation_task(cfg, 'backfill', 'numeric', {}, Mock())
+    assert task.interval == 30
 
 
 def test_live_and_backfill_have_independent_markers(connection):
@@ -126,19 +125,6 @@ def test_forced_live_restart_retries_failure_even_if_previous_process_completed_
     run.return_value = {'failed_metrics': []}
     scheduler.execute(config(), run, now=NOW, mode='live')
     assert run.call_args.args[0] == ['n']
-
-
-def test_live_loop_forces_only_initial_cycle(monkeypatch):
-    cycle = Mock(return_value=True)
-    monkeypatch.setattr(scheduler, 'execute', cycle)
-
-    def loop(job, tick, **kwargs):
-        tick()
-        tick()
-
-    monkeypatch.setattr(scheduler, 'work_cycles', loop)
-    scheduler.work(config(), Mock(), mode='live')
-    assert [call.kwargs['force'] for call in cycle.call_args_list] == [True, False]
 
 
 def test_file_schedules_have_separate_locks_and_common_metric_markers(connection):

@@ -1,47 +1,62 @@
-"""One calculation path for scheduled runs and local development."""
+"""Coordinate isolated calculations and persist their exact serialized bytes."""
+from dataclasses import dataclass
 from datetime import UTC
 
-from argus_prophet.services.generation.products import PRODUCTS
 from common.config import get_config
-from argus_prophet.services.generation.models import load_model
-from forecast.api import ForecastResult, calculate_forecast
+from argus_prophet.services.generation.products import PRODUCTS
+
+
+@dataclass(frozen=True)
+class Artifact:
+    name: str
+    content: bytes
+    model_info: dict
+    row_count: int
+    columns: list[str]
+
+
+def serialize(result):
+    return Artifact(result.name, result.frame.to_csv(index=False).encode('utf-8'),
+                    result.model_info, len(result.frame), list(result.frame.columns))
+
+
+def calculate_product(product, inputs, workdir, registry):
+    """Child entry point: only model files are read; no configuration, HTTP or DB."""
+    from forecast.api import calculate_snapshot
+    from argus_prophet.services.generation.models import load_model
+    issue_time = inputs.as_of.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+    artifacts = []
+    for model in PRODUCTS[product].models:
+        if model.bundled:
+            service, metadata = load_model(model.service_class(), workdir=workdir, registry=registry)
+        else:
+            service = model.service_class()()
+            metadata = {'backend': 'forecast_core', 'registry_name': service.registry_name,
+                        'issue_time': issue_time.isoformat()}
+        result = calculate_snapshot(service, inputs, issue_time=issue_time, model_info=metadata)
+        if result.name != model.artifact:
+            raise ValueError(f'Expected artifact {model.artifact}, received {result.name}')
+        artifact = serialize(result)
+        if len(artifact.content) > 32 * 1024 * 1024:
+            raise ValueError('Forecast artifact exceeds 32 MiB')
+        artifacts.append(artifact)
+    if sum(len(item.content) for item in artifacts) > 64 * 1024 * 1024:
+        raise ValueError('Forecast product exceeds 64 MiB')
+    return artifacts
 
 
 def calculate(product: str, *, inputs, recorder):
-    definition = PRODUCTS[product]
-    issue_time = inputs.as_of.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    if definition.backend == 'density':
-        from argus_prophet.services.density.forecast import calculate_density
-        store_result(recorder, calculate_density(inputs=inputs, issue_time=issue_time))
-        return
+    from argus_prophet.config import ProphetConfig, InputPolicy
+    from argus_prophet.scheduling.execution import execute
     config = get_config()
-    for model in definition.models:
-        service, model_info = load_model(model.service_class(), workdir=config.workdir,
-                                         registry=config.models_registry['models'])
-        if getattr(service, 'uses_hourly_imf', False):
-            if inputs.solar_wind_hourly is None:
-                raise ValueError('Clio hourly IMF history is required')
-            frame = service.forecast_hourly(inputs.solar_wind_hourly,
-                                           issue_time=issue_time, as_of=inputs.read_at)
-            store_result(recorder, ForecastResult(service.registry_name, frame, model_info))
-            continue
-        extra = {}
-        if getattr(service, '_dlinear', None) is not None:
-            import pandas as pd
-            extra['speed_history'] = pd.DataFrame(
-                [point.model_dump() for point in inputs.speed_observations], columns=['issue_time', 'v'])
-        if getattr(service, 'uses_aia', False):
-            import pandas as pd
-            extra['aia_features'] = pd.DataFrame([
-                {**point.features, 'slot_at': point.slot_at,
-                 'observed_at': point.observed_at, 'available_at': point.available_at}
-                for point in inputs.aia_frames])
-        result = calculate_forecast(service, inputs.observations,
-                                    issue_time=issue_time, model_info=model_info, **extra)
-        store_result(recorder, result)
+    policy = ProphetConfig.model_validate(getattr(config, 'project_config', {}).get('prophet', {}))
+    policy.inputs.get(product, InputPolicy()).validate_inputs(inputs)
+    artifacts = execute(calculate_product, product, inputs, config.workdir, config.models_registry['models'],
+                        timeout_seconds=policy.calculation_timeout_seconds)
+    for artifact in artifacts:
+        recorder.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
 
 
-def store_result(recorder, result: ForecastResult) -> None:
-    frame = result.frame
-    content = frame.to_csv(index=False).encode('utf-8')
-    recorder.store(result.name, content, result.model_info, len(frame), list(frame.columns))
+def store_result(recorder, result):
+    artifact = serialize(result)
+    recorder.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)

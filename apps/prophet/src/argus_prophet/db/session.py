@@ -30,7 +30,7 @@ def open_connection(*, autocommit=False):
 def require_writer():
     conn = _writer_session.get()
     if conn is None:
-        raise RuntimeError('Prophet writes require the database generation lock')
+        raise RuntimeError('Prophet writes require a database writer lock')
     if conn.closed or conn.broken:
         raise RuntimeError('Prophet lock connection was lost; reacquire the lock for a new attempt')
     return conn
@@ -39,7 +39,7 @@ def require_writer():
 @contextmanager
 def writer_session(conn):
     if _writer_session.get() is not None:
-        raise RuntimeError('Prophet generation lock is not reentrant')
+        raise RuntimeError('Prophet writer session is not reentrant')
     token = _writer_session.set(conn)
     try:
         yield

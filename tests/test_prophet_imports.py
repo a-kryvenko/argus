@@ -15,7 +15,7 @@ def test_generation_imports_without_model_runtime():
     ])
     result = subprocess.run([sys.executable, '-c', '''
 import sys
-blocked = {'joblib', 'sklearn', 'lightgbm', 'forecast_core', 'intelligence_core', 'clio', 'clio'}
+blocked = {'joblib', 'sklearn', 'lightgbm', 'forecast_core', 'intelligence_core', 'clio', 'numpy', 'pandas'}
 class BlockModelRuntime:
     def find_spec(self, fullname, *args):
         if fullname.split('.')[0] in blocked:

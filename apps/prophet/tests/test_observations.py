@@ -128,11 +128,18 @@ def test_verification_incomplete_vectors_have_no_magnitude():
 def mock_models(monkeypatch):
     from argus_prophet.services.generation import calculation as generation
     from types import SimpleNamespace
+    from pathlib import Path
+    monkeypatch.setattr(generation, 'get_config', lambda: SimpleNamespace(
+        workdir=Path('/unused'), models_registry={'models': {}}, project_config={}))
     load = Mock(side_effect=lambda service, **_: (SimpleNamespace(registry_name=service.registry_name), {}))
     compute = Mock(side_effect=lambda service, *args, **kwargs:
                    ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
-    monkeypatch.setattr(generation, 'load_model', load)
-    monkeypatch.setattr(generation, 'calculate_forecast', compute)
+    from argus_prophet.services.generation import models
+    from argus_prophet.scheduling import execution
+    from forecast import api
+    monkeypatch.setattr(models, 'load_model', load)
+    monkeypatch.setattr(api, 'calculate_snapshot', compute)
+    monkeypatch.setattr(execution, 'execute', lambda target, *args, **kwargs: target(*args))
     return compute
 
 
@@ -151,7 +158,7 @@ def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
     generation.calculate(selection, inputs=inputs, recorder=recorder)
     assert [call.args[0].registry_name for call in compute.call_args_list] == artifacts
     for call in compute.call_args_list:
-        assert call.args[1] is inputs.observations
+        assert call.args[1] is inputs
         assert call.kwargs['issue_time'] == NOW
     assert [call.args[0] for call in recorder.store.call_args_list] == artifacts
 
@@ -170,52 +177,3 @@ def test_status_selections_include_canonical_names_and_historical_aliases():
     assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
     assert attempt_selections('dst') == ['all', 'dst']
     assert attempt_selections('solar-radiation') == []
-
-
-def test_dlinear_models_receive_raw_speed_history(monkeypatch):
-    from types import SimpleNamespace
-    from common.schemas.forecast_inputs import SpeedObservation
-    from argus_prophet.services.generation import calculation as generation
-    inputs = stored_inputs()
-    inputs.speed_observations = [SpeedObservation(issue_time=NOW, v=399.)]
-    compute = mock_models(monkeypatch)
-    monkeypatch.setattr(generation, 'load_model', lambda service, **kwargs:
-        (SimpleNamespace(registry_name=service.registry_name, _dlinear=object()), {}))
-    generation.calculate('solar-wind-speed', inputs=inputs, recorder=Mock())
-    for call in compute.call_args_list:
-        raw = call.kwargs['speed_history']
-        assert raw.v.tolist() == [399.]
-        assert raw.issue_time.tolist() == [NOW]
-
-
-def test_aia_models_receive_owner_features_without_filesystem_access(monkeypatch):
-    from types import SimpleNamespace
-    from common.schemas.forecast_inputs import AIAFeatureFrame
-    from argus_prophet.services.generation import calculation as generation
-    inputs = stored_inputs()
-    inputs.aia_frames = [AIAFeatureFrame(slot_at=NOW,observed_at=NOW,available_at=NOW,sha256='a'*64,features={'aia_area_sector':.2})]
-    compute = mock_models(monkeypatch)
-    monkeypatch.setattr(generation,'load_model',lambda service,**kwargs:(SimpleNamespace(registry_name=service.registry_name,_dlinear=object(),uses_aia=True),{}))
-    generation.calculate('solar-wind-speed',inputs=inputs,recorder=Mock())
-    for call in compute.call_args_list:
-        frame=call.kwargs['aia_features']
-        assert frame.aia_area_sector.tolist()==[.2]
-        assert frame.available_at.tolist()==[NOW]
-
-
-def test_hourly_imf_uses_clio_snapshot_and_read_time(monkeypatch):
-    from types import SimpleNamespace
-    from argus_prophet.services.generation import calculation as generation
-    inputs = stored_inputs()
-    inputs.solar_wind_hourly = {'series': {}}
-    total = SimpleNamespace(registry_name='hmf_total_threshold', uses_hourly_imf=True,
-                            forecast_hourly=Mock(return_value=pd.DataFrame({'lead_hours':[1]})))
-    south = SimpleNamespace(registry_name='hmf_southward_threshold')
-    monkeypatch.setattr(generation, 'load_model', Mock(side_effect=[(total,{}),(south,{})]))
-    compute = Mock(return_value=ForecastResult(south.registry_name,pd.DataFrame({'lead_hours':[1]}),{}))
-    monkeypatch.setattr(generation, 'calculate_forecast', compute)
-    recorder = Mock()
-    generation.calculate('hmf',inputs=inputs,recorder=recorder)
-    total.forecast_hourly.assert_called_once_with(inputs.solar_wind_hourly, issue_time=NOW, as_of=inputs.read_at)
-    assert compute.call_count == 1
-    assert [c.args[0] for c in recorder.store.call_args_list] == ['hmf_total_threshold','hmf_southward_threshold']

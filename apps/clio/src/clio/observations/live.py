@@ -67,7 +67,7 @@ async def fetch_live(metrics, policies, adapters, now):
                    'missing_live_slots': {m: len(slots) for m, slots in pending.items()}, 'source_attempts': attempts}
 
 
-async def collect_live(session, config, metrics, *, now=None, heartbeat=None):
+async def collect_live(session, config, metrics, *, now=None):
     metrics = list(dict.fromkeys(metrics))
     if not metrics or any(m not in config.observations or OBSERVATIONS[m].kind != 'numeric' for m in metrics):
         raise ValueError('Select observations configured in clio.observations')
@@ -75,7 +75,7 @@ async def collect_live(session, config, metrics, *, now=None, heartbeat=None):
     if now.tzinfo is None:
         raise ValueError('now must include a timezone')
     now = now.astimezone(UTC)
-    frame, report = await fetch_live(metrics, config.observations, live_adapters(heartbeat), now)
+    frame, report = await fetch_live(metrics, config.observations, live_adapters(), now)
     await upsert_measurements(session, frame, source_priorities={m: config.observations[m].sources.live for m in metrics})
     await session.commit()
     report['downloaded_measurements'] = len(frame)

@@ -30,7 +30,7 @@ assert importlib.util.find_spec('app') is None
 assert importlib.util.find_spec('clio') is None
 import argus_prophet.db.session
 import argus_prophet.services.generation.calculation
-import argus_prophet.services.density.forecast
+from forecast_core.api import AtmosphericDensityForecastService
 '''
     result = subprocess.run([str(python), '-c', code], cwd=tmp_path,
                             env=environment, capture_output=True, text=True)
@@ -67,7 +67,8 @@ def test_removed_export_command_is_rejected(monkeypatch):
 def test_refresh_alias_generates_selected_product(monkeypatch):
     from contextlib import nullcontext
     from unittest.mock import Mock
-    from argus_prophet import cli, worker
+    from argus_prophet import cli
+    from argus_prophet.scheduling import jobs as worker
     from argus_prophet.services.generation import cycle
     from common import runtime
     generate = Mock()

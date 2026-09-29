@@ -16,6 +16,7 @@ from common.schemas.forecast_inputs import DENSITY_METRICS, ForecastInputs, Sour
 from common.data.omni import OMNI_FILL_VALUES
 
 from clio.domains.aia.features import load_aia_features
+from clio.domains.gong import load_gong_features
 from clio.domains.solar_wind.history import history as solar_history
 
 security = HTTPBearer(auto_error=False)
@@ -68,11 +69,12 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
             .group_by(hour).order_by(hour)
         )).all()
         aia_frames = await load_aia_features(session, as_of)
+        gong = await load_gong_features(session, as_of)
         issue = as_of.replace(minute=0, second=0, microsecond=0)
         hourly = await solar_history(session, ['bx', 'by', 'bz', 'v', 'n', 't'],
                                      issue-timedelta(hours=168), issue, 3600, now=now)
         return ForecastInputs(
-            as_of=as_of, read_at=now, observations=observations, aia_frames=aia_frames,
+            as_of=as_of, read_at=now, observations=observations, aia_frames=aia_frames, gong=gong,
             solar_wind_hourly=hourly,
             measurements=[SourceMeasurement(metric=row.metric, value=row.value,
                                             observed_at=row.observed_at) for row in rows],

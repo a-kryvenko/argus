@@ -4,6 +4,7 @@ import io
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from time import monotonic
 
 import httpx
 import numpy as np
@@ -14,6 +15,7 @@ from argus_prophet.db.session import connect
 from argus_prophet.services.releases.publication import read_release
 
 from argus_prophet.services.generation.products import VERIFIED_PRODUCTS as PRODUCTS
+from argus_prophet.scheduling.execution import before_dispatch
 
 
 def targets(frame, start, end):
@@ -40,17 +42,26 @@ def targets(frame, start, end):
     return rows
 
 
-def read_targets(start, end):
+def check_progress(deadline):
+    before_dispatch()
+    if deadline is not None and monotonic() >= deadline:
+        raise TimeoutError('Verification exceeded its configured time budget')
+
+
+def read_targets(start, end, *, deadline=None):
     url, token = os.getenv('OBSERVATIONS_URL'), os.getenv('OBSERVATIONS_SERVICE_TOKEN')
     if not url or not token:
         raise RuntimeError('OBSERVATIONS_URL and OBSERVATIONS_SERVICE_TOKEN are required')
     rows, total = [], None
     with httpx.Client(timeout=httpx.Timeout(180, connect=10), trust_env=False) as client:
         for page in range(1, 100_001):
+            check_progress(deadline)
             response = client.get(url.rstrip('/') + '/internal/v1/observations/browse',
                                   params={'kind': 'raw', 'start': start.isoformat(), 'end': end.isoformat(),
                                           'order': 'asc', 'page': page, 'page_size': 200},
-                                  headers={'Authorization': f'Bearer {token}'})
+                                  headers={'Authorization': f'Bearer {token}'},
+                                  timeout=httpx.Timeout(min(180, max(.1, deadline-monotonic())) if deadline else 180,
+                                                        connect=10))
             response.raise_for_status()
             payload = response.json()
             if not payload['success']:
@@ -71,7 +82,7 @@ def read_targets(start, end):
             'points': targets(frame, start, end)}
 
 
-def verify(selection='solar-wind-speed', *, days=7, now=None):
+def verify(selection='solar-wind-speed', *, days=7, now=None, deadline=None):
     from psycopg.types.json import Jsonb
     if selection not in (*PRODUCTS, 'all') or not 1 <= days <= 25:
         raise ValueError('Select a supported product and 1..25 days')
@@ -87,13 +98,15 @@ def verify(selection='solar-wind-speed', *, days=7, now=None):
             ORDER BY issue_time,id''', (list(products), start, now)).fetchall()
     if not releases:
         return {'status': 'no_releases', 'releases': 0, 'from': start.isoformat(), 'products': list(products)}
-    observed = read_targets(start, end)
+    observed = read_targets(start, end) if deadline is None else read_targets(start, end, deadline=deadline)
     truth = pd.DataFrame(observed['points'], columns=['valid_time', 'metric', 'value', 'sample_count'])
     summary = {'status': 'ok', 'releases': len(releases), 'from': start.isoformat(),
                'source': observed['source'], 'products': {}, 'evaluated_at': now.isoformat()}
     for product, release_id in releases:
+        check_progress(deadline)
         release = read_release(product, release_id)
         for artifact in release.artifacts:
+            check_progress(deadline)
             if artifact.name not in TARGETS:
                 raise ValueError('No observed target protocol for ' + artifact.name)
             prediction = validate_predictions(pd.read_csv(io.StringIO(artifact.csv_text)), artifact.name)

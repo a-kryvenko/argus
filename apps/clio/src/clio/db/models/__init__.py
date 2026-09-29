@@ -12,3 +12,4 @@ from clio.db.models.scheduled_job import ScheduledJob
 from clio.db.models.measurement_receipt import MeasurementReceipt
 
 from clio.db.models.aia_snapshot import AIASnapshot
+from clio.db.models.gong_snapshot import GONGSnapshot

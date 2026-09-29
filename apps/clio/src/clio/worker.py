@@ -38,7 +38,7 @@ def tasks_for(config, heartbeats, abort):
         for source in beat.sources:
             beat.started(source)
         try:
-            invoke('native-wind', watch=False)
+            invoke('native-wind')
             return True
         finally:
             for source in beat.sources:
@@ -71,7 +71,7 @@ def observation_task(config, mode, kind, heartbeats, invoke):
         try:
             return invoke('collect' if mode == 'live' else 'backfill',
                           metrics=metrics, now=now, start=None, end=None,
-                          scheduled=True, heartbeat=None)
+                          scheduled=True)
         finally:
             for source in sources:
                 beat.finished(source)

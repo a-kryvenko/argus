@@ -7,6 +7,7 @@ from importlib import import_module
 class Model:
     artifact: str
     service: str | None = None
+    bundled: bool = True
 
     def service_class(self):
         if self.service is None:
@@ -18,7 +19,6 @@ class Model:
 @dataclass(frozen=True)
 class Product:
     models: tuple[Model, ...]
-    backend: str = 'models'
 
     @property
     def artifacts(self) -> tuple[str, ...]:
@@ -37,7 +37,8 @@ PRODUCTS = {
     'hmf': Product((
         Model('hmf_total_threshold', 'forecast_core.api.HMFTotalProbaFS'),
         Model('hmf_southward_threshold', 'forecast_core.api.HMFSouthProbaFS'))),
-    'atmospheric-density': Product((Model('atmospheric_density'),), backend='density'),
+    'atmospheric-density': Product((Model('atmospheric_density',
+        'forecast_core.api.AtmosphericDensityForecastService', bundled=False),)),
 }
 GENERATION_CHOICES = ('all', *PRODUCTS)
 VERIFIED_PRODUCTS = tuple(name for name in PRODUCTS if name != 'atmospheric-density')

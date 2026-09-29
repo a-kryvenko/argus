@@ -1,106 +1,144 @@
-"""Hourly scheduling and exclusive Prophet writers coordinated by PostgreSQL."""
+"""Dispatch independent product schedules; persist results on the owning thread."""
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import ExitStack
+from dataclasses import dataclass
+from datetime import UTC, datetime
 import logging
-import signal
-import threading
-from collections.abc import Callable
-from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from time import monotonic, sleep
 
-from argus_prophet.db.session import connect, open_connection, writer_session
+from argus_prophet.config import InputPolicy, ProductSchedule, load_config
+from argus_prophet.scheduling.execution import ShutdownRequested, execute, supervise
+from argus_prophet.scheduling.jobs import GenerationBusy, generation_lock, product_pending
+from argus_prophet.scheduling.verification import run_due as verify_due
+from argus_prophet.services.generation.calculation import calculate_product
 from argus_prophet.services.generation.products import PRODUCTS
+from argus_prophet.services.inputs import load_inputs
+from argus_prophet.services.runs import RunRecorder, provenance
 
 logger = logging.getLogger(__name__)
-# Distinct from the publication transaction lock (736218, 1) and Clio job locks.
-GENERATION_LOCK = (736218, 2)
-COMPLETED = ('succeeded', 'imported')
 
 
-class GenerationBusy(RuntimeError):
-    """Another Prophet writer owns the database session lock."""
+@dataclass
+class Task:
+    product: str
+    schedule: ProductSchedule
+    next_check: float = 0
 
 
-def recover_interrupted():
-    # Owning the global writer lock means no previous DB writer remains active.
-    with connect(writing=True) as conn:
-        conn.execute("""UPDATE prophet.forecast_run SET status='interrupted',finished_at=%s,
-            error='Previous writer ended without recording completion' WHERE status='running'""", (datetime.now(UTC),))
-        conn.execute("""UPDATE prophet.forecast_slot SET status='interrupted',finished_at=%s,
-            error='Previous writer ended without recording completion' WHERE status='running'""", (datetime.now(UTC),))
+@dataclass
+class Active:
+    recorder: RunRecorder
+    future: Future
+    phase: str = 'inputs'
 
 
-@contextmanager
-def generation_lock():
-    # Closing this unpooled session releases its lock, including on exceptions.
-    # It stays in autocommit between short operations, not idle in a long transaction.
-    with open_connection(autocommit=True) as conn:
-        if not conn.execute('SELECT pg_try_advisory_lock(%s,%s)', GENERATION_LOCK).fetchone()[0]:
-            raise GenerationBusy('Another Prophet writer is running')
-        with writer_session(conn):
-            recover_interrupted()
-            yield
+class Dispatcher:
+    def __init__(self, config, runtime, control, pool):
+        self.config, self.runtime, self.control, self.pool = config, runtime, control, pool
+        self.tasks = [Task(name, config.schedules.get(name, ProductSchedule())) for name in PRODUCTS]
+        self.active = {}
+        self.writer = ExitStack()
+        self.locked = False
+        self.verification = None
+        self.verify_after = 0
+        self.details = provenance(runtime)
+
+    def submit(self, target, *args, timeout=None):
+        return self.pool.submit(execute, target, *args, control=self.control,
+                                timeout_seconds=timeout or self.config.calculation_timeout_seconds)
+
+    def finish_tasks(self):
+        for product, task in list(self.active.items()):
+            if not task.future.done():
+                continue
+            try:
+                result = task.future.result()
+                if task.phase == 'inputs':
+                    self.control.before_dispatch()
+                    task.recorder.snapshot(result)
+                    self.config.inputs.get(product, InputPolicy()).validate_inputs(result)
+                    task.future = self.submit(calculate_product, product, result, self.runtime.workdir,
+                                              self.runtime.models_registry['models'])
+                    task.phase = 'calculation'
+                    continue
+                for artifact in result:
+                    task.recorder.store(artifact.name, artifact.content, artifact.model_info,
+                                        artifact.row_count, artifact.columns)
+                task.recorder.finish()
+                logger.info('Prophet run %s published (%s)', task.recorder.run_id, product)
+            except (Exception, ShutdownRequested) as exc:
+                # Losing the writer session is fatal: finish also fails, and the
+                # caller cancels/reaps all children before releasing the lock.
+                task.recorder.finish(error=exc)
+                logger.warning('Prophet run %s failed (%s): %s', task.recorder.run_id, product, exc)
+            del self.active[product]
+        if not self.active:
+            self.writer.close()
+            self.locked = False
+        if self.verification is not None and self.verification.done():
+            try:
+                if self.verification.result():
+                    logger.info('Scheduled forecast verification completed')
+            except (Exception, ShutdownRequested):
+                logger.exception('Scheduled verification failed; retrying in 60 seconds')
+            self.verification = None
+            self.verify_after = monotonic() + 60
+
+    def launch_due(self, now, clock):
+        self.control.before_dispatch()
+        inputs = None
+        # Oldest check first: frequent products cannot starve other products.
+        for task in sorted(self.tasks, key=lambda item: item.next_check):
+            if len(self.active) >= self.config.max_parallel_products:
+                break
+            if task.product in self.active or task.next_check > clock:
+                continue
+            task.next_check = clock + 60
+            if not self.locked:
+                try:
+                    self.writer.enter_context(generation_lock())
+                except GenerationBusy:
+                    continue
+                self.locked = True
+            slot = task.schedule.due_slot(now)
+            if not product_pending(task.product, slot):
+                continue
+            recorder = RunRecorder.begin(task.product, 'scheduled', self.runtime,
+                                         scheduled_slot=slot, details=self.details)
+            if inputs is None:
+                inputs = self.submit(load_inputs)
+            self.active[task.product] = Active(recorder, inputs)
+            logger.info('Prophet run %s started (%s, slot %s)', recorder.run_id, task.product, slot)
+        if not self.active:
+            self.writer.close()
+            self.locked = False
+        if self.config.verification.enabled and self.verification is None and clock >= self.verify_after:
+            self.verification = self.submit(verify_due, self.config.verification,
+                                            timeout=self.config.verification.timeout_seconds + 30)
+
+    def close(self):
+        # Keep the generation lock until every calculation has been reaped.
+        self.control.cancel()
+        self.pool.shutdown(wait=True)
+        self.writer.close()
 
 
-def due_slot(now: datetime) -> datetime:
-    if now.tzinfo is None or now.utcoffset() is None:
-        raise ValueError('Scheduler time must be timezone-aware')
-    return (now.astimezone(UTC) - timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)
-
-
-def completed_products(conn, slot) -> set[str]:
-    """Durable per-product success, including releases from historical batch runs."""
-    rows = conn.execute("""SELECT product FROM prophet.forecast_run
-        WHERE scheduled_slot=%s AND status='succeeded' AND product<>'all'
-        UNION
-        SELECT r.product FROM prophet.forecast_release r
-        JOIN prophet.forecast_run f ON f.id=r.run_id
-        WHERE f.scheduled_slot=%s AND f.product='all' AND f.status IN ('succeeded','partial')""",
-        (slot, slot)).fetchall()
-    return {row[0] for row in rows}
-
-
-def run_due(generate: Callable[[datetime, tuple[str, ...]], None], now: datetime) -> bool:
-    with generation_lock():
-        slot = due_slot(now)
-        with connect(writing=True) as conn:
-            previous = conn.execute('SELECT max(slot) FROM prophet.forecast_slot WHERE status=ANY(%s)',
-                                    (list(COMPLETED),)).fetchone()[0]
-        if previous is not None and previous >= slot:
-            return False
-        with connect(writing=True) as conn:
-            completed = completed_products(conn, slot)
-        pending = tuple(product for product in PRODUCTS if product not in completed)
-        if not pending:
-            return False
-        generate(slot, pending)
-        # Completion must have committed with the release, not after this callback.
-        with connect(writing=True) as conn:
-            result = conn.execute('SELECT status FROM prophet.forecast_slot WHERE slot=%s', (slot,)).fetchone()
-            if result is None or result[0] not in COMPLETED:
-                raise RuntimeError('Forecast generation did not complete its scheduled slot')
-        return True
-
-
-def list_slots(limit=20):
-    from psycopg.rows import dict_row
-    if not 1 <= limit <= 100:
-        raise ValueError('limit must be between 1 and 100')
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('SELECT slot,status,attempts,started_at,finished_at,error FROM prophet.forecast_slot ORDER BY slot DESC LIMIT %s', (limit,))
-        return cursor.fetchall()
-
-
-def work(generate: Callable[[datetime, tuple[str, ...]], None]) -> None:
-    stopped = threading.Event()
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(signum, lambda *_: stopped.set())
-    while not stopped.is_set():
+def work():
+    from common.config import get_config
+    config = load_config()
+    with supervise(config.shutdown_grace_seconds) as control:
+        pool = ThreadPoolExecutor(max_workers=config.max_parallel_products + 1)
+        dispatcher = Dispatcher(config, get_config(), control, pool)
         try:
-            if run_due(generate, datetime.now(UTC)):
-                logger.info('Forecast generation completed')
-        except GenerationBusy:
-            logger.info('Another generation is running; checking again in 60 seconds')
-        except Exception:
-            logger.exception('Forecast generation failed; retrying in 60 seconds')
-            import sentry_sdk
-            sentry_sdk.capture_exception()
-        stopped.wait(60)
+            while not control.stopped.is_set() or dispatcher.active or dispatcher.verification is not None:
+                dispatcher.finish_tasks()
+                if not control.stopped.is_set():
+                    try:
+                        dispatcher.launch_due(datetime.now(UTC), monotonic())
+                    except ShutdownRequested:
+                        pass
+                # Poll completed calculations during shutdown as well; Event.wait
+                # would return immediately once stopped and cause a busy loop.
+                sleep(0.2)
+        finally:
+            dispatcher.close()

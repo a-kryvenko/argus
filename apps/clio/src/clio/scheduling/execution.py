@@ -1,4 +1,4 @@
-"""Run occasional jobs in fresh interpreters; retain only their reports."""
+"""Run worker tasks in fresh interpreters; retain only their reports."""
 import logging
 import multiprocessing
 import traceback

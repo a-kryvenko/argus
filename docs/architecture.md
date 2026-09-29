@@ -18,13 +18,14 @@
 Data flows from providers through Clio → Prophet → Intelligence. API reads Clio, Prophet and Intelligence contracts. Reads never collect data or generate forecasts. Forecast
 artifacts are stored in PostgreSQL; model evaluation metrics are static files.
 Prophet publishes each product independently and retries only failed products
-within the current hourly slot. It does not export forecast files.
+within each product’s current schedule slot. It does not export forecast files.
 
-Clio deploys as HTTP plus one worker container. The worker supervises the existing
-collector and scheduler processes; it adds no queue or storage model. Each loop
-keeps its own database locks and timing, so normalization cannot block collection.
+Clio deploys as HTTP plus one worker container. One scheduler dispatches temporary
+executors with independent live lanes and bounded background concurrency. It
+retains task locks until executors exit, so normalization cannot block collection.
 
-Clio ingestion accesses `forecast_core.calibration` through a lazy adapter;
+Clio ingestion accesses `forecast_core.calibration` and `forecast_core.observations`
+through lazy adapters;
 its base dependencies exclude model runtimes. Prophet installs the `[models]`
 extra of `forecast-core`; its HTTP read
 path does not import the backend. API installs without private code; Intelligence depends on `intelligence-core`
@@ -62,7 +63,7 @@ Python dependency boundaries (distinct from HTTP service calls):
 | `forecast-core` | `forecast`, `common` |
 | Prophet | `forecast`, `forecast-core`, `common` |
 
-Only the Clio application imports the provider library `clio`. Other services
+Only Clio imports its `clio.providers` modules. Other services
 receive observations over HTTP. Clio owns archive loading and caching; the private
 backend exposes calibration computations over supplied data. Libraries must not depend on
 application runtimes. Architecture tests check imports, declared dependencies
@@ -100,3 +101,16 @@ database tests skip rather than use project credentials. Public CI provides Post
 Boundary tests check import direction, private adapters, absence of foreign-domain
 SQL and isolated credentials. Integration tests cover migrations, ownership,
 publication and locking. See each service README for its runtime guarantees.
+
+Prophet keeps exclusive writer sessions in its coordinator. Spawned per-product
+calculations receive saved snapshots and explicit model configuration, then return
+serialized results; they never inherit a database connection. All backends use
+`forecast_snapshot`, including private IMF and atmospheric density; density snapshot
+preparation belongs entirely to `forecast-core`. GONG inputs
+are owned and archived by Clio, and included in saved Prophet snapshots. Private
+inference must not read project configuration or local observation files.
+
+Prophet dispatches products on independent configurable schedules, with bounded
+calculation concurrency and parent-owned generation writes. Verification uses a
+separate process and writer lock; cleanup acquires both locks. Existing model
+issue times and grids remain hourly even when execution schedules are more frequent.

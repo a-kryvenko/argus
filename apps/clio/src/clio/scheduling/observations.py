@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 from clio.db.locks import JOB_LOCKS
 from clio.db.session import get_database_url
-from clio.scheduling.jobs import JobBusy, work_cycles
+from clio.scheduling.jobs import JobBusy
 from clio.ingestion.products import OBSERVATIONS
 
 logger = logging.getLogger(__name__)
@@ -70,15 +70,3 @@ def execute(config, run, *, now=None, mode='backfill', force=False):
         if failed:
             logger.warning('%s will retry failed observations: %s', mode, ', '.join(sorted(failed)))
         return True
-
-
-def work(config, run, *, mode='backfill'):
-    poll_seconds = min([60, *(getattr(policy.schedules, mode).every.total_seconds()
-                             for policy in config.observations.values())])
-    first = mode == 'live'
-    def cycle():
-        nonlocal first
-        result = execute(config, run, mode=mode, force=first)
-        first = False
-        return result
-    work_cycles(mode, cycle, poll_seconds=poll_seconds)

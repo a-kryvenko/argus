@@ -64,6 +64,12 @@ def input_diagnostics(inputs):
             'source_freshness_known': False,
         },
         'density_sources': sources,
+        'gong': ({'observed_at': inputs.gong.observed_at.isoformat(),
+                  'available_at': inputs.gong.available_at.isoformat(),
+                  'age_hours': (as_of-inputs.gong.observed_at).total_seconds()/3600,
+                  'source_product': inputs.gong.source_product, 'sha256': inputs.gong.sha256,
+                  'feature_version': inputs.gong.feature_version}
+                 if inputs.gong else None),
     }
 
 

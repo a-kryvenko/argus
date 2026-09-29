@@ -17,7 +17,7 @@ async def run(args):
             result = await backfill_selected(session, config, numeric, now=args.now, start=args.start, end=args.end,
                                              raise_on_failure=False)
     if files:
-        from clio.domains.aia.collection import collect_file_observations
+        from clio.ingestion.files import collect_file_observations
         result = merge_files(result, await collect_file_observations(
             config, files, mode='backfill', now=args.now, start=args.start, end=args.end))
     print(json.dumps(result, indent=2))

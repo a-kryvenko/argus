@@ -85,16 +85,12 @@ from one service invocation.
 | `./argus clio status` | Show collection progress and source freshness |
 | `./argus clio worker` | Run native RTSW collection, normalization, aggregation and separate numeric/file live/backfill schedules |
 | `./argus clio collect [METRIC ...]` | Fetch selected observations using configured live priorities |
-| `./argus clio schedule live` | Run per-observation live schedules in the foreground |
 | `./argus clio backfill [METRIC ...] [--from DATE --to DATE]` | Fill missing observations using configured history depths |
-| `./argus clio schedule backfill` | Run per-observation backfill schedules in the foreground |
-| `./argus clio schedule normalize` | Periodically normalize stored observations |
-| `./argus clio schedule aggregate` | Periodically process queued aggregates |
-| `./argus clio schedule native-wind` | Continuously collect native RTSW sensor samples |
 | `./argus clio audit [--json]` | Inspect native solar-wind history and aggregation gaps |
 | `./argus clio cleanup [--json] [--apply]` | Preview native solar-wind retention cleanup; apply only with `--apply` |
 | `./argus clio check-health <solar-wind\|geomagnetic\|worker>` | Check collector health |
 | `./argus prophet generate [product]` | Generate and publish forecasts |
+| `./argus prophet cleanup [--days 90] [--apply]` | Preview/delete old forecast history; preserve current releases and latest attempts |
 | `./argus prophet status [product]` | Show the current release and latest generation attempt |
 | `./argus intelligence process [product]` | Process available forecasts once, currently in stub mode |
 | `./argus intelligence status [product]` | Show processing status |
@@ -104,8 +100,7 @@ An empty database needs `collect` / `backfill` before `normalize`.
 Clio manual commands use the same locks as the worker and do not advance its
 scheduled completion markers. They also work when the worker is stopped.
 Docker Compose starts the Clio worker in both dev and production.
-`schedule live` and `schedule backfill` accept `--kind numeric` or `--kind file`;
-the worker uses one scheduler and temporary executors with independent live
+The worker uses one scheduler and temporary executors with independent live
 lanes and at most two concurrent background jobs. Without positional metrics, manual commands include all configured kinds.
 
 Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,

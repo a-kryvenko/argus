@@ -24,6 +24,17 @@ class DefaultForecastService(ABC):
                 raise ValueError('Models using dlinear_v must embed their fitted DLinear bundle')
             self._dlinear = RotationDLinearForecaster(dependency['bundle'])
 
+    def snapshot_options(self, inputs):
+        if self._dlinear is None:
+            return {}
+        return {'speed_history': pd.DataFrame(
+            [point.model_dump() for point in inputs.speed_observations], columns=['issue_time', 'v'])}
+
+    def forecast_snapshot(self, inputs, *, issue_time):
+        from common.adapters import forecast_to_dataframe
+        return forecast_to_dataframe(self.forecast(
+            inputs.observations, issue_time=issue_time, **self.snapshot_options(inputs)))
+
     @abstractmethod
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
         """Build required forecast features from raw observations"""
@@ -52,13 +63,15 @@ class DefaultForecastService(ABC):
         """Extract exatt forecasted fields from forecast dataframe row"""
 
     def forecast(self, observations: Observation, *, issue_time: datetime | None = None,
-                 speed_history: pd.DataFrame | None = None):
+                 speed_history: pd.DataFrame | None = None, feature_inputs: dict | None = None):
         issue_time = issue_time or datetime.now(UTC)
         if issue_time.tzinfo is None or issue_time.utcoffset() is None:
             raise ValueError("Forecast issue_time must be timezone-aware")
         issue_time = issue_time.astimezone(UTC)
 
         extra = {'speed_history': speed_history} if speed_history is not None else {}
+        if feature_inputs is not None:
+            extra['feature_inputs'] = feature_inputs
         frame = self._prepare_frame(
             observations=observations,
             issue_time=issue_time,
@@ -80,7 +93,7 @@ class DefaultForecastService(ABC):
         return self.forecast_from_df(frame)
 
     def _prepare_frame(self, observations: Observation, issue_time: datetime, lead_hours: int,
-                       speed_history: pd.DataFrame | None = None) -> pd.DataFrame:
+                       speed_history: pd.DataFrame | None = None, feature_inputs: dict | None = None) -> pd.DataFrame:
         forecast_start_time = issue_time.replace(minute=0, second=0, microsecond=0)
 
         df = observations_to_dataframe(observations)
@@ -91,7 +104,7 @@ class DefaultForecastService(ABC):
             dlinear_history['issue_time'] = pd.to_datetime(dlinear_history.issue_time, utc=True)
             dlinear_history = dlinear_history.loc[dlinear_history.issue_time <= forecast_start_time]
 
-        df = self._build_features(df)
+        df = self._build_features(df, **(feature_inputs or {}))
 
         last_row = df.iloc[[-1]].copy()
 

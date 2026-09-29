@@ -39,3 +39,13 @@ def test_ridge_unsupported_inputs_fall_back():
  frame.loc[0,'aia_area_x']=np.nan;frame.loc[1,'aia_available']=0
  result=residual(frame,pd.DataFrame(),bundle)
  assert result[0]==result[1]==0 and np.isfinite(result[2])
+
+
+def test_training_and_serving_preserve_missing_features_in_mixed_windows():
+ from forecast.aia_alignment import align as runtime_align
+ assert align is runtime_align
+ f,s,p=fixture()
+ s.loc[s.observed_at.eq(f.issue_time.iloc[0]-pd.Timedelta(hours=24)),'aia_delta_24h_sector']=np.nan
+ a=align(f,s,p)
+ assert np.isnan(a.loc[a.lead_hours.eq(72),'aia_delta_24h_sector'].iloc[0])
+ assert a.loc[a.lead_hours.eq(96),'aia_delta_24h_sector'].iloc[0]==0.

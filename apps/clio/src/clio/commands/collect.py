@@ -14,9 +14,9 @@ async def run(args):
         from clio.observations.live import collect_live
         async with get_session_factory()() as session:
             result = await collect_live(session, config, numeric,
-                                        now=getattr(args, 'now', None), heartbeat=getattr(args, 'heartbeat', None))
+                                        now=getattr(args, 'now', None))
     if files:
-        from clio.domains.aia.collection import collect_file_observations
+        from clio.ingestion.files import collect_file_observations
         result = merge_files(result, await collect_file_observations(config, files, mode='live', now=getattr(args, 'now', None)))
     print(json.dumps(result, indent=2))
     if (not getattr(args, 'scheduled', False) and result['downloaded_measurements'] == 0

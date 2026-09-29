@@ -1,8 +1,8 @@
 """Prophet forecasting, publication and internal read service."""
 import argparse
-import logging
+from importlib import import_module
 
-from argus_prophet.services.generation.products import GENERATION_CHOICES, select_products
+from argus_prophet.services.generation.products import GENERATION_CHOICES
 
 
 def main(argv=None) -> None:
@@ -15,9 +15,11 @@ def main(argv=None) -> None:
     serve = commands.add_parser('serve', help='Serve published forecast contracts')
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
-    slots = commands.add_parser('slots', help='List hourly slots and attempt counts')
+    slots = commands.add_parser('slots', help='List product schedule slots and attempt counts')
     slots.add_argument('--limit', type=int, default=20)
-    from common.schemas.forecast_release import PRODUCT_ARTIFACTS
+    cleanup = commands.add_parser('cleanup', help='Preview old history cleanup; preserve current releases')
+    cleanup.add_argument('--days', type=int, default=90)
+    cleanup.add_argument('--apply', action='store_true')
     status_parser = commands.add_parser('status', help='Inspect current release age and input diagnostics')
     status_parser.add_argument('product', nargs='?', default='all', choices=GENERATION_CHOICES)
     from argus_prophet.services.generation.products import VERIFIED_PRODUCTS
@@ -33,67 +35,22 @@ def main(argv=None) -> None:
     show.add_argument('--inputs', action='store_true', help='Include the saved observation snapshot')
     args, remaining = parser.parse_known_args(argv)
     if args.command == 'migrate':
-        from pathlib import Path
-        from common.config import get_config
-        from alembic.config import Config, CommandLine
-        get_config()
-        cli = CommandLine(prog='prophet migrate')
-        if not remaining:
-            cli.parser.print_help()
-            return
-        options = cli.parser.parse_args(remaining)
-        config = Config()
-        config.cmd_opts = options
-        config.set_main_option('script_location', str(Path(__file__).parent / 'migrations'))
-        cli.run_cmd(config, options)
-        return
+        from argus_prophet.commands.migrate import run
+        return run(remaining)
     if remaining:
         parser.error('Unrecognized arguments: ' + ' '.join(remaining))
-    if args.command in ('verify', 'verification-report'):
-        import json
-        from common.config import get_config
-        from argus_prophet.services.verification import verify, verification_report
-        get_config()
-        if args.command == 'verify':
-            from argus_prophet.worker import generation_lock
-            with generation_lock():
-                result = verify(args.product, days=args.days)
-        else:
-            result = verification_report(args.product, days=args.days)
-        print(json.dumps(result, default=str, indent=2, allow_nan=False))
-        return
     if args.command == 'serve':
         import uvicorn
         uvicorn.run('argus_prophet.main:app', host=args.host, port=args.port)
         return
-    if args.command in ('runs', 'show-run', 'slots', 'status'):
-        import json
-        from common.config import get_config
-        from argus_prophet.services.runs import list_runs, describe_run
-        get_config()
-        try:
-            if args.command == 'status':
-                from argus_prophet.services.releases.status import product_status
-                result = ([product_status(product).model_dump(mode='json') for product in select_products('all')]
-                          if args.product == 'all' else product_status(args.product).model_dump(mode='json'))
-            elif args.command == 'slots':
-                from argus_prophet.worker import list_slots
-                result = list_slots(args.limit)
-            else:
-                result = list_runs(args.limit) if args.command == 'runs' else describe_run(args.run_id, args.inputs)
-        except ValueError as exc:
-            parser.error(str(exc))
-        print(json.dumps(result, default=str, indent=2))
-        return
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    from argus_prophet.services.generation.cycle import generate, generate_products
-    from common.runtime import run_command
-    from argus_prophet.worker import generation_lock, work
-    if args.command == 'worker':
-        run_command(lambda: work(lambda slot, products: generate_products(
-            products, trigger='scheduled', scheduled_slot=slot)))
-    else:
-        def once():
-            with generation_lock():
-                generate(args.product)
-        run_command(once)
+    handlers = {
+        'generate': 'generation', 'refresh': 'generation', 'worker': 'generation',
+        'verify': 'verification', 'verification-report': 'verification',
+        'runs': 'inspection', 'show-run': 'inspection', 'slots': 'inspection', 'status': 'inspection',
+        'cleanup': 'cleanup',
+    }
+    handler = import_module('argus_prophet.commands.' + handlers[args.command])
+    try:
+        return handler.run(args)
+    except ValueError as exc:
+        parser.error(str(exc))

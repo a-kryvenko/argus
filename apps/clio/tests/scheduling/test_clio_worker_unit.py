@@ -1,16 +1,12 @@
 """One scheduler bounds concurrency, retries failures and drains on shutdown."""
-import asyncio
 from concurrent.futures import Future
 import os
 import signal
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 
 from clio import worker
-from clio.commands import collect_solar_wind
-from clio.commands._shutdown import stop_on_signal, wait_for_next_poll
-from clio.monitoring.heartbeat import check_heartbeat
 
 
 def test_live_lanes_are_not_queued_behind_background_jobs(monkeypatch):
@@ -102,41 +98,4 @@ def test_observation_lane_preserves_partial_report_time_and_heartbeat(monkeypatc
     task.run()
     assert forces == [True, False]
     assert invoke.call_args.kwargs['now'] == now
-    assert invoke.call_args.kwargs['heartbeat'] is None
     assert beat.started.call_count == beat.finished.call_count == 2
-
-
-def test_solar_wind_finishes_active_collection_on_sigterm(monkeypatch, tmp_path):
-    monkeypatch.setenv('ARGUS_COLLECTOR_HEALTH_DIR', str(tmp_path))
-    events = []
-
-    async def refresh():
-        events.append('started')
-        os.kill(os.getpid(), signal.SIGTERM)
-        await asyncio.sleep(0)
-        events.append('saved')
-
-    monkeypatch.setattr(collect_solar_wind, 'refresh_solar_wind', refresh)
-    dispose = AsyncMock()
-    from clio import cli
-    from clio.db import session
-    from types import SimpleNamespace
-    monkeypatch.setattr(session, 'dispose_engine', dispose)
-    previous = signal.getsignal(signal.SIGTERM)
-    cli.invoke('native-wind', SimpleNamespace(watch=True))
-    assert events == ['started', 'saved']
-    dispose.assert_awaited_once()
-    assert check_heartbeat('solar-wind')['reason'] == 'collector_stopped'
-    assert signal.getsignal(signal.SIGTERM) == previous
-
-
-
-
-def test_signal_wakes_idle_collector_without_waiting_for_poll_interval():
-    async def scenario():
-        with stop_on_signal(True) as stopped:
-            asyncio.get_running_loop().call_soon(os.kill, os.getpid(), signal.SIGTERM)
-            await asyncio.wait_for(wait_for_next_poll(stopped, 300), timeout=2)
-            assert stopped.is_set()
-
-    asyncio.run(scenario())

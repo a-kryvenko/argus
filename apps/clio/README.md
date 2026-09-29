@@ -22,7 +22,7 @@ normalization, file artifacts and the observations HTTP API. Python package:
 
 Metrics are positional, separated by spaces. `fetch-live`, `--metrics`, the old
 `collect aia/solar-wind/geomagnetic`, and `refresh` interface were removed.
-`serve`, `worker`, `schedule` and `check-health` are operational commands.
+`serve`, `worker` and `check-health` are operational commands.
 Manual commands use the worker's locks but do not advance schedule markers.
 
 ## Layout and responsibilities
@@ -30,9 +30,10 @@ Manual commands use the worker's locks but do not advance schedule markers.
 - `commands/`: thin command handlers and output, no provider selection rules.
 - `scheduling/`: periodic execution, PostgreSQL locks and completion markers.
 - `ingestion/`: source registry, adapters, selection and monitoring-independent orchestration.
-- `providers/`: public provider transports and parsers; GONG is retained.
+- `providers/`: public provider transports and parsers, including GONG live/archive.
 - `observations/`: metric schema, live/backfill persistence, normalization and calibrated solar indices.
 - `domains/geomagnetic.py`: geomagnetic index intervals and persistence.
+- `domains/gong.py`: immutable magnetograms, private feature extraction and stored feature reads.
 - `domains/aia/`: immutable originals/receipts, artifact recovery, FITS extraction and stored features.
 - `domains/solar_wind/`: native RTSW data, aggregation, history, audit and retention.
 - `monitoring/`: source health, heartbeat and collection status.
@@ -47,7 +48,7 @@ reports. Provider libraries and working data are released on executor exit.
 Shutdown stops dispatch, drains active tasks for up to 570 seconds, then
 terminates remaining executors before releasing their locks. Starting an
 interpreter for each run trades CPU/startup time for lower idle memory.
-Standalone `schedule` commands remain available for diagnostics.
+Use one-shot commands for manual collection, backfill, normalization and aggregation.
 
 Native RTSW and metric observations are distinct products. Do not mix spacecraft
 sample timestamps, propagated timestamps, coordinate frames, or aggregate windows.
@@ -85,17 +86,10 @@ bit 30 (`Q_NRT`); archive quality remains strict. Per-slot locks serialize recov
 
 ## Worker
 
-Seven supervised processes run independently:
-
-```text
-schedule native-wind
-schedule live --kind numeric
-schedule normalize
-schedule aggregate
-schedule live --kind file
-schedule backfill --kind numeric
-schedule backfill --kind file
-```
+`clio worker` dispatches seven task families into temporary executors:
+native RTSW collection, numeric live collection, file live collection,
+normalization, aggregation, numeric backfill and file backfill.
+The worker owns all periodic loops; these are internal tasks, not CLI commands.
 
 Native collection retains its own cadence. Numeric and file schedules use separate
 locks so AIA warmup does not block numeric live collection. Observation markers
@@ -118,3 +112,21 @@ Integration tests require `TEST_DATABASE_ADMIN_DSN` pointing to an isolated test
 PostgreSQL server; otherwise pytest skips them. They create temporary schemas.
 Research/notebook tests are separately run from `scripts/training/tests` and may
 require local notebooks/private calibration dependencies.
+
+## Forecast inputs
+
+`GET /internal/v1/observations/forecast-inputs?as_of=...` returns the versioned
+`common.schemas.forecast_inputs.ForecastInputs` contract in one read-only database
+snapshot. It includes normalized observations, raw density drivers, observed speed,
+AIA features, native hourly wind and optional `gong` features. Reads do not collect.
+
+GONG is configured as a file observation: `collect gong` and `backfill gong` use
+`gong.live` and `gong.archive`, with hourly live collection and a two-day backfill
+by default. One original per UTC hour is retained in `clio.gong_snapshot`, together
+with compressed FITS bytes, SHA256, first receipt, provider URL and `gong-bands-v1`
+features. Conflicts never overwrite earlier receipts or originals. Feature
+extraction uses the lazy private `forecast_core.observations` boundary during
+collection; HTTP reads use stored JSON only. Apply `20260929_gong_snapshot` first.
+The latest frame whose observation and receipt are both at or before `as_of` is
+returned; Prophet separately enforces the configured age limit. Originals have no
+automatic retention policy.

@@ -121,10 +121,10 @@ def test_clio_uses_base_backend_and_prophet_requests_models():
 
 @pytest.mark.parametrize('root,blocked,private_surface', [
     ('apps/api/app', {'forecast', 'clio', 'forecast_core', 'argus_prophet', 'argus_intelligence'}, {'intelligence_core.api'}),
-    ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.calibration'}),
+    ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.calibration', 'forecast_core.observations'}),
     ('apps/prophet/src', {'app', 'clio', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.api'}),
     ('apps/intelligence/src', {'app', 'clio', 'argus_prophet', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
-    ('packages/forecast-core/src', {'clio'}, None),
+    ('packages/forecast-core/src', {'clio', 'argus_prophet', 'argus_intelligence', 'app'}, None),
 ])
 def test_service_import_boundaries(root, blocked, private_surface):
     for path in (ROOT / root).rglob('*.py'):
@@ -137,3 +137,15 @@ def test_service_import_boundaries(root, blocked, private_surface):
 def test_prophet_environment_does_not_include_provider_library():
     lock = tomllib.loads((ROOT / 'apps/prophet/uv.lock').read_text())
     assert not {'clio', 'argus-clio'} & {package['name'] for package in lock['package']}
+
+
+def test_private_inference_has_no_configuration_or_observation_file_access():
+    root = ROOT / 'packages/forecast-core/src/forecast_core/inference'
+    if not root.exists():
+        pytest.skip('Private checkout unavailable')
+    for path in root.rglob('*.py'):
+        assert 'common.config' not in set(imports(path)), path
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                assert not (isinstance(node.func, ast.Name) and node.func.id == 'open'), path

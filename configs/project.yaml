@@ -1,10 +1,33 @@
 project:
   name: argus-sunwatch
 
+prophet:
+  calculation_timeout_seconds: 540
+  shutdown_grace_seconds: 570
+  max_parallel_products: 2
+  # Unspecified products run hourly at :10 UTC.
+  # Example override: dst: {every_minutes: 5, offset_minutes: 0}
+  schedules: {}
+  verification:
+    enabled: true
+    every_hours: 6
+    days: 7
+  inputs:
+    hmf:
+      max_gong_age_hours: 3
+
 # Numeric and file observations use these sources, schedules and backfill depths.
 # Native RTSW remains a separate product; AIA uses file adapters.
 clio:
   observations:
+    gong:
+      sources:
+        live: [gong.live]
+        historical: [gong.archive]
+      schedules:
+        live: {every: 1h}
+        backfill: {every: 6h}
+      backfill: {days: 2}
     aia193:
       sources:
         live: [aia.nrt_193]

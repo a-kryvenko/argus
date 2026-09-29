@@ -41,6 +41,7 @@ def align(frame, solar, plan):
         center = np.where(latest, observed[safe], center)
         sums = np.zeros((n, len(solar_columns)))
         denominator = np.zeros_like(sums)
+        missing = np.zeros_like(sums, dtype=bool)
         age_sum = np.zeros(n)
         weight_sum = np.zeros(n)
         count = np.zeros(n, dtype=int)
@@ -57,6 +58,10 @@ def align(frame, solar, plan):
             weight = np.where(eligible, np.exp(-0.5 * ((observed[index] - center) / HOUR / plan['window_sigma_hours']) ** 2), 0.0)
             values = source[index]
             finite = np.isfinite(values)
+            # A feature must describe the same window as the other features.
+            # Independent NaN-skipping averages can mix a change from one frame
+            # with overlap/area from several frames and hide an unsupported gap.
+            missing |= eligible[:, None] & ~finite
             sums += np.where(finite, values, 0.0) * weight[:, None]
             denominator += finite * weight[:, None]
             age_sum += (issue - observed[index]) / HOUR * weight
@@ -64,7 +69,7 @@ def align(frame, solar, plan):
             count += eligible
             after_issue_weight += weight * (observed[index] > issue)
         with np.errstate(invalid='ignore', divide='ignore'):
-            matrix[begin:begin + n] = np.where(denominator > 0, sums / denominator, np.nan)
+            matrix[begin:begin + n] = np.where((denominator > 0) & ~missing, sums / denominator, np.nan)
             ages[begin:begin + n] = np.where(weight_sum > 0, age_sum / weight_sum, np.nan)
         counts[begin:begin + n] = count
         delays[begin:begin + n] = tau

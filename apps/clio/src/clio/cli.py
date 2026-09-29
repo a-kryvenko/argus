@@ -6,11 +6,9 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 
 from clio.commands._arguments import utc_hour, boundary
 from clio.ingestion.products import OBSERVATIONS
-from clio.scheduling.execution import invoke_isolated
 
 COMMANDS = {
     'native-wind': 'collect_solar_wind',
@@ -35,7 +33,6 @@ def invoke(name, args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.set_defaults(watch=False, history_days=None, limit=240)
     commands = parser.add_subparsers(dest='command', required=True)
     serve = commands.add_parser('serve')
     serve.add_argument('--host', default='0.0.0.0')
@@ -64,15 +61,10 @@ def main(argv=None):
     commands.add_parser('migrate', add_help=False)
     commands.add_parser('status')
     commands.add_parser('worker')
-    schedule = commands.add_parser('schedule')
-    schedule.add_argument('job', choices=['normalize', 'aggregate', 'native-wind', 'backfill', 'live'])
-    schedule.add_argument('--kind', choices=['numeric', 'file'], help='Run one observation kind independently')
     args, remainder = parser.parse_known_args(argv)
     if args.command != 'migrate' and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
     args.now = datetime.now(UTC)
-    if args.command == 'schedule' and args.kind and args.job not in ('live', 'backfill'):
-        parser.error('--kind applies only to live/backfill schedules')
     if args.command in ('collect', 'backfill'):
         if any(m not in OBSERVATIONS for m in args.metrics):
             parser.error('Unknown observation metric')
@@ -132,31 +124,6 @@ def execute(args, remainder):
     elif args.command == 'worker':
         from clio.worker import work
         work()
-    elif args.command == 'schedule':
-        if args.job in ('backfill', 'live'):
-            from clio.scheduling.observations import work
-            from clio.config import load_observation_config
-            from clio.monitoring.heartbeat import CollectorHeartbeat
-            from clio.monitoring.specs import collector_sources
-            config = load_observation_config()
-            if args.kind:
-                config = config.model_copy(update={'observations': {
-                    m: p for m, p in config.observations.items() if OBSERVATIONS[m].kind == args.kind}})
-            heartbeat = CollectorHeartbeat('geomagnetic') if args.job == 'live' and args.kind != 'file' and collector_sources('geomagnetic') else None
-            execute_batch = invoke_isolated if args.job == 'backfill' or args.kind == 'file' else invoke
-            try:
-                return work(config, lambda metrics, now: execute_batch(
-                    'collect' if args.job == 'live' else 'backfill', SimpleNamespace(
-                        metrics=metrics, now=now, start=None, end=None, scheduled=True, heartbeat=heartbeat)), mode=args.job)
-            finally:
-                if heartbeat:
-                    heartbeat.stop()
-        if args.job == 'native-wind':
-            args.watch = True
-            return invoke('native-wind', args)
-        from clio.scheduling.jobs import work
-        name = args.job
-        work('refresh' if args.job == 'normalize' else args.job, lambda: invoke_isolated(name, args))
     else:
         from clio.scheduling.jobs import execute as locked
         name = args.command

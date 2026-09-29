@@ -74,3 +74,37 @@ def test_speed_fill_value_does_not_become_forecast_or_threshold_probability():
     out=AIAWindForecaster(bundle()).frame(issue,history,solar)
     np.testing.assert_allclose(out.v_q50,440.)
     assert out.p_v_ge_450.between(0,1,inclusive='neither').all()
+
+
+def test_partial_temporal_features_do_not_become_supported_by_window_averaging():
+    issue, history, solar = inputs()
+    # At +72h both frames are in the arrival window. The older frame has no
+    # daily pair: its delta is unknown and its measured overlap is zero.
+    # Averaging each feature over a different subset used to activate Ridge.
+    solar = solar.iloc[[-4, -1]].copy()
+    solar['aia_delta_24h_sector'] = [np.nan, .2]
+    solar['aia_overlap_24h_sector'] = [0., 1.]
+    b = bundle()
+    model = b['ridge']['models'][0]['ridge']
+    model.update(columns=['aia_delta_24h_sector', 'aia_overlap_24h_sector'],
+                 coefficient=np.array([10000., -2000.]))
+    out = AIAWindForecaster(b).frame(issue, history, solar)
+    mixed = out.loc[out.lead_hours.eq(72)].iloc[0]
+    assert mixed.selected_frames == 2
+    assert np.isnan(mixed.aia_delta_24h_sector)
+    assert mixed.v_q50 == pytest.approx(400.)
+    assert mixed.v_q10 == pytest.approx(280.)  # DLinear uncertainty, too
+    assert mixed.p_v_ge_600 == 0
+    # A complete latest-only window remains supported and retains AIA uncertainty.
+    latest = out.loc[out.lead_hours.eq(96)].iloc[0]
+    assert latest.v_q50 == pytest.approx(400.)
+    assert latest.v_q10 == pytest.approx(320.)
+
+
+def test_missing_features_in_unselected_frames_do_not_disable_complete_window():
+    issue, history, solar = inputs()
+    original = AIAWindForecaster(bundle()).frame(issue, history, solar)
+    solar.loc[solar.index[0], 'aia_area_sector'] = np.nan
+    out = AIAWindForecaster(bundle()).frame(issue, history, solar)
+    np.testing.assert_allclose(out.v_q50, original.v_q50)
+    np.testing.assert_allclose(out.v_q10, original.v_q10)

@@ -25,7 +25,7 @@ def recorder_database(database, monkeypatch, tmp_path):
 
 @pytest.fixture
 def recorder_setup(recorder_database):
-    from argus_prophet.worker import generation_lock
+    from argus_prophet.scheduling.jobs import generation_lock
     with generation_lock():
         yield recorder_database
 
@@ -73,7 +73,7 @@ def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
 def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
     dsn, passwords, config = recorder_setup
     first = RunRecorder.begin('dst', 'manual', config)
-    from argus_prophet.worker import recover_interrupted
+    from argus_prophet.scheduling.jobs import recover_interrupted
     recover_interrupted()
     second = RunRecorder.begin('dst', 'manual', config)
     second.finish(error=ValueError('bad model'))
@@ -81,6 +81,51 @@ def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
         rows = dict(conn.execute('SELECT id,status FROM prophet.forecast_run').fetchall())
         assert rows[first.run_id] == 'interrupted'
         assert rows[second.run_id] == 'failed'
+
+
+def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
+    from argus_prophet.scheduling.execution import ShutdownRequested
+    dsn, passwords, config = recorder_setup
+    run = RunRecorder.begin('dst', 'manual', config)
+    run.finish(error=ShutdownRequested('deadline'))
+    with runtime(dsn, 'prophet', passwords) as conn:
+        assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s',
+                            (run.run_id,)).fetchone()[0] == 'interrupted'
+
+
+def test_cleanup_preserves_current_release_latest_attempt_and_slots(recorder_setup):
+    from argus_prophet.services.retention import cleanup
+    from psycopg.types.json import Jsonb
+    dsn, passwords, config = recorder_setup
+    old = datetime.now(UTC)-timedelta(days=100)
+    first = RunRecorder.begin('dst', 'manual', config)
+    store_product(first)
+    first.finish()
+    first_release = read_release('dst')
+    current = RunRecorder.begin('dst', 'manual', config)
+    store_product(current)
+    current.finish()
+    latest = RunRecorder.begin('dst', 'manual', config)
+    latest.finish(error=ValueError('test failure'))
+    with runtime(dsn, 'prophet', passwords) as conn:
+        conn.execute('INSERT INTO prophet.forecast_verification VALUES (%s,%s,%s,%s)',
+                     (first_release.release_id, 'dst_quantile', old, Jsonb({})))
+        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
+                     (old, old, first.run_id))
+        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
+                     (old+timedelta(seconds=1), old, current.run_id))
+        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
+                     (old+timedelta(seconds=2), old, latest.run_id))
+    preview = cleanup()
+    assert preview['runs'] == preview['releases'] == preview['artifacts'] == preview['verifications'] == 1
+    assert not preview['applied']
+    assert read_release('dst', first_release.release_id)
+    result = cleanup(apply=True)
+    assert result['runs'] == 1 and result['applied']
+    assert read_release('dst').run_id == current.run_id
+    with pytest.raises(ReleaseNotFound):
+        read_release('dst', first_release.release_id)
+    assert describe_run(latest.run_id)['status'] == 'failed'
 
 
 def test_only_completed_products_publish_and_history_survives(recorder_setup):

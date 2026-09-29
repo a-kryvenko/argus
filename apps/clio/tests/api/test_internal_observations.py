@@ -20,6 +20,7 @@ def client_with_session(monkeypatch):
     loader = AsyncMock(return_value=Observation(points=[]))
     monkeypatch.setattr(routes, 'load_normalized_observations', loader)
     monkeypatch.setattr(routes, 'load_aia_features', AsyncMock(return_value=[]))
+    monkeypatch.setattr(routes, 'load_gong_features', AsyncMock(return_value=None))
     monkeypatch.setattr(routes, 'solar_history', AsyncMock(return_value={'series': {}}))
     app = FastAPI()
     app.include_router(routes.router)

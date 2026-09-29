@@ -164,4 +164,4 @@ def test_database_contract():
     import pytest
     if not os.getenv('TEST_DATABASE_ADMIN_DSN'):
         pytest.skip('Set TEST_DATABASE_ADMIN_DSN to an isolated PostgreSQL server')
-    asyncio.run(verify())
+    asyncio.run(main())

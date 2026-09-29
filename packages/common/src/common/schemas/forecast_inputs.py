@@ -29,6 +29,16 @@ class AIAFeatureFrame(BaseModel):
     features: dict[str, FiniteFloat | None]
 
 
+class GONGFeatureFrame(BaseModel):
+    """An immutable observed magnetogram and versioned model features."""
+    observed_at: AwareDatetime
+    available_at: AwareDatetime
+    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    source_product: str
+    feature_version: Literal['gong-bands-v1'] = 'gong-bands-v1'
+    features: dict[str, FiniteFloat]
+
+
 class ForecastInputs(BaseModel):
     schema_version: Literal[1] = 1
     as_of: AwareDatetime
@@ -38,6 +48,7 @@ class ForecastInputs(BaseModel):
     speed_observations: list[SpeedObservation] = Field(default_factory=list)
 
     aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)
+    gong: GONGFeatureFrame | None = None
 
     # Native, unfilled hourly Clio solar-wind history for IMF inference.
     solar_wind_hourly: dict | None = None

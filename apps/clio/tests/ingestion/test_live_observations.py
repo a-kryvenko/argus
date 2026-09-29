@@ -93,21 +93,16 @@ def test_native_adapter_preserves_fractional_kp_raw_ap_and_receipt(monkeypatch):
                dict(interval_start=NOW, quality='flagged', value=5., raw={'a_running': 39.}, received_at=NOW)]
     ingest = AsyncMock(return_value=records)
     monkeypatch.setattr(adapters, 'ingest_source', ingest)
-    heartbeat = Mock()
-    result = asyncio.run(adapters.GeomagneticLiveAdapter('kp', heartbeat).fetch(NOW - timedelta(days=1), NOW))
+    result = asyncio.run(adapters.GeomagneticLiveAdapter('kp').fetch(NOW - timedelta(days=1), NOW))
     assert result.value.tolist() == [3.33, 18.]
     assert result.metric.tolist() == ['kp', 'ap']
     assert set(result.received_at) == {received}
-    heartbeat.started.assert_called_once_with('kp')
-    heartbeat.finished.assert_called_once_with('kp')
 
 
-def test_native_error_finishes_heartbeat_and_propagates(monkeypatch):
+def test_native_error_propagates(monkeypatch):
     monkeypatch.setattr(adapters, 'ingest_source', AsyncMock(side_effect=OSError('offline')))
-    heartbeat = Mock()
     with pytest.raises(OSError):
-        asyncio.run(adapters.GeomagneticLiveAdapter('dst', heartbeat).fetch(NOW - timedelta(days=1), NOW))
-    heartbeat.finished.assert_called_once_with('dst')
+        asyncio.run(adapters.GeomagneticLiveAdapter('dst').fetch(NOW - timedelta(days=1), NOW))
 
 
 def test_live_saves_partial_results_with_priority_policy_and_no_normalization(monkeypatch):

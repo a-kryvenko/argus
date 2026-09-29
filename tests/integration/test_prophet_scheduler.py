@@ -12,7 +12,7 @@ from argus_prophet.db.session import require_writer
 from argus_prophet.services.runs import RunRecorder
 from argus_prophet.services.generation.products import PRODUCTS
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
-from argus_prophet.worker import generation_lock, run_due, due_slot, GenerationBusy
+from argus_prophet.scheduling.jobs import generation_lock, run_due, due_slot, GenerationBusy
 from argus_prophet.services.generation import cycle as generation_cycle
 
 NOW = datetime(2026, 9, 13, 10, 10, tzinfo=UTC)
@@ -56,7 +56,8 @@ def test_partial_cycle_publishes_successes_and_retries_only_failures(recorder_da
     assert read_release('dst').run_id != manual.run_id
     assert not run_due(lambda *_: pytest.fail('Completed slot repeated'), NOW)
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT status,attempts,error FROM prophet.forecast_slot').fetchone() == ('succeeded', 8, None)
+        assert conn.execute('SELECT product,status,attempts,error FROM prophet.forecast_slot ORDER BY product').fetchall() == [
+            (p, 'succeeded', 2 if p in failed else 1, None) for p in sorted(PRODUCTS)]
         assert conn.execute('SELECT scheduled_slot FROM prophet.forecast_run WHERE id=%s', (manual.run_id,)).fetchone()[0] is None
 
 
@@ -68,8 +69,9 @@ def test_new_hour_drops_old_retries_and_does_not_replay_missed_hours(recorder_da
     assert run_due(generate(config, seen=seen), NOW + timedelta(hours=3))
     assert seen == list(PRODUCTS)
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT slot,status FROM prophet.forecast_slot ORDER BY slot').fetchall() == [
-            (due_slot(NOW), 'partial'), (due_slot(NOW) + timedelta(hours=3), 'succeeded')]
+        assert conn.execute('SELECT product,slot,status FROM prophet.forecast_slot ORDER BY slot,product').fetchall() == [
+            (p, due_slot(NOW), 'failed' if p == 'dst' else 'succeeded') for p in sorted(PRODUCTS)] + [
+            (p, due_slot(NOW) + timedelta(hours=3), 'succeeded') for p in sorted(PRODUCTS)]
 
 
 def test_all_failed_products_retry_and_keep_history(recorder_database):
@@ -80,7 +82,7 @@ def test_all_failed_products_retry_and_keep_history(recorder_database):
         assert conn.execute('SELECT status FROM prophet.forecast_slot').fetchone()[0] == 'failed'
     assert run_due(generate(config), NOW)
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT status,attempts FROM prophet.forecast_slot').fetchone() == ('succeeded', 12)
+        assert conn.execute('SELECT status,attempts FROM prophet.forecast_slot').fetchall() == [('succeeded', 2)] * 6
         assert conn.execute("SELECT count(*) FROM prophet.forecast_run WHERE status='failed'").fetchone()[0] == 6
 
 
@@ -210,3 +212,87 @@ def test_real_cycle_records_shared_inputs_and_retries_failed_product(recorder_da
     assert seen == ['dst'] and load.call_count == 2
     assert read_release('solar-wind-speed') == speed
     assert read_release('dst').product == 'dst'
+
+
+def test_product_slots_allow_subhour_retries_and_independent_clock_rollback(recorder_database):
+    from argus_prophet.scheduling.jobs import product_pending
+    dsn, passwords, config = recorder_database
+    slot = NOW.replace(minute=5)
+    with generation_lock():
+        assert product_pending('dst', slot)
+        run = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=slot)
+        store_product(run)
+        run.finish()
+        assert not product_pending('dst', slot)
+        assert not product_pending('dst', slot-timedelta(minutes=5))
+        assert product_pending('hmf', slot)
+        assert product_pending('dst', slot+timedelta(minutes=5))
+        failed = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=slot+timedelta(minutes=5))
+        failed.finish(error=ValueError('model timeout'))
+        assert product_pending('dst', slot+timedelta(minutes=5))
+    with generation_lock():
+        assert not product_pending('dst', slot)
+        assert product_pending('dst', slot+timedelta(minutes=5))
+    with runtime(dsn, 'prophet', passwords) as conn:
+        assert conn.execute('SELECT product,slot,status FROM prophet.forecast_slot ORDER BY slot').fetchall() == [
+            ('dst', slot, 'succeeded'), ('dst', slot+timedelta(minutes=5), 'failed')]
+
+
+def test_verification_can_write_during_generation_and_blocks_cleanup(recorder_database):
+    from argus_prophet.scheduling.jobs import verification_lock, retention_lock
+    import threading
+    acquired, release = threading.Event(), threading.Event()
+    def verify():
+        with verification_lock():
+            require_writer().execute("INSERT INTO prophet.scheduled_job VALUES ('test', now(), now())")
+            acquired.set()
+            assert release.wait(10)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(verify)
+        try:
+            assert acquired.wait(10)
+            with generation_lock():
+                require_writer().execute('SELECT 1')
+            with pytest.raises(GenerationBusy):
+                with retention_lock():
+                    pytest.fail('Cleanup overlapped verification')
+        finally:
+            release.set()
+            future.result(timeout=10)
+    with retention_lock():
+        require_writer().execute('SELECT 1')
+
+
+def test_product_slot_migration_preserves_aggregate_history(database, monkeypatch):
+    import subprocess
+    import sys
+    from uuid import uuid4
+    from test_domain_storage import ROOT
+    from argus_prophet.scheduling.jobs import product_pending
+    dsn, passwords, environment = database
+    command = [sys.executable, '-c', 'from argus_prophet.cli import main; main()', 'migrate', 'upgrade']
+    result = subprocess.run([*command, '20260929_prophet_jobs'], env=environment, cwd=ROOT,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    run_id = uuid4()
+    with runtime(dsn, 'prophet', passwords) as conn:
+        conn.execute("INSERT INTO prophet.forecast_slot(slot,status,attempts) VALUES (%s,'partial',1)", (due_slot(NOW),))
+        conn.execute("""INSERT INTO prophet.forecast_run
+            (id,scope,product,trigger,started_at,status,provenance,scheduled_slot)
+            VALUES (%s,'legacy','all','scheduled',%s,'partial','{}',%s)""", (run_id, NOW, due_slot(NOW)))
+        conn.execute("""INSERT INTO prophet.forecast_release(id,product,run_id,published_at,issue_time,artifact_names)
+            VALUES (%s,'dst',%s,%s,%s,'["dst_quantile"]')""", (uuid4(), run_id, NOW, due_slot(NOW)))
+    result = subprocess.run([*command, 'head'], env=environment, cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    for key, value in environment.items():
+        if key.startswith('PROPHET_DB_'):
+            monkeypatch.setenv(key, value)
+    with runtime(dsn, 'prophet', passwords) as conn:
+        assert conn.execute('SELECT product,slot,status,attempts FROM prophet.forecast_slot').fetchone() == (
+            'all', due_slot(NOW), 'partial', 1)
+        assert conn.execute('SELECT scheduled_product,scheduled_slot,status FROM prophet.forecast_run').fetchone() == (
+            'all', due_slot(NOW), 'partial')
+    with generation_lock():
+        assert not product_pending('dst', due_slot(NOW))
+        assert product_pending('hmf', due_slot(NOW))
+        assert product_pending('dst', NOW.replace(minute=15))

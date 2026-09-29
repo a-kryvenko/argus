@@ -1,7 +1,4 @@
 """Owned periodic jobs with PostgreSQL completion markers and session locks."""
-import logging
-import signal
-import threading
 from datetime import UTC, datetime
 from collections.abc import Callable
 
@@ -9,7 +6,6 @@ from clio.db.locks import JOB_LOCKS
 from clio.db.session import get_database_url
 
 JOBS = {'refresh': 60, 'aggregate': 5}
-logger = logging.getLogger(__name__)
 
 
 class JobBusy(RuntimeError):
@@ -41,24 +37,3 @@ def execute(job: str, run: Callable[[], None], *, scheduled: bool = False, now=N
                 completed_slot=EXCLUDED.completed_slot, completed_at=EXCLUDED.completed_at''',
                          (job, slot, datetime.now(UTC)))
         return True
-
-
-def work(job: str, run: Callable[[], None]):
-    work_cycles(job, lambda: execute(job, run, scheduled=True))
-
-
-def work_cycles(job: str, cycle: Callable[[], bool], *, poll_seconds: float = 60):
-    stopped = threading.Event()
-    for signum in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(signum, lambda *_: stopped.set())
-    while not stopped.is_set():
-        try:
-            if cycle():
-                logger.info('Clio %s completed', job)
-        except JobBusy:
-            logger.info('Clio %s already running; checking again in %s seconds', job, poll_seconds)
-        except Exception:
-            logger.exception('Clio %s failed; retrying in %s seconds', job, poll_seconds)
-            import sentry_sdk
-            sentry_sdk.capture_exception()
-        stopped.wait(poll_seconds)

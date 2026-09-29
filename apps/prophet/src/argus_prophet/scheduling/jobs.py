@@ -1,0 +1,115 @@
+"""Durable product schedules and Prophet writer locks coordinated by PostgreSQL."""
+import logging
+from collections.abc import Callable
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+
+from argus_prophet.db.session import connect, open_connection, writer_session
+from argus_prophet.services.generation.products import PRODUCTS
+
+logger = logging.getLogger(__name__)
+# Distinct from the publication transaction lock (736218, 1) and Clio job locks.
+GENERATION_LOCK = (736218, 2)
+VERIFICATION_LOCK = (736218, 3)
+COMPLETED = ('succeeded', 'imported')
+
+
+class GenerationBusy(RuntimeError):
+    """Another Prophet writer owns the database session lock."""
+
+
+def recover_interrupted():
+    # Owning the global writer lock means no previous DB writer remains active.
+    with connect(writing=True) as conn:
+        conn.execute("""UPDATE prophet.forecast_run SET status='interrupted',finished_at=%s,
+            error='Previous writer ended without recording completion' WHERE status='running'""", (datetime.now(UTC),))
+        conn.execute("""UPDATE prophet.forecast_slot SET status='interrupted',finished_at=%s,
+            error='Previous writer ended without recording completion' WHERE status='running'""", (datetime.now(UTC),))
+
+
+@contextmanager
+def writer_lock(key, *, recover=False):
+    # Closing this unpooled session releases its lock, including on exceptions.
+    # It stays in autocommit between short operations, not idle in a long transaction.
+    with open_connection(autocommit=True) as conn:
+        if not conn.execute('SELECT pg_try_advisory_lock(%s,%s)', key).fetchone()[0]:
+            raise GenerationBusy('Another Prophet task owns this writer lock')
+        with writer_session(conn):
+            if recover:
+                recover_interrupted()
+            yield
+
+
+def generation_lock():
+    return writer_lock(GENERATION_LOCK, recover=True)
+
+
+def verification_lock():
+    return writer_lock(VERIFICATION_LOCK)
+
+
+@contextmanager
+def retention_lock():
+    # Fixed order. Verification has independent writes but must not race deletion
+    # of the releases it is scoring. Reuse the generation writer connection.
+    with generation_lock():
+        from argus_prophet.db.session import require_writer
+        conn = require_writer()
+        if not conn.execute('SELECT pg_try_advisory_lock(%s,%s)', VERIFICATION_LOCK).fetchone()[0]:
+            raise GenerationBusy('Verification is running; retry cleanup later')
+        try:
+            yield
+        finally:
+            if not conn.closed and not conn.broken:
+                conn.execute('SELECT pg_advisory_unlock(%s,%s)', VERIFICATION_LOCK)
+
+
+def due_slot(now: datetime) -> datetime:
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError('Scheduler time must be timezone-aware')
+    return (now.astimezone(UTC) - timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)
+
+
+def product_pending(product, slot):
+    """A product's successes never suppress another product or a later slot."""
+    with connect(writing=True) as conn:
+        completed = conn.execute('''SELECT max(slot) FROM prophet.forecast_slot
+            WHERE product=ANY(%s) AND status=ANY(%s)''', ([product, 'all'], list(COMPLETED))).fetchone()[0]
+        if completed is not None and completed >= slot:
+            return False
+        return product not in completed_products(conn, slot)
+
+
+def completed_products(conn, slot) -> set[str]:
+    """Durable per-product success, including releases from historical batch runs."""
+    rows = conn.execute("""SELECT product FROM prophet.forecast_run
+        WHERE scheduled_slot=%s AND status='succeeded' AND product<>'all'
+        UNION
+        SELECT r.product FROM prophet.forecast_release r
+        JOIN prophet.forecast_run f ON f.id=r.run_id
+        WHERE f.scheduled_slot=%s AND f.product='all' AND f.status IN ('succeeded','partial')""",
+        (slot, slot)).fetchall()
+    return {row[0] for row in rows}
+
+
+def run_due(generate: Callable[[datetime, tuple[str, ...]], None], now: datetime) -> bool:
+    with generation_lock():
+        slot = due_slot(now)
+        pending = tuple(product for product in PRODUCTS if product_pending(product, slot))
+        if not pending:
+            return False
+        generate(slot, pending)
+        # Completion must have committed with the release, not after this callback.
+        with connect(writing=True) as conn:
+            if set(PRODUCTS) - completed_products(conn, slot):
+                raise RuntimeError('Forecast generation did not complete its scheduled slot')
+        return True
+
+
+def list_slots(limit=20):
+    from psycopg.rows import dict_row
+    if not 1 <= limit <= 100:
+        raise ValueError('limit must be between 1 and 100')
+    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
+        cursor.execute('SELECT product,slot,status,attempts,started_at,finished_at,error FROM prophet.forecast_slot ORDER BY slot DESC,product LIMIT %s', (limit,))
+        return cursor.fetchall()

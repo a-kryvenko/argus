@@ -58,7 +58,7 @@ def test_live_command_returns_per_metric_failures_to_scheduler(monkeypatch):
     now = datetime(2026, 9, 28, 12, tzinfo=UTC)
     args = SimpleNamespace(metrics=['kp'], now=now, scheduled=True)
     assert cli.invoke('collect', args) == result
-    collect.assert_awaited_once_with(session, config, ['kp'], now=now, heartbeat=None)
+    collect.assert_awaited_once_with(session, config, ['kp'], now=now)
     dispose.assert_awaited_once()
     args.scheduled = False
     with pytest.raises(RuntimeError, match='No live observations'):

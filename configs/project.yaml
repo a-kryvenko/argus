@@ -140,28 +140,3 @@ clio:
         live: {every: 1h}
         backfill: {every: 1d}
       backfill: {days: 88}
-
-metrics:
-  solar_wind_speed: data/metrics/wind_speed_by_lead.csv
-  solar_wind_probability: data/metrics/wind_threshold_by_lead.csv
-
-paths:
-  live_gong: data/raw/live_gong.fits
-  evaluation_dataset: data/training/valid_2025.parquet
-
-sources:
-  omni:
-    enabled: true
-    start: 20260313 #YYYYMMDD
-    end: 20260313
-    out: data/raw/omni/omni_2024.parquet
-  dscovr:
-    enabled: true
-    range: 7d
-    out: data/raw/dscovr/dscovr_7d.parquet
-  sdo:
-    enabled: true
-    email: ${SDO_EMAIL}
-    timestamps_csv: data/processed/forecast_timeseries.csv
-    out_dir: data/raw/sdo
-    manifest_out: data/raw/sdo/manifest.parquet

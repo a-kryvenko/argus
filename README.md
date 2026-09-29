@@ -33,6 +33,7 @@ that backend and its model files.
 - [API documentation](https://argussun.com/api/v1/docs)
 - [Development, configuration and deployment](README_DEPLOY.md)
 - [Forecast verification, model evaluation and MLflow](docs/forecast-workflows.md)
+- [Forecast accuracy report](docs/forecast-accuracy-report.md)
 
 ---
 

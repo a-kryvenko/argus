@@ -1,0 +1,21 @@
+[project]
+name = "argus-domain-tests"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["argus-api", "argus-clio", "argus-prophet", "argus-intelligence", "pytest>=8,<10"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+argus-api = { path = "../../apps/api", editable = true }
+argus-clio = { path = "../../apps/clio", editable = true }
+argus-prophet = { path = "../../apps/prophet", editable = true }
+argus-intelligence = { path = "../../apps/intelligence", editable = true }
+common = { path = "../../packages/common", editable = true }
+forecast = { path = "../../packages/forecast", editable = true }
+forecast-core = { path = "../../packages/forecast-core", editable = true }
+intelligence-core = { path = "../../packages/intelligence-core", editable = true }

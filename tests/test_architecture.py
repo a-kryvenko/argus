@@ -6,6 +6,7 @@ import tomllib
 import re
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -14,7 +15,14 @@ def test_architecture_workflow_references_existing_local_paths():
     workflow = (ROOT / '.github/workflows/architecture.yml').read_text()
     paths = re.findall(r'(?<![\w/])(?:apps|packages|tests)/[\w/.-]+', workflow)
     assert paths
-    missing = [path for path in paths if not (ROOT / path).exists()]
+    # Additional checkouts are created by Actions, not present in a public clone.
+    jobs = yaml.safe_load(workflow)['jobs']
+    checkout_paths = {
+        step.get('with', {}).get('path')
+        for job in jobs.values() for step in job.get('steps', [])
+        if step.get('uses', '').startswith('actions/checkout@')
+    }
+    missing = [path for path in paths if path not in checkout_paths and not (ROOT / path).exists()]
     assert not missing, f'Architecture workflow references missing paths: {missing}'
 
 

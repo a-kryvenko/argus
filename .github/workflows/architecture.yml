@@ -1,9 +1,7 @@
 name: Package architecture
 on:
-  push:
-    branches:
-      - '**'
   pull_request:
+    branches: [master]
 concurrency:
   group: architecture-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -31,51 +29,39 @@ jobs:
           tests/test_architecture.py
           apps/intelligence/tests
           tests/test_domain_deployment.py
-          tests/test_release_deployment.py
+          tests/test_release_deployment.py tests/test_domain_test_runner.py
           tests/test_argus_cli.py tests/test_argus_entrypoint.py
           tests/test_config.py tests/test_prophet_imports.py
           packages/forecast/tests
 
   domain-storage:
+    # Forks and Dependabot cannot access the private runtime repositories.
+    if: github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: test-postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      TEST_DATABASE_ADMIN_DSN: postgresql://postgres:test-postgres@127.0.0.1:5432/postgres
-      PYTHONPATH: apps/api:apps/clio/src:apps/prophet/src:apps/intelligence/src:packages/common/src
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v6
         with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: |
+          repository: a-kryvenko/argus-forecast-core
+          ref: master
+          path: packages/forecast-core
+          ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: a-kryvenko/argus-intelligence-core
+          ref: master
+          path: packages/intelligence-core
+          ssh-key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            tests/runtime/uv.lock
+            apps/*/pyproject.toml
             packages/*/pyproject.toml
-            .github/workflows/architecture.yml
-      - name: Install public observation runtime and test dependencies
-        # Clio is loaded from PYTHONPATH; installing the app would require private forecast-core.
-        run: >-
-          python -m pip install -e packages/common -e packages/forecast
-          pytest pyarrow 'scipy>=1.13' sqlalchemy 'psycopg[binary]' alembic fastapi uvicorn httpx sentry-sdk
-          scikit-learn
-      - name: Check separate databases, ownership and scheduling
-        run: python -m pytest -q tests/test_prophet_imports.py tests/test_database_urls.py tests/integration/test_domain_storage.py tests/integration/test_gong_snapshot.py tests/integration/test_prophet_ledger.py tests/integration/test_prophet_scheduler.py tests/integration/test_prophet_verification.py tests/integration/test_intelligence_worker.py
-      - name: Check aggregation, retention and collection recovery
-        run: |
-          python apps/clio/tests/integration/test_solar_wind_aggregation.py
-          python apps/clio/tests/integration/test_solar_wind_retention.py
-          python apps/clio/tests/integration/test_observation_recovery.py
-      - name: Check verification observation reads
-        run: python -m pytest -q apps/prophet/tests/test_observations.py -k verification
-      - name: Check dashboard through the Clio read interface
-        run: python apps/api/tests/integration/verify_dashboard.py
+      - name: Check service integration in the locked runtime
+        run: ./scripts/test-domain-storage

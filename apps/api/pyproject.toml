@@ -13,7 +13,7 @@ dependencies = [
   "sentry-sdk>=2.61.1",
   "pydantic>=2.13.4",
   "pydantic-settings>=2.14.1",
-  "sqlalchemy>=2.0,<3",
+  "sqlalchemy[asyncio]>=2.0,<3",
   "psycopg[binary]>=3.2,<4",
 ]
 
@@ -24,3 +24,10 @@ common = { workspace = true }
 members = [
     "../../packages/common",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

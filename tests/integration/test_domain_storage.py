@@ -3,6 +3,7 @@
 Never reads project .env credentials. Creates/drops only UUID-named databases
 and owners. Run serially; TEST_DATABASE_ADMIN_DSN must be administrative.
 """
+from contextlib import contextmanager
 import importlib.util
 import os
 from pathlib import Path
@@ -43,8 +44,8 @@ def database_environment(urls):
     return settings
 
 
-@pytest.fixture
-def database(tmp_path):
+@contextmanager
+def provisioned_database(tmp_path):
     admin_dsn = os.environ['TEST_DATABASE_ADMIN_DSN']
     admin_url = make_url(admin_dsn)
     token = uuid4().hex[:16]
@@ -57,9 +58,7 @@ def database(tmp_path):
     (tmp_path / 'configs/models_registry.yaml').write_text('models: {}\n')
     environment = {**os.environ, **database_environment(urls),
                    'ARGUS_WORKDIR': str(tmp_path),
-                   'PYTHONPATH': ':'.join(str(ROOT / path) for path in (
-                       'apps/api', 'apps/clio/src', 'apps/prophet/src', 'apps/intelligence/src',
-                       'packages/common/src', 'packages/forecast/src')) + os.pathsep + os.environ.get('PYTHONPATH', '')}
+                   'DEBUG': 'true', 'SENTRY_COLLECT_POINT': '', 'SENTRY_DSN': ''}
     try:
         provisioning.provision(admin_dsn, urls, apply=True)
         yield dsns, urls, environment
@@ -68,6 +67,12 @@ def database(tmp_path):
             for url in targets.values():
                 admin.execute(sql.SQL('DROP DATABASE IF EXISTS {} WITH (FORCE)').format(sql.Identifier(url.database)))
                 admin.execute(sql.SQL('DROP ROLE IF EXISTS {}').format(sql.Identifier(url.username)))
+
+
+@pytest.fixture
+def database(tmp_path):
+    with provisioned_database(tmp_path) as settings:
+        yield settings
 
 
 def migrate(environment):

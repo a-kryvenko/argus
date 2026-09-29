@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+for package in forecast-core intelligence-core; do
+    if [[ ! -f "packages/$package/pyproject.toml" ]]; then
+        echo "Missing packages/$package checkout. See docs/architecture.md#validation." >&2
+        exit 1
+    fi
+done
+uv sync --locked --project tests/runtime
+exec tests/runtime/.venv/bin/python scripts/testing/domain_storage.py "$@"

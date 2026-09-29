@@ -68,8 +68,39 @@ jobs:
           name: release-plan
           path: release-plan.json
 
-  images:
+  domain-storage:
     needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          repository: a-kryvenko/argus-forecast-core
+          ref: ${{ needs.plan.outputs.private_commit }}
+          path: packages/forecast-core
+          ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        with:
+          repository: a-kryvenko/argus-intelligence-core
+          ref: ${{ needs.plan.outputs.intelligence_core_commit }}
+          path: packages/intelligence-core
+          ssh-key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            tests/runtime/uv.lock
+            apps/*/pyproject.toml
+            packages/*/pyproject.toml
+      - name: Check service integration in the locked runtime
+        run: ./scripts/test-domain-storage
+
+  images:
+    needs: [plan, domain-storage]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -177,7 +208,7 @@ jobs:
           path: ${{ matrix.component }}.json
 
   deploy:
-    needs: [plan, images]
+    needs: [plan, images, domain-storage]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

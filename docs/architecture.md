@@ -94,9 +94,28 @@ files. See [local setup](../README_DEPLOY.md#local-development),
 
 `./scripts/test-python -q` runs the application, public package and private backend
 suites. Private tests require the private checkout and installed dependencies.
-Integration tests require `TEST_DATABASE_ADMIN_DSN` pointing to a disposable
-PostgreSQL server; they create and delete random databases and roles. Without it,
-database tests skip rather than use project credentials. Public CI provides PostgreSQL 17.
+For domain integration, run `./scripts/test-domain-storage` with uv, Docker and
+both private checkouts available. This is the exact entry point used in CI and
+before deployment. It creates and removes a disposable PostgreSQL 17 container,
+checks service imports and migrations first, then runs all domain integration
+checks. An explicit `TEST_DATABASE_ADMIN_DSN` can instead select an existing
+**disposable** PostgreSQL server with database/role administration rights.
+The runner uses temporary configuration and disables Sentry; it does not load
+local `.env` credentials.
+
+`tests/runtime/pyproject.toml` depends on the four service packages and pytest.
+Service libraries are declared only in their own manifests; there is no second
+list in the workflow. `tests/runtime/uv.lock` fixes the combined integration
+environment, independently of each service's deployment lock. After changing
+service dependencies, update that service's lock and run
+`uv lock --project tests/runtime`. The runner uses `uv sync --locked`, so stale
+metadata fails during setup rather than producing dozens of test failures.
+No service virtualenv or inherited `PYTHONPATH` is used.
+
+Public boundary checks run without private credentials. Domain integration uses
+private checkouts and therefore skips fork and Dependabot pull requests; it runs
+on same-repository pull requests targeting `master`. Deployment always runs it
+with the exact private commits selected for the release and waits for success.
 
 Boundary tests check import direction, private adapters, absence of foreign-domain
 SQL and isolated credentials. Integration tests cover migrations, ownership,

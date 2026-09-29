@@ -13,9 +13,9 @@ COPY apps/api/pyproject.toml apps/api/uv.lock ./
 
 COPY packages/common ./../../packages/common
 
-RUN uv sync --frozen --no-cache
-
 COPY apps/api/app ./app
+
+RUN uv sync --frozen --no-cache
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
 COPY scripts/db/provision.py /var/www/scripts/db/provision.py

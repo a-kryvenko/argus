@@ -6,3 +6,4 @@ from forecast.inference._forecast_service import (
 )
 from forecast.inference.plasma_fs import SWDensityFS, SWSpeedFS, SWSpeedProbaFS
 from forecast.inference.rotation_dlinear import RotationDLinearForecaster
+from forecast.inference.density_dlinear import DensityDLinearForecaster

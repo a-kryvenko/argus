@@ -16,7 +16,7 @@ def client_with_session(monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
     session = AsyncMock()
     session.execute.return_value = Mock(all=lambda: [SimpleNamespace(
-        metric='dst', value=-10, observed_at=NOW, issue_time=NOW, v=420.)])
+        metric='dst', value=-10, observed_at=NOW, issue_time=NOW, v=420., n=4.5)])
     loader = AsyncMock(return_value=Observation(points=[]))
     monkeypatch.setattr(routes, 'load_normalized_observations', loader)
     monkeypatch.setattr(routes, 'load_aia_features', AsyncMock(return_value=[]))
@@ -55,6 +55,7 @@ def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
     routes.load_aia_features.assert_awaited_once_with(session, NOW)
     assert payload['measurements'][0]['metric'] == 'dst'
     assert payload['speed_observations'][0]['v'] == 420.
+    assert payload['density_observations'][0]['n'] == 4.5
     statements = session.execute.call_args_list
     assert str(statements[0].args[0]) == 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'
     query = statements[2].args[0].compile(dialect=postgresql.dialect())
@@ -70,6 +71,15 @@ def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
     assert (NOW - speed_query.params['observed_at_1']).days == 60
     assert 'avg(clio.measurement.value)' in str(speed_query)
     assert 'GROUP BY date_trunc' in str(speed_query)
+    density_query = statements[4].args[0].compile(dialect=postgresql.dialect())
+    assert density_query.params['metric_1'] == 'n'
+    assert density_query.params['value_1'] == 0
+    assert density_query.params['value_2'] == 999.9
+    assert density_query.params['value_3'] == float('inf')
+    assert density_query.params['observed_at_2'] == NOW
+    assert (NOW - density_query.params['observed_at_1']).days == 60
+    assert 'avg(clio.measurement.value)' in str(density_query)
+    assert 'GROUP BY date_trunc' in str(density_query)
     session.rollback.assert_awaited_once()
     session.commit.assert_not_called()
 

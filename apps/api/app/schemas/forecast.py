@@ -14,7 +14,7 @@ VARIABLES_DESCRIPTION = (
 
 
 class QuantileForecast(BaseModel):
-    """Quantile forecast in the parent variable's units; wind speed is rounded to integer km/s."""
+    """Quantiles in the variable's units; speed uses integers, proton density 3 decimal places."""
 
     q10: int | float = Field(description="Predicted 10th percentile (quantile 0.1).", examples=[380.0])
     q50: int | float = Field(description="Predicted median (quantile 0.5).", examples=[420.0])

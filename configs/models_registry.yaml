@@ -13,8 +13,9 @@ models:
     metrics: data/metrics/plasma/speed_proba
 
   plasma_density_quantile:
-    model: argus-plasma-den-q-v2
-    metrics: data/metrics/plasma/density_quantile
+    model: argus-plasma-density-dlinear-v1
+    artifact_path: data/models/argus-plasma-density-dlinear-v1.joblib
+    metrics: data/metrics/plasma/density_dlinear
 
   kp_threshold:
     model: argus-kp-t-v2

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.db import get_db_session
 from clio.db.models import Measurement
 from clio.observations.normalized import HISTORY_DAYS, load_normalized_observations
-from common.schemas.forecast_inputs import DENSITY_METRICS, ForecastInputs, SourceMeasurement, SpeedObservation
+from common.schemas.forecast_inputs import DENSITY_METRICS, DensityObservation, ForecastInputs, SourceMeasurement, SpeedObservation
 from common.data.omni import OMNI_FILL_VALUES
 
 from clio.domains.aia.features import load_aia_features
@@ -68,6 +68,16 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
                    Measurement.observed_at <= as_of)
             .group_by(hour).order_by(hour)
         )).all()
+        density_rows = (await session.execute(
+            select(hour.label('issue_time'), func.avg(Measurement.value).label('n'))
+            .where(Measurement.metric == 'n',
+                   Measurement.value >= 0,
+                   Measurement.value != OMNI_FILL_VALUES['n'],
+                   Measurement.value < float('inf'),
+                   Measurement.observed_at >= as_of - timedelta(days=HISTORY_DAYS),
+                   Measurement.observed_at <= as_of)
+            .group_by(hour).order_by(hour)
+        )).all()
         aia_frames = await load_aia_features(session, as_of)
         gong = await load_gong_features(session, as_of)
         issue = as_of.replace(minute=0, second=0, microsecond=0)
@@ -79,6 +89,7 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
             measurements=[SourceMeasurement(metric=row.metric, value=row.value,
                                             observed_at=row.observed_at) for row in rows],
             speed_observations=[SpeedObservation(issue_time=row.issue_time, v=row.v) for row in speed_rows],
+            density_observations=[DensityObservation(issue_time=row.issue_time, n=row.n) for row in density_rows],
         )
     finally:
         await session.rollback()

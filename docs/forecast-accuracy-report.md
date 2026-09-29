@@ -35,22 +35,33 @@ not evaluate the no-AIA fallback. Sources: [training protocol](../scripts/traini
 
 ## Solar wind proton density — n (cm⁻³)
 
-- **Model:** `argus-plasma-den-q-v2`.
-- **Training data:** notebook specifies `data/training/2010_2024`, with n, v,
-  Bt and F10.7 plus 3 h, 6 h and 7-day summaries. Chronological 85%/15% split
-  with a 120 h purge; the calibration partition is not used. The original
-  training snapshot has not been recovered and verified against the artifact.
-- **Test data:** existing `data/training/2025` features, hourly releases;
-  rows without observed target_n or finite current n excluded. N = 8,656 at 24 h.
-- **Results:** MAE **2.797 cm⁻³**, RMSE **5.266 cm⁻³**, coverage **74.7%**.
-  Persistence MAE: 3.730; historical-median baseline MAE: 3.166 cm⁻³.
+- **Active model:** `argus-plasma-density-dlinear-v1`, history-only DLinear,
+  replacing `argus-plasma-den-q-v2` on 2026-09-29 for all served leads.
+- **Training data:** hourly OMNI n; initial fit on 2010–2022, epoch selection on
+  2023 (7 epochs), then fresh refit/scaler on 2010–2023. Inputs are the last 72 h
+  and windows around one and two solar rotations. Only inputs are forward-filled,
+  causally and for at most 24 h; targets are never filled.
+- **Calibration data:** observed 2024 residuals, separately for every lead.
+  The deployed q10/q50/q90 retain the saved median-residual correction and are
+  floored at zero. The lower-MAE raw point variant is not the deployed q50.
+- **Test data:** hourly 2025 issues, 1–120 h; 1,034,390 observed pairs matched to
+  the previous model's evaluation sample. This is an already explored historical
+  diagnostic, not an independent holdout or live-service score.
 
-Historical diagnostic, not an independent holdout or live-service evaluation.
-The older density metrics CSV does not reproduce and is excluded. Sources:
-[training notebook](../notebooks/4_train_density_quantiles.ipynb),
-[audit](solar-wind-density-audit-2026-09-29.md),
-[results](../data/reports/density_audit_20260929/selected_leads.csv),
-[artifact hash and protocol](../data/reports/density_audit_20260929/provenance.json).
+| Lead, h | N | MAE, cm⁻³ | RMSE, cm⁻³ | Coverage 80% | Width, cm⁻³ |
+|---|---:|---:|---:|---:|---:|
+| 1 | 8,693 | 0.876 | 1.998 | 86.2% | 2.770 |
+| 24 | 8,656 | 2.865 | 4.940 | 84.9% | 10.291 |
+| 48 | 8,632 | 2.894 | 4.973 | 86.1% | 10.827 |
+| 72 | 8,608 | 2.943 | 4.972 | 86.7% | 11.150 |
+| 96 | 8,584 | 2.909 | 4.940 | 85.3% | 10.842 |
+| 120 | 8,560 | 3.027 | 4.999 | 83.3% | 11.018 |
+
+Public forecasts and metrics expose up to 96 h; the artifact and historical
+assessment cover 120 h. Pooled over 1–120 h: MAE **2.802 cm⁻³**, RMSE
+**4.848 cm⁻³**, coverage **85.7%**. These pooled numbers include the longer leads.
+The model sacrifices short-lead MAE relative to LightGBM in this test; the paired
+comparison is retained as historical evidence, not as the current model's score.
 
 ## Geomagnetic Ap index
 

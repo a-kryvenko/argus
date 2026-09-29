@@ -20,6 +20,12 @@ class SpeedObservation(BaseModel):
     v: FiniteFloat
 
 
+class DensityObservation(BaseModel):
+    """Observed hourly proton density, without interpolation or gap filling."""
+    issue_time: AwareDatetime
+    n: FiniteFloat
+
+
 class AIAFeatureFrame(BaseModel):
     """Six-hour model input derived from the hourly owner archive as of the read."""
     slot_at: AwareDatetime
@@ -46,6 +52,7 @@ class ForecastInputs(BaseModel):
     observations: Observation
     measurements: list[SourceMeasurement] = Field(default_factory=list)
     speed_observations: list[SpeedObservation] = Field(default_factory=list)
+    density_observations: list[DensityObservation] = Field(default_factory=list)
 
     aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)
     gong: GONGFeatureFrame | None = None

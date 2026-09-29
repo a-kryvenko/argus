@@ -15,14 +15,17 @@ class RotationDLinearForecaster:
     """
 
     registry_name = "plasma_speed_dlinear"
+    artifact_format = "rotation_dlinear"
+    variable = "v"
+    history_name = "speed"
 
     def __init__(self, bundle, *, batch_size=256):
-        if bundle.get("format") != "rotation_dlinear" or bundle.get("version") != 1:
+        if bundle.get("format") != self.artifact_format or bundle.get("version") != 1:
             raise ValueError("Unsupported rotation DLinear artifact format")
         self.settings = dict(bundle["settings"])
         settings = self.settings
-        if settings["columns"] != ["v"]:
-            raise ValueError("Rotation DLinear requires exactly one input: v")
+        if settings["columns"] != [self.variable]:
+            raise ValueError(f"Rotation DLinear requires exactly one input: {self.variable}")
         segments = settings["segments"]["rotations"]
         if (not segments or any(len(s) != 2 for s in segments)
                 or any(not isinstance(v, int) for s in segments for v in s)
@@ -67,6 +70,12 @@ class RotationDLinearForecaster:
 
     def add_rotation_v(self, frame, observations, *, column="rotation_v", require_history=False):
         """Return a copy of frame with one forecast per (issue_time, lead_hours)."""
+        return self._add_predictions(frame, observations, column=column, require_history=require_history)
+
+    def _clean_values(self, values):
+        return values.where(values.ge(0) & values.lt(OMNI_FILL_VALUES[self.variable]))
+
+    def _add_predictions(self, frame, observations, *, column, require_history=False):
         result = frame.copy()
         issue_times = self._times(frame["issue_time"])
         leads = pd.to_numeric(frame["lead_hours"], errors="raise").to_numpy(dtype=float)
@@ -80,13 +89,13 @@ class RotationDLinearForecaster:
                 raise self._history_error(issue_times[0], missing)
             return result
         obs = pd.DataFrame({"issue_time": self._times(observations["issue_time"]),
-                            "v": observations["v"].to_numpy(dtype=np.float64)})
+                            self.variable: observations[self.variable].to_numpy(dtype=np.float64)})
         # Historical databases can retain provider fill values. Treat them as
         # gaps before normalization and the existing bounded forward-fill.
-        obs["v"] = obs["v"].where(obs["v"].ge(0) & obs["v"].lt(OMNI_FILL_VALUES['v']))
-        if (obs.groupby("issue_time")["v"].nunique(dropna=False) > 1).any():
-            raise ValueError("Conflicting v observations at the same issue_time")
-        series = obs.drop_duplicates("issue_time").set_index("issue_time")["v"].sort_index()
+        obs[self.variable] = self._clean_values(obs[self.variable])
+        if (obs.groupby("issue_time")[self.variable].nunique(dropna=False) > 1).any():
+            raise ValueError(f"Conflicting {self.variable} observations at the same issue_time")
+        series = obs.drop_duplicates("issue_time").set_index("issue_time")[self.variable].sort_index()
         # Include a fill buffer before the first requested historical point.
         start = issue_times.min() + pd.Timedelta(hours=int(self.offsets.min()) - self.ffill_limit)
         clock = pd.date_range(start, issue_times.max(), freq="h")
@@ -123,10 +132,10 @@ class RotationDLinearForecaster:
             f'{(issue + pd.Timedelta(hours=start)).isoformat()}..{(issue + pd.Timedelta(hours=end)).isoformat()}'
             for start, end in self.settings['segments']['rotations'])
         return ValueError(
-            f'Insufficient hourly speed history for DLinear at {issue.isoformat()}: '
+            f'Insufficient hourly {self.history_name} history for DLinear at {issue.isoformat()}: '
             f'{len(missing)}/{len(self.offsets)} required hours remain missing after '
             f'forward-fill limited to {self.ffill_limit} h. Missing intervals (UTC, inclusive): {gaps}. '
             f'Required windows (UTC, inclusive): {windows}. '
-            'Restore observed speed in these intervals before retrying; '
+            f'Restore observed {self.history_name} in these intervals before retrying; '
             'normalized/interpolated observations do not replace this history.'
         )

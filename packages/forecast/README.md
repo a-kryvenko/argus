@@ -136,6 +136,22 @@ Error calibration reuses 2024 validation folds, so it is not independent calibra
 On historical2025, nominal80% coverage at96h is about73%; thresholds are not claimed
 uniformly superior to the old classifier. Metrics/provenance: `data/metrics/plasma/aia_ridge`.
 
+## Density DLinear
+
+`plasma_density_quantile` uses `argus-plasma-density-dlinear-v1`, a density-only
+affine DLinear bundle with frozen 2024 residual q10/q50/q90 offsets. The q50
+median correction is retained exactly as evaluated; all outputs are nonnegative.
+Clio supplies 60 days of raw hourly `density_observations`; the model selects
+three windows reaching back 57 days and forward-fills gaps for at most 24 hours.
+Missing required history raises an explicit error, without using interpolated
+normalized observations or falling back to the retired LightGBM model.
+
+Use `SWDensityFS` with `ForecastInputs`, or pass `density_history` explicitly to
+`forecast` / `calculate_forecast`. `DensityDLinearForecaster.frame` provides direct
+DataFrame inference without PyTorch or LightGBM. Metrics and artifact provenance
+are in `data/metrics/plasma/density_dlinear/`. Clio and Prophet must both use the
+updated shared input contract; restart long-running workers after deployment.
+
 ## Saved snapshot adapter contract (0.3)
 
 `calculate_snapshot(service, inputs, issue_time=..., model_info=...)` accepts an

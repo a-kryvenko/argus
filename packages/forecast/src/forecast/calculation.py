@@ -33,8 +33,11 @@ def calculate_snapshot(service: SnapshotService, inputs: ForecastInputs, *,
 def calculate_forecast(service: DefaultForecastService, observations: Observation, *,
                        issue_time: datetime, model_info: dict,
                        speed_history: pd.DataFrame | None = None,
+                       density_history: pd.DataFrame | None = None,
                        aia_features: pd.DataFrame | None = None) -> ForecastResult:
     extra = {'speed_history': speed_history} if speed_history is not None else {}
+    if density_history is not None:
+        extra['density_history'] = density_history
     if aia_features is not None:
         extra['aia_features'] = aia_features
     forecast = service.forecast(observations, issue_time=issue_time, **extra)

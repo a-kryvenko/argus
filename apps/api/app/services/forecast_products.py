@@ -114,6 +114,8 @@ def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
     continuous = None
     speed = variable.name == "v" and variable.unit == "km/s"
     value = round if speed else float
+    if variable.name == "n" and variable.unit == "cm^-3":
+        value = lambda number: round(float(number), 3)
     if variable.quantiles:
         continuous = QuantileForecast(
             q10=value(row[f"{variable.source_prefix}_q10"]),

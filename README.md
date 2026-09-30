@@ -25,6 +25,13 @@ inspector for source, quality, freshness and coverage. The inspector collapses o
 smaller screens. Collection diagnostics and additional hourly indices remain
 available below the charts.
 
+The forecast overview (`/`), product catalog (`/products`) and product pages share
+the observation workspace's navigation and graphite theme. Forecasts provide
+variable selection, 24/48-hour or full-release views, median and q10–q90 charts,
+threshold probability heatmaps, and an inspector with exact UTC times and values.
+The hourly table also supports keyboard selection. Missing values remain gaps;
+changing the visible horizon never changes the model's issue time.
+
 ## About this repository
 
 This repository contains the web application, public API and services that collect

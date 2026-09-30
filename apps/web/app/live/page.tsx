@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { Activity, ArrowUpRight, BookOpen, ChartNoAxesCombined, ChevronRight, CircleHelp, Clock3, Gauge, LayoutGrid, Menu, Orbit, Radio, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, Clock3 } from 'lucide-react';
+import WorkspaceShell from '../_components/WorkspaceShell';
 import GeomagneticLive from './GeomagneticLive';
 import ObservationSummary from './ObservationSummary';
 import ObservationInspector from './ObservationInspector';
@@ -14,14 +14,6 @@ import type { IndexHistory } from './geomagnetic';
 import { stamp, type Selection } from './observations';
 import styles from './page.module.css';
 import { useLiveQuery, useLiveClock, type Summary } from './useLiveQuery';
-
-const navigation = [
-  { href: '/', label: 'Forecast overview', icon: LayoutGrid },
-  { href: '/live', label: 'Live observations', icon: Radio },
-  { href: '/products', label: 'Forecast products', icon: Activity },
-  { href: '/metrics', label: 'Model performance', icon: ChartNoAxesCombined },
-  { href: '/dashboard/risk/leo', label: 'LEO drag', icon: Orbit },
-];
 
 export default function Live() {
   const [hours, setHours] = useState(24);
@@ -38,35 +30,9 @@ export default function Live() {
   const indexHistory = useLiveQuery<IndexHistory>(window ? '/public/observations/geomagnetic/history' : null, window);
   const select = (metric: Selection) => { setSelected(metric); setInspectorOpen(true); };
   const snapshotOld = now && snapshot.receivedAt ? now - snapshot.receivedAt > 120000 : false;
-  return <div className={styles.workspace}>
-    <a className={styles.skipLink} href="#live-content">Skip to observations</a>
-    <aside className={styles.sidebar} aria-label="Workspace navigation">
-      <Link className={styles.brand} href="/" aria-label="Argus SunWatch home"><Orbit size={28} strokeWidth={1.3} aria-hidden="true" /><span>ARGUS<small>SUNWATCH</small></span></Link>
-      <div className={styles.navLabel}>WORKSPACE</div>
-      <nav className={styles.navigation} aria-label="Main navigation">
-        {navigation.map(({ href, label, icon: Icon }) => <Link href={href} key={href} aria-label={label} title={label} aria-current={href === '/live' ? 'page' : undefined}>
-          <Icon size={17} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span>{href === '/live' && <span className={styles.navMarker} />}
-        </Link>)}
-      </nav>
-      <div className={styles.sidebarBottom}>
-        <div className={styles.navLabel}>RESOURCES</div>
-        <nav className={styles.navigation} aria-label="Resources">
-          <Link href="/dashboard" aria-label="Dashboard" title="Dashboard"><Gauge size={17} strokeWidth={1.5} aria-hidden="true" /><span>Dashboard</span></Link>
-          <Link href="/help" aria-label="Help" title="Help"><CircleHelp size={17} strokeWidth={1.5} aria-hidden="true" /><span>Help & methodology</span></Link>
-          <a href="/api/v1/docs" aria-label="API documentation" title="API documentation"><BookOpen size={17} strokeWidth={1.5} aria-hidden="true" /><span>API documentation</span></a>
-        </nav>
-        <div className={styles.sidebarFoot}><ShieldCheck size={14} aria-hidden="true" /><span>SPACE WEATHER<br />OBSERVATION WORKSPACE</span></div>
-      </div>
-    </aside>
-    <div className={styles.workspaceMain}>
-      <header className={styles.commandBar}>
-        <div className={styles.breadcrumb}><span>ARGUS</span><ChevronRight size={12} aria-hidden="true" /><span>Space weather</span><ChevronRight size={12} aria-hidden="true" /><strong>Observations</strong></div>
-        <details className={styles.mobileResources}>
-          <summary><Menu size={13} aria-hidden="true" />Resources</summary>
-          <nav aria-label="Mobile resources"><Link href="/dashboard">Dashboard</Link><Link href="/help">Help & methodology</Link><a href="/api/v1/docs">API documentation</a></nav>
-        </details>
-        <div className={styles.commandStatus}><span className={styles.refreshState} data-warning={snapshot.failed || snapshotOld}><span className={styles.dot} />{snapshot.failed ? 'Refresh delayed' : snapshotOld ? 'Old snapshot' : 'Auto refresh · 60 s'}</span><span className={styles.utcClock}><Clock3 size={12} aria-hidden="true" />{now ? new Date(now).toISOString().slice(11, 16) : '—'} UTC</span></div>
-      </header>
+  return <WorkspaceShell section="Observations" contentId="live-content"
+    status={snapshot.failed ? 'Refresh delayed' : snapshotOld ? 'Old snapshot' : 'Auto refresh · 60 s'}
+    statusTone={snapshot.failed || snapshotOld ? 'warning' : 'good'}>
       <main id="live-content" className={styles.page}>
         <div className={styles.pageHeading}>
           <div><div className={styles.eyebrow}>EARTH–SUN ENVIRONMENT <span>/ 01</span></div><h1>Live observations</h1><p>Solar wind upstream. Geomagnetic response on Earth.</p></div>
@@ -95,6 +61,5 @@ export default function Live() {
           <ObservationInspector selected={selected} onSelect={select} snapshot={snapshot} windHistory={windHistory} indexHistory={indexHistory} expanded={inspectorOpen} onToggle={() => setInspectorOpen(open => !open)} />
         </div>
       </main>
-    </div>
-  </div>;
+  </WorkspaceShell>;
 }

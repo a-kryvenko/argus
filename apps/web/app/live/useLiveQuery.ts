@@ -52,12 +52,4 @@ export function useLiveQuery<T>(path: string | null, range?: HistoryWindow): Que
   return state.key === key ? state : { failed: false, loading: true };
 }
 
-export function useLiveClock() {
-  const [now, setNow] = useState<number>();
-  useEffect(() => {
-    const initial = setTimeout(() => setNow(Date.now()), 0);
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => { clearTimeout(initial); clearInterval(timer); };
-  }, []);
-  return now;
-}
+export { useClock as useLiveClock } from '../_utils/useClock';

@@ -11,9 +11,30 @@ const source = await readFile(
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext },
 }).outputText;
-const { formatForecastTime, probabilityData, quantileData } = await import(
+const { formatForecastTime, probabilityData, quantileData, forecastWindow, formatProbability } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`
 );
+
+test('horizon filters relative lead hours without changing issue time or filling missing variables', () => {
+  const forecast = { issue_time: '2020-01-01T00:00:00Z', horizon_hours: 48,
+    predictions: [{ lead_hours: 1, variables: { bt: {} } }, { lead_hours: 24, variables: {} },
+      { lead_hours: 30, variables: { bs: {} } }] };
+  const view = forecastWindow(forecast, 24);
+  assert.equal(view.issue_time, forecast.issue_time);
+  assert.deepEqual(view.predictions.map(point => point.lead_hours), [1, 24]);
+  assert.deepEqual(view.predictions[1].variables, {});
+  assert.equal(forecast.predictions.length, 3);
+  assert.equal(forecastWindow(forecast, null).predictions.length, 3);
+});
+
+test('probabilities distinguish missing, zero and very small positive values', () => {
+  assert.equal(formatProbability(undefined), '—');
+  assert.equal(formatProbability(null), '—');
+  assert.equal(formatProbability(0), '0%');
+  assert.equal(formatProbability(1), '100%');
+  assert.equal(formatProbability(.725), '72.5%');
+  assert.equal(formatProbability(.0005), '<0.1%');
+});
 
 test("forecast timestamps preserve historical dates and normalize offsets to UTC", () => {
   assert.equal(

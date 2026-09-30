@@ -1,100 +1,43 @@
-import ReactECharts from "echarts-for-react";
-import { formatForecastTime } from "../_utils/forecast";
-import "./charts.css";
-import ContentBlock from "./ContentBlock";
+'use client';
+import ReactECharts from 'echarts-for-react';
+import { formatForecastTime } from '../_utils/forecast';
+import styles from './forecast.module.css';
 
-export default function HeatMap({
-  title,
-  yLabels,
-  data,
-  times,
-}: {
-  title: string;
-  yLabels: string[];
-  data: number[][];
-  times: string[];
+export default function HeatMap({ title, yLabels, data, times, selectedTime, onSelectTime }: {
+  title: string; yLabels: string[]; data: number[][]; times: string[];
+  selectedTime?: string; onSelectTime?: (time: string) => void;
 }) {
   const option = {
-    aria: {
-      enabled: true,
-      description: `${title}. Color indicates threshold probability from 0 to 100 percent. Times are UTC.`,
-    },
+    animation: false,
+    aria: { enabled: true, description: `${title}. Threshold probabilities from 0 to 100 percent. Empty cells indicate unavailable data. All times UTC. Exact values are available in the forecast inspector and hourly table.` },
     tooltip: {
-      confine: true,
-      transitionDuration: 0,
-      backgroundColor: "#21172e",
-      borderColor: "#675579",
-      textStyle: { color: "#f7f3fc" },
+      confine: true, transitionDuration: 0, backgroundColor: '#1b2632', borderColor: '#3c5062', textStyle: { color: '#e4edf5', fontSize: 12 },
       formatter: (params: { data: number[] }) => {
         const [x, y, value] = params.data;
         return `${formatForecastTime(times[x])}<br/>${yLabels[y]}: <b>${value}%</b> probability`;
       },
     },
-    grid: { top: 8, right: 12, bottom: 48, left: 8, containLabel: true },
-    xAxis: {
-      type: "category",
-      data: times,
-      axisLabel: {
-        color: "#b9aec7",
-        hideOverlap: true,
-        formatter: (value: string) => {
-          const d = new Date(value);
-          return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}\n${d.toISOString().slice(11, 16)}`;
-        },
-      },
-    },
-    yAxis: {
-      type: "category",
-      data: yLabels,
-      axisLabel: { color: "#d8cfe3", fontSize: 12 },
-    },
-    visualMap: {
-      min: 0,
-      max: 100,
-      show: false,
-      inRange: {
-        color: ["#272138", "#6655b8", "#a78bfa", "#f5a35b", "#f65c71"],
-      },
-    },
-    series: [
-      {
-        name: title,
-        type: "heatmap",
-        data,
-        itemStyle: { borderColor: "#160f20", borderWidth: 1 },
-      },
-    ],
+    grid: { top: 8, right: 16, bottom: 45, left: 12, containLabel: true },
+    xAxis: { type: 'category', data: times, axisTick: { show: false }, axisLine: { show: false },
+      axisLabel: { color: '#92a4b5', fontSize: 10, fontFamily: 'monospace', hideOverlap: true,
+        formatter: (value: string) => `${value.slice(5, 10)}\n${value.slice(11, 16)}` } },
+    yAxis: { type: 'category', data: yLabels, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { color: '#b4c3d1', fontSize: 10 } },
+    visualMap: { min: 0, max: 100, show: false, inRange: { color: ['#1b2a37', '#254962', '#377997', '#8bbfca', '#e0be77'] } },
+    series: [{ name: title, type: 'heatmap', data, itemStyle: { borderColor: '#131b24', borderWidth: 1 },
+      emphasis: { itemStyle: { borderColor: '#e0edf7', borderWidth: 1 } },
+      markLine: { silent: true, symbol: 'none', label: { show: false }, lineStyle: { color: '#b9c9d7', type: 'dashed', width: 1 },
+        data: selectedTime && times.includes(selectedTime) ? [{ xAxis: selectedTime }] : [] },
+    }],
   };
-  return (
-    <ContentBlock>
-      <h2>{title}</h2>
-      {data.length ? (
-        <>
-          <ReactECharts
-            option={option}
-            style={{ height: 46 * yLabels.length + 78, width: "100%" }}
-            notMerge
-          />
-          <div
-            className="probability-legend"
-            aria-label="Probability color scale: 0 to 100 percent"
-          >
-            <span>Probability</span>
-            <span>0%</span>
-            <span className="probability-legend__scale" aria-hidden="true" />
-            <span>100%</span>
-            <span>· UTC</span>
-          </div>
-          <p className="probability-legend">
-            Brighter cells indicate higher probability. Hover or tap a cell for
-            its value. Empty cells indicate unavailable data.
-          </p>
-        </>
-      ) : (
-        <p className="forecast-meta" role="status">
-          No probability forecast available.
-        </p>
-      )}
-    </ContentBlock>
-  );
+  return <section className={styles.chart} aria-label={title}>
+    <div className={styles.chartHeading}><h3>{title}</h3><span className={styles.chartTag}>PROBABILITY</span></div>
+    {data.length ? <>
+      <ReactECharts option={option} style={{ height: 42 * yLabels.length + 70, width: '100%' }} notMerge
+        onEvents={{ click: (event: { data?: number[]; componentType?: string }) => {
+          if (event.componentType === 'series' && event.data && times[event.data[0]]) onSelectTime?.(times[event.data[0]]);
+        } }} />
+      <div className={styles.probabilityLegend} aria-label="Probability color scale: 0 to 100 percent"><span>Probability</span><span>0%</span><i aria-hidden="true" /><span>100%</span><span>· UTC</span></div>
+      <p className={styles.chartNote}>Per-time probability of meeting or exceeding each threshold. Click a cell to inspect. Empty cells are unavailable.</p>
+    </> : <p className={styles.emptyChart} role="status">No probability forecast available in this horizon.</p>}
+  </section>;
 }

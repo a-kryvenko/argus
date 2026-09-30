@@ -1,5 +1,17 @@
 import type { Forecast } from "./api";
 
+export function formatProbability(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  if (value > 0 && value < .001) return '<0.1%';
+  return `${(value * 100).toLocaleString('en-US', { maximumFractionDigits: 1 })}%`;
+}
+
+// Horizons are relative to the release's issue time, not the current clock.
+export function forecastWindow(forecast: Forecast, hours: number | null): Forecast {
+  return { ...forecast, predictions: hours == null ? forecast.predictions :
+    forecast.predictions.filter(point => point.lead_hours <= hours) };
+}
+
 export function formatForecastTime(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "Time unavailable";

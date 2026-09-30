@@ -19,6 +19,8 @@ prophet:
 # Numeric and file observations use these sources, schedules and backfill depths.
 # Native RTSW remains a separate product; AIA uses file adapters.
 clio:
+  sdo_images:
+    enabled: true
   observations:
     gong:
       sources:

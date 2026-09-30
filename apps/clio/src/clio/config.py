@@ -50,7 +50,16 @@ class ObservationPolicy(StrictModel):
     backfill: Backfill
 
 
+class SDOImages(StrictModel):
+    enabled: bool = False
+    live_seconds: int = Field(default=300, ge=60)
+    warmup_seconds: int = Field(default=60, ge=10)
+    cleanup_seconds: int = Field(default=3600, ge=60, le=3600)
+    warmup_hours_per_batch: int = Field(default=6, ge=1, le=24)
+
+
 class ClioObservations(StrictModel):
+    sdo_images: SDOImages = Field(default_factory=SDOImages)
     observations: dict[str, ObservationPolicy]
 
     @model_validator(mode='after')

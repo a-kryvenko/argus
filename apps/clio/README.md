@@ -130,3 +130,76 @@ collection; HTTP reads use stored JSON only. Apply `20260929_gong_snapshot` firs
 The latest frame whose observation and receipt are both at or before `as_of` is
 returned; Prophet separately enforces the configured age limit. Originals have no
 automatic retention policy.
+## Hourly SDO observations
+
+Clio collects individual hourly images for eight AIA wavelengths (94, 131, 171,
+193, 211, 304, 335, 1600) and HMI LOS. Each archived image is 512x512 and has
+its own observation time and first-receipt metadata. Selection of model inputs
+and temporal assembly belong to private forecast-core, called by Prophet.
+
+`clio.providers.sdo_images.download_observation(url, channel, slot=..., now=...)`
+downloads a scientific FITS with bounded size/time and checks its instrument, units,
+resolution and observation time. HMI TAI times are converted to UTC. Stale
+`current` files are rejected. Both 1024x1024 NRT and 4096x4096 scientific images
+are accepted, with source resolution preserved in metadata. These source arrays
+are labelled `fits-unregistered-v1`, not calibrated encoder inputs.
+This loader does not calibrate/reproject FITS or invoke reconstruction.
+
+`common.sdo_images` provides atomic 512x512 observation writes, first-receipt
+metadata, causal reads and `prune(root, now=...)` for the current UTC hour plus
+143 previous hours. The archive accepts only the nine observed channels and
+exposes individual images through `read_image`. Files live at
+`<data_root>/observations/sdo/YYYYmmddTHH0000Z/<channel>.npz` (or
+`ARGUS_SDO_ARCHIVE`). Each NPZ contains `image` (float32) and `metadata` (JSON).
+
+The worker enables collection through `clio.sdo_images.enabled` in project.yaml:
+
+- `sdo-live`: on startup and every 300 seconds after completion, checks the
+  current hour and three preceding hours to allow for source publication delays.
+- `sdo-warmup`: starts with the worker and fills the remaining retained window
+  in six-hour batches, with 60 seconds between batches. A persistent cursor
+  traverses gaps even when upstream files are missing, then repeats the window.
+- `sdo-cleanup`: on startup and every 3600 seconds, deletes expired hourly files.
+
+All lanes have independent process locks; warmup uses the bounded background
+pool and cannot occupy live worker capacity. Downloads use four threads per
+collection lane. Existing images are immutable and skipped. HTTP 404 is an
+unavailable observation; other failures are logged and retried on subsequent
+passes. Warmup is best effort: source gaps remain explicit, with no substitution.
+Retention includes the current UTC hour and previous 143 hours; expired files
+are removed on the next cleanup pass. Publication rejects expired slots.
+Manual cycles: `clio sdo-images live`, `clio sdo-images warmup`,
+`clio sdo-images cleanup`. These honor the same enable flag and locks.
+
+The collector reduces public 1024x1024 numeric FITS to 512x512 using finite-only
+area means (`sdo-area-mean-unregistered-v1`). Blocks without measurements remain
+NaN, notably outside the HMI disk. AIA remains in source DN and HMI in Gauss.
+Receipts retain source headers, exposure, quality, source checksum and true UTC
+observation/receipt times; pixel scale and reference pixel in the reduced header
+are adjusted for the new grid. This is **not** Surya-normalized or co-registered
+encoder input. Training must explicitly use this observation convention or add
+an agreed preprocessing pipeline; historical normalized-before-reduction inputs
+are not numerically interchangeable with these observations.
+
+`GET /internal/v1/observations/sdo-images` returns a JSON catalog protected by
+`OBSERVATIONS_SERVICE_TOKEN` (Bearer). Optional `start` and `end` are aware whole
+UTC hours, with an exclusive end and a maximum range of 144 hours. Optional
+`channel` selects one observed channel. `as_of` defaults to now and excludes
+observations received later; the default range is the 144 slots ending in its
+hour. The successful response envelope contains `data.items` and `data.missing`.
+Each item has an absolute `path` to its NPZ, `shape: [512, 512]`,
+`dtype: "float32"` and its `metadata` receipt. No image arrays or download URLs
+are sent. `metadata.sha256` identifies the original FITS, not the NPZ file.
+
+Clio and Prophet currently mount the same `./data` at `/var/www/data`, so these
+paths are directly readable in both services. Any `ARGUS_SDO_ARCHIVE` override
+must also resolve to shared storage at the same path. Catalog reads only inspect
+receipts and never download, transform or assemble images. Missing observations
+are explicit; an empty archive returns an empty `items` list. Paths are valid at
+read time and do not prevent retention from deleting files later. A consumer
+must handle a file disappearing before it opens it.
+
+The nine-channel NRT sources were confirmed on 2026-09-30 at jsoc1's
+`data/aia/synoptic/nrt/` and `data/hmi/fits/` (1024x1024 FITS).
+Calibration, registration, model normalization and temporal assembly remain
+separate forecasting/training concerns; Clio does not assemble pairs.

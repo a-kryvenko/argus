@@ -57,6 +57,11 @@ def tasks_for(config, heartbeats, abort):
         def cycle(name=name, job=job):
             return jobs.execute(job, lambda: invoke(name, limit=240), scheduled=True)
         tasks.append(Task(name, cycle, background=True))
+    if config.sdo_images.enabled:
+        for mode in ('live', 'warmup', 'cleanup'):
+            tasks.append(Task(
+                f'sdo-{mode}', lambda mode=mode: invoke('sdo-images', mode=mode),
+                getattr(config.sdo_images, f'{mode}_seconds'), background=mode == 'warmup'))
     return tasks
 
 
@@ -131,9 +136,9 @@ def work():
             heartbeats['geomagnetic'] = CollectorHeartbeat('geomagnetic')
         tasks = tasks_for(config, heartbeats, abort)
         running = {}
-        # Three live lanes plus two background lanes. Threads only coordinate;
+        # Reserve capacity for every live lane plus bounded background work. Threads coordinate;
         # provider code and scientific libraries run in spawned processes.
-        with ThreadPoolExecutor(max_workers=3 + BACKGROUND_LIMIT,
+        with ThreadPoolExecutor(max_workers=sum(not task.background for task in tasks) + BACKGROUND_LIMIT,
                                 thread_name_prefix='clio-schedule') as pool:
             try:
                 while not stopped.is_set():

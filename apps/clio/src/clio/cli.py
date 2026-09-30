@@ -11,6 +11,7 @@ from clio.commands._arguments import utc_hour, boundary
 from clio.ingestion.products import OBSERVATIONS
 
 COMMANDS = {
+    'sdo-images': 'sdo_images',
     'native-wind': 'collect_solar_wind',
     'backfill': 'backfill_observations', 'normalize': 'normalize', 'aggregate': 'aggregate_solar_wind',
     'collect': 'collect',
@@ -61,6 +62,7 @@ def main(argv=None):
     commands.add_parser('migrate', add_help=False)
     commands.add_parser('status')
     commands.add_parser('worker')
+    commands.add_parser('sdo-images').add_argument('mode', choices=['live', 'warmup', 'cleanup'])
     args, remainder = parser.parse_known_args(argv)
     if args.command != 'migrate' and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
@@ -121,6 +123,8 @@ def execute(args, remainder):
         config.cmd_opts = options
         config.set_main_option('script_location', str(Path(__file__).parent / 'migrations'))
         cli.run_cmd(config, options)
+    elif args.command == 'sdo-images':
+        print(json.dumps(invoke('sdo-images', args)))
     elif args.command == 'worker':
         from clio.worker import work
         work()

@@ -12,7 +12,7 @@ from clio.db.session import dispose_engine, get_session_factory
 from clio.config import load_observation_config
 from clio.routers import (
     observations, solar_wind, geomagnetic, observation_summary, collection_status,
-    forecast_inputs, browse,
+    forecast_inputs, browse, sdo_images,
 )
 
 get_config()
@@ -31,7 +31,7 @@ async def lifespan(_):
 
 app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)
 for module in (observations, solar_wind, geomagnetic, observation_summary,
-               collection_status, forecast_inputs, browse):
+               collection_status, forecast_inputs, browse, sdo_images):
     app.include_router(module.router, dependencies=[Depends(forecast_inputs.require_service_token)])
 
 

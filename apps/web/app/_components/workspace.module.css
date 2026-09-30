@@ -36,6 +36,10 @@
 .workspace h1, .workspace h2, .workspace h3 { color: var(--text-primary); }
 .skipLink { position: fixed; top: -80px; left: 16px; padding: 10px 18px; background: var(--background-elevated); z-index: 100; }
 .skipLink:focus { top: 10px; }
+.workspace :global(.recharts-wrapper):focus:not(:focus-visible),
+.workspace :global(.recharts-surface):focus:not(:focus-visible) { outline: none; }
+.workspace :global(.recharts-wrapper):focus-visible,
+.workspace :global(.recharts-surface):focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width); background: #11171f; border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
 .brand { display: flex; align-items: center; gap: 10px; height: 88px; padding: 0 20px; color: #e6edf3; }
 .brand > svg { color: #9bb7cc; flex-shrink: 0; }
@@ -47,7 +51,7 @@
 .navigation a > svg { flex-shrink: 0; }
 .navigation a:hover { color: #e6edf3; background: #19232e; }
 .navigation a[aria-current='page'] { color: #d9eafa; background: #1e2c3b; border-color: #2b4055; }
-.navigation .navMarker { margin-left: auto; width: 4px; height: 4px; background: #8ab4d7; border-radius: 50%; }
+.navigation .navMarker { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 4px; height: 4px; background: #8ab4d7; border-radius: 50%; pointer-events: none; }
 .sidebarBottom { margin-top: auto; padding-bottom: 16px; }
 .sidebarFoot { margin: 22px 18px 0; padding-top: 18px; border-top: 1px solid var(--border-subtle); display: flex; gap: 8px; align-items: center; font-size: 8px; line-height: 1.8; letter-spacing: .06em; color: var(--text-muted); }
 .workspaceMain { grid-column: 2; min-width: 0; }
@@ -105,4 +109,3 @@
 }
 .dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .refreshState[data-tone="neutral"] { color: var(--text-secondary); }
-

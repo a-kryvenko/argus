@@ -32,6 +32,12 @@ threshold probability heatmaps, and an inspector with exact UTC times and values
 The hourly table also supports keyboard selection. Missing values remain gaps;
 changing the visible horizon never changes the model's issue time.
 
+The model performance workspace (`/metrics`) uses the same navigation and layout.
+Product pages connect continuous scores, threshold scores and calibration through
+a shared lead-hour inspector, with metric and variable selectors, horizon controls
+and accessible value tables. Charts use the actual evaluated lead hours and retain
+gaps and unavailable scores instead of shifting values or replacing them with zero.
+
 ## About this repository
 
 This repository contains the web application, public API and services that collect

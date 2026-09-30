@@ -1,232 +1,31 @@
-import {
-    ResponsiveContainer,
-    LineChart,
-    CartesianGrid,
-    XAxis,
-    YAxis,
-    Tooltip,
-    Legend,
-    Label,
-    Line
-} from "recharts";
+'use client';
+import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Line } from 'recharts';
+import { type VariableMetrics, metricNumber } from '../_utils/transform';
+import { colors } from './MetricChart';
+import styles from '../../_components/forecast.module.css';
+import local from './metrics.module.css';
 
-import { useId, useState } from "react";
-
-import "../../_components/charts.css"
-import ContentBlock from "../../_components/ContentBlock";
-
-type ReliabilityRow = {
-  x: number;
-  values: Record<string, ReliabilityPoint[]>;
-};
-
-type ReliabilityPoint = { predicted_probability: number; observed_frequency: number };
-
-type Labels = Record<string, string>;
-
-const linesMeta: Array<any> = [
-  {
-    "color": "#56B4E9",
-    "stroke": "#56B4E9",
-    "fontWeight": "400"
-  },
-  {
-    "color": "#009E73",
-    "stroke": "#009E73",
-    "fontWeight": "600"
-  },
-  {
-    "color": "#D55E00",
-    "stroke": "#D55E00",
-    "fontWeight": "400"
-  },
-];
-
-function parseReliability(reliability: ReliabilityPoint[]) {
-  return reliability.map((point) => ({
-    predicted: point.predicted_probability,
-    observed: point.observed_frequency,
-  }));
-}
-
-function buildReliabilityChartData(
-  rows: ReliabilityRow[],
-  hour: number,
-  labels: Labels
-) {
-  const row = rows.find((item) => item.x === hour);
-
-  if (!row) return [];
-
-  const selectedKeys = Object.keys(labels);
-
-  const allPoints = selectedKeys.flatMap((key) =>
-    parseReliability(row.values[key] ?? []).map((point) => ({
-      ...point,
-      key,
-    }))
-  );
-
-  const predictedBins = [...new Set(allPoints.map((p) => p.predicted))].sort(
-    (a, b) => a - b
-  );
-
-  return predictedBins.map((predicted) => {
-    const chartRow: Record<string, number> = {
-      predicted,
-      perfect: predicted,
-    };
-
-    for (const key of selectedKeys) {
-      const point = parseReliability(row.values[key] ?? []).find(
-        (p) => p.predicted === predicted
-      );
-
-      chartRow[key] = point?.observed ?? NaN;
-    }
-
-    return chartRow;
-  });
-}
-
-export default function ReliabilityChart({ data, title, labels }: {data: Array<any>, title: string, labels: Labels})
-{
-    const [hour, setHour] = useState(1);
-    const sliderId = useId();
-
-    if (!data || data.length == 0) {
-        return (
-        <div>
-            <h3 className="heading">{ title }</h3>
-            <p>No metrics available.</p>
-        </div>
-        );
-    }
-
-    const leadHours = data.length;
-
-    const xAxisMeta = Array.from({length: leadHours}, (_, i) => i + 1);
-
-    const rechartsData = xAxisMeta.map((x, i) => ({
-        x,
-        values: data[i],
-    }));
-
-    const chartData = buildReliabilityChartData(rechartsData, hour, labels);
-
-    return (
-      <ContentBlock>
-        <div className="reliability-container">
-            <h3 className="heading">{ title }</h3>
-
-            <div style={{ marginBottom: 16 }}>
-                <label htmlFor={sliderId} className="color-default">Lead hour: <strong>{hour}</strong></label>
-
-                <input
-                    id={sliderId}
-                    type="range"
-                    min={1}
-                    max={leadHours}
-                    step={1}
-                    value={hour}
-                    onChange={(event) => setHour(Number(event.target.value))}
-                    style={{ width: "100%" }}
-                />
-            </div>
-
-            <ResponsiveContainer width="100%" aspect={1}>
-                <LineChart data={chartData} margin={{ top: 12, right: 12, bottom: 24, left: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-
-                    <XAxis
-                      tick={{ fill: "#b9aec7", fontSize: 12 }}
-                      dataKey="predicted"
-                      type="number"
-                      domain={[0, 1]}
-                      tickFormatter={(v) => `${v}`}
-                    >
-                      <Label
-                        style={{
-                            textAnchor: "middle",
-                            fontSize: 12,
-                            fill: "white",
-                        }}
-                      angle={0} 
-                      position="insideBottom" offset={-12}
-                      value={"Predicted probability"} />
-                    </XAxis>
-
-                    <YAxis
-                      tick={{ fill: "#b9aec7", fontSize: 12 }}
-                      type="number"
-                      domain={[0, 1]}
-                    >
-                      <Label
-                        style={{
-                            textAnchor: "middle",
-                            fontSize: 12,
-                            fill: "white",
-                        }}
-                      angle={270} 
-                      position="insideLeft"
-                      value={"Observed probability"} />
-                    </YAxis>
-
-                    {/* <Tooltip
-                        cursor={true}
-                        animationDuration={0}
-                        animationEasing="linear"
-                        contentStyle={{
-                            backgroundColor: '#18181b',
-                            border: '1px solid #3f3f46',
-                            borderRadius: '8px',
-                            padding: '10px 14px',
-                            color: '#e4e4e7',
-                            fontSize: '13px',
-                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
-                        }}
-                    /> */}
-
-
-
-                    <Line
-                        dataKey="perfect"
-                        name="Perfect calibration"
-                        strokeDasharray="5 5"
-                        dot={false}
-                        isAnimationActive={false}
-                    />
-
-                    {Object.keys(labels).map((key, i) => {
-                        const meta = linesMeta[i];
-
-                        return (
-                            <Line
-                                key={key}
-                                dataKey={key}
-                                name={labels[key]}
-                                stroke={meta["stroke"]}
-                                strokeWidth={2.5}
-                                fill="none"
-                                dot
-                                activeDot={{ 
-                                    r: 6, 
-                                    fill: meta["stroke"],
-                                    stroke: '#fff', 
-                                    strokeWidth: 2 
-                                }}
-                                connectNulls
-                                isAnimationActive={false}
-                            />
-                        );
-                    })}
-                </LineChart>
-            </ResponsiveContainer>
-            <div className="reliability-legend">
-              <span style={{ color: "#8884d8" }}>– – Perfect calibration</span>
-              {Object.entries(labels).map(([key, label], index) => <span key={key} style={{ color: linesMeta[index].color }}>● {label}</span>)}
-            </div>
-        </div>
-      </ContentBlock>
-    );
+export default function ReliabilityChart({ data, hour, labels }: { data: VariableMetrics; hour: number | undefined; labels: Record<string, string> }) {
+  const series = data.binary.map(item => ({ key: String(item.threshold), points: item.by_lead_hour.find(row => row.lead_hours === hour)?.reliability ?? [] }));
+  const bins = [...new Set(series.flatMap(item => item.points.map(point => point.predicted_probability)))].sort((a, b) => a - b);
+  const rows = bins.map(predicted => ({ predicted, ...Object.fromEntries(series.map(item => [item.key, item.points.find(point => point.predicted_probability === predicted)?.observed_frequency ?? null])) }));
+  return <section className={styles.chart} aria-label="Reliability at selected lead hour">
+    <div className={styles.chartHeading}><h3>Reliability<small>{hour == null ? 'No lead selected' : `Lead +${hour}h`}</small></h3><span className={styles.chartTag}>CALIBRATION</span></div>
+    <div className={local.legend}><span><i style={{ background: '#8797a8' }} />Perfect calibration</span>{Object.entries(labels).map(([key, label], i) => <span key={key}><i style={{ background: colors[i % colors.length] }} />{label}</span>)}</div>
+    {bins.length ? <div className={local.reliabilityPlot}><ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 12, right: 28, bottom: 28, left: 8 }}>
+        <CartesianGrid stroke="#26333f" />
+        <XAxis dataKey="predicted" type="number" domain={[0, 1]} tickFormatter={value => `${Math.round(value * 100)}%`} tick={{ fill: '#92a4b5', fontSize: 10 }} tickLine={false} axisLine={false} label={{ value: 'Predicted probability', position: 'insideBottom', offset: -16, fill: '#92a4b5', fontSize: 10 }} />
+        <YAxis type="number" domain={[0, 1]} width={54} tickFormatter={value => `${Math.round(value * 100)}%`} tick={{ fill: '#92a4b5', fontSize: 10 }} tickLine={false} axisLine={false} />
+        <Tooltip isAnimationActive={false} content={({ active, payload }) => {
+          const row = payload?.find(item => item.dataKey !== 'perfect')?.payload as Record<string, number | null> | undefined;
+          return active && row ? <div className={styles.tooltip}><strong>Predicted probability {metricNumber((row.predicted ?? 0) * 100)}%</strong>{Object.entries(labels).map(([key, label]) => <p key={key}>{label}<b>{row[key] == null ? '—' : `${metricNumber(row[key] * 100)}%`}</b></p>)}</div> : null;
+        }} />
+        <Line data={[{ predicted: 0, perfect: 0 }, { predicted: 1, perfect: 1 }]} dataKey="perfect" stroke="#8797a8" strokeDasharray="4 4" dot={false} isAnimationActive={false} />
+        {Object.entries(labels).map(([key, label], i) => <Line key={key} dataKey={key} name={label} stroke={colors[i % colors.length]} strokeWidth={1.6} dot={{ r: 3, fill: colors[i % colors.length] }} connectNulls={false} isAnimationActive={false} />)}
+      </LineChart>
+    </ResponsiveContainer></div> : <p className={styles.emptyChart} role="status">No reliability points at this lead hour.</p>}
+    <p className={styles.chartNote}>Vertical axis: observed event frequency. The diagonal represents perfect calibration. Values apply to the selected lead hour.</p>
+    {bins.length > 0 && <details className={local.reliabilityTable}><summary>Calibration values</summary><div className={styles.tableScroll}><table><caption>Predicted probabilities and observed frequencies as fractions (0–1).</caption><thead><tr><th scope="col">Predicted</th>{Object.entries(labels).map(([key, label]) => <th scope="col" key={key}>{label}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.predicted}><th scope="row">{metricNumber(row.predicted)}</th>{Object.keys(labels).map(key => <td key={key}>{metricNumber((row as Record<string, number | null>)[key])}</td>)}</tr>)}</tbody></table></div></details>}
+  </section>;
 }

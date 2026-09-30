@@ -1,165 +1,37 @@
-import {
-  CartesianGrid,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  LineChart
-} from "recharts";
+'use client';
+import { CartesianGrid, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, ReferenceLine } from 'recharts';
+import { chartRows, metricNumber, type MetricRow } from '../_utils/transform';
+import styles from '../../_components/forecast.module.css';
+import local from './metrics.module.css';
 
-import "../../_components/charts.css"
-import ContentBlock from "../../_components/ContentBlock";
-
-const linesMeta: Array<any> = [
-  {
-    "color": "#56B4E9",
-    "stroke": "#56B4E9",
-    "fontWeight": "400"
-  },
-  {
-    "color": "#009E73",
-    "stroke": "#009E73",
-    "fontWeight": "600"
-  },
-  {
-    "color": "#D55E00",
-    "stroke": "#D55E00",
-    "fontWeight": "400"
-  },
-];
-
-export default function MetricChart({ data, title, labels }: {data: Array<any>, title: string, labels: Record<string, string>}) {
-  if (!data || data.length == 0) {
-    return (
-      <div>
-        <h3>{ title }</h3>
-        <p>No metrics available.</p>
-      </div>
-    );
-  }
-
-  const leadHours = data.length;
-
-  const xAxisMeta = Array.from({length: leadHours}, (_, i) => i + 1);
-
-  const rechartsData = xAxisMeta.map((x, i) => ({
-    x,
-    values: data[i],
-  }));
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) {
-      return null;
-    }
-
-    const row = payload[0].payload;
-
-    return (
-      <div className="tooltip">
-        <div className="tooltip__title">
-          Forecast horizon, hours: <b>{row.x}</b>
-        </div>
-        <div>
-          {Object.entries(labels).map(([key, value], i) => (
-            <div
-              className="tooltip__row"
-              key={key}
-              style={{
-                color: linesMeta[i].color,
-                fontWeight: linesMeta[i].fontWeight,
-              }}
-            >
-              <span>{ value }</span>
-              <span>{row.values[key]}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <ContentBlock>
-      <h3 className="heading">{ title }</h3>
-
-      <div style={{ height: 400 }}>
-        <ResponsiveContainer>
-          <LineChart
-            data={rechartsData}
-            margin={{
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-            }}
-          >
-            <XAxis
-                      tick={{ fill: "#b9aec7", fontSize: 12 }}
-              dataKey="x"
-              type="number"
-              domain={[1, leadHours + 1]}
-            />
-            
-            <YAxis
-              type="number"
-              tickCount={6}
-              width={70}
-              tick={{ fontSize: 12, fill: "#b9aec7" }}
-              domain={[
-                (min: number) => Math.floor(min * 10) / 10,
-                (max: number) => Math.ceil(max * 10) / 10,
-              ]}
-            />
-
-            <CartesianGrid strokeDasharray="3 3" stroke="#212121" />
-
-            <Tooltip
-              cursor={true}
-              animationDuration={0}
-              animationEasing="linear"
-              content={<CustomTooltip />} 
-              contentStyle={{
-                backgroundColor: '#18181b',
-                border: '1px solid #3f3f46',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                color: '#e4e4e7',
-                fontSize: '13px',
-                boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
-              }}
-            />
-
-            {Object.entries(labels).map(([key, value], i) => {
-              const meta = linesMeta[i];
-          
-              return (
-                <Line
-                  isAnimationActive={false}
-                  key={key}
-                  type="monotone"
-                  dataKey={`values.${key}`}
-                  name={key}
-                  stroke={meta["stroke"]}
-                  strokeWidth={3.5}
-                  fill="none"
-                  dot={false}
-                  activeDot={{ 
-                    r: 6, 
-                    fill: meta["stroke"],
-                    stroke: '#fff', 
-                    strokeWidth: 2 
-                  }}
-                />
-              );
-            })}
-
-            <Legend formatter={(value) => labels[value] ?? value} />
-
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </ContentBlock>
-  );
+export const colors = ['#79b9e6', '#74b8a7', '#d5b376', '#b49cd1', '#d59191'];
+export default function MetricChart({ data, title, labels, unit = '', note, selectedHour, onSelectHour }: {
+  data: MetricRow[]; title: string; labels: Record<string, string>; unit?: string; note: string;
+  selectedHour: number | undefined; onSelectHour: (hour: number) => void;
+}) {
+  const rows = chartRows(data);
+  const hasValues = rows.some(row => Object.keys(labels).some(key => row.values[key] != null));
+  return <section className={styles.chart} aria-label={`${title} by lead hour`}>
+    <div className={styles.chartHeading}><h3>{title}<small>{unit}</small></h3><span className={styles.chartTag}>BY LEAD HOUR</span></div>
+    <div className={local.legend}>{Object.entries(labels).map(([key, label], i) => <span key={key}><i style={{ background: colors[i % colors.length] }} />{label}</span>)}</div>
+    {hasValues ? <div className={styles.quantilePlot}><ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows} margin={{ top: 12, right: 28, bottom: 12, left: 0 }} onClick={event => {
+        const lead = Number(event.activeLabel);
+        if (event.activeLabel != null && data.some(row => row.lead_hours === lead)) onSelectHour(lead);
+      }}>
+        <CartesianGrid vertical={false} stroke="#26333f" />
+        <XAxis dataKey="lead_hours" type="number" domain={rows.length === 1 ? [Math.max(0, rows[0].lead_hours - 1), rows[0].lead_hours + 1] : ['dataMin', 'dataMax']} allowDecimals={false} tickFormatter={value => `+${value}h`} tick={{ fill: '#92a4b5', fontSize: 10 }} tickLine={false} axisLine={false} />
+        <YAxis width={62} domain={['auto', 'auto']} tickFormatter={metricNumber} tick={{ fill: '#92a4b5', fontSize: 10 }} tickLine={false} axisLine={false} />
+        <Tooltip isAnimationActive={false} content={({ active, payload }) => {
+          const row = payload?.[0]?.payload as MetricRow | undefined;
+          return active && row ? <div className={styles.tooltip}><strong>Lead +{row.lead_hours} hours</strong>{Object.entries(labels).map(([key, label]) => <p key={key}>{label}<b>{metricNumber(row.values[key])}</b></p>)}</div> : null;
+        }} />
+        {Object.entries(labels).map(([key, label], i) => <Line key={key} name={label} dataKey={row => row.values[key] ?? null} type="linear" stroke={colors[i % colors.length]} strokeWidth={1.8}
+          dot={({ cx, cy, payload }: { cx?: number; cy?: number; payload?: MetricRow }) => cx == null || cy == null || payload?.values[key] == null ? <g /> : <circle className="recharts-line-dot" cx={cx} cy={cy} r={2} fill={colors[i % colors.length]} onClick={event => { event.stopPropagation(); onSelectHour(payload.lead_hours); }} />}
+          activeDot={{ r: 4, pointerEvents: 'none' }} connectNulls={false} isAnimationActive={false} />)}
+        {selectedHour != null && <ReferenceLine x={selectedHour} stroke="#8999a9" strokeDasharray="3 3" />}
+      </LineChart>
+    </ResponsiveContainer></div> : <p className={styles.emptyChart} role="status">No values for this metric.</p>}
+    <p className={styles.chartNote}>{note} Click a lead hour to inspect. Missing values remain gaps.</p>
+  </section>;
 }

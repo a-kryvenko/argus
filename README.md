@@ -19,6 +19,12 @@ in other applications and analyses.
 - **Forecasts:** published model outputs alongside observational data. Available
   products depend on the configured models and input data.
 
+The `/live` observation workspace combines a selectable measurement summary,
+solar-wind and geomagnetic charts with a shared UTC history window, and an
+inspector for source, quality, freshness and coverage. The inspector collapses on
+smaller screens. Collection diagnostics and additional hourly indices remain
+available below the charts.
+
 ## About this repository
 
 This repository contains the web application, public API and services that collect

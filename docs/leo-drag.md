@@ -54,7 +54,14 @@ The successful response uses the standard `{success, data, error}` envelope.
 | `estimated_altitude_loss_m` | Positive first-order loss of circular-orbit altitude |
 | `drag_risk` | `low`, `elevated`, `high`, or `not_assessed` |
 | `predictions` | Hourly orbit means and cumulative losses, including zero loss at lead 0 |
-| `inputs`, `source`, `assumptions` | Echoed parameters, release ID, density driver provenance and model limitations |
+| `inputs`, `source`, `assumptions` | Echoed parameters, release ID, source timestamps, driver mode, interpolation flag and model limitations |
+
+Responses are compact by default. `POST /public/risks/leo-drag?meta=true` adds
+`data.meta.model` and `data.meta.source` with the density model (`model`), history
+start, background method, interpolated daily dates and DTC method. The main data
+are identical in both modes. `source.background_interpolated` always identifies
+gap-filled backgrounds. The dashboard requests metadata to display the density
+model; risk reasons, thresholds and assumptions never depend on this parameter.
 
 Thresholds refer to the **total loss over the selected horizon**, not a daily
 rate. Equality counts as a threshold crossing. Without thresholds the response

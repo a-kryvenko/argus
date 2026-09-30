@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.atmospheric_density import DensityForecast
+from app.schemas.metadata import MetaQuery
 from app.schemas.response import ApiResponse, success_response
 from app.services.atmospheric_density import load_density_forecast
 from app.services.forecast_products import ArtifactNotReadyError
@@ -23,8 +24,8 @@ router = APIRouter(tags=["forecasts"])
     ),
     responses={503: {"model": ApiResponse[None], "description": "Forecast is not ready"}},
 )
-def atmospheric_density():
+def atmospheric_density(meta: MetaQuery = False):
     try:
-        return success_response(load_density_forecast())
+        return success_response(DensityForecast.from_internal(load_density_forecast(), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Atmospheric density forecast is not ready")

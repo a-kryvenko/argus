@@ -1,19 +1,24 @@
 from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Query, Response
 from app.services.observations_client import read_observations
+from app.services.observation_responses import public_observations
+from app.schemas.metadata import MetaQuery
+from app.schemas.observations import IndexLatest, IndexHistory
+from app.schemas.response import ApiResponse
 
 router = APIRouter(prefix='/public/observations/geomagnetic', tags=['observations'])
 
 
-@router.get('/latest')
-async def latest(response: Response):
+@router.get('/latest', response_model=ApiResponse[IndexLatest])
+async def latest(response: Response, meta: MetaQuery = False):
     """Latest native Kp/Dst intervals, with independent quality and publication lag."""
     response.headers['Cache-Control'] = 'no-store'
-    return await read_observations('geomagnetic/latest')
+    return public_observations(await read_observations('geomagnetic/latest'), IndexLatest, meta=meta)
 
 
-@router.get('/history')
+@router.get('/history', response_model=ApiResponse[IndexHistory])
 async def history(response: Response,
+                  meta: MetaQuery = False,
                   start: datetime | None = Query(default=None, alias='from'),
                   end: datetime | None = Query(default=None, alias='to')):
     """Native intervals overlapping [from,to); default 24h, maximum 31 days.
@@ -29,4 +34,4 @@ async def history(response: Response,
     if not timedelta(0) < end-start <= timedelta(days=31):
         raise HTTPException(422, 'Interval must be positive and at most 31 days')
     response.headers['Cache-Control'] = 'no-store'
-    return await read_observations('geomagnetic/history', {'from': start, 'to': end})
+    return public_observations(await read_observations('geomagnetic/history', {'from': start, 'to': end}), IndexHistory, meta=meta)

@@ -1,12 +1,14 @@
 'use client';
 import type { Derived, LiveSnapshot } from './useLiveQuery';
 import styles from './page.module.css';
+import { windUnits } from './solarWind';
+import { indexDefinitions } from './geomagnetic';
 
 const number = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 2 });
 const reasons: Record<string, string> = { stale: 'delayed measurements', source_changed: 'spacecraft changed', insufficient_coverage: 'insufficient coverage', missing_latest: 'latest measurement unavailable' };
-function trend(point: Derived | undefined) {
+function trend(point: Derived | undefined, unit: string) {
   if (!point || point.value == null) return `unavailable (${reasons[point?.reason ?? ''] ?? 'insufficient data'})`;
-  return `${point.value > 0 ? '+' : ''}${number(point.value)} ${point.unit ?? ''}`;
+  return `${point.value > 0 ? '+' : ''}${number(point.value)} ${unit}`;
 }
 
 export default function ObservationSummary({ snapshot }: { snapshot: LiveSnapshot }) {
@@ -22,7 +24,7 @@ export default function ObservationSummary({ snapshot }: { snapshot: LiveSnapsho
         {(['v','bz'] as const).map(metric => {
           const series = summary.solar_wind[metric];
           if (metric === 'v') {
-            return <div key={metric}><h3>Solar wind speed</h3><p>{number(series.latest?.value)} {series.unit}{series.status !== 'fresh' ? ` · ${series.status}` : ''}{series.latest?.quality === 'flagged' ? ' · flagged' : ''}</p><small>1h change: {trend(summary.changes_1h[metric])}</small></div>;
+            return <div key={metric}><h3>Solar wind speed</h3><p>{number(series.latest?.value)} {windUnits[metric]}{series.status !== 'fresh' ? ` · ${series.status}` : ''}{series.latest?.quality === 'flagged' ? ' · flagged' : ''}</p><small>1h change: {trend(summary.changes_1h[metric], windUnits[metric])}</small></div>;
           }
           const point = series.latest;
           const elapsed = clock && lastSuccess ? Math.max(0, (clock-lastSuccess)/1000) : 0;
@@ -36,21 +38,21 @@ export default function ObservationSummary({ snapshot }: { snapshot: LiveSnapsho
           const showChange = usable && change?.status === 'available' && change.value != null;
           return <div key={metric}>
             <h3>Bz</h3>
-            <p>{number(point?.value)} {series.unit}{point?.quality === 'flagged' ? ' · flagged' : ''}</p>
+            <p>{number(point?.value)} {windUnits[metric]}{point?.quality === 'flagged' ? ' · flagged' : ''}</p>
             {showDuration && <small className={styles.summaryLine}>Negative for {duration.status === 'lower_bound' ? 'at least ' : ''}{number(duration.value)} min through {new Date(duration.as_of ?? summary.generated_at).toISOString().slice(11,16)} UTC</small>}
-            {showChange && <small className={styles.summaryLine}>1h change: {trend(change)}</small>}
+            {showChange && <small className={styles.summaryLine}>1h change: {trend(change, windUnits.bz)}</small>}
             <small className={styles.summaryLine}>{point?.value == null ? 'Measurement unavailable' : fresh ? 'Recent' : 'Delayed'}{age != null && ` · ${Math.floor(age/60)} min old`}</small>
             <details className={styles.summaryDetails}>
               <summary>Details</summary>
               {point && <small className={styles.summaryLine}>Latest Bz: {new Date(point.observed_at).toISOString().replace('T', ' ').slice(0,16)} UTC</small>}
               {!showDuration && (point?.value == null || point.value < 0) && <small className={styles.summaryLine}>Negative duration: {reasons[!fresh && point?.value != null ? 'stale' : duration.reason ?? ''] ?? 'insufficient data'}</small>}
-              {!showChange && <small className={styles.summaryLine}>1h change: {fresh ? trend(change) : 'unavailable (delayed measurements)'}</small>}
+              {!showChange && <small className={styles.summaryLine}>1h change: {fresh ? trend(change, windUnits.bz) : 'unavailable (delayed measurements)'}</small>}
             </details>
           </div>;
         })}
         {(['kp','dst'] as const).map(metric => {
           const series = summary.geomagnetic[metric];
-          return <div key={metric}><h3>{metric === 'kp' ? 'Kp' : series.label}</h3><p>{number(series.latest?.value)} {series.unit}{series.status !== 'fresh' ? ` · ${series.status}` : ''}{series.latest?.quality === 'flagged' ? ' · flagged' : ''}</p><small>{series.latest ? `${new Date(series.latest.interval_start).toISOString().slice(5,16).replace('T',' ')} – ${new Date(series.latest.interval_end).toISOString().slice(11,16)} UTC` : 'No stored interval'}</small></div>;
+          return <div key={metric}><h3>{indexDefinitions[metric].label}</h3><p>{number(series.latest?.value)} {indexDefinitions[metric].unit}{series.status !== 'fresh' ? ` · ${series.status}` : ''}{series.latest?.quality === 'flagged' ? ' · flagged' : ''}</p><small>{series.latest ? `${new Date(series.latest.interval_start).toISOString().slice(5,16).replace('T',' ')} – ${new Date(series.latest.interval_end).toISOString().slice(11,16)} UTC` : 'No stored interval'}</small></div>;
         })}
       </div>
       <p className={styles.sampleTime}>Snapshot: {new Date(summary.generated_at).toISOString().replace('T',' ').slice(0,19)} UTC. Changes compare five-minute means one hour apart and require ≥80% coverage in both windows and the last hour.</p>

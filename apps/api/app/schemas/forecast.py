@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.schemas.metadata import metadata_field
 
 LEAD_HOURS_DESCRIPTION = (
     "Number of hours between forecast issuance (issue_time) and the time "
@@ -31,9 +32,16 @@ class BinaryForecast(BaseModel):
 class VariableForecast(BaseModel):
     """Available quantile and threshold forecasts for one physical variable."""
 
-    unit: str = Field(description="Unit shared by quantile values and binary thresholds; index denotes an index value.", examples=["km/s", "nT", "index"])
     continuous: QuantileForecast | None = Field(default=None, description="Quantile forecast, or null when unavailable or unsupported for this variable.")
     binary: list[BinaryForecast] = Field(default_factory=list, description="Available threshold probabilities; empty when unavailable or unsupported. Thresholds with missing probabilities are omitted.")
+
+
+class ForecastVariableMetadata(BaseModel):
+    unit: str
+
+
+class ForecastMetadata(BaseModel):
+    variables: dict[str, ForecastVariableMetadata]
 
 
 class ForecastPoint(BaseModel):
@@ -52,6 +60,7 @@ class Forecast(BaseModel):
     horizon_hours: int = Field(description="Largest lead_hours among returned predictions; may be shorter than the product's maximum horizon.", examples=[1])
     available_variables: list[str] = Field(description="Variable names available for this forecast issuance. A particular prediction may contain only a subset.", examples=[["v"]])
     predictions: list[ForecastPoint] = Field(description="Forecast points, each with its own valid_time and lead_hours.")
+    meta: ForecastMetadata | None = metadata_field()
 
     model_config = ConfigDict(json_schema_extra={"examples": [{
         "target": "solar-wind-speed",
@@ -60,7 +69,7 @@ class Forecast(BaseModel):
         "available_variables": ["v"],
         "predictions": [{
             "valid_time": "2026-09-05T01:00:00Z", "lead_hours": 1,
-            "variables": {"v": {"unit": "km/s", "continuous": {
+            "variables": {"v": {"continuous": {
                 "q10": 380, "q50": 420, "q90": 480,
             }, "binary": [
                 {"threshold": 450, "probability": 0.25},

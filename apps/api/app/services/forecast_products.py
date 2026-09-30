@@ -6,6 +6,8 @@ from app.schemas.forecast import (
     BinaryForecast,
     Forecast,
     ForecastPoint,
+    ForecastMetadata,
+    ForecastVariableMetadata,
     QuantileForecast,
     VariableForecast,
 )
@@ -129,7 +131,7 @@ def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
         )
         if probability is not None:
             binary.append(BinaryForecast(threshold=int(threshold) if speed else threshold, probability=probability))
-    return VariableForecast(unit=variable.unit, continuous=continuous, binary=binary)
+    return VariableForecast(continuous=continuous, binary=binary)
 
 
 def _merge_variable_forecasts(
@@ -139,13 +141,19 @@ def _merge_variable_forecasts(
     if current is None:
         return addition
     return VariableForecast(
-        unit=current.unit,
         continuous=current.continuous or addition.continuous,
         binary=[*current.binary, *addition.binary],
     )
 
 
-def load_forecast(product: Product) -> Forecast:
+def product_metadata(product: Product, available: list[str]) -> ForecastMetadata:
+    return ForecastMetadata(variables={
+        variable.name: ForecastVariableMetadata(unit=variable.unit)
+        for variable in product.variables if variable.name in available
+    })
+
+
+def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
     frames = _load_variable_frames(product)
     if not frames:
         raise ArtifactNotReadyError(product.target)
@@ -194,6 +202,7 @@ def load_forecast(product: Product) -> Forecast:
         horizon_hours=max(point.lead_hours for point in predictions),
         available_variables=available,
         predictions=predictions,
+        meta=product_metadata(product, available) if meta else None,
     )
 
 
@@ -257,7 +266,7 @@ def _binary_metrics(variable: Variable, max_horizon_hours: int) -> list[BinaryMe
     return series
 
 
-def load_metrics(product: Product) -> ForecastMetrics:
+def load_metrics(product: Product, *, meta: bool = False) -> ForecastMetrics:
     variables = {}
     for variable in product.variables:
         continuous = _continuous_metrics(variable, product.max_horizon_hours)
@@ -270,4 +279,5 @@ def load_metrics(product: Product) -> ForecastMetrics:
             )
     if not variables:
         raise ArtifactNotReadyError(product.target)
-    return ForecastMetrics(target=product.target, variables=variables)
+    return ForecastMetrics(target=product.target, variables=variables,
+                           meta=product_metadata(product, list(variables)) if meta else None)

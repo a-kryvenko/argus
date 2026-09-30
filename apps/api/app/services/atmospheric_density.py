@@ -1,7 +1,7 @@
 """Render atmospheric density from a published Prophet release."""
 from common.config import get_config
 from common.density_contract import parse_density_frame
-from app.schemas.atmospheric_density import DensityForecast
+from common.schemas.atmospheric_density import DensityForecast
 from app.services.forecast_products import ArtifactNotReadyError
 from app.services.forecasts_client import read_frames
 

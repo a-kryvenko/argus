@@ -46,7 +46,7 @@ export default function LeoDragView() {
     setError("");
     setResult(null);
     try {
-      const data = await apiRequest<DragAssessment>("/public/risks/leo-drag", {
+      const data = await apiRequest<DragAssessment>("/public/risks/leo-drag?meta=true", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(inputs), cache: "no-store", signal: controller.signal,
       });
@@ -124,11 +124,12 @@ export default function LeoDragView() {
             <Card className="space-y-3 p-5 text-sm">
               <h2 className="font-medium">Data & assumptions</h2>
               <dl className="grid gap-2 text-muted-foreground sm:grid-cols-2">
-                <div><dt>Density model</dt><dd>{result.source.density_model}</dd></div>
+                {result.meta && <div><dt>Density model</dt><dd>{result.meta.source.model}</dd></div>}
                 <div><dt>Forecast issued (UTC)</dt><dd>{utc(result.source.issue_time)}</dd></div>
                 <div><dt>Solar drivers observed (UTC)</dt><dd>{utc(result.source.observed_at)}</dd></div>
                 <div><dt>DTC observed (UTC)</dt><dd>{utc(result.source.dtc_observed_at)}</dd></div>
               </dl>
+              {result.source.background_interpolated && <p className="text-xs text-muted-foreground">Background drivers include interpolated daily values.</p>}
               <ul className="list-disc space-y-2 pl-5 text-xs text-muted-foreground">{result.assumptions.map(item => <li key={item}>{item}</li>)}</ul>
             </Card>
           </>}

@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 
 from app.schemas.forecast import Forecast
 from app.schemas.metrics import ForecastMetrics
+from app.schemas.metadata import MetaQuery
 from app.schemas.response import ApiResponse, success_response
 from app.services.forecast_products import (
     ArtifactNotReadyError,
@@ -100,9 +101,10 @@ TargetType = Literal[*PRODUCTS.keys()]
 def forecast(
     visibility: Visibility,
     target: Annotated[TargetType, Path(description=TARGET_DESCRIPTION)],
+    meta: MetaQuery = False,
 ):
     try:
-        return success_response(load_forecast(_product(target, visibility)))
+        return success_response(load_forecast(_product(target, visibility), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Forecast is not ready")
 
@@ -117,8 +119,9 @@ def forecast(
 def metrics(
     visibility: Visibility,
     target: Annotated[str, Path(description=TARGET_DESCRIPTION)],
+    meta: MetaQuery = False,
 ):
     try:
-        return success_response(load_metrics(_product(target, visibility)))
+        return success_response(load_metrics(_product(target, visibility), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Metrics are not ready")

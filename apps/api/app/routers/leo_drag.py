@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from common.schemas.leo_drag import LeoDragAssessment, LeoDragRequest
+from common.schemas.leo_drag import LeoDragRequest
+from app.schemas.leo_drag import LeoDragAssessment
+from app.schemas.metadata import MetaQuery
 from app.schemas.response import ApiResponse, success_response
 from app.services.forecast_errors import ArtifactNotReadyError
 from app.services.intelligence_client import assess_drag, DragDomainError
@@ -14,9 +16,9 @@ router = APIRouter(tags=['risks'])
                           'Optional cumulative altitude-loss thresholds determine risk categories; no probabilities. '
                           'Returns 422 outside the grid or above 1000 m estimated decay, and 503 when unavailable.'),
              responses={503: {'model': ApiResponse[None], 'description': 'Impact service or density is not ready'}})
-def leo_drag(request: LeoDragRequest):
+def leo_drag(request: LeoDragRequest, meta: MetaQuery = False):
     try:
-        return success_response(assess_drag(request))
+        return success_response(LeoDragAssessment.from_internal(assess_drag(request), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(503, 'Impact service or atmospheric density is not ready') from None
     except DragDomainError as exc:

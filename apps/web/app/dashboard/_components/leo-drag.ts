@@ -22,11 +22,14 @@ export type DragAssessment = Omit<DragPoint, "valid_time" | "lead_hours"> & {
   end_time: string;
   inputs: DragInputs;
   source: {
+    release_id: string;
     issue_time: string;
     observed_at: string;
     dtc_observed_at: string;
-    density_model: string;
+    driver_mode: 'observed_persistence';
+    background_interpolated: boolean;
   };
+  meta?: { model: string; source: { model: string } };
   assumptions: string[];
   predictions: DragPoint[];
 };

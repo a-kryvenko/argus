@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { intervalBounds, type IndexHistory, type IndexMetric, type IndexSample } from './geomagnetic';
+import { intervalBounds, indexDefinitions, type IndexHistory, type IndexMetric, type IndexSample } from './geomagnetic';
 import { useLiveQuery, type LiveSnapshot } from './useLiveQuery';
 import styles from './page.module.css';
 import HistoryCoverage from './HistoryCoverage';
@@ -22,7 +22,7 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
     return () => observer.disconnect();
   }, []);
   const series = history.series[metric];
-  const label = metric === 'kp' ? 'Kp' : series.label;
+  const { label, unit } = indexDefinitions[metric];
   const start = Date.parse(history.from), end = Date.parse(history.to);
   const values = series.points.filter(p => p.value != null && p.quality !== 'flagged').map(p => p.value as number);
   const low = metric === 'kp' ? 0 : Math.min(0, ...values) - 10;
@@ -31,7 +31,7 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
   const x = (time: number) => 48 + (time-start)/(end-start)*(width-64);
   const y = (value: number) => 200 - (value-low)/(high-low)*180;
   return <section className={styles.chart} aria-label={`${label} history`}>
-    <h3>{label}{series.unit && ` (${series.unit})`}</h3>
+    <h3>{label}{unit && ` (${unit})`}</h3>
     {metric === 'kp' && <p className={styles.chartDetail}>NOAA SWPC · Preliminary estimate</p>}
     <HistoryCoverage label={label} coverage={series.coverage} />
     {values.length === 0 && <p className={styles.description}>No usable observations in this interval.</p>}
@@ -50,7 +50,7 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
           const bounds = intervalBounds(point, start, end);
           if (!bounds || point.value == null) return null;
           const left = x(bounds[0]), right = x(bounds[1]);
-          const description = `${number(point.value)} ${series.unit}, ${stamp(point.interval_start)} to ${stamp(point.interval_end)} UTC, ${point.interval_status}`;
+          const description = `${number(point.value)} ${unit}, ${stamp(point.interval_start)} to ${stamp(point.interval_end)} UTC, ${point.interval_status}`;
           return <g key={point.interval_start} tabIndex={0} aria-label={description} onFocus={() => setHovered(point)} onMouseEnter={() => setHovered(point)}>
             <title>{description}</title>
             {metric === 'kp' ? <rect x={left} y={y(point.value)} width={Math.max(0.5, right-left-1)} height={Math.max(1, y(0)-y(point.value))} fill="#a4a9fa" opacity={0.85} /> : <line x1={left} x2={right} y1={y(point.value)} y2={y(point.value)} stroke="#68d5c5" strokeWidth={3} />}
@@ -59,7 +59,7 @@ function IntervalChart({ metric, history }: { metric: IndexMetric; history: Inde
         })}
       </svg>
     </div>
-    <p className={styles.chartDetail}>{hovered ? `${number(hovered.value)} ${series.unit} · ${stamp(hovered.interval_start)} – ${stamp(hovered.interval_end)} UTC${hovered.interval_status === 'in_progress' ? ' · interval in progress' : ''}` : 'Hover or focus an interval for its value and UTC times.'}</p>
+    <p className={styles.chartDetail}>{hovered ? `${number(hovered.value)} ${unit} · ${stamp(hovered.interval_start)} – ${stamp(hovered.interval_end)} UTC${hovered.interval_status === 'in_progress' ? ' · interval in progress' : ''}` : 'Hover or focus an interval for its value and UTC times.'}</p>
   </section>;
 }
 
@@ -83,14 +83,14 @@ export default function GeomagneticLive({ hours, onHoursChange, snapshot }: { ho
       return <section key={metric} className={styles.card}>
         <h3>{metric === 'kp' ? 'Kp' : 'Real-time Dst'}</h3>
         {metric === 'kp' && <p className={styles.sampleTime}>NOAA SWPC · Preliminary estimate</p>}
-        <p className={styles.value}>{number(point?.value)} <span>{series?.unit}</span></p>
+        <p className={styles.value}>{number(point?.value)} <span>{indexDefinitions[metric].unit}</span></p>
         <p className={point?.value == null || stale || point.quality === 'flagged' ? styles.warning : styles.fresh}>{!latest ? 'Loading…' : point?.value == null ? 'Unavailable' : stale ? 'Delayed' : 'Latest available interval'}</p>
         {point && <>
           <p className={styles.sampleTime}>{stamp(point.interval_start)} – {stamp(point.interval_end)} UTC</p>
           <p className={styles.sampleTime}>{point.quality === 'flagged' ? 'Provider quality issue' : serverTime < Date.parse(point.interval_end) ? 'Interval in progress' : 'Completed interval · subject to revision'}</p>
           {point.station_count != null && <p className={styles.sampleTime}>{point.station_count} contributing stations</p>}
         </>}
-        <p className={styles.sampleTime}>{series?.source}</p>
+        <p className={styles.sampleTime}>{indexDefinitions[metric].source}</p>
       </section>;
     })}</div>
     </details>

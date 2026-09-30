@@ -3,6 +3,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.forecast import LEAD_HOURS_DESCRIPTION
+from app.schemas.forecast import ForecastMetadata
+from app.schemas.metadata import metadata_field
 
 
 class ReliabilityPoint(BaseModel):
@@ -58,6 +60,7 @@ class ForecastMetrics(BaseModel):
 
     target: str = Field(description="Forecast product identifier; see the endpoint's visibility/target table.", examples=["solar-wind-speed"])
     variables: dict[str, VariableMetrics] = Field(description="Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted.")
+    meta: ForecastMetadata | None = metadata_field()
 
     model_config = ConfigDict(json_schema_extra={"examples": [{
         "target": "solar-wind-speed",

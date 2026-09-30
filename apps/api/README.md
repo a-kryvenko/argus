@@ -19,6 +19,63 @@ Public observation routes use `{success,data,error}` and `Cache-Control: no-stor
 Empty storage returns empty series/null values, never invented zeros; dependency
 or storage failures remain HTTP errors.
 
+## Compact response contracts
+
+Forecasts (public and private), forecast metrics, atmospheric density, LEO drag,
+solar-wind/geomagnetic latest and history, and the observation summary return
+compact data by default. Add the boolean query parameter `?meta=true` to include
+typed descriptions in `data.meta`. For the drag POST, this is a query parameter,
+not a request-body field. Omitted or `meta=false` means the block is absent, not
+null. Expanding metadata never changes the shape or values of the main data.
+Missing measurement values remain explicit nulls in either mode.
+
+| Response | Optional metadata location |
+| --- | --- |
+| Forecasts and evaluation metrics | `meta.variables.<variable>.unit`, once per variable, not per forecast point |
+| Solar wind / geomagnetic | `meta.series.<metric>`: labels, units, coordinate frames, sources and processing descriptions |
+| Observation summary | `meta.solar_wind`, `meta.geomagnetic`, `meta.changes_1h`, `meta.southward_bz`, `meta.lookback_minutes` |
+| Atmospheric density | `meta.model`, `meta.history_start`, `meta.background_method`, `meta.background_interpolated_days`, `meta.dtc_method` |
+| LEO drag | `meta.model` and `meta.source` with the density methodology above |
+
+For example, `/public/forecasts/solar-wind-speed?meta=true` adds
+`"meta":{"variables":{"v":{"unit":"km/s"}}}` inside `data`; individual
+predictions have no `unit` field in either mode.
+
+Units and coordinate frames are fixed contracts, not selectable response options:
+
+| Observation variable | Unit / frame |
+| --- | --- |
+| `v` | km/s |
+| `n` | cm^-3 |
+| `t` | K |
+| `bx`, `by`, `bz` | nT, GSM |
+| `bt`, `dst` | nT |
+| `kp` | Dimensionless Kp index |
+
+Summary changes use the corresponding variable's units; southward-Bz duration is
+in sampled minutes. Forecast units are listed in each endpoint's OpenAPI product
+table. Density and drag fields carry units in their names (`rho_kg_m3`,
+`altitude_km`, etc.); density no longer repeats a separate `unit` field.
+
+Always present where applicable: quality, freshness and stale thresholds, native
+interval boundaries, coverage/gaps, aggregate resolution and pending processing,
+spacecraft transitions, risk thresholds/reasons and assumptions. Density and drag
+retain `driver_mode: observed_persistence` and source timestamps; the boolean
+`background_interpolated` identifies gap-filled backgrounds even without metadata.
+Drag's compact `source` also retains `release_id`. Detailed interpolation dates
+are available in metadata. Raw provider flags and aggregate `negative_count`
+remain internal; the public API exposes normalized `quality`.
+
+Hourly normalized `/observations/latest` and `/observations/history` already
+contain only data and have no metadata expansion. `/observations/status` and
+dashboard monitoring are dedicated diagnostic contracts and keep their detail.
+Internal Clio/Prophet/Intelligence contracts keep the provenance and validation
+needed by computation; the API uses separate public projections.
+
+This is an in-place breaking change for the pre-client API. The web observation
+views use fixed units/labels and compact responses. The LEO panel explicitly
+requests metadata to show its density model. Deploy API and web together.
+
 ## Observation reads
 
 Routes below are relative to `/api/v1/public/observations`:

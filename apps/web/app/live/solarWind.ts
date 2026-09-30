@@ -1,35 +1,31 @@
 import type { Coverage, Processing } from './HistoryCoverage';
 export type Metric = 'bx' | 'by' | 'bz' | 'bt' | 'v' | 'n' | 't';
+// Fixed public API units and frames; descriptions need not travel with every poll.
+export const windUnits: Record<Metric, string> = { bx: 'nT', by: 'nT', bz: 'nT', bt: 'nT', v: 'km/s', n: 'cm⁻³', t: 'K' };
+export const windCoordinates: Partial<Record<Metric, string>> = { bx: 'GSM', by: 'GSM', bz: 'GSM' };
 export type Sample = {
   observed_at: string;
   received_at: string;
   value: number | null;
   spacecraft: string;
   quality: 'missing' | 'flagged' | 'unverified';
-  provider_quality: number | null;
   min?: number; max?: number; count?: number; expected_count?: number;
   coverage_percent?: number; source_changes?: number; last_spacecraft?: string;
 };
-export type Metadata = {
-  label: string;
-  unit: string;
-  coordinate_system: string | null;
-  source_url: string;
-  stale_after_seconds: number;
-};
 export type Latest = {
   generated_at: string;
-  series: Record<Metric, Metadata & {
+  series: Record<Metric, {
+    stale_after_seconds: number;
     latest: Sample | null;
     age_seconds: number | null;
     status: 'missing' | 'stale' | 'fresh';
   }>;
 };
 export type History = {
-  resolution_seconds?: number;
+  resolution_seconds: number;
   from: string;
   to: string;
-  series: Partial<Record<Metric, Metadata & { points: Sample[]; coverage?: Coverage; processing?: Processing }>>;
+  series: Partial<Record<Metric, { points: Sample[]; coverage: Coverage; processing?: Processing }>>;
 };
 export type ChartPoint = { time: number } & Partial<Record<Metric, number | null>>;
 

@@ -5,7 +5,9 @@ const issue = "2026-09-28T00:00:00Z";
 const result = {
   inputs, start_time: issue, end_time: "2026-09-29T00:00:00Z", computed_at: issue,
   estimated_altitude_loss_m: 86.4, delta_v_loss_m_s: 0.048, mean_density_kg_m3: 1e-12, mean_drag_accel_m_s2: 5.6e-7,
-  source: { issue_time: issue, observed_at: issue, dtc_observed_at: issue, density_model: "JB2008" },
+  source: { release_id: '00000000-0000-0000-0000-000000000001', issue_time: issue, observed_at: issue,
+    dtc_observed_at: issue, driver_mode: 'observed_persistence', background_interpolated: true },
+  meta: { model: 'circular_leo_drag_v1', source: { model: 'JB2008' } },
   assumptions: ["Circular orbit; constant area and drag coefficient."],
   predictions: Array.from({ length: 25 }, (_, i) => ({
     lead_hours: i, valid_time: new Date(Date.parse(issue) + i * 3600000).toISOString(),
@@ -21,7 +23,7 @@ test.beforeEach(async ({ page }) => {
 
 test("member can calculate, inspect results and retry after unavailable data", async ({ page }) => {
   let calls = 0;
-  await page.route("**/api/v1/public/risks/leo-drag", async route => {
+  await page.route("**/api/v1/public/risks/leo-drag?meta=true", async route => {
     calls++;
     expect(route.request().postDataJSON()).toEqual(inputs);
     await route.fulfill(calls === 1
@@ -34,6 +36,8 @@ test("member can calculate, inspect results and retry after unavailable data", a
   expect(calls).toBe(0);
   await page.getByRole("button", { name: "Calculate drag" }).click();
   await expect(page.getByText("86.4 m", { exact: true })).toBeVisible();
+  await expect(page.getByText("JB2008", { exact: true })).toBeVisible();
+  await expect(page.getByText("Background drivers include interpolated daily values.")).toBeVisible();
   await expect(page.getByRole("img", { name: /Cumulative altitude loss/ }).locator("canvas")).toBeVisible();
   await page.getByText("Hourly estimates", { exact: true }).click();
   await expect(page.getByRole("row")).toHaveCount(26);
@@ -51,7 +55,7 @@ test("member can calculate, inspect results and retry after unavailable data", a
 test("validates positive area and supports a mobile 48-hour request", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   let calls = 0;
-  await page.route("**/api/v1/public/risks/leo-drag", async route => {
+  await page.route("**/api/v1/public/risks/leo-drag?meta=true", async route => {
     calls++;
     expect(route.request().postDataJSON()).toEqual({ ...inputs, horizon_hours: 48 });
     await route.fulfill({ status: 422, json: { success: false, data: null, error: { message: "Outside grid" } } });

@@ -53,6 +53,17 @@ def test_http_contract_and_public_envelope(result, monkeypatch):
         assert response.status_code == 200
         assert response.json()['data']['estimated_altitude_loss_m'] == 100
         assert response.json()['success'] is True
+        compact = response.json()['data']
+        assert 'meta' not in compact and 'model' not in compact
+        assert 'background_method' not in compact['source']
+        assert compact['source']['release_id'] == result['source']['release_id']
+        assert compact['source']['driver_mode'] == 'observed_persistence'
+        assert compact['source']['background_interpolated'] is False
+        expanded = api.post('/public/risks/leo-drag?meta=true', json=REQUEST).json()['data']
+        metadata = expanded.pop('meta')
+        assert metadata['source']['model'] == 'JB2008'
+        assert metadata['source']['dtc_method'] == 'causal_dst_ap_v1'
+        assert expanded == compact
         assert '/public/risks/leo-drag' in api.get('/openapi.json').json()['paths']
 
 

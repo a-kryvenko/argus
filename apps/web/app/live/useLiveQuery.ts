@@ -4,7 +4,7 @@ import { apiRequest } from '../_utils/api';
 import type { Latest } from './solarWind';
 import type { IndexLatest } from './geomagnetic';
 
-export type Derived = { status: 'available' | 'lower_bound' | 'unavailable'; value: number | null; reason?: string; as_of?: string; unit?: string };
+export type Derived = { status: 'available' | 'lower_bound' | 'unavailable'; value: number | null; reason?: string; as_of?: string };
 export type Summary = {
   generated_at: string;
   solar_wind: Latest['series'];

@@ -3,6 +3,10 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from app.services.observations_client import read_observations
+from app.services.observation_responses import public_observations
+from app.schemas.metadata import MetaQuery
+from app.schemas.observations import SolarLatest, SolarHistory
+from app.schemas.response import ApiResponse
 
 METRICS = ("bx", "by", "bz", "bt", "v", "n", "t")
 from typing import Literal
@@ -17,9 +21,10 @@ def selected_metrics(metrics: str | None = Query(default=None, description="Comm
     return selected
 
 
-@router.get("/latest")
+@router.get("/latest", response_model=ApiResponse[SolarLatest])
 async def latest(
     response: Response,
+    meta: MetaQuery = False,
     metrics: list[str] = Depends(selected_metrics),
 ):
     """Latest active-source samples; freshness is based on measurement time.
@@ -28,12 +33,13 @@ async def latest(
     Quality 'unverified' means Argus has not independently validated the sample.
     """
     response.headers["Cache-Control"] = "no-store"
-    return await read_observations('solar-wind/latest', {'metrics': ','.join(metrics)})
+    return public_observations(await read_observations('solar-wind/latest', {'metrics': ','.join(metrics)}), SolarLatest, meta=meta)
 
 
-@router.get("/history")
+@router.get("/history", response_model=ApiResponse[SolarHistory])
 async def history(
     response: Response,
+    meta: MetaQuery = False,
     start: datetime | None = Query(default=None, alias="from", description="Inclusive UTC timestamp; default last 24 hours"),
     end: datetime | None = Query(default=None, alias="to", description="Exclusive UTC timestamp; default now"),
     resolution: Literal["1m", "5m", "1h", "auto"] = Query(default="1m"),
@@ -57,6 +63,7 @@ async def history(
     if not timedelta(0) < end - start <= timedelta(days=days):
         raise HTTPException(422, f"History interval must be positive and at most {days} days for {resolution}")
     response.headers["Cache-Control"] = "no-store"
-    return await read_observations('solar-wind/history', {
+    result = await read_observations('solar-wind/history', {
         'from': start, 'to': end, 'resolution': resolution, 'metrics': ','.join(metrics),
     })
+    return public_observations(result, SolarHistory, meta=meta)

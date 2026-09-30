@@ -36,7 +36,6 @@ export type ForecastPoint = {
   valid_time: string;
   lead_hours: number;
   variables: Record<string, {
-    unit: string;
     continuous: { q10: number; q50: number; q90: number } | null;
     binary: BinaryForecast[];
   }>;
@@ -48,6 +47,7 @@ export type Forecast = {
   horizon_hours: number;
   available_variables: string[];
   predictions: ForecastPoint[];
+  meta?: { variables: Record<string, { unit: string }> };
 };
 
 export type ReliabilityPoint = {
@@ -67,6 +67,7 @@ export type BinaryMetricsPoint = {
 
 export type ForecastMetrics = {
   target: string;
+  meta?: { variables: Record<string, { unit: string }> };
   variables: Record<string, {
     continuous: {
       quantiles: number[];

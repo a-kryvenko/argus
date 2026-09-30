@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { chartPoints, type History, type Metric } from './solarWind';
+import { chartPoints, windUnits, windCoordinates, type History, type Metric } from './solarWind';
 import { useLiveQuery, type LiveSnapshot } from './useLiveQuery';
 import styles from './page.module.css';
 import HistoryCoverage from './HistoryCoverage';
@@ -43,8 +43,8 @@ export default function SolarWindLive({ hours, onHoursChange, snapshot }: { hour
     const age = series?.age_seconds == null ? undefined : series.age_seconds + elapsed;
     const stale = age !== undefined && age > (series?.stale_after_seconds ?? 600);
     return <section className={styles.card} key={metric}>
-      <h3>{labels[metric]}{series?.coordinate_system && <small> · {series.coordinate_system}</small>}</h3>
-      <p className={styles.value}>{number(point?.value)} <span>{series?.unit}</span></p>
+      <h3>{labels[metric]}{windCoordinates[metric] && <small> · {windCoordinates[metric]}</small>}</h3>
+      <p className={styles.value}>{number(point?.value)} <span>{windUnits[metric]}</span></p>
       <p className={point?.value == null || stale || point.quality === 'flagged' ? styles.warning : styles.fresh}>
         {point?.value == null ? 'Measurement unavailable' : stale ? 'Delayed' : 'Recent'}
         {age !== undefined && ` · ${Math.floor(age / 60)} min old`}

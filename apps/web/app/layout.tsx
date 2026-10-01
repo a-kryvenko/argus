@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import SiteChrome from "./_components/SiteChrome";
 
 const font = localFont({
   src: "../fonts/GeistVF.woff",
@@ -31,11 +30,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body
-        className={`${font.className} d-flex flex-column justify-content-between`}
-      >
-        <SiteChrome>{children}</SiteChrome>
-      </body>
+      <body className={font.className}>{children}</body>
     </html>
   );
 }

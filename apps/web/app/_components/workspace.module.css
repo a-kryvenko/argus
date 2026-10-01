@@ -1,4 +1,4 @@
-/* Shared observation and forecast workspace. Other routes retain their theme. */
+/* Shared layout for observations, forecasts, metrics and authenticated sections. */
 .workspace {
   --background: #10161d;
   --background-elevated: #171f28;
@@ -12,8 +12,6 @@
   --primary: #85b8df;
   --secondary: #85b8df;
   --warning: #e5b96c;
-  --glass: #151d26;
-  --glass-hover: #1d2833;
   --radius-md: 3px;
   --sidebar-width: 184px;
   --font-mono: ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
@@ -30,7 +28,7 @@
 .workspace a { text-decoration: none; }
 .workspace button, .workspace select { font: inherit; }
 .workspace a:focus-visible, .workspace button:focus-visible, .workspace select:focus-visible, .workspace summary:focus-visible {
-  outline: 2px solid var(--primary); outline-offset: 3px;
+  outline: 2px solid #85b8df; outline-offset: 3px;
 }
 .workspace button { cursor: pointer; }
 .workspace h1, .workspace h2, .workspace h3 { color: var(--text-primary); }
@@ -39,9 +37,9 @@
 .workspace :global(.recharts-wrapper):focus:not(:focus-visible),
 .workspace :global(.recharts-surface):focus:not(:focus-visible) { outline: none; }
 .workspace :global(.recharts-wrapper):focus-visible,
-.workspace :global(.recharts-surface):focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-.sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width); background: #11171f; border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; }
-.brand { display: flex; align-items: center; gap: 10px; height: 88px; padding: 0 20px; color: #e6edf3; }
+.workspace :global(.recharts-surface):focus-visible { outline: 2px solid #85b8df; outline-offset: -2px; }
+.sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width); background: #11171f; border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 30; overflow-y: auto; scrollbar-width: thin; }
+.brand { display: flex; align-items: center; gap: 10px; height: 88px; flex-shrink: 0; padding: 0 20px; color: #e6edf3; }
 .brand > svg { color: #9bb7cc; flex-shrink: 0; }
 .brand > span { font-weight: 650; font-size: 21px; letter-spacing: .14em; line-height: 1.2; }
 .brand small { display: block; color: var(--text-muted); font-size: 9px; letter-spacing: .25em; font-weight: 500; margin-top: 4px; }
@@ -65,8 +63,10 @@
 .mobileResources { display: none; }
 .refreshState { color: #9bbbac; gap: 7px; }
 .refreshState[data-warning='true'] { color: var(--warning); }
-.workspace :global(.api-links) { gap: 8px 16px; font-size: 11px; margin: 12px 0; }
-.workspace :global(.state-message) { background: #151d26; font-size: 12px; padding: 16px; }
+.workspace :global(.api-links) { display: flex; flex-wrap: wrap; gap: 8px 16px; color: #a9cbe4; font-size: 11px; margin: 12px 0; }
+.workspace :global(.state-message) { background: #151d26; color: #a4b1bf; border: 1px solid #2a3643; border-radius: 3px; font-size: 12px; padding: 16px; margin: 18px 0; text-align: center; }
+.workspace :global(.retry-button) { display: block; margin: 16px auto 0; padding: 8px 14px; min-height: 40px; background: #203040; color: #c8ddef; border: 1px solid #47637a; border-radius: 3px; }
+.workspace :global(.retry-button):hover { background: #2b4055; }
 @media (max-width: 1350px) and (min-width: 761px) {
 .workspace { --sidebar-width: 62px; }
 .brand { justify-content: center; padding: 0; height: 76px; }
@@ -85,7 +85,7 @@
 .brand > svg { width: 23px; }
 .brand > span { font-size: 17px; }
 .brand small { font-size: 7px; }
-.sidebar > .navLabel, .sidebarBottom, .navigation a > span { display: none; }
+.sidebar > .navLabel, .secondaryNavigation, .sidebarBottom, .navigation a > span { display: none; }
 .navigation { flex-direction: row; align-items: center; justify-content: flex-end; padding: 0 10px 0 0; gap: 4px; }
 .navigation a { padding: 8px; min-height: 40px; min-width: 36px; justify-content: center; }
 .commandBar { position: static; height: 40px; padding: 0 16px; }
@@ -109,3 +109,16 @@
 }
 .dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .refreshState[data-tone="neutral"] { color: var(--text-secondary); }
+
+.secondaryNavigation { padding-top: 8px; }
+.secondaryNavigation .navLabel { padding-top: 16px; text-transform: uppercase; }
+.account { margin: 12px 8px 0; border-top: 1px solid #2a3643; color: #a9bfce; }
+.account summary { display: flex; align-items: center; gap: 10px; padding: 14px 10px; cursor: pointer; list-style: none; }
+.account summary::-webkit-details-marker { display: none; }
+.account summary > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.account small { display: block; color: #8b9aaa; font-size: 9px; margin-top: 3px; }
+.account button { display: flex; align-items: center; gap: 8px; padding: 10px; width: 100%; background: #17222d; border: 1px solid #2a3643; border-radius: 3px; color: #b7cddb; font-size: 11px; }
+.account button:disabled { opacity: .5; cursor: wait; }
+.mobileGroupLabel { padding: 10px 12px 4px; font-size: 9px; letter-spacing: .1em; color: #93aabe; text-transform: uppercase; }
+@media (min-width: 761px) and (max-width: 1350px) { .account summary { justify-content: center; padding: 14px 0; } .account summary > span, .account button > span { display: none; } .account button { justify-content: center; padding: 10px 0; } }
+@media (max-width: 760px) { .mobileResources nav { max-height: calc(100svh - 110px); overflow-y: auto; } .mobileResources nav a[aria-current='page'] { background: #263a4b; color: #e0edfa; } }

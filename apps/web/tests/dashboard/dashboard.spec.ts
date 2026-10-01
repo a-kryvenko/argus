@@ -6,7 +6,6 @@ const admin = {
   active: true,
   groups: ["admins"],
   permissions: [
-    "observations.read",
     "users.manage",
     "api_stats.read",
     "project_monitoring.read",
@@ -92,7 +91,6 @@ const stats = {
     "/public/observations/latest",
     "/public/solar-wind/history",
     "/public/geomagnetic/history",
-    "/dashboard/observations",
   ].map((route, i) => ({
     ...summary,
     route,
@@ -162,63 +160,12 @@ async function mockApi(page: Page, user = admin) {
     else if (path === "/users") data = { items: [admin, secondUser], total: 2 };
     else if (path === "/groups")
       data = [{ name: "admins", permissions: admin.permissions }];
-    else if (path === "/observations") {
-      const normalized = url.searchParams.get("kind") === "normalized";
-      data = {
-        columns: normalized
-          ? [
-              "observed_at",
-              "bx",
-              "by",
-              "bz",
-              "v",
-              "n",
-              "t",
-              "kp",
-              "dst",
-              "ap",
-              "f10_7",
-              "s10",
-              "m10",
-              "y10",
-            ]
-          : ["id", "metric", "value", "observed_at"],
-        items: Array.from({ length: 8 }, (_, i) =>
-          normalized
-            ? {
-                observed_at: `2026-09-11T${String(i).padStart(2, "0")}:00:00Z`,
-                bx: 1.2,
-                by: -2.5,
-                bz: 3.1,
-                v: 423.6,
-                n: 5.2,
-                t: 102450,
-                kp: 2.3,
-                dst: -12,
-                ap: 7,
-                f10_7: 143.2,
-                s10: null,
-                m10: null,
-                y10: null,
-              }
-            : {
-                id: i + 1,
-                metric: ["bx", "by", "bz", "v"][i % 4],
-                value: 2.513 + i,
-                observed_at: "2026-09-11T09:00:00Z",
-              },
-        ),
-        total: 1234,
-        page: Number(url.searchParams.get("page") ?? 1),
-        page_size: 50,
-      };
-    }
     await route.fulfill({ json: { success: true, data, error: null } });
   });
   return { writes, reads };
 }
 
-test("overview, chart, desktop navigation and persistent collapse", async ({
+test("overview, chart and shared workspace navigation", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -239,14 +186,10 @@ test("overview, chart, desktop navigation and persistent collapse", async ({
     path: "/tmp/argus-dashboard-overview.png",
     fullPage: true,
   });
-  await page.locator('[data-sidebar="trigger"]').click();
-  await expect(
-    page.locator('[data-state="collapsed"][data-collapsible="icon"]'),
-  ).toBeVisible();
-  await page.reload();
-  await expect(
-    page.locator('[data-state="collapsed"][data-collapsible="icon"]'),
-  ).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Analytics', exact: true }).getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await expect(page.getByRole('navigation', { name: 'Analytics', exact: true }).getByRole('link', { name: 'API statistics', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(
     page.getByRole("link", { name: "API statistics", exact: true }),
   ).toBeVisible();
@@ -260,45 +203,6 @@ test("overview, chart, desktop navigation and persistent collapse", async ({
   expect(errors).toEqual([]);
 });
 
-test("observation filtering, pagination and normalized table", async ({
-  page,
-}) => {
-  const { reads } = await mockApi(page);
-  await page.goto("/dashboard/observations");
-  await expect(
-    page.getByText("Original measurements", { exact: true }),
-  ).toBeVisible();
-  await page.getByLabel("From (UTC)").fill("2026-09-01T00:00");
-  await page.getByLabel("Metric", { exact: true }).fill("bz");
-  await page.getByRole("button", { name: "Apply filters" }).click();
-  await expect
-    .poll(() =>
-      reads.some(
-        (url) =>
-          url.searchParams.get("metric") === "bz" &&
-          url.searchParams.get("start") === "2026-09-01T00:00:00.000Z",
-      ),
-    )
-    .toBeTruthy();
-  await page.getByRole("button", { name: "Next page" }).click();
-  await expect
-    .poll(() => reads.some((url) => url.searchParams.get("page") === "2"))
-    .toBeTruthy();
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
-  await expect(page.getByLabel("Metric", { exact: true })).toHaveValue("");
-  await page.screenshot({
-    path: "/tmp/argus-dashboard-observations.png",
-    fullPage: true,
-  });
-  await page.getByRole("link", { name: "Normalized", exact: true }).click();
-  await expect(
-    page.getByRole("columnheader", { name: "Speed", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("columnheader", { name: "Y10", exact: true }),
-  ).toBeAttached();
-});
-
 test("create and edit dialogs preserve groups and submit correct mutations", async ({
   page,
 }) => {
@@ -308,7 +212,7 @@ test("create and edit dialogs preserve groups and submit correct mutations", asy
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveCSS("position", "fixed");
-  await expect(dialog).toHaveCSS("background-color", "rgb(17, 17, 19)");
+  await expect(dialog).toHaveCSS("background-color", "rgb(16, 23, 30)");
   await dialog.getByLabel("Username", { exact: true }).fill("newuser");
   await dialog
     .getByLabel("Password", { exact: true })
@@ -340,7 +244,7 @@ test("create and edit dialogs preserve groups and submit correct mutations", asy
   });
 });
 
-test("mobile sidebar closes on navigation; wide tables remain contained", async ({
+test("mobile workspace menu closes on navigation; statistics remain contained", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -349,15 +253,13 @@ test("mobile sidebar closes on navigation; wide tables remain contained", async 
   await expect(
     page.getByRole("heading", { name: "Project overview" }),
   ).toBeVisible();
-  await page.locator('[data-sidebar="trigger"]').click();
-  const sidebar = page.getByRole("dialog");
-  await expect(sidebar).toBeVisible();
-  await sidebar
-    .getByRole("link", { name: "Normalized data", exact: true })
-    .click();
-  await expect(sidebar).not.toBeVisible();
+  await page.getByText('Resources', { exact: true }).click();
+  const menu = page.getByRole('navigation', { name: 'Mobile resources' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('link', { name: 'API statistics', exact: true }).click();
+  await expect(menu).toBeHidden();
   await expect(
-    page.getByRole("columnheader", { name: "Speed", exact: true }),
+    page.getByRole("heading", { name: "API statistics", exact: true }),
   ).toBeAttached();
   expect(
     await page.evaluate(
@@ -392,7 +294,7 @@ test("login errors, sign in and sign out", async ({ page }) => {
     page.getByRole("heading", { name: "Project overview" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Account menu" }).click();
-  await page.getByRole("menuitem", { name: "Sign out", exact: true }).click();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard\/login$/);
   expect(writes.some((write) => write.path === "/logout")).toBeTruthy();
 });
@@ -407,7 +309,7 @@ test("permissions hide protected navigation and direct pages", async ({
   );
   await expect(
     page
-      .locator('[data-sidebar="menu"]')
+      .getByRole("complementary", { name: "Workspace navigation" })
       .getByRole("link", { name: "Users & access", exact: true }),
   ).toHaveCount(0);
   await expect(
@@ -419,6 +321,7 @@ test("dashboard styles do not change public typography after client navigation",
   page,
 }) => {
   await mockApi(page);
+  await page.route('**/api/v1/public/forecasts/**', route => route.fulfill({ status: 503, json: { success: false, data: null, error: { message: 'No test forecast' } } }));
   await page.goto("/");
   const before = await page
     .locator("h1")
@@ -428,7 +331,7 @@ test("dashboard styles do not change public typography after client navigation",
       return { fontSize: css.fontSize, color: css.color, margin: css.margin };
     });
   await page.goto("/dashboard");
-  await page.getByRole("link", { name: "Public website", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Forecast overview", exact: true }).click();
   await expect(page).toHaveURL("http://localhost:3000/");
   await expect(page.locator(".dashboard")).toHaveCount(0);
   const after = await page
@@ -451,7 +354,9 @@ test("client landing never requests project monitoring", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Your workspace" }),
   ).toBeVisible();
-  await expect(page.getByText("Client dashboard is coming soon")).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'LEO drag assessment', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Users & access', exact: true })).toHaveCount(0);
+  await page.screenshot({ path: '/tmp/argus-member-workspace.png', fullPage: true });
   expect(
     reads.some((url) => /project-(monitoring|traffic)/.test(url.pathname)),
   ).toBeFalsy();
@@ -588,3 +493,26 @@ for (const count of [0, "0"]) {
     await expect(page.getByText("Project needs attention")).toHaveCount(0);
   });
 }
+
+test('mobile member can open account and sign out from shared resources', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { writes } = await mockApi(page, { ...admin, groups: ['clients'], permissions: [] });
+  await page.goto('/dashboard');
+  await expect(page.getByRole('heading', { name: 'Your workspace' })).toBeVisible();
+  await page.getByText('Resources', { exact: true }).click();
+  const menu = page.getByRole('navigation', { name: 'Mobile resources' });
+  await expect(menu.getByRole('link', { name: 'Users & access' })).toHaveCount(0);
+  await menu.getByRole('button', { name: 'Account menu' }).click();
+  await menu.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard\/login$/);
+  expect(writes.some(write => write.path === '/logout')).toBe(true);
+});
+
+test('restricted sections do not fetch protected data for a member', async ({ page }) => {
+  const { reads } = await mockApi(page, { ...admin, groups: ['clients'], permissions: [] });
+  for (const path of ['/dashboard/users', '/dashboard/api-stats']) {
+    await page.goto(path);
+    await expect(page.locator('.dashboard').getByRole('alert')).toContainText('You do not have access');
+  }
+  expect(reads.some(url => /\/(users|groups|api-stats|project-monitoring)/.test(url.pathname))).toBe(false);
+});

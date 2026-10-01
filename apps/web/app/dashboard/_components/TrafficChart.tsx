@@ -22,7 +22,7 @@ export default function TrafficChart({
         option={{
           animation: false,
           useUTC: true,
-          color: ["#a78bfa", "#fb7185"],
+          color: ["#79b9e6", "#d59191"],
           grid: { left: 48, right: 20, top: 38, bottom: 38 },
           legend: {
             top: 0,
@@ -30,27 +30,27 @@ export default function TrafficChart({
             icon: "circle",
             itemWidth: 7,
             itemHeight: 7,
-            textStyle: { color: "#a1a1aa", fontSize: 11 },
+            textStyle: { color: "#a4b1bf", fontSize: 11 },
           },
           tooltip: {
             trigger: "axis",
             confine: true,
-            backgroundColor: "#202023",
-            borderColor: "#353539",
-            textStyle: { color: "#f4f4f5", fontSize: 12 },
+            backgroundColor: "#1b2632",
+            borderColor: "#3c5062",
+            textStyle: { color: "#e6edf3", fontSize: 12 },
           },
           xAxis: {
             type: "time",
             axisLine: { show: false },
             axisTick: { show: false },
-            axisLabel: { color: "#71717a", fontSize: 10, hideOverlap: true },
+            axisLabel: { color: "#92a4b5", fontSize: 10, hideOverlap: true },
             splitLine: { show: false },
           },
           yAxis: {
             type: "value",
             minInterval: 1,
-            axisLabel: { color: "#71717a", fontSize: 10 },
-            splitLine: { lineStyle: { color: "#27272a", type: "dashed" } },
+            axisLabel: { color: "#92a4b5", fontSize: 10 },
+            splitLine: { lineStyle: { color: "#26333f", type: "dashed" } },
           },
           series: [
             {

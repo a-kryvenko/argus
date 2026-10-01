@@ -132,7 +132,7 @@
 .table th { font-weight: 500; }
 .table th:first-child { text-align: left; }
 .table small { display: block; color: var(--text-muted); }
-.table tbody tr:hover { background: var(--glass-hover); }
+.table tbody tr:hover { background: #1d2833; }
 @media (min-width: 1800px) {
 .workspaceGrid { grid-template-columns: minmax(0, 1fr) 300px; }
 .metricCard { padding: 20px; }

@@ -1,7 +1,5 @@
 import {
   Activity,
-  Database,
-  Layers3,
   LayoutDashboard,
   UsersRound,
   Satellite,
@@ -32,23 +30,6 @@ export const navigation = [
         title: "LEO drag",
         icon: Satellite,
         permission: null,
-      },
-    ],
-  },
-  {
-    title: "Observations",
-    items: [
-      {
-        href: "/dashboard/observations",
-        title: "Original data",
-        icon: Database,
-        permission: "observations.read",
-      },
-      {
-        href: "/dashboard/observations/normalized",
-        title: "Normalized data",
-        icon: Layers3,
-        permission: "observations.read",
       },
     ],
   },

@@ -4,34 +4,34 @@
 
 /* Tailwind preflight is disabled. Theme/reset only the dashboard, including portals. */
 .dashboard {
-  --background: 240 6% 7%;
-  --foreground: 240 5% 96%;
-  --card: 240 5% 9%;
-  --card-foreground: 240 5% 96%;
-  --popover: 240 5% 11%;
-  --popover-foreground: 240 5% 96%;
-  --primary: 255 83% 77%;
-  --primary-foreground: 255 30% 12%;
-  --secondary: 240 4% 16%;
-  --secondary-foreground: 240 5% 96%;
-  --muted: 240 4% 14%;
-  --muted-foreground: 240 5% 63%;
-  --accent: 240 4% 17%;
-  --accent-foreground: 240 5% 96%;
+  --background: 212 29% 9%;
+  --foreground: 208 35% 93%;
+  --card: 212 29% 12%;
+  --card-foreground: 208 35% 93%;
+  --popover: 211 29% 15%;
+  --popover-foreground: 208 35% 93%;
+  --primary: 206 58% 70%;
+  --primary-foreground: 212 35% 12%;
+  --secondary: 211 28% 19%;
+  --secondary-foreground: 208 35% 93%;
+  --muted: 213 25% 16%;
+  --muted-foreground: 210 19% 65%;
+  --accent: 210 30% 21%;
+  --accent-foreground: 208 35% 93%;
   --destructive: 0 63% 45%;
   --destructive-foreground: 0 0% 100%;
-  --border: 240 4% 18%;
-  --input: 240 4% 23%;
-  --ring: 255 83% 77%;
-  --sidebar-background: 240 6% 6%;
-  --sidebar-foreground: 240 5% 75%;
-  --sidebar-primary: 255 83% 77%;
-  --sidebar-primary-foreground: 255 30% 12%;
-  --sidebar-accent: 240 4% 15%;
-  --sidebar-accent-foreground: 240 5% 98%;
-  --sidebar-border: 240 4% 15%;
-  --sidebar-ring: 255 83% 77%;
-  --radius: 0.75rem;
+  --border: 211 23% 21%;
+  --input: 210 22% 28%;
+  --ring: 206 58% 70%;
+  --sidebar-background: 214 29% 9%;
+  --sidebar-foreground: 210 20% 72%;
+  --sidebar-primary: 206 58% 70%;
+  --sidebar-primary-foreground: 212 35% 12%;
+  --sidebar-accent: 212 28% 16%;
+  --sidebar-accent-foreground: 208 35% 95%;
+  --sidebar-border: 212 28% 16%;
+  --sidebar-ring: 206 58% 70%;
+  --radius: 0.25rem;
   width: 100%;
   min-height: 100svh;
   color: hsl(var(--foreground));
@@ -98,9 +98,7 @@
 .dashboard :where(::selection) {
   background: hsl(var(--primary) / 0.3);
 }
-.dashboard :where(.recharts-wrapper) {
-  outline: none;
-}
+.dashboard :where(.recharts-wrapper, .recharts-surface):focus:not(:focus-visible) { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   .dashboard *,
   .dashboard *::before,
@@ -108,4 +106,17 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* The shared shell owns navigation; Tailwind and portal tokens stay inside this pane. */
+.dashboard-pane { min-height: calc(100svh - 52px); }
+.dashboard .dashboard-content { display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 1900px; margin: 0 auto; padding: 27px 26px 22px; }
+.dashboard .dashboard-pending { display: flex; min-height: calc(100svh - 52px); flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; }
+.dashboard .dashboard-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid hsl(var(--border)); margin-top: 8px; padding-top: 15px; font-size: 10px; color: hsl(var(--muted-foreground)); }
+.dashboard [role="dialog"] { border-radius: 4px; }
+.dashboard .dashboard-login { display: grid; place-items: center; min-height: calc(100svh - 52px); padding: 40px 20px; }
+.dashboard .login-card { width: 100%; max-width: 420px; padding: 28px; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); border-radius: 4px; }
+@media (max-width: 760px) {
+  .dashboard .dashboard-content { padding: 22px 16px 16px; gap: 20px; }
+  .dashboard-pane, .dashboard .dashboard-login, .dashboard .dashboard-pending { min-height: calc(100svh - 102px); }
 }

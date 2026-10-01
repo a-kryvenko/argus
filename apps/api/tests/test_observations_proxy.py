@@ -21,15 +21,12 @@ def test_public_routes_use_clio_without_database_dependency(monkeypatch):
         assert client.get('/public/observations/history?limit=169').status_code == 422
 
 
-def test_dashboard_authorization_precedes_clio_read(monkeypatch):
-    read = AsyncMock()
-    monkeypatch.setattr(dashboard, 'read_observations', read)
+def test_dashboard_observation_browser_is_removed():
     app = FastAPI()
     app.include_router(dashboard.router)
-    app.dependency_overrides[dashboard.get_db_session] = lambda: object()
     with TestClient(app) as client:
-        assert client.get('/dashboard/observations').status_code == 401
-    read.assert_not_awaited()
+        assert client.get('/dashboard/observations').status_code == 404
+        assert client.get('/dashboard/observations?kind=normalized').status_code == 404
 
 
 @pytest.mark.parametrize('status', [401, 403, 500, 503])
@@ -45,15 +42,15 @@ def test_owner_failure_maps_to_503_without_sql_fallback(monkeypatch, status):
 
 def test_versioned_read_path_and_authentication(monkeypatch):
     def response(request):
-        assert request.url.path == '/internal/v1/observations/browse'
-        assert request.url.params['page'] == '2'
+        assert request.url.path == '/internal/v1/observations/history'
+        assert request.url.params['limit'] == '2'
         assert request.headers['authorization'] == 'Bearer secret'
         return httpx.Response(200, json={'success': True, 'data': {'items': []}, 'error': None})
     client = httpx.AsyncClient(transport=httpx.MockTransport(response))
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'secret')
     monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **_: client)
-    assert asyncio.run(service.read_observations('browse', {'page': 2}))['data']['items'] == []
+    assert asyncio.run(service.read_observations('history', {'limit': 2}))['data']['items'] == []
 
 
 def test_validation_response_is_preserved(monkeypatch):
@@ -62,5 +59,5 @@ def test_validation_response_is_preserved(monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'secret')
     monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **_: client)
-    result = asyncio.run(service.read_observations('browse'))
+    result = asyncio.run(service.read_observations('history'))
     assert result.status_code == 422

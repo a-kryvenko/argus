@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { products } from "../_config/products";
+import WorkspaceShell from "../_components/WorkspaceShell";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
@@ -19,9 +20,10 @@ const sections = [
 
 export default function Help() {
   return (
-    <main className={`container ${styles.page}`}>
+    <WorkspaceShell section="Help & methodology" contentId="help-content" status="Reference guide">
+    <main id="help-content" className={styles.page}>
       <header className={styles.hero}>
-        <p className={styles.eyebrow}>ARGUS SUNWATCH · HELP</p>
+        <p className={styles.eyebrow}>WORKSPACE GUIDE / 06 TOPICS</p>
         <h1>Reading charts and data</h1>
         <p className={styles.intro}>
           Chart values, forecast probabilities, observation timestamps and model evaluation metrics.
@@ -55,7 +57,7 @@ export default function Help() {
             <div className={styles.cards}>
               <article className={styles.card}>
                 <h3>Median & quantiles</h3>
-                <p>The <strong>Median</strong> is the 50th percentile (q50), the model’s central estimate. <strong>Low</strong> and <strong>High</strong> are the 10th and 90th percentiles (q10 and q90), available in the chart tooltip.</p>
+                <p>The <strong>Median</strong> is the 50th percentile (q50), the model’s central estimate. <strong>q10</strong> and <strong>q90</strong> are the 10th and 90th percentiles (q10 and q90), available in the chart tooltip.</p>
                 <p>The q10–q90 range represents the model’s central 80% prediction interval. It is not a guaranteed minimum or maximum; actual coverage depends on model calibration.</p>
               </article>
               <article className={styles.card}>
@@ -106,7 +108,7 @@ export default function Help() {
             <dl className={styles.definitions}>
               <div><dt>Brier score</dt><dd>Measures the error of event probabilities against observed outcomes. Lower is better; zero is perfect.</dd></div>
               <div><dt>ROC AUC</dt><dd>Measures how well the model ranks events above non-events. Higher is better; 0.5 corresponds to random ranking and 1 to perfect ranking. It does not measure probability calibration.</dd></div>
-              <div><dt>Precision chart</dt><dd>This chart uses average precision, which summarizes the precision–recall trade-off across thresholds. Higher is better; interpret it alongside how common the event is.</dd></div>
+              <div><dt>Average precision</dt><dd>This chart uses average precision, which summarizes the precision–recall trade-off across thresholds. Higher is better; interpret it alongside how common the event is.</dd></div>
               <div><dt>Reliability</dt><dd>Compares predicted probabilities with observed event frequencies. For a well-calibrated model, events assigned about 70% probability should occur about 70% of the time across many comparable predictions.</dd></div>
               <div><dt>Continuous metrics</dt><dd>For quantile forecasts, the available metrics are shown separately for each variable. MAE and RMSE, when provided, measure prediction error in the variable’s units; lower values are better.</dd></div>
             </dl>
@@ -131,6 +133,8 @@ export default function Help() {
           </section>
         </div>
       </div>
+      <footer className={styles.footer}><span>ARGUS Sunwatch · Help & methodology</span><a href="#help-content">Back to top ↑</a></footer>
     </main>
+    </WorkspaceShell>
   );
 }

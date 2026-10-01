@@ -15,7 +15,6 @@ from app.db.session import get_db_session
 from app.db.models.dashboard import User, Group, Membership, Session, LoginAttempt, ApiMetric
 from app.dashboard_auth import COOKIE, DUMMY_HASH, check_origin, current_user, digest, hash_password, verify_password, require, user_info
 from app.schemas.response import success_response
-from app.services.observations_client import read_observations
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 
@@ -155,17 +154,6 @@ async def update_user(user_id: int, body: UserUpdate, actor: User = Depends(requ
         await db.execute(delete(Session).where(Session.user_id == user.id))
     await db.commit()
     return success_response(await user_info(db, user))
-
-
-@router.get('/observations', dependencies=[Depends(require('observations.read'))])
-async def observations(kind: Literal['raw', 'normalized'] = 'raw', page: int = Query(1, ge=1, le=100000),
-    page_size: int = Query(50, ge=1, le=200), order: Literal['asc', 'desc'] = 'desc',
-    start: datetime | None = None, end: datetime | None = None,
-    metric: str | None = Query(None, max_length=16)):
-    return await read_observations('browse', {
-        'kind': kind, 'page': page, 'page_size': page_size, 'order': order,
-        'start': start, 'end': end, 'metric': metric,
-    })
 
 
 @router.get('/api-stats', dependencies=[Depends(require('api_stats.read'))])

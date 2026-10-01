@@ -6,8 +6,7 @@ Local adaptations:
 
 - Imports resolve through the web app's `@/` alias.
 - Radix portals use `dashboardPortal()` so the scoped dashboard theme applies.
-- The sidebar skeleton has a deterministic width for React rendering purity.
-- `useIsMobile` uses `useSyncExternalStore` for a stable server snapshot.
+- Cards use the workspace's compact corners and flat surfaces.
 
 Tailwind 3 utilities and tokens are scoped to `.dashboard`. These components
 currently belong to the dashboard; using them on public pages requires an

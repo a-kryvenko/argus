@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.session import get_db_session
 from app.db.models.dashboard import Session, ApiMetric
-from clio.db.models.measurement import Measurement
 from clio.db.models.normalized_observation import NormalizedObservation
 from app.routers.dashboard import router, create_user, UserCreate
 from app.routers.public.observations import router as public_router
@@ -55,15 +54,13 @@ async def verify():
             created = True
         async with engine.begin() as conn:
             await conn.run_sync(lambda c: migrate(c, 'upgrade'))
-            for model in [Measurement, NormalizedObservation]:
+            for model in [NormalizedObservation]:
                 await conn.run_sync(model.__table__.create)
         async with factory() as db:
             primary = await create_user(db, UserCreate(username='Admin', password='administrator-password', groups=['admins']))
             other = await create_user(db, UserCreate(username='other', password='other-admin-password', groups=['admins']))
             reader = await create_user(db, UserCreate(username='reader', password='reader-password'))
             now = datetime.now(timezone.utc).replace(microsecond=0)
-            for metric in ['bx', 'by', 'bz']:
-                db.add(Measurement(metric=metric, value=1.0, observed_at=now))
             db.add(NormalizedObservation(observed_at=now, bx=1, by=2, bz=3, v=400, n=2, t=1, kp=1, dst=1, ap=1, f10_7=1))
             await db.commit()
         app = FastAPI()
@@ -83,7 +80,7 @@ async def verify():
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
                 assert (await client.get('/public/observations/latest')).status_code == 200
-                for path in ['me', 'observations', 'users', 'groups', 'api-stats']:
+                for path in ['me', 'users', 'groups', 'api-stats']:
                     assert (await client.get('/dashboard/'+path)).status_code == 401
                 async def login(c, username='admin', password='administrator-password'):
                     return await c.post('/dashboard/login', json={'username': username, 'password': password})
@@ -95,21 +92,13 @@ async def verify():
                 assert response.json()['data']['groups'] == ['admins']
                 assert (await client.get('/dashboard/me')).status_code == 200
                 assert (await client.post('/dashboard/logout', headers={'Origin': 'https://evil.test'})).status_code == 403
-                raw = (await client.get('/dashboard/observations?page_size=2&order=asc')).json()['data']
-                assert raw['total'] == 3 and len(raw['items']) == 2
-                second = (await client.get('/dashboard/observations?page_size=2&page=2&order=asc')).json()['data']
-                assert len(second['items']) == 1 and second['items'][0]['id'] != raw['items'][0]['id']
-                assert (await client.get('/dashboard/observations?metric=bz')).json()['data']['total'] == 1
-                assert (await client.get('/dashboard/observations?kind=normalized')).json()['data']['total'] == 1
-                assert (await client.get('/dashboard/observations?start=2026-01-01')).status_code == 422
-                assert (await client.get('/dashboard/observations?page=0')).status_code == 422
-                assert (await client.get('/dashboard/observations?start=2099-01-01T00:00:00Z')).json()['data']['total'] == 0
+                assert (await client.get('/dashboard/observations')).status_code == 404
                 assert (await client.post('/dashboard/users', json={'username': 'admin', 'password': 'some-long-password'})).status_code == 409
                 assert (await client.post('/dashboard/users', json={'username': 'new', 'password': 'some-long-password', 'groups': ['unknown']})).status_code == 422
                 assert (await client.post('/dashboard/users', json={'username': 'new', 'password': 'some-long-password', 'groups': ['admins']})).status_code == 200
                 assert (await client.patch(f"/dashboard/users/{primary['id']}", json={'active': False})).status_code == 409
                 assert (await login(secondary, 'reader', 'reader-password')).status_code == 200
-                for path in ['observations', 'users', 'groups', 'api-stats']:
+                for path in ['users', 'groups', 'api-stats']:
                     assert (await secondary.get('/dashboard/'+path)).status_code == 403
                 assert (await client.patch(f"/dashboard/users/{reader['id']}", json={'groups': ['admins']})).status_code == 200
                 assert (await secondary.get('/dashboard/me')).status_code == 401

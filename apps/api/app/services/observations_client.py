@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 READS = frozenset({
     'latest', 'history', 'status', 'summary', 'solar-wind/latest',
-    'solar-wind/history', 'geomagnetic/latest', 'geomagnetic/history', 'browse',
+    'solar-wind/history', 'geomagnetic/latest', 'geomagnetic/history',
 })
 
 

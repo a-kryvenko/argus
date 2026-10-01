@@ -38,6 +38,7 @@ a shared lead-hour inspector, with metric and variable selectors, horizon contro
 and accessible value tables. Charts use the actual evaluated lead hours and retain
 gaps and unavailable scores instead of shifting values or replacing them with zero.
 
+
 ## About this repository
 
 This repository contains the web application, public API and services that collect

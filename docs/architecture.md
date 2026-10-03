@@ -93,7 +93,14 @@ files. See [local setup](../README_DEPLOY.md#local-development),
 ## Validation
 
 `./scripts/test-python -q` runs the application, public package and private backend
-suites. Private tests require the private checkout and installed dependencies.
+and training suites. Private tests require the private checkout and installed dependencies.
+Repository-wide architecture, deployment, CLI wrapper and cross-service tests live
+in `tests/`. Application tests, including their integration scenarios, live in
+`apps/<app>/tests/`; package tests live in `packages/<package>/tests/` and training
+tests in `scripts/training/tests/`. Shared disposable-database helpers live in
+`tests/support/`. Database URL contracts for all four services are tested once in
+`tests/test_database_urls.py`.
+
 For domain integration, run `./scripts/test-domain-storage` with uv, Docker and
 both private checkouts available. This is the exact entry point used in CI and
 before deployment. It creates and removes a disposable PostgreSQL 17 container,

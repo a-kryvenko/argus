@@ -1,7 +1,7 @@
 """Real PostgreSQL storage/retry test; provider reads are fixed deterministic inputs."""
 from datetime import UTC, datetime, timedelta
 
-from test_prophet_ledger import recorder_setup, recorder_database, database, store_product
+from .storage import recorder_setup, recorder_database, database, store_product
 from argus_prophet.services.runs import RunRecorder
 from argus_prophet.services import verification
 from argus_prophet.db.session import connect

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from test_domain_storage import database, migrate, runtime
+from domain_storage import database, migrate, runtime
 
 
 def test_gong_collection_is_immutable_and_reads_are_causal(database, monkeypatch):

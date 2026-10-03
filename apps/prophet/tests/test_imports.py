@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_generation_imports_without_model_runtime():

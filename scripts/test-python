@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export PYTHONPATH="$PWD/apps/api:$PWD/apps/clio/src:$PWD/apps/prophet/src:$PWD/apps/intelligence/src:$PWD/packages/common/src:$PWD/packages/forecast/src:$PWD/packages/forecast-core/src:$PWD/packages/intelligence-core/src:$PWD/tests/integration${PYTHONPATH:+:$PYTHONPATH}"
-exec .venv/bin/python -m pytest --import-mode=importlib tests packages/forecast/tests apps/api/tests apps/clio/tests apps/prophet/tests apps/intelligence/tests packages/forecast-core/tests packages/intelligence-core/tests "$@"
+export PYTHONPATH="$PWD/apps/api:$PWD/apps/clio/src:$PWD/apps/prophet/src:$PWD/apps/intelligence/src:$PWD/packages/common/src:$PWD/packages/forecast/src:$PWD/packages/forecast-core/src:$PWD/packages/intelligence-core/src${PYTHONPATH:+:$PYTHONPATH}"
+exec .venv/bin/python -m pytest --import-mode=importlib tests packages/common/tests scripts/training/tests packages/forecast/tests apps/api/tests apps/clio/tests apps/prophet/tests apps/intelligence/tests packages/forecast-core/tests packages/intelligence-core/tests "$@"

@@ -7,7 +7,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  public-boundaries:
+  test-isolation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -15,24 +15,11 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: |
-            packages/*/pyproject.toml
-            .github/workflows/architecture.yml
-      - name: Install public packages and test dependencies
-        # The serialization tests exercise the optional joblib model format.
-        run: python -m pip install -e packages/common -e packages/forecast pytest httpx fastapi 'joblib>=1.5.3' scikit-learn
-      - name: Check boundaries and public imports
-        env:
-          PYTHONPATH: apps/intelligence/src
-        run: >-
-          python -m pytest
-          tests/test_architecture.py
-          apps/intelligence/tests
-          tests/test_domain_deployment.py
-          tests/test_release_deployment.py tests/test_domain_test_runner.py
-          tests/test_argus_cli.py tests/test_argus_entrypoint.py
-          tests/test_config.py tests/test_prophet_imports.py
-          packages/forecast/tests
+          cache-dependency-path: .github/workflows/architecture.yml
+      - name: Install test dependencies
+        run: python -m pip install pytest
+      - name: Check clio, prophet and intelligence isolation
+        run: python -m pytest tests/test_application_isolation.py
 
   domain-storage:
     # Forks and Dependabot cannot access the private runtime repositories.

@@ -64,14 +64,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from clio.cli import main
 from argus_prophet.cli import main
 from argus_intelligence.cli import main
-sys.path.insert(0, 'tests/integration')
-from test_domain_storage import provisioned_database, migrate
+sys.path.insert(0, 'tests/support')
+from domain_storage import provisioned_database, migrate
 with tempfile.TemporaryDirectory() as directory:
     with provisioned_database(Path(directory)) as (_, _, environment):
         migrate(environment)
 """)
         print('Domain storage, ownership, scheduling and verification', flush=True)
-        python('-m', 'pytest', '-q', 'tests/test_database_urls.py', 'tests/integration', *sys.argv[1:])
+        python('-m', 'pytest', '--import-mode=importlib', '-q',
+               'tests/test_database_urls.py', 'tests/integration',
+               'apps/clio/tests/integration', 'apps/prophet/tests/integration',
+               'apps/intelligence/tests/integration', *sys.argv[1:])
         for filename in ('test_solar_wind_aggregation.py', 'test_solar_wind_retention.py', 'test_observation_recovery.py'):
             python(str(ROOT / 'apps/clio/tests/integration' / filename))
         python('-m', 'pytest', '-q', 'apps/prophet/tests/test_observations.py', '-k', 'verification')

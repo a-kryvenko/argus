@@ -1,6 +1,6 @@
 """Per-product scheduling, transaction boundaries and crash recovery on PostgreSQL."""
-from test_prophet_ledger import recorder_database, database, store_product
-from test_domain_storage import runtime
+from .storage import recorder_database, database, store_product
+from domain_storage import runtime
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -267,7 +267,7 @@ def test_product_slot_migration_preserves_aggregate_history(database, monkeypatc
     import subprocess
     import sys
     from uuid import uuid4
-    from test_domain_storage import ROOT
+    from domain_storage import ROOT
     from argus_prophet.scheduling.jobs import product_pending
     dsn, passwords, environment = database
     command = [sys.executable, '-c', 'from argus_prophet.cli import main; main()', 'migrate', 'upgrade']

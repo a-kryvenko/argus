@@ -1,9 +1,9 @@
 """Uses the explicitly configured disposable PostgreSQL server, never production."""
-from test_domain_storage import database, migrate, runtime
+from domain_storage import ROOT, database, runtime
+from .storage import recorder_database, recorder_setup, store_product
 import gzip
 import hashlib
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -11,34 +11,6 @@ from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.observation import Observation
 from argus_prophet.services.runs import RunRecorder, describe_run
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
-
-
-@pytest.fixture
-def recorder_database(database, monkeypatch, tmp_path):
-    dsn, passwords, environment = database
-    migrate(environment)
-    for key, value in environment.items():
-        if key.startswith('PROPHET_DB_'):
-            monkeypatch.setenv(key, value)
-    return dsn, passwords, SimpleNamespace(workdir=tmp_path, models_registry={})
-
-
-@pytest.fixture
-def recorder_setup(recorder_database):
-    from argus_prophet.scheduling.jobs import generation_lock
-    with generation_lock():
-        yield recorder_database
-
-
-def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00'):
-    from common.schemas.forecast_release import PREDICTION_COLUMNS
-    valid = (datetime.fromisoformat(issue) + timedelta(hours=1)).isoformat()
-    for name in names:
-        columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
-        values = [issue, valid, '1', *('0' for _ in PREDICTION_COLUMNS[name])]
-        content = ','.join(columns) + '\n' + ','.join(values) + '\n'
-        run.store(name, content.encode('utf-8'), {}, 1, columns)
-    return content
 
 
 def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
@@ -197,7 +169,6 @@ def test_status_reports_product_failure_not_unrelated_success(recorder_setup):
 
 def test_export_migration_preserves_release_bytes_on_upgrade_and_downgrade(recorder_setup):
     import importlib.util
-    from pathlib import Path
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
     from sqlalchemy import create_engine
@@ -207,7 +178,7 @@ def test_export_migration_preserves_release_bytes_on_upgrade_and_downgrade(recor
     expected = store_product(run)
     run.finish()
     release = read_release('dst')
-    path = Path(__file__).resolve().parents[2] / 'apps/prophet/src/argus_prophet/migrations/versions/20260918_remove_exports.py'
+    path = ROOT / 'apps/prophet/src/argus_prophet/migrations/versions/20260918_remove_exports.py'
     spec = importlib.util.spec_from_file_location('remove_exports', path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

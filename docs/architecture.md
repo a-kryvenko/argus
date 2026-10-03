@@ -1,5 +1,108 @@
 # Architecture
 
+## Service map
+
+Arrows show the direction of requests or storage access, not the direction of
+response data. Internal service calls use HTTP; each service accesses only its
+own database. Worker and HTTP processes are shown separately where their roles differ.
+
+```mermaid
+flowchart TB
+    web["apps/web · Next.js"] -->|HTTP| api["apps/api · Public API"]
+    clients["External API clients"] -->|HTTP| api
+
+    subgraph clio["apps/clio · Observations"]
+        cw["Clio worker"]
+        ch["Clio HTTP"]
+    end
+    subgraph prophet["apps/prophet · Forecasts"]
+        pw["Prophet worker"]
+        ph["Prophet HTTP"]
+    end
+    subgraph intelligence["apps/intelligence · Impacts"]
+        ih["Intelligence HTTP · LEO drag"]
+        iw["Intelligence worker · Release integration stub"]
+    end
+    subgraph postgres["One PostgreSQL instance · Four isolated databases"]
+        cdb[("clio")]
+        pdb[("argus_prophet")]
+        idb[("argus_intelligence")]
+        adb[("argus_api")]
+    end
+
+    cw -->|Fetch observations and images| providers["SWPC / OMNI / JSOC / GONG / other providers"]
+    cw -->|Write observations and archive records| cdb
+    cw -->|Write AIA / HMI files| images["Clio image archive · Shared disk"]
+    ch -->|Read image catalog| images
+    ch -->|Read| cdb
+    pw -->|HTTP · Read observations| ch
+    pw -->|Write snapshots, forecasts and verification| pdb
+    ph -->|Read releases and status| pdb
+    ih -->|HTTP · Read density release| ph
+    ih -->|Calculate assessment| core["packages/intelligence-core · Private backend"]
+    iw -->|HTTP · Poll solar-wind-speed releases| ph
+    iw -->|Write attempts and stub results| idb
+    api -->|HTTP · Observations| ch
+    api -->|HTTP · Forecasts| ph
+    api -->|HTTP · Drag assessment| ih
+    api -->|Sessions and usage statistics| adb
+    api -->|Read| metrics["Static model evaluation files"]
+```
+
+Intelligence's HTTP assessment path does not use its worker database. The worker
+currently records integration stub results; it does not calculate drag assessments.
+See the service READMEs for [Clio](../apps/clio/README.md),
+[Prophet](../apps/prophet/README.md), [Intelligence](../apps/intelligence/README.md)
+and the [public API](../apps/api/README.md).
+
+## Observation and forecast data flow
+
+Here arrows show **data movement**. Collection, generation and verification run
+on their own schedules or through explicit commands. Public reads serve stored
+observations and releases without triggering collection or forecast generation.
+
+```mermaid
+flowchart TD
+    sources["External observation providers"] --> collect["Clio · Live collection and historical backfill"]
+    collect --> stored["Clio DB · Measurements and archive records"]
+    collect --> images["Shared disk · AIA / HMI image files"]
+    stored --> prepare["Clio · Aggregation and normalization"]
+    prepare --> inputs["Clio DB · Aggregates and normalized observations"]
+    stored --> reads["Clio HTTP · Stored observation contracts"]
+    inputs --> reads
+    images -->|Image catalog| reads
+    reads -->|Forecast inputs| snapshot["Prophet · Save input snapshot"]
+    snapshot --> calculate["Per-product calculation processes"]
+    models["Configured model artifacts + forecast / forecast-core"] --> calculate
+    calculate -->|Serialized results| coordinator["Prophet coordinator · Save results"]
+    coordinator --> complete{"Product complete?"}
+    complete -->|Yes| release["Prophet DB · Publish product release"]
+    complete -->|No| previous["Keep previous published release"]
+    release --> serving["Prophet HTTP · Stored releases"]
+    previous --> serving
+    serving --> api["Public API"]
+    reads -->|Observations| api
+    api --> web["Web UI and external clients"]
+
+    release --> verify["Prophet verification · Compare forecast with observations"]
+    reads -->|Raw measurements as target hours finish| verify
+    verify --> scores["Prophet DB · Verification records"]
+    scores --> report["CLI verification report"]
+    static["Static historical model evaluation files"] -->|Separate metrics path| api
+```
+
+Products publish independently. Failed calculations leave the previous release
+available; calculation processes receive saved inputs and do not write to the
+database. Verification evaluates existing releases as observations arrive, retains
+pending or missing targets, and does not update the static website model metrics.
+Image storage is split: AIA/HMI files live on disk, while GONG FITS payloads live
+in Clio's database; the Clio SDO HTTP endpoint returns file references and metadata.
+See [forecast workflows](forecast-workflows.md) for the verification protocol.
+
+These diagrams describe runtime boundaries and data flow; the tables below map
+them to repository packages and database ownership. Update the diagrams when
+service contracts, storage ownership or publication paths change.
+
 ## Services and packages
 
 | Component | Responsibility |

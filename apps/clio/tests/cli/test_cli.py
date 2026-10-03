@@ -19,7 +19,7 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
     monkeypatch.setattr(cli.importlib, 'import_module', lambda name: SimpleNamespace(run=command))
     monkeypatch.setattr(session, 'dispose_engine', dispose)
     with pytest.raises(ValueError, match='command failed'):
-        cli.invoke('aggregate', args)
+        cli.invoke('normalize', args)
     command.assert_awaited_once_with(args)
     dispose.assert_awaited_once()
     assert sys.argv is original
@@ -28,7 +28,6 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
 @pytest.mark.parametrize(('argv', 'job', 'command'), [
     (['backfill', '--from', '2026-08-31', '--to', '2026-09-01'], 'refresh', 'backfill'),
     (['normalize'], 'refresh', 'normalize'),
-    (['aggregate', '--limit', '12'], 'aggregate', 'aggregate'),
     (['collect', 'kp', 'dst'], 'live', 'collect'),
     (['collect', 'aia193'], 'aia-live', 'collect'),
     (['backfill', 'aia193'], 'aia', 'backfill'),
@@ -57,7 +56,7 @@ def test_help_and_invalid_arguments_do_not_run_or_lock(monkeypatch, argv):
     execute.assert_not_called()
 
 
-@pytest.mark.parametrize('command', ['audit', 'cleanup', 'check-health'])
+@pytest.mark.parametrize('command', ['check-health'])
 def test_diagnostic_exit_status_is_preserved(monkeypatch, command):
     monkeypatch.setattr(cli, 'invoke', lambda name, args: 1)
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())

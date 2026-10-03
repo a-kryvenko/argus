@@ -3,6 +3,8 @@
 Clio collects space-weather observations, fills historical gaps, normalizes numeric
 measurements and stores solar images. Its HTTP API serves stored data to other services.
 
+Database schema: [README_DB.md](README_DB.md).
+
 ## Observations
 
 Schedules and source priorities: [project.yaml](../../configs/project.yaml).
@@ -11,11 +13,11 @@ Live and historical sources are separate; Sources declared in priority order.
 
 | Metric | Updates frequency | Source(s), ordered by priority | Notes |
 | --- | --- | --- | --- |
-| v | Live: 1 min; backfill: 6 h | Live: SWPC propagated plasma; history: OMNI, ACE, SOHO/CELIAS | Solar-wind speed, km/s; hourly history, 60-day backfill. |
-| n | Live: 1 min; backfill: 6 h | Live: SWPC propagated plasma; history: OMNI, ACE, SOHO/CELIAS | Proton density, cm⁻³; hourly history, 60-day backfill. |
-| t | Live: 1 min; backfill: 6 h | Live: SWPC propagated plasma; history: OMNI, ACE, SOHO/CELIAS | Proton temperature, K; hourly history, 60-day backfill. |
+| v | Live: 1 min; backfill: 6 h | Live: SWPC native RTSW plasma; history: OMNI, ACE, SOHO/CELIAS | Solar-wind speed, km/s; hourly history, 60-day backfill. |
+| n | Live: 1 min; backfill: 6 h | Live: SWPC native RTSW plasma; history: OMNI, ACE, SOHO/CELIAS | Proton density, cm⁻³; hourly history, 60-day backfill. |
+| t | Live: 1 min; backfill: 6 h | Live: SWPC native RTSW plasma; history: OMNI, ACE, SOHO/CELIAS | Proton temperature, K; hourly history, 60-day backfill. |
 | b (`bt`) | Live: 1 min | SWPC RTSW magnetic feed; NOAA selects the active spacecraft | Total field, nT; native 1-minute L1 measurements, no propagation or configured historical fallback. |
-| bz | Live: 1 min; backfill: 6 h | Live: SWPC propagated magnetic field; history: OMNI | GSM Bz, nT; hourly history, 60-day backfill. |
+| bz | Live: 1 min; backfill: 6 h | Live: SWPC native RTSW magnetic field; history: OMNI | GSM Bz, nT; hourly history, 60-day backfill. |
 | kp | Live: 1 min; backfill: 6 h | Live: SWPC estimated Kp; history: OMNI | 3-hour index; 60-day backfill. |
 | ap | Live: 1 min; backfill: 6 h | Live: SWPC Kp feed (`a_running`); history: OMNI | 3-hour ap, nT; 60-day backfill. |
 | dst | Live: 5 min; backfill: 6 h | Live: Kyoto Dst via SWPC; history: OMNI | Hourly index, nT; 60-day backfill. |
@@ -24,8 +26,8 @@ Live and historical sources are separate; Sources declared in priority order.
 | hmi | Live: 5 min | JSOC HMI `M_720s_nrt` FITS | Hourly 512×512 LOS magnetograms, Gauss; 144-hour retention. |
 | gong | Live: 1 h; backfill: 6 h | Live: `gong.live`; history: `gong.archive` | Hourly magnetograms and stored features; 2-day backfill. |
 
-Native RTSW also collects `v`, `n`, `t`, `bx`, `by`, `bz` every minute, separately
-from propagated observations. `bx` and `by` follow the same configured policy as `bz`.
+Native RTSW is the single live source for `v`, `n`, `t`, `bx`, `by`, `bz`, `bt`,
+stored in `measurement` and used for normalization. `bx` and `by` follow the same configured policy as `bz`.
 Additional solar indices `s10`, `m10`, `y10` use calibrated GOES data: hourly live
 collection, daily backfill over 88 days.
 
@@ -44,7 +46,6 @@ runs; cleanup runs hourly. SDO images retain source units and are not model-norm
 ./argus clio sdo-images live                # AIA/HMI hourly images
 ./argus clio sdo-images warmup              # Fill retained AIA/HMI gaps
 ./argus clio normalize
-./argus clio aggregate
 ./argus clio status
 ./argus clio migrate
 ```

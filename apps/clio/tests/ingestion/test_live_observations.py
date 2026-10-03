@@ -86,16 +86,15 @@ def test_independent_feeds_start_concurrently():
     asyncio.run(scenario())
 
 
-def test_native_adapter_preserves_fractional_kp_raw_ap_and_receipt(monkeypatch):
+def test_native_adapter_reads_committed_measurements(monkeypatch):
     received = NOW - timedelta(minutes=1)
-    records = [dict(interval_start=NOW - timedelta(hours=3), quality='unverified', value=3.33,
-                    raw={'a_running': 18.}, received_at=received),
-               dict(interval_start=NOW, quality='flagged', value=5., raw={'a_running': 39.}, received_at=NOW)]
-    ingest = AsyncMock(return_value=records)
+    stored = AsyncMock(return_value=frame(('kp', 3.33, NOW), ('ap', 18., NOW)).assign(received_at=received))
+    ingest = AsyncMock()
     monkeypatch.setattr(adapters, 'ingest_source', ingest)
+    monkeypatch.setattr(adapters, 'stored_native_frame', stored)
     result = asyncio.run(adapters.GeomagneticLiveAdapter('kp').fetch(NOW - timedelta(days=1), NOW))
+    ingest.assert_awaited_once_with('kp')
     assert result.value.tolist() == [3.33, 18.]
-    assert result.metric.tolist() == ['kp', 'ap']
     assert set(result.received_at) == {received}
 
 
@@ -108,14 +107,14 @@ def test_native_error_propagates(monkeypatch):
 def test_live_saves_partial_results_with_priority_policy_and_no_normalization(monkeypatch):
     config = load_observation_config()
     wind = SimpleNamespace(fetch=AsyncMock(return_value=frame(('v', 450., NOW))))
-    monkeypatch.setattr(live, 'live_adapters', lambda *_: {'swpc.propagated_plasma': wind})
+    monkeypatch.setattr(live, 'live_adapters', lambda *_: {'swpc.rtsw_plasma': wind})
     save = AsyncMock()
     monkeypatch.setattr(live, 'upsert_measurements', save)
     session = AsyncMock()
     report = asyncio.run(live.collect_live(session, config, ['v', 'n'], now=NOW))
     assert report['failed_metrics'] == ['n']
     assert report['downloaded_measurements'] == 1
-    assert save.call_args.kwargs == {'source_priorities': {'v': ['swpc.propagated_plasma'], 'n': ['swpc.propagated_plasma']}}
+    assert save.call_args.kwargs == {'source_priorities': {'v': ['swpc.rtsw_plasma'], 'n': ['swpc.rtsw_plasma']}}
     session.commit.assert_awaited_once()
 
 
@@ -127,7 +126,7 @@ def test_live_noop_does_not_refresh_receipt_and_update_requires_priority():
     session.execute.assert_awaited_once()
     compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
-    assert 'RETURNING' in sql and 'source_product IS DISTINCT FROM' in sql
+    assert 'source_product IS DISTINCT FROM' in sql
     # A backup may correct its own observations, but not a known primary value.
     lists = [value for value in compiled.params.values() if isinstance(value, list)]
     assert ['backup'] in lists and ['primary', 'backup'] in lists
@@ -139,6 +138,6 @@ def test_live_receipt_uses_actual_changed_record_time():
     session.execute.return_value = Mock(all=lambda: [('v', NOW - timedelta(minutes=1), received)])
     records = frame(('v', 450., NOW - timedelta(minutes=1))).assign(source_product='primary', received_at=received)
     asyncio.run(upsert_measurements(session, records, source_priorities={'v': ['primary']}))
-    assert session.execute.await_count == 2
-    receipt = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
-    assert receipt.params['received_at'] == received
+    assert session.execute.await_count == 1
+    receipt = session.execute.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
+    assert receipt.params['received_at_m0'] == received

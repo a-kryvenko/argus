@@ -27,9 +27,11 @@ def test_fresh_databases_repeat_migrations_and_reject_foreign_connections(databa
                 psycopg.connect(foreign.render_as_string(hide_password=False))
     with runtime(dsns, 'clio', urls) as conn:
         conn.execute('SET search_path TO pg_catalog')
-        conn.execute("""INSERT INTO clio.solar_wind_observation(kind, observed_at, spacecraft, active, received_at, "values", raw)
-            VALUES ('mag', '2026-09-02 00:00:00+00', 'A', true, '2026-09-02 00:00:00+00', '{"bz": -5}', '{}')""")
-        assert conn.execute("SELECT count(*) FROM clio.solar_wind_aggregate_pending WHERE hour='2026-09-02 00:00:00+00'").fetchone()[0] == 1
+        conn.execute("""INSERT INTO clio.measurement(metric, observed_at, value, source_product, received_at)
+            VALUES ('bz', '2026-09-02 00:00:00+00', -5, 'swpc.rtsw_mag', '2026-09-02 00:00:00+00')""")
+        assert conn.execute("SELECT value FROM clio.measurement WHERE metric='bz'").fetchone()[0] == -5
+        assert conn.execute("SELECT to_regclass('clio.solar_wind_observation')").fetchone()[0] is None
+
 
 
 def test_provisioning_does_not_rotate_existing_passwords(database):

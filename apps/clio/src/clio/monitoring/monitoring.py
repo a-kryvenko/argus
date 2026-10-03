@@ -1,7 +1,7 @@
 """Read-only model input freshness alongside native collector diagnostics."""
 from datetime import UTC, datetime
 from sqlalchemy import select
-from clio.db.models import Measurement, MeasurementReceipt, ScheduledJob
+from clio.db.models import Measurement, ScheduledJob
 from clio.observations.schema import OBSERVATION_METRICS
 from clio.ingestion.products import OBSERVATIONS
 from clio.monitoring.status import source_status
@@ -9,18 +9,18 @@ from clio.monitoring.status import source_status
 async def monitoring_status(session):
     now = datetime.now(UTC)
     result = await source_status(session, now)
-    receipts = {r.metric: r for r in (await session.scalars(select(MeasurementReceipt))).all()}
     measurements = []
     for metric in OBSERVATION_METRICS:
-        latest = await session.scalar(select(Measurement.observed_at).where(Measurement.metric == metric)
+        record = await session.scalar(select(Measurement).where(Measurement.metric == metric)
                                       .order_by(Measurement.observed_at.desc()).limit(1))
-        receipt = receipts.get(metric)
+        received_at = record.received_at if record else None
+        latest = record.observed_at if record else None
         age = (now - latest).total_seconds() if latest else None
         threshold = OBSERVATIONS[metric].max_age.total_seconds()
         measurements.append({'metric': metric, 'latest_observation_at': latest,
-            'received_at': receipt.received_at if receipt and receipt.latest_observation_at == latest else None,
+            'received_at': received_at,
             'age_seconds': age, 'stale_after_seconds': threshold,
-            'status': 'unavailable' if latest is None else 'future' if age < -300 else 'delayed' if age > threshold else 'fresh'})
+            'status': 'unavailable' if record is None or record.value is None or record.quality in ('flagged', 'missing') else 'future' if age < -300 else 'delayed' if age > threshold else 'fresh'})
     job = await session.get(ScheduledJob, 'refresh')
     result['measurements'] = measurements
     result['last_refresh_completed_at'] = job.completed_at if job else None

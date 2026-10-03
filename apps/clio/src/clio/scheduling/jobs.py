@@ -5,7 +5,7 @@ from collections.abc import Callable
 from clio.db.locks import JOB_LOCKS
 from clio.db.session import get_database_url
 
-JOBS = {'refresh': 60, 'aggregate': 5}
+JOBS = {'refresh': 60}
 
 
 class JobBusy(RuntimeError):

@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db import get_db_session
@@ -47,9 +47,10 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         observations = await load_normalized_observations(
             session, since=as_of - timedelta(days=HISTORY_DAYS), until=as_of,
         )
+        usable = or_(Measurement.quality.is_(None), Measurement.quality.not_in(['flagged', 'missing']))
         rows = (await session.execute(
             select(Measurement.metric, Measurement.value, Measurement.observed_at)
-            .where(Measurement.metric.in_(DENSITY_METRICS),
+            .where(Measurement.metric.in_(DENSITY_METRICS), usable, Measurement.value.is_not(None),
                    Measurement.observed_at >= as_of - timedelta(days=88),
                    Measurement.observed_at <= as_of)
             .order_by(Measurement.observed_at, Measurement.metric)
@@ -61,7 +62,7 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         hour = func.date_trunc('hour', Measurement.observed_at)
         speed_rows = (await session.execute(
             select(hour.label('issue_time'), func.avg(Measurement.value).label('v'))
-            .where(Measurement.metric == 'v',
+            .where(Measurement.metric == 'v', usable,
                    Measurement.value >= 0,
                    Measurement.value < OMNI_FILL_VALUES['v'],
                    Measurement.observed_at >= as_of - timedelta(days=HISTORY_DAYS),
@@ -70,7 +71,7 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         )).all()
         density_rows = (await session.execute(
             select(hour.label('issue_time'), func.avg(Measurement.value).label('n'))
-            .where(Measurement.metric == 'n',
+            .where(Measurement.metric == 'n', usable,
                    Measurement.value >= 0,
                    Measurement.value != OMNI_FILL_VALUES['n'],
                    Measurement.value < float('inf'),

@@ -99,3 +99,27 @@ def test_observation_lane_preserves_partial_report_time_and_heartbeat(monkeypatc
     assert forces == [True, False]
     assert invoke.call_args.kwargs['now'] == now
     assert beat.started.call_count == beat.finished.call_count == 2
+
+
+def test_worker_has_one_numeric_collection_lane_and_no_aggregate_job():
+    from clio.config import load_observation_config
+    tasks = worker.tasks_for(load_observation_config(), {}, Mock())
+    names = [task.name for task in tasks]
+    assert names.count('live-numeric') == 1
+    assert 'native-wind' not in names and 'aggregate' not in names
+    assert 'normalize' in names
+
+
+def test_wind_heartbeat_follows_configured_numeric_collection(monkeypatch):
+    from datetime import UTC, datetime
+    from clio.config import load_observation_config
+    config = load_observation_config()
+    beat = Mock(sources={'solar_wind_mag': {}, 'solar_wind_plasma': {}})
+    def execute(config, run, **kwargs):
+        run(['bx', 'v'], datetime.now(UTC))
+        return True
+    monkeypatch.setattr(worker.observations, 'execute', execute)
+    task = worker.observation_task(config, 'live', 'numeric', {'solar-wind': beat}, Mock())
+    task.run()
+    assert {call.args[0] for call in beat.started.call_args_list} == {'solar_wind_mag', 'solar_wind_plasma'}
+    assert beat.finished.call_count == 2

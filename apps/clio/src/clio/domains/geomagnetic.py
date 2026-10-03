@@ -3,11 +3,11 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.providers.geomagnetic_loader import SOURCES, INTERVAL_SECONDS, POLL_SECONDS, fetch_records
-from clio.db.models import GeomagneticObservation
+from clio.providers.geomagnetic_loader import SOURCES, INTERVAL_SECONDS, fetch_records
+from clio.db.models import Measurement
+from clio.observations.native import geomagnetic_measurements, store_native
 from clio.db.session import get_session_factory
 from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import SOURCE_SPECS, poll_seconds
@@ -28,13 +28,7 @@ async def ingest_source(metric: str) -> list[dict] | None:
             # Replay the entire source window, including older revised intervals
             # and internal gaps left by downtime or late publication.
             attempt.received(records)
-            statement = insert(GeomagneticObservation).values(records)
-            statement = statement.on_conflict_do_update(
-                index_elements=['metric', 'interval_start'],
-                set_={key: statement.excluded[key] for key in ('interval_end', 'value', 'quality', 'received_at', 'raw')},
-                where=GeomagneticObservation.raw.is_distinct_from(statement.excluded.raw),
-            )
-            await session.execute(statement)
+            await store_native(session, geomagnetic_measurements(metric, records))
         logger.info('%s: ingested %d intervals', metric, len(records))
         return records
 
@@ -60,20 +54,20 @@ def metadata(metric: str) -> dict:
             'time_basis': 'source_interval_start', 'gap_filling': 'none'}
 
 
-def sample(record: GeomagneticObservation, now: datetime) -> dict:
-    return {'interval_start': record.interval_start, 'interval_end': record.interval_end,
+def sample(record: Measurement, now: datetime) -> dict:
+    return {'interval_start': record.observed_at, 'interval_end': record.interval_end,
             'interval_status': 'in_progress' if record.interval_end > now else 'completed',
             'value': record.value, 'quality': record.quality, 'received_at': record.received_at,
-            'station_count': record.raw.get('station_count')}
+            'station_count': record.station_count}
 
 
 async def latest(session: AsyncSession, now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     series = {}
     for metric in SOURCES:
-        statement = (select(GeomagneticObservation)
-                     .where(GeomagneticObservation.metric == metric, GeomagneticObservation.interval_start <= now)
-                     .order_by(GeomagneticObservation.interval_start.desc()).limit(1))
+        statement = (select(Measurement)
+                     .where(Measurement.metric == metric, Measurement.interval_end.is_not(None), Measurement.observed_at <= now)
+                     .order_by(Measurement.observed_at.desc()).limit(1))
         record = (await session.execute(statement)).scalars().first()
         lag = max(0, int((now-record.interval_end).total_seconds())) if record is not None else None
         series[metric] = {**metadata(metric), 'latest': sample(record, now) if record is not None else None,
@@ -86,12 +80,13 @@ async def latest(session: AsyncSession, now: datetime | None = None) -> dict:
 async def history(session: AsyncSession, start: datetime, end: datetime, now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     # Include overlapping native intervals at the left edge, without clipping them.
-    statement = (select(GeomagneticObservation)
-                 .where(GeomagneticObservation.interval_start >= start - timedelta(hours=3),
-                        GeomagneticObservation.interval_start < end,
-                        GeomagneticObservation.interval_start <= now,
-                        GeomagneticObservation.interval_end > start)
-                 .order_by(GeomagneticObservation.interval_start))
+    statement = (select(Measurement)
+                 .where(Measurement.metric.in_(list(SOURCES)),
+                        Measurement.observed_at >= start - timedelta(hours=3),
+                        Measurement.observed_at < end,
+                        Measurement.observed_at <= now,
+                        Measurement.interval_end > start)
+                 .order_by(Measurement.observed_at))
     series = {metric: {**metadata(metric), 'points': []} for metric in SOURCES}
     for record in (await session.execute(statement)).scalars():
         series[record.metric]['points'].append(sample(record, now))
@@ -101,26 +96,11 @@ async def history(session: AsyncSession, start: datetime, end: datetime, now: da
 
 
 async def load_kp_measurements(session: AsyncSession, *, since: datetime, until: datetime):
-    """Project stored NOAA Kp/Ap into model inputs without fetching or resampling."""
-    import math
+    """Read Kp and Ap directly from their canonical measurements."""
     import pandas as pd
-    records = (await session.scalars(select(GeomagneticObservation).where(
-        GeomagneticObservation.metric == 'kp',
-        GeomagneticObservation.interval_start >= since,
-        GeomagneticObservation.interval_start <= until,
-        GeomagneticObservation.received_at <= until,
-    ).order_by(GeomagneticObservation.interval_start))).all()
-    rows = []
-    for record in records:
-        # Preserve the provider's interval start and fractional Kp scale (0..9).
-        # Ap is supplied as a_running; never infer it from rounded Kp.
-        for metric, value in (('kp', record.value), ('ap', record.raw.get('a_running'))):
-            if value is None or isinstance(value, bool):
-                continue
-            try:
-                value = float(value)
-            except (ValueError, TypeError):
-                continue
-            if math.isfinite(value):
-                rows.append({'metric': metric, 'value': value, 'observed_at': record.interval_start})
-    return pd.DataFrame(rows, columns=['metric', 'value', 'observed_at'])
+    statement = select(Measurement.metric, Measurement.value, Measurement.observed_at).where(
+        Measurement.metric.in_(['kp', 'ap']), Measurement.value.is_not(None),
+        Measurement.quality.not_in(['flagged', 'missing']),
+        Measurement.observed_at >= since, Measurement.observed_at <= until,
+        Measurement.received_at <= until).order_by(Measurement.observed_at, Measurement.metric)
+    return pd.DataFrame((await session.execute(statement)).all(), columns=['metric', 'value', 'observed_at'])

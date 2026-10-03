@@ -96,7 +96,7 @@ export default function Help() {
               <div><dt>Freshness</dt><dd>Solar wind is marked delayed after ten minutes. Kp and Dst use time since the observation interval ended: four hours for Kp and two for Dst. A recent page refresh can still return old data.</dd></div>
               <div><dt>History resolution</dt><dd>Up to 24 hours uses minute solar wind samples; 3–7 days uses five-minute means; 30 days uses hourly means. Aggregate tooltips include min/max and coverage. Kp/Dst keep their original intervals.</dd></div>
               <div><dt>Missing values</dt><dd>A dash means unavailable, not zero. Native observations are not filled. Missing intervals and provider-flagged values leave gaps in the charts.</dd></div>
-              <div><dt>Coverage</dt><dd>The percentage counts usable measurements. For aggregates it covers calculated windows only; uncalculated windows have unknown coverage. Values awaiting recalculation remain visible with a notice.</dd></div>
+              <div><dt>Coverage</dt><dd>The percentage counts usable measurements. Window statistics are calculated from stored measurements; coverage includes every expected minute.</dd></div>
               <div><dt>Collection status</dt><dd>Expand “Data collection” for source delays, request errors and overdue collection. If a page refresh fails, previously loaded data remain visible while it retries.</dd></div>
               <div><dt>Additional hourly indices</dt><dd>This separate section uses normalized data, which may be filled. S10, M10 and Y10 are provisional daily estimates calibrated from GOES data.</dd></div>
             </dl>

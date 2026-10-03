@@ -43,11 +43,11 @@ async def history(
     metrics: list[str] = Depends(selected_metrics),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Stored native samples or complete UTC aggregate windows.
+    """Native measurements, optionally summarized into closed UTC windows.
 
     Limits: 1m seven days, 5m 31 days, 1h 366 days. Auto: 1m through 24h,
     5m through seven days, otherwise 1h. Aggregate left edge may precede from;
-    current partial buckets are excluded. No source requests or recalculation.
+    current partial buckets are excluded. Statistics are computed from stored measurements.
     Omitted timestamps are gaps; explicit missing values are null.
     """
     end = end or datetime.now(UTC)

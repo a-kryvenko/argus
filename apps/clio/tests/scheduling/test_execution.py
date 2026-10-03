@@ -31,7 +31,7 @@ async def run(args):
         await asyncio.sleep(0.05)
     return {'pid': os.getpid(), 'failed_metrics': ['v'], 'payload': 'x' * 1000000}
 
-module = ModuleType('clio.commands.aggregate_solar_wind')
+module = ModuleType('clio.commands.normalize')
 module.run = run
 sys.modules[module.__name__] = module
 
@@ -44,7 +44,7 @@ if __name__ == '__main__':
     if mode == 'cancel':
         threading.Timer(0.5, abort.set).start()
     try:
-        result = invoke_isolated('aggregate', SimpleNamespace(mode=mode), abort=abort)
+        result = invoke_isolated('normalize', SimpleNamespace(mode=mode), abort=abort)
     except RuntimeError as error:
         assert mode != 'success'
         assert {'failure': 'provider failed', 'crash': 'without a report (17)',

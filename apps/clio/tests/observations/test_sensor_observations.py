@@ -71,6 +71,7 @@ def test_database_models_match_narrow_and_wide_storage_contracts() -> None:
         "observed_at",
         "source_product",
         "received_at",
+        "interval_end", "quality", "spacecraft", "provider_quality", "station_count",
     }
     assert set(NormalizedObservation.__table__.columns.keys()) == {
         "observed_at",

@@ -51,8 +51,8 @@ def check_heartbeat(collector: str, path: Path | None = None, now: float | None 
     now = monotonic() if now is None else now
     expected = collector_sources(collector)
     if not expected:
-        return {'healthy': collector == 'geomagnetic',
-                'reason': 'disabled' if collector == 'geomagnetic' else 'unknown_collector'}
+        return {'healthy': collector in ('geomagnetic', 'solar-wind'),
+                'reason': 'disabled' if collector in ('geomagnetic', 'solar-wind') else 'unknown_collector'}
     try:
         payload = json.loads((path or heartbeat_path(collector)).read_text())
         if payload['collector'] != collector:

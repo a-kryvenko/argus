@@ -115,7 +115,7 @@ async def backfill_selected(session, config: ClioObservations, metrics, *, now=N
     if raise_on_failure and frame.empty and any('error' in attempt for attempt in attempts):
         raise RuntimeError('No gaps filled; source errors: ' + '; '.join(
             f"{a['product']}: {a['error']}" for a in attempts if 'error' in a))
-    await upsert_measurements(session, frame, track_receipt=False, replace_existing=False)
+    await upsert_measurements(session, frame, replace_existing=False)
     # Reload after insert: concurrent or pre-existing observations always win.
     stored = await load_measurements(session, since=earliest, until=latest)
     normalized_count = 0

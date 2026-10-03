@@ -40,7 +40,7 @@ clio:
       backfill: {days: 40}
     bx:
       sources:
-        live: [swpc.propagated_magnetic]
+        live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       schedules:
         live: {every: 1m}
@@ -48,7 +48,7 @@ clio:
       backfill: {days: 60}
     by:
       sources:
-        live: [swpc.propagated_magnetic]
+        live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       schedules:
         live: {every: 1m}
@@ -56,7 +56,7 @@ clio:
       backfill: {days: 60}
     bz:
       sources:
-        live: [swpc.propagated_magnetic]
+        live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       schedules:
         live: {every: 1m}
@@ -64,7 +64,7 @@ clio:
       backfill: {days: 60}
     v:
       sources:
-        live: [swpc.propagated_plasma]
+        live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       schedules:
         live: {every: 1m}
@@ -72,7 +72,7 @@ clio:
       backfill: {days: 60}
     n:
       sources:
-        live: [swpc.propagated_plasma]
+        live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       schedules:
         live: {every: 1m}
@@ -80,7 +80,7 @@ clio:
       backfill: {days: 60}
     t:
       sources:
-        live: [swpc.propagated_plasma]
+        live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       schedules:
         live: {every: 1m}

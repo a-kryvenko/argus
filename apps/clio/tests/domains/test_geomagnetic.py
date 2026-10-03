@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
-from clio.db.models import GeomagneticObservation
+from clio.db.models import Measurement
 from clio.domains import geomagnetic as service
 from clio.routers import geomagnetic as routes
 
@@ -15,9 +15,9 @@ NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 
 
 def record(metric, start, value):
-    return GeomagneticObservation(metric=metric, interval_start=start,
+    return Measurement(metric=metric, observed_at=start,
         interval_end=start+timedelta(seconds=service.INTERVAL_SECONDS[metric]),
-        value=value, quality='unverified' if value is not None else 'missing', received_at=NOW, raw={'station_count': 8})
+        value=value, quality='unverified' if value is not None else 'missing', received_at=NOW, station_count=8)
 
 
 def test_freshness_uses_end_of_each_native_interval():
@@ -39,7 +39,7 @@ def test_history_queries_overlapping_intervals_without_expanding_them():
     assert len(result['series']['kp']['points']) == 1
     assert result['series']['kp']['points'][0]['interval_start'] == NOW-timedelta(hours=4)
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'interval_end >' in sql and 'interval_start <' in sql
+    assert 'interval_end >' in sql and 'observed_at <' in sql
 
 
 def test_empty_database_has_no_invented_indices():
@@ -91,22 +91,11 @@ def test_completed_kp_waits_for_next_native_interval_before_becoming_stale():
     assert asyncio.run(service.latest(session, NOW+timedelta(seconds=1)))['series']['kp']['status'] == 'stale'
 
 
-def test_stored_kp_projection_preserves_intervals_and_raw_ap():
-    import asyncio
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock, Mock
-    import pandas as pd
-    from clio.domains.geomagnetic import load_kp_measurements
-
-    clock = pd.date_range('2026-09-01', periods=5, freq='3h', tz='UTC')
-    records = [SimpleNamespace(interval_start=stamp, value=kp, raw=raw)
-               for stamp, kp, raw in zip(clock, [2.333, 3., None, 1., 4.],
-                   [{'a_running': '12'}, {}, {'a_running': 7}, {'a_running': 'bad'}, {'a_running': float('nan')}])]
-    result = Mock()
-    result.all.return_value = records
-    session = SimpleNamespace(scalars=AsyncMock(return_value=result))
-    frame = asyncio.run(load_kp_measurements(session, since=clock[0], until=clock[-1]))
-    assert frame[frame.metric == 'kp'].value.tolist() == [2.333, 3., 1., 4.]
-    assert frame[frame.metric == 'ap'].value.tolist() == [12., 7.]
-    assert frame[frame.metric == 'ap'].observed_at.tolist() == [clock[0], clock[2]]
-    assert frame[frame.metric == 'kp'].observed_at.tolist() == list(clock[[0, 1, 3, 4]])
+def test_stored_kp_projection_reads_canonical_kp_and_ap():
+    session = AsyncMock()
+    session.execute.return_value = Mock(all=lambda: [('kp', 3.33, NOW), ('ap', 18., NOW)])
+    frame = asyncio.run(service.load_kp_measurements(session, since=NOW-timedelta(days=1), until=NOW))
+    assert frame.value.tolist() == [3.33, 18.]
+    assert frame.metric.tolist() == ['kp', 'ap']
+    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
+    assert 'clio.measurement' in sql and 'received_at <=' in sql

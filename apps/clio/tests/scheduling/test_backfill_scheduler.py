@@ -16,7 +16,7 @@ NOW = datetime(2026, 9, 28, 13, 17, tzinfo=UTC)
 
 def config():
     return ClioObservations.model_validate({'observations': {
-        metric: {'sources': {'live': ['swpc.propagated_plasma'], 'historical': ['omni.hourly']},
+        metric: {'sources': {'live': ['swpc.rtsw_plasma'], 'historical': ['omni.hourly']},
                  'schedules': {'live': {'every': '1h'}, 'backfill': {'every': every}},
                  'backfill': {'days': 60}}
         for metric, every in [('v', '6h'), ('n', '1d')]}})

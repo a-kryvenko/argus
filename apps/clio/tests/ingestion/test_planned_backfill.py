@@ -38,7 +38,7 @@ def frame(*rows):
 
 @pytest.mark.parametrize('change', [
     lambda p: p['sources'].update(historical=['typo']),
-    lambda p: p['sources'].update(historical=['swpc.propagated_plasma']),
+    lambda p: p['sources'].update(historical=['swpc.rtsw_plasma']),
     lambda p: p['sources'].update(historical=['omni.hourly', 'omni.hourly']),
     lambda p: p['sources'].update(historical=[]),
     lambda p: p['schedules']['live'].update(every='0s'),
@@ -48,7 +48,7 @@ def frame(*rows):
     lambda p: p.update(unknown=True),
 ])
 def test_invalid_policy_rejected(change):
-    policy = {'sources': {'live': ['swpc.propagated_plasma'], 'historical': ['omni.hourly']},
+    policy = {'sources': {'live': ['swpc.rtsw_plasma'], 'historical': ['omni.hourly']},
               'schedules': {'live': {'every': '60s'}, 'backfill': {'every': '1d'}},
               'backfill': {'days': 60}}
     change(policy)
@@ -157,7 +157,7 @@ def test_backfill_preserves_concurrent_values_and_uses_metric_depth(monkeypatch)
     pending = fetch.call_args.args[0]
     assert len(pending['v']) == 48 and len(pending['n']) == 24
     assert normalize.call_args.args[0].value.tolist() == [450.]
-    assert insert.call_args.kwargs == {'track_receipt': False, 'replace_existing': False}
+    assert insert.call_args.kwargs == {'replace_existing': False}
     assert result['missing_observed_hours'] == {'v': 47, 'n': 24}
     session.commit.assert_awaited_once()
 
@@ -165,7 +165,7 @@ def test_backfill_preserves_concurrent_values_and_uses_metric_depth(monkeypatch)
 def test_provenance_and_insert_only_conflict_do_not_update_existing_rows():
     session = AsyncMock()
     data = frame(('v', 400., START)).assign(source_product='omni.hourly', received_at=END)
-    asyncio.run(upsert_measurements(session, data, track_receipt=False, replace_existing=False))
+    asyncio.run(upsert_measurements(session, data, replace_existing=False))
     compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     assert 'DO NOTHING' in str(compiled)
     assert compiled.params['source_product_m0'] == 'omni.hourly'
@@ -174,7 +174,7 @@ def test_provenance_and_insert_only_conflict_do_not_update_existing_rows():
 
 def test_legacy_repoll_does_not_erase_provenance_for_unchanged_values():
     session = AsyncMock()
-    asyncio.run(upsert_measurements(session, frame(('v', 400., START)), track_receipt=False))
+    asyncio.run(upsert_measurements(session, frame(('v', 400., START))))
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
     assert sql.rsplit(' WHERE ', 1)[-1].endswith('measurement.value IS DISTINCT FROM excluded.value')
 
@@ -281,7 +281,7 @@ def test_partial_explicit_day_does_not_fetch_daily_observation(monkeypatch):
 
 
 def test_magnetic_config_cannot_use_ace_gse_as_gsm_fallback():
-    policy = {'sources': {'live': ['swpc.propagated_magnetic'], 'historical': ['ace.plasma_hourly']},
+    policy = {'sources': {'live': ['swpc.rtsw_mag'], 'historical': ['ace.plasma_hourly']},
               'schedules': {'live': {'every': '1h'}, 'backfill': {'every': '1d'}}, 'backfill': {'days': 60}}
     with pytest.raises(ValidationError, match='incompatible'):
         ClioObservations.model_validate({'observations': {'bz': policy}})

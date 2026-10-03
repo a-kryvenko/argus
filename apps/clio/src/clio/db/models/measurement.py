@@ -5,6 +5,7 @@ from sqlalchemy import (
     DateTime,
     Double,
     Identity,
+    Integer,
     Index,
     String,
     UniqueConstraint,
@@ -31,10 +32,15 @@ class Measurement(Base):
         primary_key=True,
     )
     metric: Mapped[str] = mapped_column(String(16), nullable=False)
-    value: Mapped[float] = mapped_column(Double, nullable=False)
+    value: Mapped[float | None] = mapped_column(Double, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
     )
     source_product: Mapped[str | None] = mapped_column(String(80), nullable=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    interval_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    quality: Mapped[str | None] = mapped_column(String(16))
+    spacecraft: Mapped[str | None] = mapped_column(String(32))
+    provider_quality: Mapped[int | None] = mapped_column(Integer)
+    station_count: Mapped[int | None] = mapped_column(Integer)

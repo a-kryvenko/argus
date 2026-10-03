@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from clio.db.models import SolarWindObservation, GeomagneticObservation, ObservationSourceStatus
+from clio.db.models import Measurement, ObservationSourceStatus
 from clio.domains.solar_wind import observations as solar_wind
 from clio.domains import geomagnetic
 
@@ -40,12 +40,12 @@ async def verify():
             await connection.execute(text(f'CREATE SCHEMA {schema}'))
             created = True
         async with db.begin() as connection:
-            for model in (SolarWindObservation, GeomagneticObservation, ObservationSourceStatus):
+            for model in (Measurement, ObservationSourceStatus):
                 await connection.run_sync(model.__table__.create)
         for source in ('mag', 'plasma', 'kp', 'dst'):
             solar = source in ('mag', 'plasma')
             service = solar_wind if solar else geomagnetic
-            model = SolarWindObservation if solar else GeomagneticObservation
+            model = Measurement
             step = timedelta(seconds=60 if solar else geomagnetic.INTERVAL_SECONDS[source])
             # More than one SQL batch for solar wind, eight hours of downtime.
             count = 601 if solar else 12
@@ -61,8 +61,8 @@ async def verify():
                 else:
                     records.append(dict(metric=source, interval_start=at, interval_end=at+step,
                         received_at=receipt, value=1, quality='unverified', raw=raw))
-            source_filter = model.kind == source if solar else model.metric == source
-            time_field = 'observed_at' if solar else 'interval_start'
+            source_filter = model.metric == (next(iter(solar_wind.FIELDS[source])) if solar else source)
+            time_field = 'observed_at'
 
             async def stored():
                 async with factory() as session:
@@ -104,8 +104,8 @@ async def verify():
             rows = await stored()
             assert len(rows) == count
             revised = rows[start+step*2]
-            assert revised.raw['value'] == 2 and revised.received_at == revision['received_at']
-            assert (all(value == 2 for value in revised.values.values()) if solar else revised.value == 2)
+            assert revised.received_at == revision['received_at']
+            assert revised.value == 2
             print(f'PASS {source}: downtime recovery, internal gaps, retained history, no duplicates, stable receipts, late data and revisions')
     finally:
         await db.dispose()

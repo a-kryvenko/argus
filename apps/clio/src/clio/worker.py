@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from clio.config import load_observation_config
 from clio.ingestion.products import OBSERVATIONS
 from clio.monitoring.heartbeat import CollectorHeartbeat
-from clio.monitoring.specs import collector_sources, WIND_POLL_SECONDS
+from clio.monitoring.specs import collector_sources
 from clio.scheduling import jobs, observations
 from clio.scheduling.execution import invoke_isolated
 
@@ -33,18 +33,7 @@ def tasks_for(config, heartbeats, abort):
     def invoke(name, **kwargs):
         return invoke_isolated(name, SimpleNamespace(**kwargs), abort=abort)
 
-    def native():
-        beat = heartbeats['solar-wind']
-        for source in beat.sources:
-            beat.started(source)
-        try:
-            invoke('native-wind')
-            return True
-        finally:
-            for source in beat.sources:
-                beat.finished(source)
-
-    tasks = [Task('native-wind', native, WIND_POLL_SECONDS)]
+    tasks = []
     for mode, kind in (('live', 'numeric'), ('live', 'file'),
                        ('backfill', 'numeric'), ('backfill', 'file')):
         selected = config.model_copy(update={'observations': {
@@ -53,10 +42,9 @@ def tasks_for(config, heartbeats, abort):
             continue
         tasks.append(observation_task(selected, mode, kind, heartbeats, invoke))
 
-    for name, job in (('normalize', 'refresh'), ('aggregate', 'aggregate')):
-        def cycle(name=name, job=job):
-            return jobs.execute(job, lambda: invoke(name, limit=240), scheduled=True)
-        tasks.append(Task(name, cycle, background=True))
+    def normalize():
+        return jobs.execute('refresh', lambda: invoke('normalize'), scheduled=True)
+    tasks.append(Task('normalize', normalize, background=True))
     if config.sdo_images.enabled:
         for mode in ('live', 'warmup', 'cleanup'):
             tasks.append(Task(
@@ -69,16 +57,23 @@ def observation_task(config, mode, kind, heartbeats, invoke):
     first = mode == 'live'
 
     def run(metrics, now):
-        beat = heartbeats.get('geomagnetic') if mode == 'live' and kind == 'numeric' else None
-        sources = [m for m in metrics if beat and m in beat.sources]
-        for source in sources:
+        beats = []
+        if mode == 'live' and kind == 'numeric':
+            geo = heartbeats.get('geomagnetic')
+            wind = heartbeats.get('solar-wind')
+            if geo:
+                beats.extend((geo, m) for m in metrics if m in geo.sources)
+            if wind:
+                sources = {product for m in metrics for product in config.observations[m].sources.live}
+                beats.extend((wind, f'solar_wind_{kind}') for kind in ('mag', 'plasma')
+                             if f'swpc.rtsw_{kind}' in sources)
+        for beat, source in beats:
             beat.started(source)
         try:
             return invoke('collect' if mode == 'live' else 'backfill',
-                          metrics=metrics, now=now, start=None, end=None,
-                          scheduled=True)
+                          metrics=metrics, now=now, start=None, end=None, scheduled=True)
         finally:
-            for source in sources:
+            for beat, source in beats:
                 beat.finished(source)
 
     def cycle():
@@ -103,9 +98,7 @@ def finish_tasks(running):
             logger.info('Clio %s already running; retrying later', name)
         except Exception:
             logger.exception('Clio %s failed; retrying later', name)
-        # Preserve native polling cadence; other schedules poll after completion.
-        task.next_run = (max(monotonic(), started + task.interval) if name == 'native-wind'
-                         else monotonic() + task.interval)
+        task.next_run = monotonic() + task.interval
         del running[name]
 
 

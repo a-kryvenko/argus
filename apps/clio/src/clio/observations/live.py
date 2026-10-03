@@ -76,7 +76,9 @@ async def collect_live(session, config, metrics, *, now=None):
         raise ValueError('now must include a timezone')
     now = now.astimezone(UTC)
     frame, report = await fetch_live(metrics, config.observations, live_adapters(), now)
-    await upsert_measurements(session, frame, source_priorities={m: config.observations[m].sources.live for m in metrics})
+    # Native adapters have already committed the canonical rows with quality metadata.
+    pending = frame.loc[~frame.source_product.isin(['swpc.rtsw_mag', 'swpc.rtsw_plasma', 'swpc.kp', 'swpc.dst'])]
+    await upsert_measurements(session, pending, source_priorities={m: config.observations[m].sources.live for m in metrics})
     await session.commit()
     report['downloaded_measurements'] = len(frame)
     return report

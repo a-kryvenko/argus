@@ -50,15 +50,14 @@ class Product:
     kind: Literal['numeric', 'file'] = 'numeric'
 
 
-# These products feed the existing hourly measurement layer. Native minute
-# solar wind is a different contract and is not interchangeable with this one.
+# All numeric products feed measurement; live wind uses native minute RTSW.
 PRODUCTS = {
     'omni.hourly': Product(frozenset({'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7'}),
                           frozenset({'historical'})),
     'soho.plasma_hourly': Product(frozenset({'v', 'n', 't'}), frozenset({'historical'})),
     'ace.plasma_hourly': Product(frozenset({'v', 'n', 't'}), frozenset({'historical'})),
-    'swpc.propagated_plasma': Product(frozenset({'v', 'n', 't'}), frozenset({'live'})),
-    'swpc.propagated_magnetic': Product(frozenset({'bx', 'by', 'bz'}), frozenset({'live'})),
+    'swpc.rtsw_plasma': Product(frozenset({'v', 'n', 't'}), frozenset({'live'})),
+    'swpc.rtsw_mag': Product(frozenset({'bx', 'by', 'bz'}), frozenset({'live'})),
     'swpc.kp': Product(frozenset({'kp', 'ap'}), frozenset({'live'})),
     'swpc.dst': Product(frozenset({'dst'}), frozenset({'live'})),
     'swpc.f107': Product(frozenset({'f10_7'}), frozenset({'live'})),

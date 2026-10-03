@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from clio.providers.swpc_loader import SWPC_Loader
 from clio.observations.schema import wide_to_measurements
-from clio.db.models import GeomagneticObservation
+from clio.db.models import Measurement
 from clio.db.session import get_session_factory
 from clio.domains.geomagnetic import ingest_source
 from clio.ingestion.adapters import clean_records
@@ -29,33 +29,28 @@ class GeomagneticLiveAdapter:
         self.metric = metric
 
     async def fetch(self, start, now):
-        records = await ingest_source(self.metric)
-        if records is None:
-            # Another collector owns the source lock. Use its persisted data;
-            # the orchestrator will independently check observation freshness.
-            async with get_session_factory()() as session:
-                stored = (await session.scalars(select(GeomagneticObservation).where(
-                    GeomagneticObservation.metric == self.metric,
-                    GeomagneticObservation.interval_start >= start,
-                    GeomagneticObservation.interval_start <= now,
-                ))).all()
-            records = [dict(interval_start=r.interval_start, value=r.value, quality=r.quality,
-                            received_at=r.received_at, raw=r.raw) for r in stored]
-        rows = []
-        for record in records:
-            if record['quality'] == 'flagged':
-                continue
-            values = {self.metric: record['value']}
-            if self.metric == 'kp':
-                values['ap'] = record['raw'].get('a_running')
-            for metric, value in values.items():
-                if isinstance(value, bool):
-                    continue
-                rows.append(dict(metric=metric, value=value, observed_at=record['interval_start'],
-                                 received_at=record['received_at']))
-        frame = pd.DataFrame(rows, columns=['metric', 'value', 'observed_at', 'received_at'])
-        return clean_records(frame, start, pd.Timestamp(now) + pd.Timedelta(microseconds=1),
-                             ('kp', 'ap') if self.metric == 'kp' else ('dst',))
+        await ingest_source(self.metric)
+        return await stored_native_frame(('kp', 'ap') if self.metric == 'kp' else ('dst',), start, now, f'swpc.{self.metric}')
+
+
+async def stored_native_frame(metrics, start, now, product):
+    async with get_session_factory()() as session:
+        statement = select(Measurement.metric, Measurement.value, Measurement.observed_at, Measurement.received_at).where(
+            Measurement.metric.in_(metrics), Measurement.source_product == product, Measurement.observed_at >= start, Measurement.observed_at <= now,
+            Measurement.quality.not_in(['flagged', 'missing']), Measurement.value.is_not(None))
+        rows = (await session.execute(statement)).all()
+    return pd.DataFrame(rows, columns=['metric', 'value', 'observed_at', 'received_at'])
+
+
+class SolarWindLiveAdapter:
+    def __init__(self, kind):
+        self.kind = kind
+
+    async def fetch(self, start, now):
+        from clio.domains.solar_wind.observations import ingest_source as ingest_wind
+        from clio.providers.solar_wind_loader import FIELDS
+        await ingest_wind(self.kind)
+        return await stored_native_frame(tuple(FIELDS[self.kind]), start, now, f'swpc.rtsw_{self.kind}')
 
 
 class SolarLiveAdapter:
@@ -67,10 +62,9 @@ class SolarLiveAdapter:
 
 
 def live_adapters():
-    wind = WideLiveAdapter(SWPC_Loader._fetch_live_sensors, ('bx', 'by', 'bz', 'v', 'n', 't'))
     return {
-        'swpc.propagated_magnetic': wind,
-        'swpc.propagated_plasma': wind,
+        'swpc.rtsw_mag': SolarWindLiveAdapter('mag'),
+        'swpc.rtsw_plasma': SolarWindLiveAdapter('plasma'),
         'swpc.kp': GeomagneticLiveAdapter('kp'),
         'swpc.dst': GeomagneticLiveAdapter('dst'),
         'swpc.f107': WideLiveAdapter(SWPC_Loader._fetch_f10_7_flux, ('f10_7',)),

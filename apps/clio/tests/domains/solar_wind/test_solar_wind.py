@@ -7,24 +7,24 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
-from clio.db.models import SolarWindObservation
+from clio.db.models import Measurement
 from clio.routers import solar_wind as routes
 from clio.domains.solar_wind import observations as service
 
 NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
 
 
-def observation(kind='mag', minutes=1, **overrides):
-    return SolarWindObservation(kind=kind, observed_at=NOW - timedelta(minutes=minutes),
-                                received_at=NOW, spacecraft='SOLAR1', active=True,
-                                values={'bz': -4, 'bt': 6, 'v': 420, 'n': None},
-                                raw={'overall_quality': 0}, **overrides)
+def observation(metric='bz', minutes=1, value=-4, **overrides):
+    return Measurement(metric=metric, observed_at=NOW - timedelta(minutes=minutes),
+                       received_at=NOW, spacecraft='SOLAR1', value=value,
+                       provider_quality=0, quality='unverified', **overrides)
 
 
 def test_latest_has_independent_freshness_and_does_not_hide_missing_values():
     session = AsyncMock()
     session.execute.side_effect = [Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation())))),
-                                   Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation('plasma', 20)))))]
+                                   Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation('v', 20, 420))))),
+                                   Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation('n', 20, None)))))]
     result = asyncio.run(service.latest(session, ['bz', 'v', 'n'], NOW))['series']
     assert result['bz']['status'] == 'fresh'
     assert result['bz']['age_seconds'] == 60
@@ -36,12 +36,13 @@ def test_latest_has_independent_freshness_and_does_not_hide_missing_values():
     assert result['bz']['propagated'] is False
     for call in session.execute.call_args_list:
         sql = str(call.args[0].compile(dialect=postgresql.dialect()))
-        assert 'LIMIT' in sql and 'active IS true' in sql
+        assert 'LIMIT' in sql and 'source_product' in sql
 
 
 def test_history_preserves_gaps_and_flagged_values():
     rows = [observation(minutes=20), observation(minutes=1)]
-    rows[1].raw = {'overall_quality': 2}
+    rows[1].provider_quality = 2
+    rows[1].quality = 'flagged'
     session = AsyncMock()
     session.execute.return_value = Mock(scalars=Mock(return_value=rows))
     result = asyncio.run(service.history(session, ['bz'], NOW-timedelta(hours=1), NOW))
@@ -52,7 +53,7 @@ def test_history_preserves_gaps_and_flagged_values():
     assert result['gap_filling'] == 'none'
     assert points[1]['spacecraft'] == 'SOLAR1'
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'DISTINCT ON' in sql and 'active IS true' in sql
+    assert 'clio.measurement' in sql and 'source_product' in sql
 
 
 def test_empty_database_has_explicit_missing_series():

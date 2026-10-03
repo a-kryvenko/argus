@@ -4,11 +4,11 @@ import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.providers.solar_wind_loader import FIELDS, SOURCES, fetch_records
-from clio.db.models import SolarWindObservation
+from clio.db.models import Measurement
+from clio.observations.native import wind_measurements, store_native
 from clio.db.session import get_session_factory
 from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
@@ -40,15 +40,7 @@ async def ingest_source(kind: str) -> None:
             # Replay the entire source window: a latest-time cursor would miss
             # internal gaps, late publications and revisions after downtime.
             attempt.received(records)
-            for offset in range(0, len(records), 500):
-                statement = insert(SolarWindObservation).values(records[offset:offset + 500])
-                statement = statement.on_conflict_do_update(
-                    index_elements=["kind", "observed_at", "spacecraft"],
-                    set_={name: statement.excluded[name] for name in ("active", "received_at", "values", "raw")},
-                    # Polling an unchanged point must not make its receipt time newer.
-                    where=SolarWindObservation.raw.is_distinct_from(statement.excluded.raw),
-                )
-                await session.execute(statement)
+            await store_native(session, wind_measurements(kind, records))
         logger.info("Solar wind %s: ingested %d source samples", kind, len(records))
 
 
@@ -72,31 +64,20 @@ def metadata(metric: str) -> dict:
             "selection": "NOAA active spacecraft", "stale_after_seconds": WIND_STALE_AFTER_SECONDS}
 
 
-def sample(record: SolarWindObservation, metric: str) -> dict:
-    value = record.values.get(metric)
-    provider_quality = record.raw.get("overall_quality")
-    quality = "missing" if value is None else "flagged" if provider_quality not in (None, 0) else "unverified"
+def sample(record: Measurement, metric: str) -> dict:
     return {"observed_at": record.observed_at, "received_at": record.received_at,
-            "value": value, "spacecraft": record.spacecraft, "quality": quality,
-            "provider_quality": provider_quality}
+            "value": record.value, "spacecraft": record.spacecraft, "quality": record.quality,
+            "provider_quality": record.provider_quality}
 
 
 async def latest(session: AsyncSession, metrics: list[str], now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
-    records = {}
-    for kind in sorted({METADATA[metric][0] for metric in metrics}):
-        statement = (select(SolarWindObservation)
-                     .where(SolarWindObservation.kind == kind,
-                            SolarWindObservation.active.is_(True), SolarWindObservation.observed_at <= now)
-                     .order_by(SolarWindObservation.observed_at.desc(),
-                               SolarWindObservation.received_at.desc(), SolarWindObservation.spacecraft)
-                     .limit(1))
-        record = (await session.execute(statement)).scalars().first()
-        if record is not None:
-            records[kind] = record
     series = {}
     for metric in metrics:
-        record = records.get(METADATA[metric][0])
+        statement = (select(Measurement).where(Measurement.metric == metric,
+                     Measurement.source_product == f'swpc.rtsw_{METADATA[metric][0]}',
+                     Measurement.observed_at <= now).order_by(Measurement.observed_at.desc()).limit(1))
+        record = (await session.execute(statement)).scalars().first()
         point = sample(record, metric) if record is not None else None
         age = max(0, int((now - record.observed_at).total_seconds())) if record is not None else None
         series[metric] = {**metadata(metric), "latest": point, "age_seconds": age,
@@ -106,19 +87,13 @@ async def latest(session: AsyncSession, metrics: list[str], now: datetime | None
 
 
 async def history(session: AsyncSession, metrics: list[str], start: datetime, end: datetime) -> dict:
-    kinds = {METADATA[metric][0] for metric in metrics}
-    statement = (select(SolarWindObservation)
-                 .where(SolarWindObservation.active.is_(True), SolarWindObservation.kind.in_(kinds),
-                        SolarWindObservation.observed_at >= start, SolarWindObservation.observed_at < end)
-                 .distinct(SolarWindObservation.kind, SolarWindObservation.observed_at)
-                 .order_by(SolarWindObservation.kind, SolarWindObservation.observed_at,
-                           SolarWindObservation.received_at.desc(), SolarWindObservation.spacecraft))
-    records = list((await session.execute(statement)).scalars())
+    statement = (select(Measurement).where(Measurement.metric.in_(metrics),
+                 Measurement.source_product.in_(['swpc.rtsw_mag', 'swpc.rtsw_plasma']),
+                 Measurement.observed_at >= start, Measurement.observed_at < end)
+                 .order_by(Measurement.observed_at))
     series = {metric: {**metadata(metric), "points": []} for metric in metrics}
-    for record in records:
-        for metric in metrics:
-            if METADATA[metric][0] == record.kind:
-                series[metric]["points"].append(sample(record, metric))
+    for record in (await session.execute(statement)).scalars():
+        series[record.metric]['points'].append(sample(record, record.metric))
     for metric, item in series.items():
         item['coverage'] = coverage(item['points'], start, end, 60)
     return {"from": start, "to": end, "interval": "[from,to)", "gap_filling": "none", "series": series}

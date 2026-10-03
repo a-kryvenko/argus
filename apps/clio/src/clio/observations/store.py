@@ -1,5 +1,5 @@
 """Shared persistence operations; callers own transactions."""
-from datetime import UTC, datetime
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.observations.schema import OBSERVATION_METRICS
-from clio.db.models import Measurement, NormalizedObservation, MeasurementReceipt
+from clio.db.models import Measurement, NormalizedObservation
 
 UPSERT_BATCH_SIZE = 5_000
 
@@ -16,7 +16,7 @@ UPSERT_BATCH_SIZE = 5_000
 async def upsert_measurements(
     session: AsyncSession,
     measurements: pd.DataFrame,
-    *, track_receipt: bool = True, replace_existing: bool = True,
+    *, replace_existing: bool = True,
     source_priorities: dict[str, list[str]] | None = None,
 ) -> None:
     if measurements.empty:
@@ -41,7 +41,6 @@ async def upsert_measurements(
         for row in frame.itertuples(index=False)
     ]
 
-    changed_records = []
     for offset in range(0, len(records), UPSERT_BATCH_SIZE):
         statement = insert(Measurement).values(records[offset:offset + UPSERT_BATCH_SIZE])
         if replace_existing:
@@ -67,30 +66,7 @@ async def upsert_measurements(
             )
         else:
             statement = statement.on_conflict_do_nothing(constraint="uq_measurement_metric")
-        if source_priorities is not None:
-            result = await session.execute(statement.returning(Measurement.metric, Measurement.observed_at, Measurement.received_at))
-            changed_records.extend(result.all())
-        else:
-            await session.execute(statement)
-
-    # Metadata and observations commit together; older backfills cannot replace
-    # the receipt timestamp of a newer observation.
-    if not track_receipt:
-        return
-    if source_priorities is not None:
-        # Repeated polling or a rejected lower-priority update is not a receipt.
-        frame = pd.DataFrame(changed_records, columns=['metric', 'observed_at', 'received_at'])
-        if frame.empty:
-            return
-    received = datetime.now(UTC)
-    for metric, group in frame.groupby('metric'):
-        latest = group['observed_at'].max().to_pydatetime()
-        if source_priorities is not None:
-            received = group.loc[group.observed_at == group.observed_at.max(), 'received_at'].max()
-        stmt = insert(MeasurementReceipt).values(metric=metric, latest_observation_at=latest, received_at=received)
-        await session.execute(stmt.on_conflict_do_update(index_elements=['metric'],
-            set_={'latest_observation_at': latest, 'received_at': received},
-            where=MeasurementReceipt.latest_observation_at <= latest))
+        await session.execute(statement)
 
 
 async def load_measurements(
@@ -99,7 +75,8 @@ async def load_measurements(
     until: datetime | None = None,
 ) -> pd.DataFrame:
     statement = (select(Measurement.metric, Measurement.value, Measurement.observed_at)
-                 .where(Measurement.observed_at >= since)
+                 .where(Measurement.observed_at >= since,
+                        or_(Measurement.quality.is_(None), Measurement.quality.not_in(["flagged", "missing"])))
                  .order_by(Measurement.observed_at))
     if until is not None:
         statement = statement.where(Measurement.observed_at < until)

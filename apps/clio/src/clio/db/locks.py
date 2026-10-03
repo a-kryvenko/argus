@@ -5,4 +5,4 @@ SOURCE_LOCKS = {
     'kp': 730110,
     'dst': 730111,
 }
-JOB_LOCKS = {'refresh': 730200, 'aggregate': 730201, 'aia': 730202, 'live': 730203, 'aia-live': 730204}
+JOB_LOCKS = {'refresh': 730200, 'aia': 730202, 'live': 730203, 'aia-live': 730204}

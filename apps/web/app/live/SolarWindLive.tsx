@@ -78,6 +78,6 @@ export default function SolarWindLive({ hours, history, selected, onSelect }: {
         <div className={styles.chartCoverage}>{chart.metrics.map(metric => <HistoryCoverage key={metric} label={windLabels[metric]} coverage={visibleHistory.series[metric]?.coverage} processing={visibleHistory.series[metric]?.processing} />)}</div>
       </section>)}
     </div>
-    <p className={styles.sectionNote}>{aggregated ? 'Closed UTC windows · min/max and coverage in tooltips · coverage includes calculated windows only.' : 'Native L1 measurements · no Earth-arrival time shift · gaps and spacecraft changes break lines.'}</p>
+    <p className={styles.sectionNote}>{aggregated ? 'Closed UTC windows · min/max and coverage in tooltips · coverage includes all expected minutes.' : 'Native L1 measurements · no Earth-arrival time shift · gaps and spacecraft changes break lines.'}</p>
   </section>;
 }

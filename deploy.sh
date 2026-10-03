@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+usage() {
+    echo "Usage: $0 [patch|minor|major] [-m message] [-t]"
+    echo "  -t  Run Ruff and tests only, without committing, pushing or deploying."
+}
+
 BUMP=""
 TAG=""
 MESSAGE="Deploy update"
+TESTS_ONLY=false
 
 if [[ $# -gt 0 && "$1" != -* ]]; then
     BUMP="$1"
     shift
 fi
 
-while getopts "m:" opt; do
+while getopts "m:t" opt; do
     case "$opt" in
         m)
             MESSAGE="$OPTARG"
             ;;
+        t)
+            TESTS_ONLY=true
+            ;;
         *)
-            echo "Usage: $0 [patch|minor|major] [-m message]" >&2
+            usage >&2
             exit 1
             ;;
     esac
@@ -25,7 +36,7 @@ done
 shift "$((OPTIND - 1))"
 if [[ $# -gt 0 ]]; then
     echo "Unexpected argument: $1" >&2
-    echo "Usage: $0 [patch|minor|major] [-m message]" >&2
+    usage >&2
     exit 1
 fi
 
@@ -34,10 +45,18 @@ case "$BUMP" in
         ;;
     *)
         echo "Invalid bump type: $BUMP" >&2
-        echo "Usage: $0 [patch|minor|major] [-m message]" >&2
+        usage >&2
         exit 1
         ;;
 esac
+
+echo "Running pytest"
+./scripts/test-python
+
+if [[ "$TESTS_ONLY" = true ]]; then
+    echo "Ruff and tests passed. Test-only run completed."
+    exit 0
+fi
 
 if [[ -n "$BUMP" ]]; then
     LAST_TAG=$(git tag --sort=-v:refname | head -n 1)
@@ -111,4 +130,3 @@ if [[ -n "$TAG" ]]; then
 else
   echo "Commit and push completed."
 fi
-

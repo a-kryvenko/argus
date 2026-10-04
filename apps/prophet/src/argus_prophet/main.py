@@ -89,9 +89,9 @@ def ready():
 def verification(product: str):
     if product not in PRODUCT_ARTIFACTS:
         raise HTTPException(404, 'Unknown forecast product')
-    from argus_prophet.services.verification import monthly_accuracy
+    from argus_prophet.services.verification import cached_monthly_accuracy
     try:
-        return monthly_accuracy(product)
+        return cached_monthly_accuracy(product)
     except Exception:
         logger.exception('Forecast verification read failed')
         raise HTTPException(503, 'Forecast verification is unavailable') from None

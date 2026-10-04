@@ -27,7 +27,38 @@ def install_rows(monkeypatch, rows):
     monkeypatch.setattr(verification, 'connect', lambda: nullcontext(conn))
 
 
-def test_monthly_pools_errors_filters_valid_times_and_separates_models(monkeypatch):
+@pytest.fixture(autouse=True)
+def clear_monthly_cache():
+    verification._monthly_cache.clear()
+    yield
+    verification._monthly_cache.clear()
+
+
+def test_monthly_cache_reuses_results_until_expiry_and_isolates_products(monkeypatch):
+    clock = Mock(return_value=0)
+    calculate = Mock(side_effect=lambda product: object())
+    monkeypatch.setattr(verification, 'monotonic', clock)
+    monkeypatch.setattr(verification, 'monthly_accuracy', calculate)
+    first = verification.cached_monthly_accuracy('dst')
+    clock.return_value = 299
+    assert verification.cached_monthly_accuracy('dst') is first
+    assert verification.cached_monthly_accuracy('solar-wind-density') is not first
+    assert calculate.call_count == 2
+    clock.return_value = 300
+    assert verification.cached_monthly_accuracy('dst') is not first
+    assert calculate.call_count == 3
+
+
+def test_monthly_cache_does_not_cache_errors(monkeypatch):
+    calculate = Mock(side_effect=[RuntimeError('unavailable'), object()])
+    monkeypatch.setattr(verification, 'monthly_accuracy', calculate)
+    with pytest.raises(RuntimeError):
+        verification.cached_monthly_accuracy('dst')
+    assert verification.cached_monthly_accuracy('dst') is not None
+    assert calculate.call_count == 2
+
+
+def test_monthly_pools_errors_across_models_and_filters_valid_times(monkeypatch):
     install_rows(monkeypatch, [
         row('dst_quantile', [pair(0, 0), pair(0, 4, lead=48),
             pair(None, 100, state='missing'), pair(None, 100, lead=12, state='pending'),
@@ -35,21 +66,23 @@ def test_monthly_pools_errors_filters_valid_times_and_separates_models(monkeypat
             pair(0, 100, time='2026-10-04T00:00Z')]),
         row('dst_quantile', [pair(0, 2)]),
         row('dst_quantile', [pair(0, 10)], 'model-b'),
+        row('dst_quantile', [pair(0, 100, time='2026-08-01T00:00Z')]),
+        row('dst_quantile', []),
     ])
     result = verification.monthly_accuracy('dst', now=datetime(2026, 10, 3, tzinfo=UTC))
-    a, b = result.groups
-    assert a.counts == {'verified': 3, 'missing': 1, 'pending': 1, 'total': 5}
+    assert len(result.groups) == 1
+    a = result.groups[0]
+    assert a.counts == {'verified': 4, 'missing': 1, 'pending': 1, 'total': 6}
     leads = {point.lead_hours: point for point in a.by_lead_hour}
-    assert leads[3].continuous['mae'] == 1
-    assert leads[3].continuous['rmse'] == pytest.approx(2**.5)
-    assert leads[3].counts == {'verified': 2, 'missing': 1, 'pending': 0, 'total': 3}
+    assert leads[3].continuous['mae'] == 4
+    assert leads[3].continuous['rmse'] == pytest.approx((104 / 3)**.5)
+    assert leads[3].counts == {'verified': 3, 'missing': 1, 'pending': 0, 'total': 4}
     assert leads[48].continuous['mae'] == 4
     assert leads[48].continuous['rmse'] == 4
     assert leads[12].continuous is None
     assert leads[12].counts['pending'] == 1
     assert 96 not in leads
-    assert a.releases == 2
-    assert b.by_lead_hour[0].continuous['mae'] == 10
+    assert a.releases == 3
     assert result.start == datetime(2026, 9, 3, tzinfo=UTC)
 
 

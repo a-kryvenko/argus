@@ -149,13 +149,13 @@ test('monthly observed accuracy is independent of static metrics and preserves z
     success: true, error: null, data: {
       product: 'solar-wind-speed', start: '2026-09-03T00:00:00Z', end: '2026-10-03T00:00:00Z',
       groups: [
-        { artifact: 'plasma_speed_quantile', model_sha256: 'abc123', releases: 48,
+        { artifact: 'plasma_speed_quantile', releases: 48,
           evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 100, missing: 2, pending: 3 },
           by_lead_hour: [
             { lead_hours: 3, counts: { verified: 80, missing: 2, pending: 3 }, continuous: { mae: 12.5, rmse: 18.5 }, binary: {} },
             { lead_hours: 48, counts: { verified: 20, missing: 0, pending: 0 }, continuous: { mae: 42, rmse: 50 }, binary: {} },
           ] },
-        { artifact: 'plasma_speed_threshold', model_sha256: 'def456', releases: 48,
+        { artifact: 'plasma_speed_threshold', releases: 48,
           evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 100, missing: 2, pending: 3 },
           by_lead_hour: [{ lead_hours: 3, counts: { verified: 100, missing: 2, pending: 3 }, continuous: null, binary: { '450': { brier: 0 }, '500': { brier: .000004949486147261768 } } }] },
       ],
@@ -167,6 +167,8 @@ test('monthly observed accuracy is independent of static metrics and preserves z
   await expect(monthly.getByTitle('18.5', { exact: true })).toHaveText('19');
   await expect(monthly.getByTitle('0.000004949486147261768', { exact: true })).toHaveText('<0.001');
   await expect(monthly).toContainText('100 verified pairs');
+  await expect(monthly.getByRole('heading', { name: 'Solar Wind Speed · Quantile forecast', exact: true })).toHaveCount(1);
+  await expect(monthly).toContainText('All model versions are combined for this period.');
   await expect(monthly).toContainText('2026-09-03 00:00 UTC');
   await expect(monthly.getByRole('table').last().getByText('0', { exact: true })).toBeVisible();
   await expect(monthly).toContainText('Brier score · ≥ 450 km/s');

@@ -12,7 +12,6 @@ type Verification = {
   end: string;
   groups: Array<{
     artifact: string;
-    model_sha256: string;
     evaluated_at: string;
     releases: number;
     counts: Record<string, number>;
@@ -42,7 +41,7 @@ export default function MonthlyAccuracy({ product }: { product: ProductConfig })
       {!data.groups.length && <p role="status">No verified forecast data available for this period.</p>}
       {data.groups.map(group => {
         const variable = product.variables.find(item => item.key === variables[group.artifact]);
-        return <div key={`${group.artifact}-${group.model_sha256}`} className={local.monthlyGroup}>
+        return <div key={group.artifact} className={local.monthlyGroup}>
           <h3>{variable?.label ?? group.artifact} · {group.artifact.endsWith('_threshold') ? 'Threshold probabilities' : 'Quantile forecast'}</h3>
           <p>{group.counts.verified.toLocaleString('en-US')} verified pairs · {group.releases} releases</p>
           {!group.counts.verified && <p role="status">No matched observations available yet.</p>}
@@ -61,10 +60,10 @@ export default function MonthlyAccuracy({ product }: { product: ProductConfig })
               })}</tbody>
             </table>
           </div>
-          <p>Updated {utc(group.evaluated_at)} · Model {group.model_sha256 === 'unknown' ? 'version unavailable' : group.model_sha256.slice(0, 12)}</p>
+          <p>Updated {utc(group.evaluated_at)}</p>
         </div>;
       })}
-      <details><summary>How this average is calculated</summary><p>Scores are recomputed from individual forecast–observation pairs in the rolling 30-day window. Each row uses only forecasts made exactly that many hours before valid time; +24h does not include shorter leads. Missing observations and pending hours are excluded from scores. Model versions are evaluated separately. Available history may cover only part of the window.</p></details>
+      <details><summary>How this average is calculated</summary><p>Scores are recomputed from individual forecast–observation pairs in the rolling 30-day window. Each row uses only forecasts made exactly that many hours before valid time; +24h does not include shorter leads. Missing observations and pending hours are excluded from scores. All model versions are combined for this period. Available history may cover only part of the window.</p></details>
     </>}
   </section>;
 }

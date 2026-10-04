@@ -4,6 +4,7 @@ import io
 import json
 import os
 from datetime import UTC, datetime, timedelta
+from threading import Lock
 from time import monotonic
 
 import httpx
@@ -11,11 +12,30 @@ import numpy as np
 import pandas as pd
 
 from forecast.evaluation import TARGETS, match_observations, score, validate_predictions
+from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 from argus_prophet.db.session import connect
 from argus_prophet.services.releases.publication import read_release
 
 from argus_prophet.services.generation.products import VERIFIED_PRODUCTS as PRODUCTS
 from argus_prophet.scheduling.execution import before_dispatch
+
+
+MONTHLY_CACHE_SECONDS = 300
+_monthly_cache = {}
+_monthly_locks = {product: Lock() for product in PRODUCT_ARTIFACTS}
+
+
+def cached_monthly_accuracy(product):
+    """Reuse a rolling summary for five minutes; coalesce concurrent reads."""
+    if product not in _monthly_locks:
+        raise ValueError('Unknown forecast product')
+    with _monthly_locks[product]:
+        cached = _monthly_cache.get(product)
+        if cached is not None and monotonic() < cached[0]:
+            return cached[1]
+        result = monthly_accuracy(product)
+        _monthly_cache[product] = (monotonic() + MONTHLY_CACHE_SECONDS, result)
+        return result
 
 
 def targets(frame, start, end):
@@ -160,10 +180,9 @@ def verification_report(product, *, days=7):
 
 
 def monthly_accuracy(product, *, now=None):
-    """Pool matched pairs by model, over valid times in the trailing 30 days."""
+    """Pool matched pairs across all models, over valid times in the trailing 30 days."""
     from psycopg.rows import dict_row
     from common.schemas.forecast_verification import ForecastVerification, VerificationGroup, VerificationLead
-    from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unknown forecast product')
     now = now or datetime.now(UTC)
@@ -179,19 +198,21 @@ def monthly_accuracy(product, *, now=None):
         rows = cursor.fetchall()
     groups = {}
     for row in rows:
-        report = row['report']
-        frame = pd.DataFrame(report['pairs'])
-        if frame.empty:
+        groups.setdefault(row['artifact'], []).append(row)
+    result = []
+    for artifact, entries in groups.items():
+        # Build and filter one frame per artifact instead of one per release.
+        pairs = [pair for entry in entries for pair in entry['report']['pairs']]
+        if not pairs:
             continue
+        frame = pd.DataFrame(pairs)
+        frame['_release'] = [index for index, entry in enumerate(entries)
+                             for _ in entry['report']['pairs']]
         times = pd.to_datetime(frame.valid_time, utc=True)
         frame = frame[(times >= start) & (times < now)].copy()
         if frame.empty:
             continue
-        key = (row['artifact'], report['model_info'].get('sha256', 'unknown'))
-        groups.setdefault(key, []).append((frame, row['evaluated_at']))
-    result = []
-    for (artifact, digest), entries in groups.items():
-        frame = pd.concat([entry[0] for entry in entries], ignore_index=True)
+        included = frame['_release'].unique()
         scored = score(frame, artifact)
         leads = {}
         for lead, part in frame.groupby('lead_hours', sort=True):
@@ -208,7 +229,7 @@ def monthly_accuracy(product, *, now=None):
                     point.continuous = values
                 else:
                     point.binary[table.removeprefix('threshold_').removesuffix('.csv')] = values
-        result.append(VerificationGroup(artifact=artifact, model_sha256=digest,
-            releases=len(entries), evaluated_at=max(entry[1] for entry in entries),
+        result.append(VerificationGroup(artifact=artifact,
+            releases=len(included), evaluated_at=max(entries[index]['evaluated_at'] for index in included),
             counts=scored['counts'], by_lead_hour=list(leads.values())))
     return ForecastVerification(product=product, start=start, end=now, groups=result)

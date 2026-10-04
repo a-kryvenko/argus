@@ -44,17 +44,17 @@ class UserUpdate(BaseModel):
 async def login(body: Credentials, request: Request, response: Response, db: AsyncSession = Depends(get_db_session)):
     now = datetime.now(timezone.utc)
     window = now.replace(minute=(now.minute // 15)*15, second=0, microsecond=0)
-    # Shared database counters work across workers; do not trust forwarded IP headers.
-    for label, limit in [(f'peer:{request.client.host if request.client else "unknown"}', 100), (f'user:{body.username}', 10)]:
-        stmt = insert(LoginAttempt).values(key=digest(label), window=window, count=1)
-        stmt = stmt.on_conflict_do_update(index_elements=[LoginAttempt.key], set_={
-            'window': window, 'count': func.coalesce(LoginAttempt.count, 0) + 1})
-        # Remove expired counters before incrementing in this transaction.
-        await db.execute(delete(LoginAttempt).where(LoginAttempt.window < window))
-        count = (await db.execute(stmt.returning(LoginAttempt.count))).scalar_one()
-        await db.commit()
-        if count > limit:
-            raise HTTPException(429, 'Too many sign-in attempts. Try again in 15 minutes.')
+    # Shared account counters work across workers and client IPs. The production
+    # nginx applies the per-IP limit after resolving the trusted edge proxy;
+    # request.client here is the nginx peer, shared by all visitors.
+    stmt = insert(LoginAttempt).values(key=digest(f'user:{body.username}'), window=window, count=1)
+    stmt = stmt.on_conflict_do_update(index_elements=[LoginAttempt.key], set_={
+        'window': window, 'count': func.coalesce(LoginAttempt.count, 0) + 1})
+    await db.execute(delete(LoginAttempt).where(LoginAttempt.window < window))
+    count = (await db.execute(stmt.returning(LoginAttempt.count))).scalar_one()
+    await db.commit()
+    if count > 10:
+        raise HTTPException(429, 'Too many sign-in attempts. Try again in 15 minutes.')
     user = await db.scalar(select(User).where(User.username == body.username))
     valid = await run_in_threadpool(verify_password, body.password, user.password_hash if user else DUMMY_HASH)
     if not valid or user is None or not user.active:

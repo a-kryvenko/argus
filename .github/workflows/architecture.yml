@@ -20,6 +20,10 @@ jobs:
         run: python -m pip install pytest
       - name: Check clio, prophet and intelligence isolation
         run: python -m pytest tests/test_application_isolation.py
+      - name: Check login throttling through nginx
+        env:
+          TEST_NGINX_IMAGE: nginx:stable-alpine
+        run: python -m pytest -q tests/integration/test_login_edge.py
 
   domain-storage:
     # Forks and Dependabot cannot access the private runtime repositories.

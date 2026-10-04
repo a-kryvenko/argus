@@ -50,7 +50,7 @@ def test_monitoring_reads_latest_measurement_and_its_receipt(monkeypatch):
     session = AsyncMock()
     session.scalar.return_value = point
     session.get.return_value = None
-    monkeypatch.setattr(monitoring, 'OBSERVATION_METRICS', ['bz'])
+    monkeypatch.setattr(monitoring, 'OBSERVATIONS', {'bz': monitoring.OBSERVATIONS['bz']})
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
     result = asyncio.run(monitoring.monitoring_status(session))
     assert result['measurements'][0]['latest_observation_at'] == NOW
@@ -63,8 +63,24 @@ def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
     session = AsyncMock()
     session.scalar.return_value = point
     session.get.return_value = None
-    monkeypatch.setattr(monitoring, 'OBSERVATION_METRICS', ['bz'])
+    monkeypatch.setattr(monitoring, 'OBSERVATIONS', {'bz': monitoring.OBSERVATIONS['bz']})
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
     result = asyncio.run(monitoring.monitoring_status(session))
     assert result['measurements'][0]['status'] == 'unavailable'
     assert result['status'] == 'degraded'
+
+
+def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(monkeypatch):
+    session = AsyncMock()
+    session.scalar.return_value = None
+    session.get.return_value = None
+    sources = {'solar_wind_mag': {'status': 'not_started'}}
+    monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'degraded', 'sources': sources}))
+    result = asyncio.run(monitoring.monitoring_status(session))
+    assert {point['metric'] for point in result['measurements']} == {
+        'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7',
+    }
+    assert all(point['status'] == 'unavailable' for point in result['measurements'])
+    assert result['sources'] == sources
+    assert result['status'] == 'degraded'
+    assert result['last_refresh_completed_at'] is None

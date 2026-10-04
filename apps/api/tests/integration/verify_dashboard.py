@@ -23,7 +23,8 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.session import get_db_session
-from app.db.models.dashboard import Session, ApiMetric
+from app.db.models.dashboard import Session, ApiMetric, LoginAttempt
+from app.dashboard_auth import digest
 from app.routers.dashboard import router, create_user, UserCreate
 from app.routers.public.observations import router as public_router
 from app.services import api_statistics
@@ -165,6 +166,24 @@ async def verify():
                 for i in range(11):
                     response = await login(secondary, 'nonexistent', 'wrong')
                 assert response.status_code == 429
+                # Visitors share the nginx peer: one visitor must not exhaust a
+                # global API peer bucket and block unrelated accounts.
+                with patch('app.routers.dashboard.verify_password', return_value=False):
+                    for i in range(101):
+                        assert (await login(secondary, f'unknown-{i}', 'wrong')).status_code == 401
+                    # Changing IPs and username casing must not bypass the account limit.
+                    for i in range(11):
+                        remote = ASGITransport(app=app, client=(f'198.51.100.{i+1}', 12345))
+                        async with AsyncClient(transport=remote, base_url='https://dashboard.test', headers=headers) as distributed:
+                            result = await login(distributed, 'Distributed' if i % 2 else 'distributed', 'wrong')
+                            assert result.status_code == (401 if i < 10 else 429)
+                    # An expired account counter releases the next window.
+                    async with factory() as db:
+                        await db.execute(update(LoginAttempt).where(LoginAttempt.key == digest('user:distributed'))
+                                         .values(window=now-timedelta(minutes=30)))
+                        await db.commit()
+                    assert (await login(secondary, 'distributed', 'wrong')).status_code == 401
+                assert (await login(client)).status_code == 200
                 api_statistics.record('/dashboard/users/{user_id}', 'PATCH', 200, 42)
                 api_statistics.record('__unmatched__', 'GET', 404, 9)
                 with patch.object(api_statistics, 'get_session_factory', return_value=factory):

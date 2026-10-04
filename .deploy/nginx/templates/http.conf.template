@@ -17,6 +17,14 @@ map $argus_traffic_channel $argus_log_traffic {
 }
 log_format argus_traffic escape=json '{"time":"$msec","channel":"$argus_traffic_channel","status":$status,"seconds":"$request_time"}';
 
+# Only login POSTs consume this bucket. $uri is normalized (including escapes).
+# real_ip below resolves the client through the trusted edge proxy before access.
+map "$request_method:$uri" $argus_login_ip {
+    default "";
+    ~^POST:/api/v1/dashboard/login/?$ $binary_remote_addr;
+}
+limit_req_zone $argus_login_ip zone=argus_login:10m rate=6r/m;
+
 server {
     listen 80;
     listen [::]:80;

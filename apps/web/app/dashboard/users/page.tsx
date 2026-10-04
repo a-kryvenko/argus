@@ -275,6 +275,8 @@ export default function Users() {
                       },
                 );
                 if (editing?.id === actor?.id && password) {
+                  // Discard in-memory session state and cached pages after revocation.
+                  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                   window.location.assign("/dashboard/login");
                   return;
                 }

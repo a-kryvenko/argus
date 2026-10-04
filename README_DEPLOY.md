@@ -67,6 +67,12 @@ and `up --wait`.
 - Configure all four service databases with distinct owners, usually at `postgres:5432`.
   Preserve existing PostgreSQL credentials and volumes.
 - Set service tokens and the public dashboard origin; use secure cookies for HTTPS.
+- Dashboard login has two limits: nginx allows 10 immediate attempts per client IP,
+  then replenishes one attempt every 10 seconds; the API allows 10 attempts per
+  username per 15-minute window across all clients. nginx resolves client IPs only
+  through the trusted edge network (`172.20.0.0/16`). Keep the API internal; direct
+  local development requests only have the username limit. Apply the nginx and API
+  changes together when deploying this configuration.
 - Add SSH and private-checkout secrets required by [deploy.yml](.github/workflows/deploy.yml).
 - Add `GHCR_USERNAME` and `GHCR_READ_TOKEN`: a classic PAT with `read:packages`
   and access to all five images; authorize organization SSO if required.
@@ -103,6 +109,13 @@ Review the main, notebooks and private-backend checkouts before publishing:
 
 All modes run web lint, TypeScript, Node, Playwright and Python tests before
 publishing. Python tests require `uv`; run them separately with `./scripts/test-python -q`.
+
+The login edge regression checks use a disposable nginx container and mock HTTP
+upstreams, and run in PR CI. To run them locally (requires Docker):
+
+```bash
+TEST_NGINX_IMAGE=nginx:stable-alpine tests/runtime/.venv/bin/python -m pytest -q tests/integration/test_login_edge.py
+```
 
 A `v*` tag triggers GitHub Actions. It builds or reuses images, pins their digests
 in `.release-images.env`, uploads the release bundle, and deploys to `/var/www`:

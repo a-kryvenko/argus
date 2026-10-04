@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from common.config import get_config
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
 from common.schemas.forecast_status import ForecastStatus
+from common.schemas.forecast_verification import ForecastVerification
 from argus_prophet.db.session import connect
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 
@@ -80,3 +81,17 @@ def ready():
     except Exception:
         raise HTTPException(503, 'Forecast storage is not ready') from None
     return {'service': 'prophet', 'status': 'ok'}
+
+
+@app.get('/internal/v1/forecasts/{product}/verification',
+         response_model=ForecastVerification,
+         dependencies=[Depends(require_service_token)])
+def verification(product: str):
+    if product not in PRODUCT_ARTIFACTS:
+        raise HTTPException(404, 'Unknown forecast product')
+    from argus_prophet.services.verification import monthly_accuracy
+    try:
+        return monthly_accuracy(product)
+    except Exception:
+        logger.exception('Forecast verification read failed')
+        raise HTTPException(503, 'Forecast verification is unavailable') from None

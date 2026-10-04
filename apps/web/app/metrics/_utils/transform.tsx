@@ -15,7 +15,17 @@ export const scoreNotes: Record<ScoreKey, string> = {
   heidke_skill_score: 'Skill relative to chance agreement · 0 means no skill over chance; 1 is perfect.',
 };
 export const metricLabel = (key: string) => ({ mae: 'MAE', rmse: 'RMSE', bias: 'Bias', coverage_80: '80% interval coverage', interval_width_80: '80% interval width', n: 'Samples' }[key] ?? key.replaceAll('_', ' '));
-export const metricNumber = (value: number | null | undefined) => value == null || !Number.isFinite(value) ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 4 });
+const integerFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const fractionFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 3 });
+const exactFormat = new Intl.NumberFormat('en-US', { useGrouping: false, maximumSignificantDigits: 21 });
+export const metricNumber = (value: number | null | undefined) => {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const magnitude = Math.abs(value);
+  if (magnitude > 0 && magnitude < 0.001) return value > 0 ? '<0.001' : '>-0.001';
+  return (magnitude >= 1 ? integerFormat : fractionFormat).format(value);
+};
+export const metricTitle = (value: number | null | undefined) => value == null || !Number.isFinite(value)
+  ? undefined : exactFormat.format(value);
 export function metricUnit(key: string, unit: string) {
   if (['mae', 'rmse', 'bias', 'interval_width_80'].includes(key) || /^q\d+_pinball$/.test(key)) return unit;
   if (key.startsWith('coverage') || ['lower_tail', 'upper_tail'].includes(key)) return 'fraction';

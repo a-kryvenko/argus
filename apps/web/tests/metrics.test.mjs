@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 const source = await readFile(new URL('../app/metrics/_utils/transform.tsx', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { binaryRows, leadHours, continuousKeys, chartRows, metricNumber } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { binaryRows, leadHours, continuousKeys, chartRows, metricNumber, metricTitle } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 
 test('threshold scores align by actual lead hour across unordered and unequal series', () => {
   const variable = { continuous: { by_lead_hour: [{ lead_hours: 48, values: { mae: 4 } }] }, binary: [
@@ -35,4 +35,18 @@ test('missing and nonfinite scores differ from zero and negative skill', () => {
   assert.equal(metricNumber(-.25), '-0.25');
   assert.deepEqual(leadHours(), []);
   assert.deepEqual(chartRows([]), []);
+});
+
+test('metric precision distinguishes tiny nonzero values and retains exact titles', () => {
+  assert.equal(metricNumber(15.1433), '15');
+  assert.equal(metricNumber(19.538), '20');
+  assert.equal(metricNumber(1), '1');
+  assert.equal(metricNumber(.123456), '0.123');
+  assert.equal(metricNumber(.001), '0.001');
+  assert.equal(metricNumber(.000004949486147261768), '<0.001');
+  assert.equal(metricTitle(.000004949486147261768), '0.000004949486147261768');
+  assert.equal(metricNumber(0), '0');
+  assert.equal(metricNumber(-.00001), '>-0.001');
+  assert.equal(metricNumber(-12.7), '-13');
+  assert.equal(metricTitle(null), undefined);
 });

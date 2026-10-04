@@ -157,3 +157,58 @@ def verification_report(product, *, days=7):
                        'releases': len(group), 'last_evaluated_at': max(row['evaluated_at'] for row in group),
                        **score(frame, artifact)})
     return {'protocol': 'published-hourly-v1', 'days': days, 'groups': result}
+
+
+def monthly_accuracy(product, *, now=None):
+    """Pool matched pairs by model, over valid times in the trailing 30 days."""
+    from psycopg.rows import dict_row
+    from common.schemas.forecast_verification import ForecastVerification, VerificationGroup, VerificationLead
+    from common.schemas.forecast_release import PRODUCT_ARTIFACTS
+    if product not in PRODUCT_ARTIFACTS:
+        raise ValueError('Unknown forecast product')
+    now = now or datetime.now(UTC)
+    start = now - timedelta(days=30)
+    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
+        cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+        cursor.execute('SET LOCAL statement_timeout=10000')
+        # Include releases before the window whose forecast horizons enter it.
+        cursor.execute("""SELECT v.artifact,v.evaluated_at,v.report
+            FROM prophet.forecast_verification v JOIN prophet.forecast_release r ON r.id=v.release_id
+            WHERE r.product=%s AND r.issue_time >= %s AND r.issue_time <= %s
+            ORDER BY r.issue_time,r.id""", (product, start-timedelta(hours=96), now))
+        rows = cursor.fetchall()
+    groups = {}
+    for row in rows:
+        report = row['report']
+        frame = pd.DataFrame(report['pairs'])
+        if frame.empty:
+            continue
+        times = pd.to_datetime(frame.valid_time, utc=True)
+        frame = frame[(times >= start) & (times < now)].copy()
+        if frame.empty:
+            continue
+        key = (row['artifact'], report['model_info'].get('sha256', 'unknown'))
+        groups.setdefault(key, []).append((frame, row['evaluated_at']))
+    result = []
+    for (artifact, digest), entries in groups.items():
+        frame = pd.concat([entry[0] for entry in entries], ignore_index=True)
+        scored = score(frame, artifact)
+        leads = {}
+        for lead, part in frame.groupby('lead_hours', sort=True):
+            counts = {state: int(part.state.eq(state).sum())
+                      for state in ('verified', 'missing', 'pending')}
+            counts['total'] = len(part)
+            leads[int(lead)] = VerificationLead(lead_hours=int(lead), counts=counts)
+        for table, records in scored['tables'].items():
+            for record in records:
+                values = {key: value for key, value in record.items()
+                          if key not in ('lead_hours', 'n', 'scheduled', 'reliability')}
+                point = leads[record['lead_hours']]
+                if table == 'regression.csv':
+                    point.continuous = values
+                else:
+                    point.binary[table.removeprefix('threshold_').removesuffix('.csv')] = values
+        result.append(VerificationGroup(artifact=artifact, model_sha256=digest,
+            releases=len(entries), evaluated_at=max(entry[1] for entry in entries),
+            counts=scored['counts'], by_lead_hour=list(leads.values())))
+    return ForecastVerification(product=product, start=start, end=now, groups=result)

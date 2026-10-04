@@ -1,5 +1,7 @@
 'use client';
-import { useId, useState } from 'react';
+import MetricValue from './MetricValue';
+import LeadHourSlider from './LeadHourSlider';
+import { useId, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, ChevronDown, Crosshair, RefreshCw } from 'lucide-react';
 import { useResource } from '../../_utils/useResource';
@@ -8,8 +10,9 @@ import WorkspaceShell from '../../_components/WorkspaceShell';
 import { productApiPath, type ProductConfig } from '../../_config/products';
 import type { ForecastMetrics } from '../../_utils/api';
 import MetricChart from './MetricChart';
+import MonthlyAccuracy from './MonthlyAccuracy';
 import ReliabilityChart from './MetricReliability';
-import { binaryRows, continuousKeys, leadHours, metricLabel, metricNumber, metricUnit, scoreLabels, scoreNotes, type ScoreKey } from '../_utils/transform';
+import { binaryRows, continuousKeys, leadHours, metricLabel, metricUnit, scoreLabels, scoreNotes, type ScoreKey } from '../_utils/transform';
 import styles from '../../_components/forecast.module.css';
 import local from './metrics.module.css';
 
@@ -21,6 +24,8 @@ export default function MetricsProduct({ product }: { product: ProductConfig }) 
       <div className={styles.pageHeading}><div><div className={styles.eyebrow}>MODEL EVALUATION <span>/ {product.variables.map(variable => variable.key.toUpperCase()).join(' · ')}</span></div><h1>{product.title} metrics</h1><p>Forecast quality by lead hour. Explore errors, threshold scores and probability calibration.</p></div>
         <Link className={styles.headingLink} href={`/products/${product.slug}`}>Open forecast<ArrowUpRight size={13} aria-hidden="true" /></Link>
       </div>
+      <MonthlyAccuracy product={product} />
+      <h2 className={local.staticHeading}>Model evaluation by lead hour</h2>
       {!data ? <ResourceState error={error} retry={retry} label="metrics" /> : <MetricsBoard key={product.slug} product={product} data={data} retry={retry} />}
       <div className={styles.pageFooter}><span>Evaluation scores · not forecast values</span><a href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics data · JSON<ArrowUpRight size={12} aria-hidden="true" /></a></div>
     </main>
@@ -37,15 +42,16 @@ function MetricsBoard({ product, data, retry }: { product: ProductConfig; data: 
   const id = useId();
   const variable = product.variables.find(item => item.key === variableKey)!;
   const metrics = data.variables[variableKey];
-  const allHours = leadHours(metrics);
-  const hours = allHours.filter(hour => horizon == null || hour <= horizon);
+  const allHours = useMemo(() => leadHours(metrics), [metrics]);
+  const hours = useMemo(() => allHours.filter(hour => horizon == null || hour <= horizon), [allHours, horizon]);
   const hour = selectedHour != null && hours.includes(selectedHour) ? selectedHour : hours[0];
   const keys = continuousKeys(metrics);
   const chartKeys = keys.filter(key => key !== 'n');
   const selectedMetric = chartKeys.includes(continuousKey) ? continuousKey : chartKeys[0];
   const continuous = metrics?.continuous?.by_lead_hour.find(row => row.lead_hours === hour)?.values;
-  const labels = Object.fromEntries(metrics?.binary.map(series => [String(series.threshold), variable.thresholds.find(item => item.value === series.threshold)?.label ?? `≥ ${series.threshold} ${variable.unit}`]) ?? []);
-  const binary = metrics ? binaryRows(metrics, score).filter(row => horizon == null || row.lead_hours <= horizon) : [];
+  const labels = useMemo(() => Object.fromEntries(metrics?.binary.map(series => [String(series.threshold), variable.thresholds.find(item => item.value === series.threshold)?.label ?? `≥ ${series.threshold} ${variable.unit}`]) ?? []), [metrics, variable]);
+  const continuousRows = useMemo(() => metrics?.continuous?.by_lead_hour.filter(row => horizon == null || row.lead_hours <= horizon) ?? [], [metrics, horizon]);
+  const binary = useMemo(() => metrics ? binaryRows(metrics, score).filter(row => horizon == null || row.lead_hours <= horizon) : [], [metrics, score, horizon]);
   const cards = ['mae', 'rmse', 'coverage_80', 'n'].filter(key => keys.includes(key));
   const summaryKeys = cards.length ? cards : chartKeys.slice(0, 4);
   const summaryScores = Object.keys(scoreLabels).slice(0, 4) as ScoreKey[];
@@ -59,13 +65,13 @@ function MetricsBoard({ product, data, retry }: { product: ProductConfig; data: 
     <div className={local.context}><span>{hours.length ? `${hours.length} evaluated lead times · +${hours[0]}h to +${hours.at(-1)}h` : 'No evaluated lead times in this horizon'}</span><div className={styles.actions}><button onClick={retry}><RefreshCw size={12} aria-hidden="true" />Refresh</button></div></div>
     {!hours.length ? <p className={styles.notice} role="status">{variable.label} metrics are not available in this horizon.</p> : <>
       <section className={local.summary} aria-label="Selected lead metrics">
-        {summaryKeys.length ? summaryKeys.map(key => <div key={key}><span>{metricLabel(key)}</span><strong>{metricNumber(continuous?.[key])}<small>{metricUnit(key, variable.unit)}</small></strong><span>Lead +{hour}h{key === 'coverage_80' ? ' · nominal 0.8' : ''}</span></div>) : summaryScores.map(key => <div key={key}><span>{scoreLabels[key]}</span><strong>{metricNumber(firstScores?.[key])}</strong><span>Lead +{hour}h · {firstThreshold ? labels[String(firstThreshold.threshold)] : 'Unavailable'}</span></div>)}
+        {summaryKeys.length ? summaryKeys.map(key => <div key={key}><span>{metricLabel(key)}</span><strong><MetricValue value={continuous?.[key]} /><small>{metricUnit(key, variable.unit)}</small></strong><span>Lead +{hour}h{key === 'coverage_80' ? ' · nominal 0.8' : ''}</span></div>) : summaryScores.map(key => <div key={key}><span>{scoreLabels[key]}</span><strong><MetricValue value={firstScores?.[key]} /></strong><span>Lead +{hour}h · {firstThreshold ? labels[String(firstThreshold.threshold)] : 'Unavailable'}</span></div>)}
       </section>
       <div className={styles.boardGrid}>
         <div className={styles.plots}>
           {selectedMetric && <>
             <div className={local.selector}><label htmlFor={`${id}-continuous`}>Continuous metric</label><select id={`${id}-continuous`} value={selectedMetric} onChange={event => setContinuousKey(event.target.value)}>{chartKeys.map(key => <option value={key} key={key}>{metricLabel(key)}</option>)}</select></div>
-            <MetricChart data={metrics.continuous!.by_lead_hour.filter(row => horizon == null || row.lead_hours <= horizon)} title={metricLabel(selectedMetric)} labels={{ [selectedMetric]: variable.label }} unit={metricUnit(selectedMetric, variable.unit)} selectedHour={hour} onSelectHour={setSelectedHour} note={selectedMetric === 'coverage_80' ? 'Observed coverage of the nominal 80% prediction interval.' : 'Evaluation of the continuous forecast.'} />
+            <MetricChart data={continuousRows} title={metricLabel(selectedMetric)} labels={{ [selectedMetric]: variable.label }} unit={metricUnit(selectedMetric, variable.unit)} selectedHour={hour} onSelectHour={setSelectedHour} note={selectedMetric === 'coverage_80' ? 'Observed coverage of the nominal 80% prediction interval.' : 'Evaluation of the continuous forecast.'} />
           </>}
           {metrics.binary.length > 0 && <>
             <div className={local.selector}><label htmlFor={`${id}-score`}>Threshold metric</label><select id={`${id}-score`} value={score} onChange={event => setScore(event.target.value as ScoreKey)}>{Object.entries(scoreLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
@@ -75,16 +81,16 @@ function MetricsBoard({ product, data, retry }: { product: ProductConfig; data: 
           <details className={styles.dataTable}><summary>Values by lead hour<span>{hours.length} evaluated times</span></summary><div className={styles.tableScroll}><table>
             <caption>Continuous values and {scoreLabels[score].toLowerCase()} by threshold. A dash means unavailable.</caption>
             <thead><tr><th scope="col">Lead hour</th>{keys.map(key => <th key={key} scope="col">{metricLabel(key)}{metricUnit(key, variable.unit) && ` · ${metricUnit(key, variable.unit)}`}</th>)}{Object.entries(labels).map(([key, label]) => <th scope="col" key={key}>{label}</th>)}</tr></thead>
-            <tbody>{hours.map(lead => { const row = metrics.continuous?.by_lead_hour.find(item => item.lead_hours === lead); const scores = binary.find(item => item.lead_hours === lead); return <tr key={lead} data-selected={lead === hour}><th scope="row"><button aria-label={`Inspect lead ${lead} hours`} onClick={() => setSelectedHour(lead)}>+{lead}h</button></th>{keys.map(key => <td key={key}>{metricNumber(row?.values[key])}</td>)}{Object.keys(labels).map(key => <td key={key}>{metricNumber(scores?.values[key])}</td>)}</tr>; })}</tbody>
+            <tbody>{hours.map(lead => { const row = metrics.continuous?.by_lead_hour.find(item => item.lead_hours === lead); const scores = binary.find(item => item.lead_hours === lead); return <tr key={lead} data-selected={lead === hour}><th scope="row"><button aria-label={`Inspect lead ${lead} hours`} onClick={() => setSelectedHour(lead)}>+{lead}h</button></th>{keys.map(key => <td key={key}><MetricValue value={row?.values[key]} /></td>)}{Object.keys(labels).map(key => <td key={key}><MetricValue value={scores?.values[key]} /></td>)}</tr>; })}</tbody>
           </table></div></details>
         </div>
         <aside className={styles.inspector} aria-label="Metrics inspector" data-expanded={expanded}>
           <div className={styles.inspectorHeading}><Crosshair size={13} aria-hidden="true" /><span>METRICS INSPECTOR</span><button className={styles.inspectorToggle} aria-expanded={expanded} aria-controls={`${id}-inspector`} onClick={() => setExpanded(!expanded)}>Details<ChevronDown size={13} aria-hidden="true" /></button></div>
           <div className={styles.inspectorBody} id={`${id}-inspector`}>
-            <label htmlFor={`${id}-lead`}>Evaluation lead hour</label><select id={`${id}-lead`} value={hour} onChange={event => setSelectedHour(Number(event.target.value))}>{hours.map(lead => <option value={lead} key={lead}>+{lead} hours</option>)}</select>
+            <LeadHourSlider id={`${id}-lead`} hours={hours} hour={hour} onChange={setSelectedHour} />
             <div className={styles.inspectorReading}><span>{variable.label}</span><p>+{hour}<small> hours</small></p><span>Forecast lead time</span></div>
-            {keys.length > 0 && <dl className={local.values} aria-label="Continuous scores">{keys.map(key => <div key={key}><dt>{metricLabel(key)}<small>{metricUnit(key, variable.unit)}</small></dt><dd>{metricNumber(continuous?.[key])}</dd></div>)}</dl>}
-            {metrics.binary.length > 0 && <div className={styles.thresholdValues}><h3>{scoreLabels[score]}</h3>{Object.entries(labels).map(([key, label]) => <div key={key}><p><span>{label}</span><strong>{metricNumber(binary.find(row => row.lead_hours === hour)?.values[key])}</strong></p></div>)}</div>}
+            {keys.length > 0 && <dl className={local.values} aria-label="Continuous scores">{keys.map(key => { const unit = metricUnit(key, variable.unit); return <div key={key}><dt>{metricLabel(key)}{unit && !['samples', 'fraction'].includes(unit) && <small>, {unit}</small>}</dt><dd><MetricValue value={continuous?.[key]} /></dd></div>; })}</dl>}
+            {metrics.binary.length > 0 && <div className={styles.thresholdValues}><h3>{scoreLabels[score]}</h3>{Object.entries(labels).map(([key, label]) => <div key={key}><p><span>{label}</span><strong><MetricValue value={binary.find(row => row.lead_hours === hour)?.values[key]} /></strong></p></div>)}</div>}
             <dl className={styles.facts}><div><dt>Product</dt><dd>{product.title}</dd></div><div><dt>Evaluated lead range</dt><dd>+{allHours[0]}h – +{allHours.at(-1)}h</dd></div>{metrics.continuous && <div><dt>Evaluated quantiles</dt><dd>{metrics.continuous.quantiles.join(' · ')}</dd></div>}</dl>
             <details className={styles.methodDetails}><summary>Reading these metrics</summary><p>Scores describe model evaluation at each lead hour. Missing values are unavailable, not zero. Calibration uses the same selected lead hour.</p><p>Sample counts, where supplied, apply to the continuous evaluation. The metrics response does not identify the evaluation period.</p></details>
             <Link className={styles.inspectorLink} href={`/products/${product.slug}`}>Open forecast<ArrowUpRight size={12} aria-hidden="true" /></Link>

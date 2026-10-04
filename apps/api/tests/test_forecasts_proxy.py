@@ -96,3 +96,52 @@ def test_hmf_preserves_southward_after_total_horizon(monkeypatch):
     assert result.horizon_hours == 48
     assert set(result.predictions[23].variables) == {'bt','bs'}
     assert set(result.predictions[24].variables) == {'bs'}
+
+
+@pytest.mark.parametrize('failure', [None, 'unavailable', 'wrong_product', 'corrupt'])
+def test_verification_proxy_validates_upstream(monkeypatch, failure):
+    monkeypatch.setenv('FORECASTS_URL', 'http://prophet-api:8000')
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'secret')
+    data = {'product': 'hmf' if failure == 'wrong_product' else 'dst',
+            'start': '2026-09-03T00:00:00Z', 'end': '2026-10-03T00:00:00Z', 'groups': []}
+    if failure == 'corrupt':
+        data.pop('start')
+    real_client = httpx.Client
+    def handle(request):
+        assert request.url.path == '/internal/v1/forecasts/dst/verification'
+        assert request.headers['Authorization'] == 'Bearer secret'
+        return httpx.Response(503 if failure == 'unavailable' else 200, json=data)
+    monkeypatch.setattr(forecasts_client.httpx, 'Client', lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handle), **kwargs))
+    if failure:
+        with pytest.raises(ArtifactNotReadyError):
+            forecasts_client.read_verification('dst')
+    else:
+        assert forecasts_client.read_verification('dst').groups == []
+
+
+def test_public_verification_route_preserves_visibility_and_upstream_failure(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers.forecasts import router
+    from common.schemas.forecast_verification import ForecastVerification
+    app = FastAPI()
+    app.include_router(router)
+    expected = ForecastVerification(product='dst', start=datetime(2026, 9, 3, tzinfo=UTC),
+                                    end=datetime(2026, 10, 3, tzinfo=UTC))
+    calls = []
+    def read(product):
+        calls.append(product)
+        return expected
+    monkeypatch.setattr(forecasts_client, 'read_verification', read)
+    with TestClient(app) as client:
+        assert client.get('/private/forecasts/dst/verification').status_code == 404
+        assert calls == []
+        response = client.get('/public/forecasts/dst/verification')
+        assert response.status_code == 200
+        assert response.json()['data']['groups'] == []
+        assert calls == ['dst']
+        def unavailable(product):
+            raise ArtifactNotReadyError('unavailable')
+        monkeypatch.setattr(forecasts_client, 'read_verification', unavailable)
+        assert client.get('/public/forecasts/dst/verification').status_code == 503

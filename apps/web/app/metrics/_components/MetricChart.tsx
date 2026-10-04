@@ -1,4 +1,6 @@
 'use client';
+import MetricValue from './MetricValue';
+import { useMemo } from 'react';
 import { CartesianGrid, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, ReferenceLine } from 'recharts';
 import { chartRows, metricNumber, type MetricRow } from '../_utils/transform';
 import styles from '../../_components/forecast.module.css';
@@ -9,7 +11,7 @@ export default function MetricChart({ data, title, labels, unit = '', note, sele
   data: MetricRow[]; title: string; labels: Record<string, string>; unit?: string; note: string;
   selectedHour: number | undefined; onSelectHour: (hour: number) => void;
 }) {
-  const rows = chartRows(data);
+  const rows = useMemo(() => chartRows(data), [data]);
   const hasValues = rows.some(row => Object.keys(labels).some(key => row.values[key] != null));
   return <section className={styles.chart} aria-label={`${title} by lead hour`}>
     <div className={styles.chartHeading}><h3>{title}<small>{unit}</small></h3><span className={styles.chartTag}>BY LEAD HOUR</span></div>
@@ -24,7 +26,7 @@ export default function MetricChart({ data, title, labels, unit = '', note, sele
         <YAxis width={62} domain={['auto', 'auto']} tickFormatter={metricNumber} tick={{ fill: '#92a4b5', fontSize: 10 }} tickLine={false} axisLine={false} />
         <Tooltip isAnimationActive={false} content={({ active, payload }) => {
           const row = payload?.[0]?.payload as MetricRow | undefined;
-          return active && row ? <div className={styles.tooltip}><strong>Lead +{row.lead_hours} hours</strong>{Object.entries(labels).map(([key, label]) => <p key={key}>{label}<b>{metricNumber(row.values[key])}</b></p>)}</div> : null;
+          return active && row ? <div className={styles.tooltip}><strong>Lead +{row.lead_hours} hours</strong>{Object.entries(labels).map(([key, label]) => <p key={key}>{label}<b><MetricValue value={row.values[key]} /></b></p>)}</div> : null;
         }} />
         {Object.entries(labels).map(([key, label], i) => <Line key={key} name={label} dataKey={row => row.values[key] ?? null} type="linear" stroke={colors[i % colors.length]} strokeWidth={1.8}
           dot={({ cx, cy, payload }: { cx?: number; cy?: number; payload?: MetricRow }) => cx == null || cy == null || payload?.values[key] == null ? <g /> : <circle className="recharts-line-dot" cx={cx} cy={cy} r={2} fill={colors[i % colors.length]} onClick={event => { event.stopPropagation(); onSelectHour(payload.lead_hours); }} />}

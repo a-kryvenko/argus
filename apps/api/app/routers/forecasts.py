@@ -1,3 +1,4 @@
+from common.schemas.forecast_verification import ForecastVerification
 from typing import Annotated, Literal
 
 from app.schemas.forecast import Forecast
@@ -125,3 +126,15 @@ def metrics(
         return success_response(load_metrics(_product(target, visibility), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Metrics are not ready")
+
+
+@router.get('/{visibility}/forecasts/{target}/verification',
+            response_model=ApiResponse[ForecastVerification],
+            summary='Get last 30 days published forecast accuracy')
+def verification(visibility: Visibility, target: str):
+    product = _product(target, visibility)
+    from app.services.forecasts_client import read_verification
+    try:
+        return success_response(read_verification(product.target))
+    except ArtifactNotReadyError:
+        raise HTTPException(status_code=503, detail='Forecast verification is unavailable')

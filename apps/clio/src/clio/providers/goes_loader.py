@@ -3,7 +3,7 @@
 The normalized records contain the EUVS measurements needed to reconstruct
 S10 and M10, plus the XRS background and Lyman-alpha measurements needed to
 reconstruct Y10. The reconstruction and calibration themselves belong in
-forecast-core rather than in this source-data loader.
+Prophet; this loader only returns source measurements.
 """
 
 from __future__ import annotations

@@ -73,7 +73,7 @@ def read_native_fits(path, channel, *, slot, now, tolerance_seconds=120):
                       preprocessing='fits-unregistered-v1')
 
 
-def download_observation(url, channel, *, slot, now, session=None):
+def download_observation(url, channel, *, slot, now, session=None, include_original=False):
     """Fetch to temporary storage and validate before returning a source image.
 
     HTTP auth errors are propagated; no protected endpoints are scraped or
@@ -97,6 +97,8 @@ def download_observation(url, channel, *, slot, now, session=None):
         image, metadata = read_native_fits(path, channel, slot=slot, now=now)
         metadata['source'] = url
         metadata['available_at'] = datetime.now(UTC).isoformat()
+        if include_original:
+            return image, metadata, path.read_bytes()
         return image, metadata
 
 

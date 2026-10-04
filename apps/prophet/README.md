@@ -1,5 +1,7 @@
 # Prophet
 
+Data flows: [DATA_FLOWS.md](DATA_FLOWS.md).
+
 Prophet generates forecasts from Clio observations, saves input snapshots and results
 in PostgreSQL, and publishes releases over HTTP. The `prophet` worker runs scheduled
 calculations; `prophet-api` serves stored releases.
@@ -55,3 +57,20 @@ Forecast routes require a Bearer token matching `FORECASTS_SERVICE_TOKEN`.
 
 See [setup](../../README_DEPLOY.md#local-development), [commands](../../docs/commands.md)
 and [forecast workflows](../../docs/forecast-workflows.md).
+
+## Observation preparation
+
+Prophet reads Clio's source-file catalog, downloads checksum-verified originals,
+and prepares AIA/GONG features and calibrated GOES solar indices before storing
+its forecast input snapshot. Clio supplies no model features or calibration code.
+The active southward IMF model uses GONG latitude-band features; its three-hour
+freshness policy is unchanged. Source receipt times remain the causality boundary.
+AIA masks and downloaded originals are cached under `data/prophet/source-cache`
+(or `PROPHET_FEATURE_CACHE`). Calibration artifacts stay in `models_registry.yaml`.
+
+AIA originals now come exclusively from Clio's shared SDO archive (45 days).
+Prophet selects a causal 40-day source history for temporal comparisons. Its cache
+is optional and rebuildable from Clio, including rotation pairs after a cold start.
+Cache files older than 45 days are removed after input preparation. Missing source
+observations retain the model's existing DLinear fallback; source availability
+times remain unchanged.

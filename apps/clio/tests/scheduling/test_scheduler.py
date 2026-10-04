@@ -13,6 +13,6 @@ def test_source_and_job_locks_never_overlap():
     from clio.scheduling.jobs import JOBS
 
     assert set(SOURCE_LOCKS) == set(SOURCE_SPECS)
-    assert set(JOB_LOCKS) == set(JOBS) | {'live', 'aia-live', 'aia'}
+    assert set(JOB_LOCKS) == set(JOBS) | {'live', 'files-live', 'files-backfill'}
     keys = [*SOURCE_LOCKS.values(), *JOB_LOCKS.values()]
     assert len(set(keys)) == len(keys)

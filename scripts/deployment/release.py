@@ -15,7 +15,7 @@ INPUTS = {
     'frontend': ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web'],
     'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/app', 'apps/api/alembic',
             'apps/api/alembic.ini', 'packages/common', 'scripts/db/provision.py'],
-    'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common', 'packages/forecast'],
+    'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common'],
     'prophet': ['apps/prophet/pyproject.toml', 'apps/prophet/uv.lock', 'apps/prophet/src',
                 'packages/common', 'packages/forecast'],
 }
@@ -57,7 +57,7 @@ def plan(root, *, rebuild=''):
               'config_hash': digest(root, ['configs'])}
     for name, prefixes in INPUTS.items():
         source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'])
-        backend_hash = private_hash if name in ('clio', 'prophet') else intelligence_core_hash if name == 'intelligence' else ''
+        backend_hash = private_hash if name == 'prophet' else intelligence_core_hash if name == 'intelligence' else ''
         identity = hashlib.sha256((source + backend_hash + rebuild).encode()).hexdigest()
         result['components'][name] = {'repository': 'ghcr.io/a-kryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
     result['migrations'] = {name: digest(root, paths) for name, paths in MIGRATIONS.items()}

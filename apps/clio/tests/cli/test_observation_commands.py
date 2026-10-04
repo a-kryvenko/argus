@@ -33,7 +33,7 @@ def test_backfill_command_uses_config_for_defaults_and_explicit_selection(monkey
     from datetime import UTC, datetime
     from clio.commands import backfill_observations as command
     session, dispose = session_factory(monkeypatch, command)
-    config = SimpleNamespace(observations={'kp': object(), 'dst': object(), 'f10_7': object()})
+    config = SimpleNamespace(sdo_images=SimpleNamespace(enabled=False), observations={'kp': object(), 'dst': object(), 'f10_7': object()})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
     expected = {'failed_metrics': ['dst'], 'status': 'partial'}
     backfill = AsyncMock(return_value=expected)
@@ -50,7 +50,7 @@ def test_live_command_returns_per_metric_failures_to_scheduler(monkeypatch):
     from datetime import UTC, datetime
     from clio.commands import collect as command
     session, dispose = session_factory(monkeypatch, command)
-    config = SimpleNamespace(observations={'kp': object(), 'dst': object()})
+    config = SimpleNamespace(sdo_images=SimpleNamespace(enabled=False), observations={'kp': object(), 'dst': object()})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
     result = {'failed_metrics': ['kp'], 'downloaded_measurements': 0}
     collect = AsyncMock(return_value=result)
@@ -69,18 +69,18 @@ def test_live_command_returns_per_metric_failures_to_scheduler(monkeypatch):
 def test_file_only_commands_never_open_numeric_storage(monkeypatch, name):
     from datetime import UTC, datetime
     from clio.commands import collect as fetch_live, backfill_observations
-    from clio.domains.aia import collection
+    from clio.ingestion import files as collection
     command = fetch_live if name == 'collect' else backfill_observations
     numeric = Mock(side_effect=AssertionError('Opened numeric session for files'))
     monkeypatch.setattr(command, 'get_session_factory', numeric)
     monkeypatch.setattr(database, 'dispose_engine', AsyncMock())
-    files = {'aia193': {'received': 0, 'restored': 0, 'retained': 1}}
+    files = {'gong': {'received': 0, 'restored': 0, 'retained': 1}}
     collect = AsyncMock(return_value={'status': 'complete', 'failed_metrics': [], 'files': files})
     monkeypatch.setattr(collection, 'collect_file_observations', collect)
     now = datetime(2026, 9, 28, 12, tzinfo=UTC)
-    result = cli.invoke(name, SimpleNamespace(metrics=['aia193'], now=now, start=None, end=None, scheduled=False))
+    result = cli.invoke(name, SimpleNamespace(metrics=['gong'], now=now, start=None, end=None, scheduled=False))
     assert result['files'] == files and result['downloaded_measurements'] == 0
-    assert collect.call_args.args[1] == ['aia193']
+    assert collect.call_args.args[1] == ['gong']
     assert collect.call_args.kwargs['mode'] == ('live' if name == 'collect' else 'backfill')
     numeric.assert_not_called()
 
@@ -88,14 +88,34 @@ def test_file_only_commands_never_open_numeric_storage(monkeypatch, name):
 def test_mixed_backfill_commits_numeric_success_and_reports_file_failure(monkeypatch):
     from datetime import UTC, datetime
     from clio.commands import backfill_observations as command
-    from clio.domains.aia import collection
+    from clio.ingestion import files as collection
     session_factory(monkeypatch, command)
     numeric = AsyncMock(return_value={'status': 'complete', 'failed_metrics': [], 'downloaded_measurements': 1})
     monkeypatch.setattr('clio.observations.backfill.backfill_selected', numeric)
     monkeypatch.setattr(collection, 'collect_file_observations', AsyncMock(return_value={
-        'status': 'partial', 'failed_metrics': ['aia193'],
-        'files': {'aia193': {'received': 0, 'restored': 0, 'retained': 0, 'failed': 1}}}))
-    result = cli.invoke('backfill', SimpleNamespace(metrics=['v', 'aia193'], now=datetime(2026, 9, 28, tzinfo=UTC),
+        'status': 'partial', 'failed_metrics': ['gong'],
+        'files': {'gong': {'received': 0, 'restored': 0, 'retained': 0, 'failed': 1}}}))
+    result = cli.invoke('backfill', SimpleNamespace(metrics=['v', 'gong'], now=datetime(2026, 9, 28, tzinfo=UTC),
                                                    start=None, end=None, scheduled=True))
     assert numeric.call_args.args[2] == ['v']
-    assert result['failed_metrics'] == ['aia193'] and result['downloaded_measurements'] == 1
+    assert result['failed_metrics'] == ['gong'] and result['downloaded_measurements'] == 1
+
+
+@pytest.mark.parametrize('name,mode', [('collect', 'live'), ('backfill', 'warmup')])
+@pytest.mark.parametrize('selected', [None, ['sdo']])
+def test_common_commands_include_sdo_without_numeric_storage(monkeypatch, name, mode, selected):
+    from datetime import UTC, datetime
+    from clio.commands import collect, backfill_observations, sdo_images
+    from clio.config import ClioObservations
+    command = collect if name == 'collect' else backfill_observations
+    config = ClioObservations(observations={}, sdo_images={'enabled': True})
+    monkeypatch.setattr(command, 'load_observation_config', lambda: config)
+    monkeypatch.setattr(command, 'get_session_factory', Mock(side_effect=AssertionError('numeric storage')))
+    monkeypatch.setattr(database, 'dispose_engine', AsyncMock())
+    cycle = Mock(return_value={'saved': 1, 'failed': 0})
+    monkeypatch.setattr(sdo_images, 'cycle', cycle)
+    now = datetime(2026, 10, 4, tzinfo=UTC)
+    result = cli.invoke(name, SimpleNamespace(metrics=selected, now=now, start=None, end=None))
+    assert result['sdo']['saved'] == 1
+    assert cycle.call_args.args[1] == mode
+    assert cycle.call_args.kwargs['full'] is True

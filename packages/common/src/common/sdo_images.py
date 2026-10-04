@@ -7,6 +7,7 @@ identifier so consumers cannot silently mix different numerical conventions.
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,8 +17,10 @@ import numpy as np
 
 OBSERVED_CHANNELS = ('aia94', 'aia131', 'aia171', 'aia193', 'aia211', 'aia304',
             'aia335', 'aia1600', 'hmi_m')
+# The current AIA wind model needs the native 193-Angstrom grid.
+ORIGINAL_CHANNELS = ('aia193',)
 IMAGE_SHAPE = (512, 512)
-RETENTION_HOURS = 144
+RETENTION_HOURS = 45 * 24
 VERSION = 1
 
 
@@ -29,7 +32,7 @@ def utc(value):
 
 
 def hourly_slots(now):
-    """Current UTC hour and the preceding 143 hours, newest first."""
+    """Retained hourly slots, newest first (45 days including the current hour)."""
     current = utc(now).replace(minute=0, second=0, microsecond=0)
     return [current - timedelta(hours=i) for i in range(RETENTION_HOURS)]
 
@@ -44,6 +47,31 @@ def image_path(root, slot, channel):
     if slot.minute or slot.second or slot.microsecond or channel not in OBSERVED_CHANNELS:
         raise ValueError('Expected whole UTC hour and an observed channel')
     return Path(root) / f'{slot:%Y%m%dT%H0000Z}' / f'{channel}.npz'
+
+
+def original_path(root, slot, channel):
+    return image_path(root, slot, channel).with_suffix('.fits')
+
+
+def save_original(root, slot, channel, content, *, now):
+    """Restore a retained original only when it matches the first source receipt."""
+    with archive_lock(root):
+        if utc(slot) not in hourly_slots(now):
+            raise ValueError('Observation is outside the retained window')
+        metadata = read_metadata(root, slot, channel)
+        if hashlib.sha256(content).hexdigest() != metadata['sha256']:
+            raise ValueError('Original differs from the recorded SHA256')
+        path = original_path(root, slot, channel)
+        if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() == metadata['sha256']:
+            return False
+        fd, name = tempfile.mkstemp(prefix='.', suffix='.part', dir=path.parent)
+        try:
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(content)
+            Path(name).replace(path)
+        finally:
+            Path(name).unlink(missing_ok=True)
+        return True
 
 
 @contextmanager
@@ -145,6 +173,8 @@ def prune(root, *, now):
                 if path.is_file():
                     path.unlink()
                     removed += 1
+                original = directory / f'{channel}.fits'
+                original.unlink(missing_ok=True)
             if not any(directory.iterdir()):
                 directory.rmdir()
     return removed

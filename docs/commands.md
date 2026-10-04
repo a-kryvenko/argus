@@ -139,8 +139,10 @@ range with an exclusive end (maximum 31 days for explicit ranges):
 ```bash
 ./argus clio backfill
 ./argus clio backfill kp dst f10_7
-./argus clio collect aia193
-./argus clio backfill aia193
+./argus clio collect sdo
+./argus clio backfill sdo
+./argus clio collect gong goes
+./argus clio backfill goes                   # source samples; calibration runs in Prophet
 ./argus clio backfill v n t --from 2026-08-31 --to 2026-09-09
 ```
 
@@ -149,11 +151,16 @@ timestamps must include a timezone and fall on a whole UTC hour. The end must
 not be in the future. Without these flags, each metric uses its configured
 `backfill.days`.
 
+AIA/HMI are included by default when enabled; select `sdo` to collect only images.
+Their backfill is limited to the retained 45 days, including when an explicit range
+is supplied. Expired image cleanup runs automatically in the worker.
+
 Existing measurements are preserved. The output reports source failures and
 remaining raw slots at each metric's cadence (hourly, three-hourly or daily).
 Only closed, fully contained slots are checked. The worker runs
 both `clio.observations.<metric>.schedules.live` and `schedules.backfill`
 automatically. See the Clio README for archive coverage limits.
-For AIA, missing derivative caches are rebuilt from retained originals; a lost
-original must match its recorded SHA256 before it is restored. Existing observations
+The shared SDO collector handles all AIA channels; no separate AIA193 collector remains.
+Clio restores missing AIA/GONG originals only when their bytes match the recorded
+SHA256. Prophet rebuilds its own derivative caches from these originals. Existing observations
 and first receipt timestamps are preserved.

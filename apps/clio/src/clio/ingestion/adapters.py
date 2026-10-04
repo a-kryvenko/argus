@@ -44,13 +44,6 @@ class DailyHistoryAdapter:
         return clean_records(self.loader(pd.Timestamp(start), pd.Timestamp(end)), start, end, self.metrics)
 
 
-def load_goes_history(start, end):
-    # Calibration is an ingestion dependency and is loaded only when requested.
-    from common.config import get_config
-    from clio.observations.solar_indices import download_goes_index_history
-    return download_goes_index_history(start, end, get_config())
-
-
 def historical_adapters():
     from clio.providers.omniweb_loader import OMNIWeb_Loader
     from clio.providers.spdf_loader import SPDF_Loader
@@ -61,5 +54,4 @@ def historical_adapters():
         'ace.plasma_hourly': PlasmaHistoryAdapter(SPDF_Loader.load_plasma),
         'soho.plasma_hourly': PlasmaHistoryAdapter(SOHOLoader().load),
         'gfz.f107': DailyHistoryAdapter(load_gfz_f107, ('f10_7',)),
-        'goes.calibrated_daily': DailyHistoryAdapter(load_goes_history, ('s10', 'm10', 'y10')),
     }

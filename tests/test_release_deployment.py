@@ -53,10 +53,10 @@ def changed_components(before, after):
 
 @pytest.mark.parametrize('path,expected', [
     ('apps/intelligence/src/argus_intelligence/cli.py', {'intelligence'}),
-    ('packages/forecast/src/forecast/example.py', {'clio', 'prophet'}),
+    ('packages/forecast/src/forecast/example.py', {'prophet'}),
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
     ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'intelligence'}),
-    ('packages/forecast-core/src/forecast_core/api.py', {'clio', 'prophet'}),
+    ('packages/forecast-core/src/forecast_core/api.py', {'prophet'}),
     ('packages/intelligence-core/src/intelligence_core/api.py', {'intelligence'}),
     ('apps/prophet/src/argus_prophet/worker.py', {'prophet'}), ('configs/project.yaml', set()),
 ])
@@ -115,7 +115,7 @@ def test_every_docker_copy_source_participates_in_image_identity():
             if not words or words[0] != 'COPY' or words[1].startswith('--from='):
                 continue
             for source in words[1:-1]:
-                if source == 'packages/forecast-core' and component in ('clio', 'prophet'):
+                if source == 'packages/forecast-core' and component == 'prophet':
                     continue
                 if source == 'packages/intelligence-core' and component == 'intelligence':
                     continue

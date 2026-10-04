@@ -19,8 +19,7 @@ def client_with_session(monkeypatch):
         metric='dst', value=-10, observed_at=NOW, issue_time=NOW, v=420., n=4.5)])
     loader = AsyncMock(return_value=Observation(points=[]))
     monkeypatch.setattr(routes, 'load_normalized_observations', loader)
-    monkeypatch.setattr(routes, 'load_aia_features', AsyncMock(return_value=[]))
-    monkeypatch.setattr(routes, 'load_gong_features', AsyncMock(return_value=None))
+    monkeypatch.setattr(routes, 'load_observation_files', AsyncMock(return_value=[]))
     monkeypatch.setattr(routes, 'solar_history', AsyncMock(return_value={'series': {}}))
     app = FastAPI()
     app.include_router(routes.router)
@@ -46,20 +45,20 @@ def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload['schema_version'] == 1
-    assert payload['aia_frames'] == []
+    assert payload['files'] == []
     assert payload['solar_wind_hourly'] == {'series': {}}
     args = routes.solar_history.call_args.args
     assert args[0] is session and args[1] == ['bx','by','bz','v','n','t']
     assert args[3] == NOW and (NOW-args[2]).total_seconds() == 168*3600
     assert args[4] == 3600
-    routes.load_aia_features.assert_awaited_once_with(session, NOW)
+    routes.load_observation_files.assert_awaited_once_with(session, NOW)
     assert payload['measurements'][0]['metric'] == 'dst'
     assert payload['speed_observations'][0]['v'] == 420.
     assert payload['density_observations'][0]['n'] == 4.5
     statements = session.execute.call_args_list
     assert str(statements[0].args[0]) == 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'
     query = statements[2].args[0].compile(dialect=postgresql.dialect())
-    assert set(query.params['metric_1']) == set(routes.DENSITY_METRICS)
+    assert set(query.params['metric_1']) == {'f10_7', 'dst', 'ap'}
     assert query.params['observed_at_2'] == NOW
     assert loader.call_args.kwargs['until'] == NOW
     assert (NOW - loader.call_args.kwargs['since']).days == 60

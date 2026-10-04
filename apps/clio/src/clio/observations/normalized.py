@@ -66,9 +66,9 @@ async def load_normalized_observations(
             dst=int(record.dst),
             ap=int(record.ap),
             f10_7=int(record.f10_7),
-            s10=record.s10,
-            m10=record.m10,
-            y10=record.y10,
+            s10=None,
+            m10=None,
+            y10=None,
         )
         for record in records
     ])

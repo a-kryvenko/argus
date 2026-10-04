@@ -79,7 +79,7 @@ def test_catalog_validates_channel_and_bounded_aware_hourly_ranges(catalog):
         {'start': slot.replace(tzinfo=None).isoformat()},
         {'start': (slot + timedelta(minutes=1)).isoformat()},
         {'end': slot.isoformat()},
-        {'start': (slot - timedelta(hours=144)).isoformat()},
+        {'start': (slot - timedelta(hours=1080)).isoformat()},
         {'end': (slot + timedelta(hours=2)).isoformat()},
         {'as_of': (datetime.now(UTC) + timedelta(days=1)).isoformat()},
     ):
@@ -98,10 +98,10 @@ def test_empty_catalog_does_not_create_storage_and_corruption_is_not_a_gap(catal
     assert request(client, slot, now).status_code == 503
 
 
-def test_default_catalog_is_limited_to_144_hourly_slots(catalog):
+def test_default_catalog_is_limited_to_1080_hourly_slots(catalog):
     client, _, _, now = catalog
     response = client.get('/internal/v1/observations/sdo-images',
                           params={'as_of': now.isoformat(), 'channel': 'aia1600'},
                           headers={'Authorization': 'Bearer test-token'})
     data = response.json()['data']
-    assert len(data['items']) == 1 and len(data['missing']) == 143
+    assert len(data['items']) == 1 and len(data['missing']) == 1079

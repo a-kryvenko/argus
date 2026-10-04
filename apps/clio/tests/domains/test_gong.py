@@ -45,19 +45,6 @@ def test_compressed_original_has_bounded_expansion(monkeypatch):
         provider.download('https://provider.example/test.fits.gz')
 
 
-def test_read_is_causal_and_does_not_select_original_bytes():
-    row = SimpleNamespace(observed_at=NOW, available_at=NOW, sha256='a'*64,
-                          source_product='gong.live', feature_version='gong-bands-v1', features={'field': 2.})
-    session = AsyncMock()
-    session.scalars.return_value = Mock(first=lambda: row)
-    result = asyncio.run(gong.load_gong_features(session, NOW))
-    assert result.features == {'field': 2.}
-    query = session.scalars.call_args.args[0].compile(dialect=postgresql.dialect())
-    assert query.params['observed_at_1'] == NOW
-    assert query.params['available_at_1'] == NOW
-    assert 'fits_gzip' not in str(query)
-
-
 def test_http_read_module_does_not_import_private_code_or_downloader():
     result = subprocess.run([sys.executable, '-c', '''
 import sys
@@ -69,15 +56,15 @@ assert 'astropy' not in sys.modules
     assert result.returncode == 0, result.stderr
 
 
-def test_original_and_features_share_exact_bytes_and_receipt(monkeypatch):
-    private = pytest.importorskip('forecast_core.observations')
+def test_original_is_archived_without_features(monkeypatch, tmp_path):
+    monkeypatch.setenv('ARGUS_GONG_ARCHIVE', str(tmp_path))
     original = b'original FITS bytes'
-    monkeypatch.setattr(provider, 'download', Mock(return_value=original))
-    extract = Mock(return_value={'field': 3.})
-    monkeypatch.setattr(private, 'extract_gong_features', extract)
+    download = Mock(return_value=original)
+    monkeypatch.setattr(provider, 'download', download)
     row = gong.snapshot_values(NOW-timedelta(minutes=6), 'https://provider/file.fits.gz', 'gong.live')
-    extract.assert_called_once_with(original)
-    assert gzip.decompress(row['fits_gzip']) == original
+    assert (tmp_path / row['raw_path']).read_bytes() == original
     assert row['sha256'] == hashlib.sha256(original).hexdigest()
     assert row['slot_at'] == NOW-timedelta(hours=1)
-    assert row['features'] == {'field': 3.}
+    assert 'features' not in row and 'fits_gzip' not in row
+    assert gong.snapshot_values(NOW-timedelta(minutes=6), 'https://provider/file.fits.gz', 'gong.live') == row
+    download.assert_called_once()

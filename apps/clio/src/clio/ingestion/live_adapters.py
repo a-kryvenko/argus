@@ -53,14 +53,6 @@ class SolarWindLiveAdapter:
         return await stored_native_frame(tuple(FIELDS[self.kind]), start, now, f'swpc.rtsw_{self.kind}')
 
 
-class SolarLiveAdapter:
-    async def fetch(self, start, now):
-        from clio.observations.derived import load_solar_index_measurements
-        # Two short live requests must not hold up the minute-index schedule.
-        frame = await asyncio.to_thread(load_solar_index_measurements, now, timeout=25)
-        return frame.assign(received_at=datetime.now(UTC))
-
-
 def live_adapters():
     return {
         'swpc.rtsw_mag': SolarWindLiveAdapter('mag'),
@@ -68,5 +60,4 @@ def live_adapters():
         'swpc.kp': GeomagneticLiveAdapter('kp'),
         'swpc.dst': GeomagneticLiveAdapter('dst'),
         'swpc.f107': WideLiveAdapter(SWPC_Loader._fetch_f10_7_flux, ('f10_7',)),
-        'goes.calibrated_live': SolarLiveAdapter(),
     }

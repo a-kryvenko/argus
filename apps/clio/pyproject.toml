@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "common",
-  "forecast-core>=0.5.0",
   "beautifulsoup4>=4.15.0",
   "numpy>=1.26",
   "pandas>=2.2",
@@ -13,10 +12,7 @@ dependencies = [
   "xarray>=2026.4.0",
   "h5netcdf>=1.8.1",
   "h5py>=3.16.0",
-  "pyarrow>=24.0.0",
-  "scipy>=1.13",
   "astropy>=6",
-  "sunpy[map]>=6",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sentry-sdk>=2.61.1",
@@ -39,9 +35,7 @@ where = ["src"]
 clio = ["migrations/script.py.mako"]
 
 [tool.uv.sources]
-forecast = { workspace = true, editable = true }
 common = { workspace = true, editable = true }
-forecast-core = { path = "../../packages/forecast-core", editable = true }
 
 [tool.uv.workspace]
-members = ["../../packages/common", "../../packages/forecast"]
+members = ["../../packages/common"]

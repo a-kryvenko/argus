@@ -59,6 +59,7 @@ def dependency_names(config):
 @pytest.mark.parametrize(('path', 'allowed', 'required'), [
     ('packages/forecast', {'common'}, {'common'}),
     ('apps/api', {'common'}, {'common'}),
+    ('apps/clio', {'common'}, {'common'}),
     ('apps/intelligence', {'common', 'intelligence-core'}, {'common', 'intelligence-core'}),
     ('apps/prophet', {'common', 'forecast', 'forecast-core'},
      {'common', 'forecast', 'forecast-core'}),
@@ -120,16 +121,19 @@ def test_api_environment_does_not_include_forecast_package():
     assert not {'forecast', 'forecast-core', 'clio', 'argus-prophet', 'argus-clio', 'argus-intelligence'} & {package['name'] for package in lock['package']}
 
 
-def test_clio_uses_base_backend_and_prophet_requests_models():
+def test_clio_has_no_forecast_packages_and_prophet_requests_models():
     clio = tomllib.loads((ROOT / 'apps/clio/pyproject.toml').read_text())
     prophet = tomllib.loads((ROOT / 'apps/prophet/pyproject.toml').read_text())
-    assert any(d.startswith('forecast-core>=') for d in clio['project']['dependencies'])
+    assert not {'forecast', 'forecast-core'} & dependency_names(clio)
+    assert set(clio['tool']['uv']['sources']) == {'common'}
+    lock = tomllib.loads((ROOT / 'apps/clio/uv.lock').read_text())
+    assert not {'forecast', 'forecast-core'} & {p['name'] for p in lock['package']}
     assert any(d.startswith('forecast-core[models]>=') for d in prophet['project']['dependencies'])
 
 
 @pytest.mark.parametrize('root,blocked,private_surface', [
     ('apps/api/app', {'forecast', 'clio', 'forecast_core', 'argus_prophet', 'argus_intelligence'}, {'intelligence_core.api'}),
-    ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.calibration', 'forecast_core.observations'}),
+    ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core', 'forecast', 'forecast_core'}, set()),
     ('apps/prophet/src', {'app', 'clio', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.api'}),
     ('apps/intelligence/src', {'app', 'clio', 'argus_prophet', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
     ('packages/forecast-core/src', {'clio', 'argus_prophet', 'argus_intelligence', 'app'}, None),

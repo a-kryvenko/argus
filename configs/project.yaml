@@ -30,14 +30,6 @@ clio:
         live: {every: 1h}
         backfill: {every: 6h}
       backfill: {days: 2}
-    aia193:
-      sources:
-        live: [aia.nrt_193]
-        historical: [aia.synoptic_193]
-      schedules:
-        live: {every: 1h}
-        backfill: {every: 6h}
-      backfill: {days: 40}
     bx:
       sources:
         live: [swpc.rtsw_mag]
@@ -118,26 +110,10 @@ clio:
         live: {every: 1h}
         backfill: {every: 1d}
       backfill: {days: 88}
-    s10:
+    goes:
       sources:
-        live: [goes.calibrated_live]
-        historical: [goes.calibrated_daily]
-      schedules:
-        live: {every: 1h}
-        backfill: {every: 1d}
-      backfill: {days: 88}
-    m10:
-      sources:
-        live: [goes.calibrated_live]
-        historical: [goes.calibrated_daily]
-      schedules:
-        live: {every: 1h}
-        backfill: {every: 1d}
-      backfill: {days: 88}
-    y10:
-      sources:
-        live: [goes.calibrated_live]
-        historical: [goes.calibrated_daily]
+        live: [goes.live]
+        historical: [goes.archive]
       schedules:
         live: {every: 1h}
         backfill: {every: 1d}

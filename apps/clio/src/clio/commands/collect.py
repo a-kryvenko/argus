@@ -3,7 +3,7 @@ import json
 
 from clio.db.session import get_session_factory
 from clio.config import load_observation_config
-from clio.ingestion.selection import partition, merge_files, available_files
+from clio.ingestion.selection import partition, merge_files, available_files, merge_sdo
 
 
 async def run(args):
@@ -18,6 +18,7 @@ async def run(args):
     if files:
         from clio.ingestion.files import collect_file_observations
         result = merge_files(result, await collect_file_observations(config, files, mode='live', now=getattr(args, 'now', None)))
+    result = await merge_sdo(result, config, args, mode='live')
     print(json.dumps(result, indent=2))
     if (not getattr(args, 'scheduled', False) and result['downloaded_measurements'] == 0
             and result['failed_metrics'] and not available_files(result)):

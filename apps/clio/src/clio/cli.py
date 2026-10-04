@@ -11,7 +11,7 @@ from clio.commands._arguments import boundary
 from clio.ingestion.products import OBSERVATIONS
 
 COMMANDS = {
-    'sdo-images': 'sdo_images',
+    'sdo-cleanup': 'sdo_images',
     'backfill': 'backfill_observations', 'normalize': 'normalize',
     'collect': 'collect',
     'check-health': 'check_collector_health',
@@ -37,24 +37,24 @@ def main(argv=None):
     serve = commands.add_parser('serve')
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
-    commands.add_parser('collect').add_argument('metrics', nargs='*')
+    commands.add_parser('collect').add_argument(
+        'metrics', nargs='*', help='Configured observations; sdo selects AIA/HMI images (default: all)')
     commands.add_parser('normalize')
     backfill = commands.add_parser('backfill')
     backfill.add_argument('--from', dest='start', type=boundary)
     backfill.add_argument('--to', dest='end', type=boundary)
     backfill.add_argument('metrics', nargs='*',
-                          help='Use configured gap-only backfill (defaults to each metric history depth)')
+                          help='Fill configured gaps; sdo selects retained AIA/HMI images (default: all)')
     commands.add_parser('check-health').add_argument('collector', choices=['solar-wind', 'geomagnetic', 'worker'])
     commands.add_parser('migrate', add_help=False)
     commands.add_parser('status')
     commands.add_parser('worker')
-    commands.add_parser('sdo-images').add_argument('mode', choices=['live', 'warmup', 'cleanup'])
     args, remainder = parser.parse_known_args(argv)
     if args.command != 'migrate' and remainder:
         parser.error('Unrecognized arguments: ' + ' '.join(remainder))
     args.now = datetime.now(UTC)
     if args.command in ('collect', 'backfill'):
-        if any(m not in OBSERVATIONS for m in args.metrics):
+        if any(m not in OBSERVATIONS and m != 'sdo' for m in args.metrics):
             parser.error('Unknown observation metric')
         args.metrics = args.metrics or None
     if args.command == 'backfill':
@@ -100,8 +100,6 @@ def execute(args, remainder):
         config.cmd_opts = options
         config.set_main_option('script_location', str(Path(__file__).parent / 'migrations'))
         cli.run_cmd(config, options)
-    elif args.command == 'sdo-images':
-        print(json.dumps(invoke('sdo-images', args)))
     elif args.command == 'worker':
         from clio.worker import work
         work()
@@ -109,8 +107,8 @@ def execute(args, remainder):
         from clio.scheduling.jobs import execute as locked
         name = args.command
         job = {'backfill': 'refresh', 'collect': 'live', 'normalize': 'refresh'}.get(name)
-        if name in ('backfill', 'collect') and args.metrics and all(OBSERVATIONS[m].kind == 'file' for m in args.metrics):
-            job = 'aia' if name == 'backfill' else 'aia-live'
+        if name in ('backfill', 'collect') and args.metrics and all(m == 'sdo' or OBSERVATIONS[m].kind == 'file' for m in args.metrics):
+            job = 'files-backfill' if name == 'backfill' else 'files-live'
         if job:
             locked(job, lambda: invoke(name, args))
             return

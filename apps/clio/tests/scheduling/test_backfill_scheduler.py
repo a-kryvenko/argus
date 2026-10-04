@@ -30,7 +30,7 @@ def connection(monkeypatch):
     def execute(sql, params):
         if 'pg_try_advisory_lock' in sql:
             state['locks'].append(params[0])
-            assert params[0] in (JOB_LOCKS['refresh'], JOB_LOCKS['live'], JOB_LOCKS['aia'], JOB_LOCKS['aia-live'])
+            assert params[0] in (JOB_LOCKS['refresh'], JOB_LOCKS['live'], JOB_LOCKS['files-backfill'], JOB_LOCKS['files-live'])
             return Mock(fetchone=lambda: (state['locked'],))
         if sql.startswith('SELECT name'):
             return Mock(fetchall=lambda: list(state['markers'].items()))
@@ -130,9 +130,9 @@ def test_forced_live_restart_retries_failure_even_if_previous_process_completed_
 def test_file_schedules_have_separate_locks_and_common_metric_markers(connection):
     from clio.config import load_observation_config
     full = load_observation_config()
-    cfg = full.model_copy(update={'observations': {'aia193': full.observations['aia193']}})
+    cfg = full.model_copy(update={'observations': {'gong': full.observations['gong']}})
     run = Mock(return_value={'failed_metrics': []})
     scheduler.execute(cfg, run, now=NOW, mode='live')
     scheduler.execute(cfg, run, now=NOW, mode='backfill')
-    assert connection['locks'] == [JOB_LOCKS['aia-live'], JOB_LOCKS['aia']]
-    assert set(connection['markers']) == {'live.aia193', 'backfill.aia193'}
+    assert connection['locks'] == [JOB_LOCKS['files-live'], JOB_LOCKS['files-backfill']]
+    assert set(connection['markers']) == {'live.gong', 'backfill.gong'}

@@ -12,4 +12,6 @@ COPY apps/prophet/pyproject.toml apps/prophet/uv.lock ./
 COPY apps/prophet/src ./src
 RUN uv sync --frozen --no-cache
 ENV PATH="/var/www/apps/prophet/.venv/bin:$PATH"
+ENV XDG_CONFIG_HOME=/tmp/prophet-config \
+    XDG_CACHE_HOME=/tmp/prophet-cache
 CMD ["prophet", "worker"]

@@ -95,8 +95,13 @@ Products publish independently. Failed calculations leave the previous release
 available; calculation processes receive saved inputs and do not write to the
 database. Verification evaluates existing releases as observations arrive, retains
 pending or missing targets, and does not update the static website model metrics.
-Image storage is split: AIA/HMI files live on disk, while GONG FITS payloads live
-in Clio's database; the Clio SDO HTTP endpoint returns file references and metadata.
+The shared SDO collector stores AIA/HMI images and native AIA193 originals for
+45 days; there is no separate AIA193 collector. Clio owns the full source history;
+Prophet's feature cache is disposable. New GONG originals also live on disk.
+Clio's database stores GONG file
+receipts; existing compressed GONG originals remain readable during migration.
+Clio's SDO endpoint returns file references and metadata; the original-file endpoint
+serves checksum-verified AIA/GONG/GOES files to Prophet.
 See [forecast workflows](forecast-workflows.md) for the verification protocol.
 
 These diagrams describe runtime boundaries and data flow; the tables below map
@@ -127,11 +132,12 @@ Clio deploys as HTTP plus one worker container. One scheduler dispatches tempora
 executors with independent live lanes and bounded background concurrency. It
 retains task locks until executors exit, so normalization cannot block collection.
 
-Clio ingestion accesses `forecast_core.calibration` and `forecast_core.observations`
-through lazy adapters;
-its base dependencies exclude model runtimes. Prophet installs the `[models]`
-extra of `forecast-core`; its HTTP read
-path does not import the backend. API installs without private code; Intelligence depends on `intelligence-core`
+Clio downloads, parses and archives source observations without forecast packages,
+feature extraction or model calibration. Prophet downloads checksum-verified originals
+through Clio's authenticated file API, derives AIA/GONG features, and calibrates GOES
+solar indices before saving its input snapshot. Prophet installs the `[models]`
+extra of `forecast-core` and owns its local derivative cache.
+API installs without private code; Intelligence depends on `intelligence-core`
 and uses its `api` boundary for on-demand drag calculations. Neither imports
 other applications' runtimes. `intelligence-api` reads the density release over
 HTTP and needs no database credentials; the existing worker remains a separate
@@ -161,6 +167,7 @@ Python dependency boundaries (distinct from HTTP service calls):
 | Consumer | Internal package dependencies |
 | --- | --- |
 | `forecast` | `common` only |
+| Clio | `common` only; no forecast packages |
 | API | `common` only; calls Prophet and Intelligence over HTTP without installing them |
 | Intelligence | `common`, private `intelligence-core`; calls Prophet over HTTP |
 | `forecast-core` | `forecast`, `common` |
@@ -183,10 +190,10 @@ and quantile blending. The private backend depends on that public library; the
 public library never imports private code. Prophet's product catalog resolves
 public and private adapters lazily, without a second model enumeration.
 See the [public package example and tests](../packages/forecast/README.md).
-`packages/forecast-core` is an ignored, separate Git checkout required by Clio
-and Prophet builds. Keep its version consistent with both application lockfiles;
-push private changes before deploying dependent public code. CI pins one private
-commit for both images. Do not publish private implementation or training code.
+`packages/forecast-core` is an ignored, separate Git checkout required by Prophet
+builds. Keep its version consistent with the Prophet lockfile;
+push private changes before deploying dependent public code. CI pins the private
+commit used by the Prophet image. Do not publish private implementation or training code.
 
 Configuration uses `ARGUS_WORKDIR`, or searches the current directory and parents
 for `configs/project.yaml`. The command adapters set the workdir and load root env
@@ -236,7 +243,8 @@ calculations receive saved snapshots and explicit model configuration, then retu
 serialized results; they never inherit a database connection. All backends use
 `forecast_snapshot`, including private IMF and atmospheric density; density snapshot
 preparation belongs entirely to `forecast-core`. GONG inputs
-are owned and archived by Clio, and included in saved Prophet snapshots. Private
+are downloaded and archived as original FITS files by Clio. Prophet extracts
+GONG features and includes them in its saved snapshots. Private
 inference must not read project configuration or local observation files.
 
 Prophet dispatches products on independent configurable schedules, with bounded

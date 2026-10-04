@@ -2,12 +2,12 @@
 
 
 async def collect_file_observations(config, metrics, **kwargs):
-    from clio.domains.aia.collection import collect_file_observations as collect_aia
     from clio.domains.gong import collect as collect_gong
+    from clio.domains.goes import collect as collect_goes
     result = {'status': 'complete', 'failed_metrics': [], 'files': {}}
     for metric in metrics:
-        if metric == 'aia193':
-            report = await collect_aia(config, [metric], **kwargs)
+        if metric == 'goes':
+            report = await collect_goes(config, **kwargs)
         elif metric == 'gong':
             report = await collect_gong(config, **kwargs)
         else:

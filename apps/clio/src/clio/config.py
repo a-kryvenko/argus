@@ -67,8 +67,9 @@ class ClioObservations(StrictModel):
         for metric, policy in self.observations.items():
             if metric not in OBSERVATIONS:
                 raise ValueError(f'{metric}: unknown observation; supported: {", ".join(OBSERVATIONS)}')
-            if OBSERVATIONS[metric].kind == 'file' and policy.backfill.days > 60:
-                raise ValueError(f'{metric}: file backfill is bounded to 60 days')
+            limit = 90 if metric == 'goes' else 60
+            if OBSERVATIONS[metric].kind == 'file' and policy.backfill.days > limit:
+                raise ValueError(f'{metric}: file backfill is bounded to {limit} days')
             for mode in ('live', 'historical'):
                 sources = getattr(policy.sources, mode)
                 if not sources:

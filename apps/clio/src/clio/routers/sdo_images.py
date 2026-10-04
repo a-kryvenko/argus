@@ -20,7 +20,7 @@ def sdo_images(start: AwareDatetime | None = None, end: AwareDatetime | None = N
                as_of: AwareDatetime | None = None, channel: str | None = None):
     """List a bounded hourly range, without selecting model moments or filling gaps.
 
-    Defaults to the 144 slots ending in the as_of hour. End is exclusive.
+    Defaults to 45 days of hourly slots ending in the as_of hour. End is exclusive.
     Paths are references at read time, not leases against subsequent retention.
     """
     now = datetime.now(UTC)
@@ -33,7 +33,7 @@ def sdo_images(start: AwareDatetime | None = None, end: AwareDatetime | None = N
     if (any(t.minute or t.second or t.microsecond for t in (start, end))
             or not timedelta(0) < end - start <= timedelta(hours=RETENTION_HOURS)
             or end > last_boundary):
-        raise HTTPException(422, 'Use whole UTC hours, start < end, at most 144 hours and no slots after as_of')
+        raise HTTPException(422, f'Use whole UTC hours, start < end, at most {RETENTION_HOURS} hours and no slots after as_of')
     if channel is not None and channel not in OBSERVED_CHANNELS:
         raise HTTPException(422, 'Unknown SDO observation channel')
     channels = (channel,) if channel is not None else OBSERVED_CHANNELS

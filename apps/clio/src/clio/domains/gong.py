@@ -1,37 +1,20 @@
-"""Clio-owned immutable GONG inputs. Reads never import private features."""
+"""Download immutable GONG originals and retain their first receipts."""
 import asyncio
-import gzip
-import hashlib
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from common.schemas.forecast_inputs import GONGFeatureFrame
 from clio.db.models.gong_snapshot import GONGSnapshot
 from clio.db.session import get_session_factory
 
 
-def snapshot_values(observed, url, source):
+def snapshot_values(observed, url, source, *, expected=None):
     from clio.providers import gong as provider
-    from forecast_core.observations import extract_gong_features
-    content = provider.download(url)
-    available = datetime.now(UTC)
-    frame = GONGFeatureFrame(observed_at=observed, available_at=available,
-        sha256=hashlib.sha256(content).hexdigest(), source_product=source,
-        features=extract_gong_features(content))
-    if not frame.features:
-        raise ValueError('GONG extraction returned no features')
-    return {**frame.model_dump(), 'slot_at': observed.replace(minute=0, second=0, microsecond=0),
-            'source_url': url, 'fits_gzip': gzip.compress(content, mtime=0)}
-
-
-async def load_gong_features(session, as_of):
-    row = (await session.scalars(select(GONGSnapshot).where(
-        GONGSnapshot.observed_at <= as_of,
-        GONGSnapshot.available_at <= as_of,
-    ).order_by(GONGSnapshot.observed_at.desc()).limit(1))).first()
-    return GONGFeatureFrame.model_validate(row, from_attributes=True) if row else None
+    from clio.observations.files import store_original
+    slot = observed.replace(minute=0, second=0, microsecond=0)
+    values = store_original('gong', slot, observed, source, lambda: provider.download(url), expected=expected, metadata={'source_url': url})
+    return {**values, 'source_url': values.get('source_url', url)}
 
 
 async def collect(config, *, mode, now=None, start=None, end=None):
@@ -51,10 +34,38 @@ async def collect(config, *, mode, now=None, start=None, end=None):
     report = dict(received=0, restored=0, retained=0, missing=0, rejected=0, failed=0,
                   latest_observed_at=None, source_errors=[])
     async with get_session_factory()() as session:
-        existing = set((await session.scalars(select(GONGSnapshot.observed_at).where(
-            GONGSnapshot.observed_at >= start, GONGSnapshot.observed_at <= end))).all())
-    latest = max(existing) if existing else None
-    report['retained'] = len(existing)
+        records = (await session.scalars(select(GONGSnapshot).where(
+            GONGSnapshot.observed_at >= start, GONGSnapshot.observed_at <= end))).all()
+    existing = {row.observed_at for row in records}
+    usable = set()
+    # Restore missing files using their original URL and checksum. Legacy rows
+    # still carry the original compressed bytes until they are archived on disk.
+    from clio.observations.files import archive_root, store_original
+    import gzip
+    for row in records:
+        try:
+            expected = {k: getattr(row, k) for k in ('slot_at', 'observed_at', 'available_at', 'sha256', 'source_product')}
+            if row.raw_path and (archive_root('gong') / row.raw_path).is_file():
+                await asyncio.to_thread(store_original, 'gong', row.slot_at, row.observed_at,
+                    row.source_product, lambda: None, expected=expected, relative=row.raw_path)
+                usable.add(row.observed_at)
+                continue
+            async with get_session_factory()() as session:
+                original = await session.scalar(select(GONGSnapshot.fits_gzip).where(GONGSnapshot.slot_at == row.slot_at))
+            values = await asyncio.to_thread(store_original, 'gong', row.slot_at, row.observed_at,
+                row.source_product, lambda: gzip.decompress(original) if original else provider.download(row.source_url), expected=expected)
+            from sqlalchemy import update
+            async with get_session_factory()() as session:
+                await session.execute(update(GONGSnapshot).where(GONGSnapshot.slot_at == row.slot_at).values(raw_path=values['raw_path']))
+                await session.commit()
+            report['restored'] += 1
+            usable.add(row.observed_at)
+        except Exception as exc:
+            report['failed'] += 1
+            if len(report['source_errors']) < 20:
+                report['source_errors'].append({'product': source, 'error': str(exc)})
+    latest = max(usable) if usable else None
+    report['retained'] = len(usable) - report['restored']
     try:
         candidates = await asyncio.to_thread(provider.candidates, start, end, historical=historical)
         # One magnetogram per observed hour; keep already received hours immutable.

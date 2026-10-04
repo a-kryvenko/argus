@@ -152,7 +152,9 @@ Before manual production schema changes, stop affected writers and back up the
 databases; normal deployment performs these steps automatically. Review and commit
 new migration files before deployment.
 
-Run the combined Python suite with `./scripts/test-python -q`.
+Run the combined Python suite with `./scripts/test-python -q`. The script uses
+`uv` and the locked environment in `tests/runtime`, synchronizing service and test
+dependencies automatically; it does not use the root `.venv`.
 
 ## Prerequisites
 

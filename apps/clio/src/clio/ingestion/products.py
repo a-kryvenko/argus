@@ -36,9 +36,7 @@ OBSERVATIONS = {
     'ap': ObservationDefinition('nT', resolution='3h', live_resolution='3h', max_age=timedelta(hours=7)),
     'dst': ObservationDefinition('nT', quality='finite', live_resolution='1h', max_age=timedelta(hours=3)),
     'f10_7': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=2)),
-    **{metric: ObservationDefinition('sfu', resolution='1D', live_resolution='1h', max_age=timedelta(hours=2))
-       for metric in ('s10', 'm10', 'y10')},
-    'aia193': ObservationDefinition('FITS', kind='file', live_resolution='1h', max_age=timedelta(hours=3)),
+    'goes': ObservationDefinition('JSON', kind='file', live_resolution='1h', max_age=timedelta(hours=2)),
     'gong': ObservationDefinition('FITS', kind='file', live_resolution='1h', max_age=timedelta(hours=3)),
 }
 
@@ -62,10 +60,8 @@ PRODUCTS = {
     'swpc.dst': Product(frozenset({'dst'}), frozenset({'live'})),
     'swpc.f107': Product(frozenset({'f10_7'}), frozenset({'live'})),
     'gfz.f107': Product(frozenset({'f10_7'}), frozenset({'historical'})),
-    'goes.calibrated_daily': Product(frozenset({'s10', 'm10', 'y10'}), frozenset({'historical'})),
-    'goes.calibrated_live': Product(frozenset({'s10', 'm10', 'y10'}), frozenset({'live'})),
-    'aia.synoptic_193': Product(frozenset({'aia193'}), frozenset({'historical'}), kind='file'),
-    'aia.nrt_193': Product(frozenset({'aia193'}), frozenset({'live'}), kind='file'),
+    'goes.live': Product(frozenset({'goes'}), frozenset({'live'}), kind='file'),
+    'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file'),
     'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file'),
     'gong.archive': Product(frozenset({'gong'}), frozenset({'historical'}), kind='file'),
 }

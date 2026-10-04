@@ -1,17 +1,13 @@
-"""Read causal AIA features from Clio's archived snapshots."""
-import asyncio
+"""Derive causal AIA features from Prophet's local snapshot caches."""
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
 
 from common.schemas.forecast_inputs import AIAFeatureFrame
-from clio.db.models.aia_snapshot import AIASnapshot
-from clio.domains.aia.archive import archive_root
-from clio.domains.aia.extraction import sectors, weighted_mean, aligned_change, ROTATION_HOURS
+from argus_prophet.services.aia.extraction import sectors, weighted_mean, aligned_change, ROTATION_HOURS
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +30,6 @@ def feature_frames(records, as_of: datetime) -> list[AIAFeatureFrame]:
     for row in records:
         try:
             cache = Path(row.cache_path)
-            if not cache.is_absolute():
-                cache = archive_root() / cache
             with np.load(cache, allow_pickle=False) as saved:
                 masks.append(saved['dark'])
                 usable.append(row)
@@ -85,16 +79,3 @@ def feature_frames(records, as_of: datetime) -> list[AIAFeatureFrame]:
             sha256=row.sha256, features=values,
         ))
     return result
-
-
-async def load_aia_features(session, as_of: datetime) -> list[AIAFeatureFrame]:
-    records = (await session.execute(
-        select(AIASnapshot).where(
-            AIASnapshot.observed_at >= as_of - timedelta(days=40),
-            AIASnapshot.observed_at <= as_of,
-            AIASnapshot.available_at <= as_of,
-        ).order_by(AIASnapshot.observed_at).limit(1001)
-    )).scalars().all()
-    if len(records) > 1000:
-        raise ValueError('AIA read exceeds bounded 40-day hourly archive')
-    return await asyncio.to_thread(feature_frames, records, as_of)

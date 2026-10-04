@@ -22,7 +22,6 @@ def config(metrics=('v', 'n', 't')):
     def sources(metric):
         live = [name for name, product in PRODUCTS.items() if metric in product.metrics and 'live' in product.modes]
         historical = (['gfz.f107', 'omni.hourly'] if metric == 'f10_7' else
-                      ['goes.calibrated_daily'] if metric in ('s10', 'm10', 'y10') else
                       ['omni.hourly', 'ace.plasma_hourly'] if metric in ('v', 'n', 't') else ['omni.hourly'])
         return {'live': live, 'historical': historical}
     return ClioObservations.model_validate({'observations': {
@@ -200,12 +199,10 @@ def test_all_sources_failing_does_not_commit(monkeypatch):
 def test_coverage_uses_three_hour_and_daily_slots_and_only_closed_intervals():
     end = START + timedelta(days=1, hours=2)
     stored = frame(('kp', 3., START), ('kp', 2., START + timedelta(hours=3)),
-                   ('f10_7', 150., START + timedelta(hours=12)), ('s10', 120., START + timedelta(hours=14)))
+                   ('f10_7', 150., START + timedelta(hours=12)))
     assert len(service.missing_slots(stored, 'kp', START, end)) == 6
     assert not service.missing_slots(stored, 'f10_7', START, end)
-    assert not service.missing_slots(stored, 's10', START, end)
     assert len(service.missing_slots(stored, 'ap', START, end)) == 8
-    assert len(service.missing_slots(stored, 'y10', START, end)) == 1
     assert not service.missing_slots(stored, 'f10_7', START + timedelta(hours=1), end)
 
 
@@ -243,31 +240,10 @@ def test_three_hour_coverage_stores_one_original_per_missing_slot():
     assert result.observed_at.tolist() == [START, START + timedelta(hours=3)]
 
 
-def test_gfz_is_independent_of_goes_calibration_failure(monkeypatch):
-    from clio.providers import gfz_loader
-    from clio.ingestion import adapters
-    monkeypatch.setattr(gfz_loader, 'load_gfz_f107', lambda *_: frame(('f10_7', 150., START + timedelta(hours=12))))
-    monkeypatch.setattr(adapters, 'load_goes_history', Mock(side_effect=FileNotFoundError('calibration')))
-    pending = {metric: {pd.Timestamp(START)} for metric in ('f10_7', 's10')}
-    result, attempts = service.fetch_missing(pending, config(('f10_7', 's10')).observations, historical_adapters())
-    assert result.metric.tolist() == ['f10_7']
-    assert any(attempt.get('error') == 'calibration' for attempt in attempts)
-
-
-def test_scheduler_failure_result_is_per_metric_and_uses_closed_daily_range(monkeypatch):
-    monkeypatch.setattr(service, 'load_measurements', AsyncMock(return_value=frame()))
-    attempts = [{'product': 'goes.calibrated_daily', 'metrics': ['s10'], 'error': 'offline'},
-                {'product': 'gfz.f107', 'metrics': ['f10_7'], 'accepted_measurements': 0}]
-    fetch = Mock(return_value=(frame(), attempts))
-    monkeypatch.setattr(service, 'fetch_missing', fetch)
-    session = AsyncMock()
-    result = asyncio.run(service.backfill_selected(session, config(('f10_7', 's10')), ['f10_7', 's10'],
-                                                   now=START + timedelta(days=2, hours=13), raise_on_failure=False))
-    assert result['failed_metrics'] == ['s10']
-    assert result['missing_observed_slots'] == {'f10_7': 2, 's10': 2}
-    assert result['missing_observed_hours'] == {}
-    assert result['ranges']['f10_7']['to_exclusive'] == (START + timedelta(days=2)).isoformat()
-    session.commit.assert_awaited_once()
+def test_numeric_ingestion_does_not_register_calibration_products():
+    from clio.ingestion.live_adapters import live_adapters
+    assert not any('calibrated' in name for name in historical_adapters())
+    assert not any('calibrated' in name for name in live_adapters())
 
 
 def test_partial_explicit_day_does_not_fetch_daily_observation(monkeypatch):

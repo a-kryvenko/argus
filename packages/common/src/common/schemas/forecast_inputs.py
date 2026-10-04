@@ -45,7 +45,16 @@ class GONGFeatureFrame(BaseModel):
     features: dict[str, FiniteFloat]
 
 
-class ForecastInputs(BaseModel):
+class RawObservationFile(BaseModel):
+    kind: Literal['aia', 'gong', 'goes']
+    slot_at: AwareDatetime
+    observed_at: AwareDatetime
+    available_at: AwareDatetime
+    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    source_product: str
+
+
+class ObservationInputs(BaseModel):
     schema_version: Literal[1] = 1
     as_of: AwareDatetime
     read_at: AwareDatetime
@@ -54,8 +63,13 @@ class ForecastInputs(BaseModel):
     speed_observations: list[SpeedObservation] = Field(default_factory=list)
     density_observations: list[DensityObservation] = Field(default_factory=list)
 
-    aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)
-    gong: GONGFeatureFrame | None = None
+    files: list[RawObservationFile] = Field(default_factory=list)
 
     # Native, unfilled hourly Clio solar-wind history for IMF inference.
     solar_wind_hourly: dict | None = None
+
+
+class ForecastInputs(ObservationInputs):
+    """Prophet-owned enrichment of the source observation response."""
+    aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)
+    gong: GONGFeatureFrame | None = None

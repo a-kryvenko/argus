@@ -3,7 +3,7 @@ import os
 from datetime import UTC, datetime
 
 import httpx
-from common.schemas.forecast_inputs import ForecastInputs
+from common.schemas.forecast_inputs import ForecastInputs, ObservationInputs
 
 
 def load_inputs(as_of: datetime | None = None) -> ForecastInputs:
@@ -20,9 +20,12 @@ def load_inputs(as_of: datetime | None = None) -> ForecastInputs:
             headers={'Authorization': f'Bearer {token}'},
         )
         response.raise_for_status()
-        inputs = ForecastInputs.model_validate(response.json())
-    if inputs.as_of != as_of:
-        raise RuntimeError('Observation service returned a different as_of')
-    if not inputs.observations.points:
-        raise RuntimeError('No stored observations available in the requested history range; check ingestion')
+        source = ObservationInputs.model_validate(response.json())
+        inputs = ForecastInputs.model_validate(source.model_dump())
+        if inputs.as_of != as_of:
+            raise RuntimeError('Observation service returned a different as_of')
+        if not inputs.observations.points:
+            raise RuntimeError('No stored observations available in the requested history range; check ingestion')
+        from argus_prophet.services.source_features import enrich_inputs
+        inputs = enrich_inputs(inputs, client, url, token)
     return inputs

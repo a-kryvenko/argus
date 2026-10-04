@@ -1,39 +1,25 @@
 """Clio-owned read boundary for forecast workers."""
-import os
-import secrets
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime
 from sqlalchemy import func, select, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db import get_db_session
+from clio.routers.auth import require_service_token
 from clio.db.models import Measurement
 from clio.observations.normalized import HISTORY_DAYS, load_normalized_observations
-from common.schemas.forecast_inputs import DENSITY_METRICS, DensityObservation, ForecastInputs, SourceMeasurement, SpeedObservation
+from common.schemas.forecast_inputs import DensityObservation, ObservationInputs, SourceMeasurement, SpeedObservation
 from common.data.omni import OMNI_FILL_VALUES
 
-from clio.domains.aia.features import load_aia_features
-from clio.domains.gong import load_gong_features
+from clio.routers.observation_files import load_observation_files
 from clio.domains.solar_wind.history import history as solar_history
-
-security = HTTPBearer(auto_error=False)
-
-
-def require_service_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
-    expected = os.getenv('OBSERVATIONS_SERVICE_TOKEN')
-    if not expected:
-        raise HTTPException(503, 'Observation read service is not configured')
-    if credentials is None or not secrets.compare_digest(credentials.credentials.encode(), expected.encode()):
-        raise HTTPException(401, 'Invalid service credentials')
-
 
 router = APIRouter(prefix='/internal/v1/observations', dependencies=[Depends(require_service_token)])
 
 
-@router.get('/forecast-inputs', response_model=ForecastInputs)
+@router.get('/forecast-inputs', response_model=ObservationInputs)
 async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(get_db_session)):
     as_of = as_of.astimezone(UTC)
     now = datetime.now(UTC)
@@ -50,7 +36,7 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         usable = or_(Measurement.quality.is_(None), Measurement.quality.not_in(['flagged', 'missing']))
         rows = (await session.execute(
             select(Measurement.metric, Measurement.value, Measurement.observed_at)
-            .where(Measurement.metric.in_(DENSITY_METRICS), usable, Measurement.value.is_not(None),
+            .where(Measurement.metric.in_(['f10_7', 'dst', 'ap']), usable, Measurement.value.is_not(None),
                    Measurement.observed_at >= as_of - timedelta(days=88),
                    Measurement.observed_at <= as_of)
             .order_by(Measurement.observed_at, Measurement.metric)
@@ -79,13 +65,12 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
                    Measurement.observed_at <= as_of)
             .group_by(hour).order_by(hour)
         )).all()
-        aia_frames = await load_aia_features(session, as_of)
-        gong = await load_gong_features(session, as_of)
+        files = await load_observation_files(session, as_of)
         issue = as_of.replace(minute=0, second=0, microsecond=0)
         hourly = await solar_history(session, ['bx', 'by', 'bz', 'v', 'n', 't'],
                                      issue-timedelta(hours=168), issue, 3600, now=now)
-        return ForecastInputs(
-            as_of=as_of, read_at=now, observations=observations, aia_frames=aia_frames, gong=gong,
+        return ObservationInputs(
+            as_of=as_of, read_at=now, observations=observations, files=files,
             solar_wind_hourly=hourly,
             measurements=[SourceMeasurement(metric=row.metric, value=row.value,
                                             observed_at=row.observed_at) for row in rows],

@@ -16,7 +16,7 @@ def receipt(slot):
 
 def test_retention_boundary_and_unrelated_files(tmp_path):
     slots = hourly_slots(NOW)
-    assert len(slots) == 144 and len(set(slots)) == 144
+    assert len(slots) == 1080 and len(set(slots)) == 1080
     image = np.ones((512, 512), dtype=np.float32)
     for slot in (slots[0], slots[-1]):
         assert save_image(tmp_path, slot, 'aia94', image, receipt(slot), now=NOW)
@@ -63,4 +63,20 @@ def test_archive_accepts_only_configured_observation_channels(tmp_path):
     for channel in ('halpha', 'hmi_v', 'hmi_bx', 'hmi_by', 'hmi_bz'):
         with pytest.raises(ValueError, match='schema/channel'):
             save_image(tmp_path, slot, channel, image, receipt(slot), now=NOW)
-    assert prune(tmp_path, now=NOW + timedelta(hours=144)) == 1
+    assert prune(tmp_path, now=NOW + timedelta(hours=1080)) == 1
+
+
+def test_native_original_matches_first_receipt_and_expires_with_image(tmp_path):
+    import hashlib
+    from common.sdo_images import original_path, save_original
+    slot = hourly_slots(NOW)[0]
+    content = b'native FITS pixels'
+    metadata = {**receipt(slot), 'sha256': hashlib.sha256(content).hexdigest()}
+    save_image(tmp_path, slot, 'aia193', np.ones((512, 512), np.float32), metadata, now=NOW)
+    with pytest.raises(ValueError, match='SHA256'):
+        save_original(tmp_path, slot, 'aia193', b'other pixels', now=NOW)
+    assert save_original(tmp_path, slot, 'aia193', content, now=NOW)
+    assert not save_original(tmp_path, slot, 'aia193', content, now=NOW)
+    assert original_path(tmp_path, slot, 'aia193').read_bytes() == content
+    assert prune(tmp_path, now=NOW + timedelta(hours=1080)) == 1
+    assert not original_path(tmp_path, slot, 'aia193').exists()

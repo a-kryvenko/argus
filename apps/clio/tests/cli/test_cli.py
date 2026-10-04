@@ -29,8 +29,10 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
     (['backfill', '--from', '2026-08-31', '--to', '2026-09-01'], 'refresh', 'backfill'),
     (['normalize'], 'refresh', 'normalize'),
     (['collect', 'kp', 'dst'], 'live', 'collect'),
-    (['collect', 'aia193'], 'aia-live', 'collect'),
-    (['backfill', 'aia193'], 'aia', 'backfill'),
+    (['collect', 'gong'], 'files-live', 'collect'),
+    (['collect', 'sdo'], 'files-live', 'collect'),
+    (['backfill', 'sdo'], 'files-backfill', 'backfill'),
+    (['backfill', 'gong'], 'files-backfill', 'backfill'),
 ])
 def test_manual_commands_keep_their_job_lock(monkeypatch, argv, job, command):
     invoke = Mock(return_value=None)
@@ -44,8 +46,8 @@ def test_manual_commands_keep_their_job_lock(monkeypatch, argv, job, command):
 
 
 @pytest.mark.parametrize('argv', [['collect', '--help'], ['refresh', 'solar-wind', '--watch'],
-                                  ['schedule', 'live'], ['schedule', 'normalize'],
-                                  ['aggregate', '--limit', '0'], ['collect', 'aia', '--unknown'],
+                                  ['sdo-images', 'live'], ['schedule', 'live'], ['schedule', 'normalize'],
+                                  ['aggregate', '--limit', '0'], ['collect', 'files-backfill', '--unknown'],
                                   ['backfill', '--from', '2026-08-01', '--to', '2026-09-09']])
 def test_help_and_invalid_arguments_do_not_run_or_lock(monkeypatch, argv):
     execute = Mock()

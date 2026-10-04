@@ -28,7 +28,7 @@ def execute(config, run, *, now=None, mode='backfill', force=False):
     with psycopg.connect(url.set(drivername='postgresql').render_as_string(hide_password=False), autocommit=True,
                          options='-csearch_path=clio,pg_catalog,pg_temp') as conn:
         files_only = all(OBSERVATIONS[m].kind == 'file' for m in config.observations)
-        job = ('aia-live' if mode == 'live' else 'aia') if files_only else ('live' if mode == 'live' else 'refresh')
+        job = ('files-live' if mode == 'live' else 'files-backfill') if files_only else ('live' if mode == 'live' else 'refresh')
         key = JOB_LOCKS[job]
         if not conn.execute('SELECT pg_try_advisory_lock(%s)', (key,)).fetchone()[0]:
             raise JobBusy(f'Clio {mode} is already running')

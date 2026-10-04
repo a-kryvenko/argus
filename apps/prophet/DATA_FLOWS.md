@@ -1,8 +1,9 @@
-## Data flows
+# Потоки данных Prophet
 
 ```mermaid
 flowchart TD
-    clio[HTTP API Clio: входы прогноза] -->|Снимок входов и SHA256| forecast_run
+    clio[HTTP API Clio: наблюдения и оригинальные файлы] --> preparation[Prophet: признаки AIA/GONG и калибровки GOES]
+    preparation -->|Подготовленный снимок входов и SHA256| forecast_run
     generation[Ручной или плановый запуск расчёта] -->|Статус, ошибки и provenance| forecast_run
     scheduler[Планировщик расчётов по продуктам] --> forecast_slot
     forecast_slot -->|Плановый слот запуска| forecast_run

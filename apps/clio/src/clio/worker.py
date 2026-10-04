@@ -2,6 +2,7 @@
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from datetime import UTC, datetime
 import logging
 import signal
 import threading
@@ -48,7 +49,10 @@ def tasks_for(config, heartbeats, abort):
     if config.sdo_images.enabled:
         for mode in ('live', 'warmup', 'cleanup'):
             tasks.append(Task(
-                f'sdo-{mode}', lambda mode=mode: invoke('sdo-images', mode=mode),
+                f'sdo-{mode}', lambda mode=mode: (
+                    invoke('sdo-cleanup') if mode == 'cleanup' else
+                    invoke('collect' if mode == 'live' else 'backfill',
+                           metrics=['sdo'], now=datetime.now(UTC), start=None, end=None, scheduled=True)),
                 getattr(config.sdo_images, f'{mode}_seconds'), background=mode == 'warmup'))
     return tasks
 

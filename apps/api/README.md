@@ -16,7 +16,8 @@ Paths are relative to `/api/v1`. See `/api/v1/docs` for schemas, parameters and 
 | GET | `/public/observations/summary` | Hourly changes and southward-Bz duration. |
 | GET | `/public/observations/status` | Collection progress and freshness. |
 | GET | `/{visibility}/forecasts/{target}` | Latest forecast. |
-| GET | `/{visibility}/forecasts/{target}/metrics` | Model evaluation metrics. |
+| GET | `/{visibility}/forecasts/{target}/metrics` | Static model evaluation metrics. |
+| GET | `/{visibility}/forecasts/{target}/verification` | Rolling 30-day accuracy of published forecasts against Clio observations. |
 | GET | `/public/forecasts/atmospheric-density` | 48-hour JB2008 density grid. |
 | POST | `/public/risks/leo-drag` | Circular-orbit drag assessment; [request and limits](../../docs/leo-drag.md). |
 

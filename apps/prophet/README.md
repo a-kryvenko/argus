@@ -36,6 +36,7 @@ Forecast routes require a Bearer token matching `FORECASTS_SERVICE_TOKEN`.
 | --- | --- | --- |
 | GET | `/internal/v1/forecasts/{product}/latest` | Current complete release. |
 | GET | `/internal/v1/forecasts/{product}/releases/{release_id}` | Historical release. |
+| GET | `/internal/v1/forecasts/{product}/verification` | Rolling 30-day observed accuracy, grouped by artifact and model hash. |
 | GET | `/internal/v1/forecasts/{product}/status` | Release age, latest attempt and input diagnostics. |
 | GET | `/health/live`, `/health/ready` | Service liveness and storage readiness. |
 

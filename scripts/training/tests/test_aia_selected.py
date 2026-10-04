@@ -9,7 +9,7 @@ import stream_ridge
 
 def fixture():
  plan=json.loads(PLAN.read_text());times=pd.date_range('2024-01-01',periods=41,freq='6h',tz='UTC')
- solar=pd.DataFrame(dict(observed_at=times,available_at=times+pd.Timedelta(hours=2),aia_valid_fraction=1.,aia_b0_deg=0.,aia_area_sector=np.arange(len(times),dtype=float),aia_delta_24h_sector=0.,aia_24h_separation_h=24.))
+ solar=pd.DataFrame(dict(observed_at=times,available_at=times+pd.Timedelta(2, unit='h'),aia_valid_fraction=1.,aia_b0_deg=0.,aia_area_sector=np.arange(len(times),dtype=float),aia_delta_24h_sector=0.,aia_24h_separation_h=24.))
  issue=pd.Timestamp('2024-01-10T00:00Z');leads=np.array([24,48,72,95,96,120])
  frame=pd.DataFrame(dict(issue_time=issue,valid_time=issue+pd.to_timedelta(leads,unit='h'),lead_hours=leads,dlinear_v=400.,target_v=500.,calendar_sin=0.,calendar_cos=1.))
  return frame,solar,plan
@@ -30,7 +30,7 @@ def test_missing_history_is_not_backfilled():
  assert not a.aia_available.iloc[0] and np.isnan(a.aia_age_hours.iloc[0]) and a.aia_available.iloc[-1]
 
 def test_training_excludes_missing_and_boundary_targets():
- t=pd.Timestamp('2024-04-01',tz='UTC');f=pd.DataFrame(dict(issue_time=[t-pd.Timedelta(hours=6)]*4,valid_time=[t-pd.Timedelta(hours=1),t,t-pd.Timedelta(hours=1),t-pd.Timedelta(hours=1)],lead_hours=[5,6,5,5],target_v=[400.,400.,np.nan,400.],common_available=[True,True,True,False]))
+ t=pd.Timestamp('2024-04-01',tz='UTC');f=pd.DataFrame(dict(issue_time=[t-pd.Timedelta(6, unit='h')]*4,valid_time=[t-pd.Timedelta(1, unit='h'),t,t-pd.Timedelta(1, unit='h'),t-pd.Timedelta(1, unit='h')],lead_hours=[5,6,5,5],target_v=[400.,400.,np.nan,400.],common_available=[True,True,True,False]))
  assert len(training(f,'2023-01-01T00:00:00Z',t))==1
 
 def test_ridge_unsupported_inputs_fall_back():
@@ -45,7 +45,7 @@ def test_training_and_serving_preserve_missing_features_in_mixed_windows():
  from forecast.aia_alignment import align as runtime_align
  assert align is runtime_align
  f,s,p=fixture()
- s.loc[s.observed_at.eq(f.issue_time.iloc[0]-pd.Timedelta(hours=24)),'aia_delta_24h_sector']=np.nan
+ s.loc[s.observed_at.eq(f.issue_time.iloc[0]-pd.Timedelta(24, unit='h')),'aia_delta_24h_sector']=np.nan
  a=align(f,s,p)
  assert np.isnan(a.loc[a.lead_hours.eq(72),'aia_delta_24h_sector'].iloc[0])
  assert a.loc[a.lead_hours.eq(96),'aia_delta_24h_sector'].iloc[0]==0.

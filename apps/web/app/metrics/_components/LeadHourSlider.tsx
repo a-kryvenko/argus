@@ -1,14 +1,18 @@
 'use client';
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import local from './metrics.module.css';
 
 export default function LeadHourSlider({ id, hours, hour, onChange }: {
   id: string; hours: number[]; hour: number; onChange: (hour: number) => void;
 }) {
   const [preview, setPreview] = useState(hour);
+  const [syncedHour, setSyncedHour] = useState(hour);
   const [pending, startTransition] = useTransition();
-  // Chart clicks and horizon changes sync back after the latest drag is committed.
-  useEffect(() => { if (!pending) setPreview(hour); }, [hour, pending]);
+  // Reconcile external chart/horizon changes without an extra effect render.
+  if (!pending && syncedHour !== hour) {
+    setSyncedHour(hour);
+    setPreview(hour);
+  }
   const current = hours.includes(preview) ? preview : hour;
   return <>
     <label htmlFor={id}>Evaluation lead hour <output htmlFor={id}>+{current}h</output></label>

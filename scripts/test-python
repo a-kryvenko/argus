@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export PYTHONPATH="$PWD/apps/api:$PWD/apps/clio/src:$PWD/apps/prophet/src:$PWD/apps/intelligence/src:$PWD/packages/common/src:$PWD/packages/forecast/src:$PWD/packages/forecast-core/src:$PWD/packages/intelligence-core/src${PYTHONPATH:+:$PYTHONPATH}"
-exec uv run --locked --project tests/runtime python -m pytest --import-mode=importlib tests packages/common/tests scripts/training/tests packages/forecast/tests apps/api/tests apps/clio/tests apps/prophet/tests apps/intelligence/tests packages/forecast-core/tests packages/intelligence-core/tests "$@"
+unset PYTHONPATH UV_PROJECT_ENVIRONMENT
+for app in api clio prophet intelligence; do
+    uv sync --locked --project "apps/$app" --group test
+    "apps/$app/.venv/bin/python" -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs "apps/$app/tests" "$@"
+done
+uv sync --locked --project tests/runtime
+tests/runtime/.venv/bin/python -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs tests "$@"
+for package in common forecast forecast-core intelligence-core; do
+    extras=()
+    if [[ "$package" == forecast-core ]]; then extras=(--extra models --extra datasets); fi
+    uv sync --locked --project "packages/$package" --group test "${extras[@]}"
+    "packages/$package/.venv/bin/python" -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs "packages/$package/tests" "$@"
+done
+uv sync --locked --project scripts/training
+scripts/training/.venv/bin/python -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs scripts/training/tests "$@"

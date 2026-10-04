@@ -58,7 +58,7 @@ def match_observations(predictions, observations, *, as_of):
         raise ValueError('Observation timestamps must be present and unique')
     truth['value'] = pd.to_numeric(truth.value, errors='raise')
     result = predictions.merge(truth, on='valid_time', how='left', validate='many_to_one')
-    due = result.valid_time + pd.Timedelta(hours=1) <= pd.Timestamp(as_of)
+    due = result.valid_time + pd.Timedelta(1, unit="h") <= pd.Timestamp(as_of)
     finite = np.isfinite(result.value.to_numpy(dtype=float))
     result['state'] = np.where(~due, 'pending', np.where(finite, 'verified', 'missing'))
     result.loc[~due, 'value'] = np.nan

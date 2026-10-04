@@ -72,7 +72,7 @@ def _parse_spacewx_text(text: str) -> pd.DataFrame:
         + frame["day_of_year"].astype(int).astype(str).str.zfill(3),
         format="%Y%j",
         utc=True,
-    ) + pd.Timedelta(hours=12)
+    ) + pd.Timedelta(12, unit='h')
 
     if frame["timestamp"].duplicated().any():
         raise RuntimeError("Duplicate dates found in SOLFSMY response.")

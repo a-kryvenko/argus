@@ -97,7 +97,7 @@ class RotationDLinearForecaster:
             raise ValueError(f"Conflicting {self.variable} observations at the same issue_time")
         series = obs.drop_duplicates("issue_time").set_index("issue_time")[self.variable].sort_index()
         # Include a fill buffer before the first requested historical point.
-        start = issue_times.min() + pd.Timedelta(hours=int(self.offsets.min()) - self.ffill_limit)
+        start = issue_times.min() + pd.Timedelta(int(self.offsets.min()) - self.ffill_limit, unit="h")
         clock = pd.date_range(start, issue_times.max(), freq="h")
         history = series.reindex(clock).ffill(limit=self.ffill_limit).to_numpy(dtype=np.float32)
         history = (history - self.mean) / self.std
@@ -123,13 +123,13 @@ class RotationDLinearForecaster:
 
     def _history_error(self, issue, missing):
         """Bounded diagnostic using the exact post-fill inference window."""
-        groups = np.split(missing, np.flatnonzero(np.diff(missing.asi8) != pd.Timedelta(hours=1).value) + 1)
+        groups = np.split(missing, np.flatnonzero(np.diff(missing.asi8) != pd.Timedelta(1, unit="h").value) + 1)
         gaps = '; '.join(f'{group[0].isoformat()}..{group[-1].isoformat()} ({len(group)} h)'
                          for group in groups[:5])
         if len(groups) > 5:
             gaps += f'; ... {len(groups) - 5} more intervals'
         windows = '; '.join(
-            f'{(issue + pd.Timedelta(hours=start)).isoformat()}..{(issue + pd.Timedelta(hours=end)).isoformat()}'
+            f'{(issue + pd.Timedelta(start, unit="h")).isoformat()}..{(issue + pd.Timedelta(end, unit="h")).isoformat()}'
             for start, end in self.settings['segments']['rotations'])
         return ValueError(
             f'Insufficient hourly {self.history_name} history for DLinear at {issue.isoformat()}: '

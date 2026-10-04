@@ -7,5 +7,9 @@ for package in forecast-core intelligence-core; do
         exit 1
     fi
 done
+unset PYTHONPATH UV_PROJECT_ENVIRONMENT
+for app in api clio prophet intelligence; do
+    uv sync --locked --project "apps/$app" --group test
+done
 uv sync --locked --project tests/runtime
 exec tests/runtime/.venv/bin/python scripts/testing/domain_storage.py "$@"

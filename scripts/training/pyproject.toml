@@ -1,0 +1,17 @@
+[project]
+name = "argus-training-tests"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["common", "forecast", "pytest>=8,<10", "forecast-core[models,datasets]", "argus-clio", "matplotlib"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+common = { path = "../../packages/common", editable = true }
+forecast = { path = "../../packages/forecast", editable = true }
+forecast-core = { path = "../../packages/forecast-core", editable = true }
+argus-clio = { path = "../../apps/clio", editable = true }

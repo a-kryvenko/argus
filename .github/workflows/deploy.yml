@@ -94,6 +94,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             tests/runtime/uv.lock
+            apps/*/uv.lock
             apps/*/pyproject.toml
             packages/*/pyproject.toml
       - name: Check service integration in the locked runtime

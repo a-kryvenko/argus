@@ -165,18 +165,18 @@ def build_features(raw_dir, output_dir, *, assumed_latency_hours=2., threshold=.
         with np.load(meta["cache_path"], allow_pickle=False) as saved:
             current = saved["dark"]
         row = dict(observed_at=times[i],
-            available_at=times[i]+pd.Timedelta(hours=assumed_latency_hours),
+            available_at=times[i]+pd.Timedelta(assumed_latency_hours, unit='h'),
             aia_valid_fraction=meta["valid_fraction"], aia_b0_deg=meta["b0_deg"])
         for name, mask in sectors():
             row[f"aia_area_{name}"] = weighted_mean(current, mask)
         for label, hours in [("24h", 24.), ("rotation", ROTATION_HOURS)]:
-            target = times[i]-pd.Timedelta(hours=hours)
+            target = times[i]-pd.Timedelta(hours, unit='h')
             k = int(times.searchsorted(target))
             candidates = [j for j in [k-1, k] if 0 <= j < i]
             j = min(candidates, key=lambda j: abs(times[j]-target)) if candidates else None
             change = np.full(current.shape, np.nan)
             row[f"aia_{label}_separation_h"] = np.nan
-            if j is not None and abs(times[j]-target) <= pd.Timedelta(hours=pair_tolerance_hours):
+            if j is not None and abs(times[j]-target) <= pd.Timedelta(pair_tolerance_hours, unit='h'):
                 with np.load(metadata[j]["cache_path"], allow_pickle=False) as saved:
                     change = aligned_change(current, saved["dark"], meta["carrington_lon"],
                                             metadata[j]["carrington_lon"])

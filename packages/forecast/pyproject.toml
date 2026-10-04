@@ -17,4 +17,14 @@ models = ["scikit-learn>=1.5", "lightgbm>=4.6.0", "joblib>=1.5.3"]
 "" = "src"
 
 [tool.uv.sources]
-common = { workspace = true, editable = true }
+common = { path = "../common", editable = true }
+
+[tool.uv.workspace]
+members = []
+
+[dependency-groups]
+test = ["pytest>=8,<10", "scikit-learn>=1.5", "lightgbm>=4.6.0", "joblib>=1.5.3"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

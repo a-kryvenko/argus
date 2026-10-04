@@ -11,7 +11,6 @@ import psycopg
 from psycopg import sql
 from sqlalchemy import URL
 from sqlalchemy.engine import make_url
-from common.database import database_parameters
 
 DOMAINS = ('api', 'clio', 'prophet', 'intelligence')
 
@@ -78,6 +77,7 @@ def main():
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
     from dotenv import load_dotenv
+    from common.database import database_parameters
     root = Path(os.getenv('ARGUS_WORKDIR', Path(__file__).resolve().parents[2]))
     load_dotenv(root / '.env')
     load_dotenv(root / '.env.local', override=True)

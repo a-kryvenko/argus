@@ -318,7 +318,7 @@ test("permissions hide protected navigation and direct pages", async ({
 });
 
 test("dashboard styles do not change public typography after client navigation", async ({
-  page,
+  page, baseURL,
 }) => {
   await mockApi(page);
   await page.route('**/api/v1/public/forecasts/**', route => route.fulfill({ status: 503, json: { success: false, data: null, error: { message: 'No test forecast' } } }));
@@ -332,7 +332,7 @@ test("dashboard styles do not change public typography after client navigation",
     });
   await page.goto("/dashboard");
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Forecast overview", exact: true }).click();
-  await expect(page).toHaveURL("http://localhost:3000/");
+  await expect(page).toHaveURL(`${baseURL}/`);
   await expect(page.locator(".dashboard")).toHaveCount(0);
   const after = await page
     .locator("h1")

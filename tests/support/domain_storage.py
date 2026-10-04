@@ -8,7 +8,6 @@ import importlib.util
 import os
 from pathlib import Path
 import subprocess
-import sys
 from uuid import uuid4
 
 import pytest
@@ -75,11 +74,15 @@ def database(tmp_path):
 
 
 def migrate(environment):
-    for command in ([sys.executable, '-c', 'from clio.cli import main; main()', 'migrate', 'upgrade', 'head'],
-                    [sys.executable, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini'), 'upgrade', 'head'],
-                    [sys.executable, '-c', 'from argus_prophet.cli import main; main()', 'migrate', 'upgrade', 'head'],
-                    [sys.executable, '-c', 'from argus_intelligence.cli import main; main()', 'migrate', 'upgrade', 'head']):
-        result = subprocess.run(command, env=environment, cwd=ROOT, capture_output=True, text=True)
+    for domain in provisioning.DOMAINS:
+        python = str(ROOT / 'apps' / domain / '.venv/bin/python')
+        if domain == 'api':
+            command = [python, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini')]
+        else:
+            module = 'clio' if domain == 'clio' else 'argus_' + domain
+            command = [python, '-c', f'from {module}.cli import main; main()', 'migrate']
+        result = subprocess.run([*command, 'upgrade', 'head'], env={**environment, 'PYTHONPATH': ''},
+                                cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
 
 

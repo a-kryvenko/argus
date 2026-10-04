@@ -35,7 +35,10 @@ where = ["src"]
 clio = ["migrations/script.py.mako"]
 
 [tool.uv.sources]
-common = { workspace = true, editable = true }
+common = { path = "../../packages/common", editable = true }
 
 [tool.uv.workspace]
-members = ["../../packages/common"]
+members = []
+
+[dependency-groups]
+test = ["pytest>=8,<10", "httpx>=0.28,<1", "httpx2"]

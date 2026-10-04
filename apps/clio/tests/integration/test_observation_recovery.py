@@ -1,6 +1,6 @@
-"""Run explicitly with the API Python environment; uses an isolated temporary schema.
+"""Run explicitly with the Clio Python environment; uses an isolated temporary schema.
 
-PYTHONPATH=apps/clio/src apps/clio/.venv/bin/python apps/clio/tests/integration/test_observation_recovery.py
+apps/clio/.venv/bin/python apps/clio/tests/integration/test_observation_recovery.py
 """
 import asyncio
 from copy import deepcopy

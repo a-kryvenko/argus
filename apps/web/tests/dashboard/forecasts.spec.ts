@@ -152,6 +152,7 @@ test('mobile forecast navigation, time inspector and charts fit the screen', asy
   await mockForecasts(page);
   await page.goto('/products/solar-wind-speed');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
+  await expect(inspector.getByLabel('Forecast time · UTC')).toBeEnabled();
   await expect(inspector.getByLabel('Forecast time · UTC')).toBeHidden();
   await inspector.getByRole('button', { name: 'Details', exact: true }).click();
   await expect(inspector.getByLabel('Forecast time · UTC')).toBeVisible();

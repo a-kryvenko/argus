@@ -17,9 +17,9 @@ def bundle():
 
 def inputs():
     issue=pd.Timestamp('2025-02-10T12:00:00Z')
-    history=pd.DataFrame(dict(issue_time=pd.date_range(issue-pd.Timedelta(hours=2),periods=3,freq='h'),v=400.))
-    times=pd.date_range(issue-pd.Timedelta(days=6),issue-pd.Timedelta(hours=6),freq='6h')
-    solar=pd.DataFrame(dict(slot_at=times,observed_at=times,available_at=times+pd.Timedelta(hours=2),aia_valid_fraction=1.,aia_b0_deg=0.,aia_area_sector=.4,aia_delta_24h_sector=0.))
+    history=pd.DataFrame(dict(issue_time=pd.date_range(issue-pd.Timedelta(2, unit="h"),periods=3,freq='h'),v=400.))
+    times=pd.date_range(issue-pd.Timedelta(6, unit="D"),issue-pd.Timedelta(6, unit="h"),freq='6h')
+    solar=pd.DataFrame(dict(slot_at=times,observed_at=times,available_at=times+pd.Timedelta(2, unit="h"),aia_valid_fraction=1.,aia_b0_deg=0.,aia_area_sector=.4,aia_delta_24h_sector=0.))
     return issue,history,solar
 
 
@@ -33,17 +33,17 @@ def test_quantile_and_threshold_share_point_distribution_and_keep_contract():
         assert v.v_q10<=v.v_q50<=v.v_q90
         assert 0<=prob.p_v_ge_600<=prob.p_v_ge_500<=prob.p_v_ge_450<=1
         assert v.valid_time==prob.valid_time
-    assert q.points[95].valid_time==issue+pd.Timedelta(hours=96)
+    assert q.points[95].valid_time==issue+pd.Timedelta(96, unit="h")
 
 
 def test_actual_receipt_hourly_sampling_and_future_speed_are_causal():
     issue,history,solar=inputs();model=AIAWindForecaster(bundle());original=model.frame(issue,history,solar)
-    changed=solar.copy();changed.loc[changed.index[-1],'available_at']=issue+pd.Timedelta(hours=1)
+    changed=solar.copy();changed.loc[changed.index[-1],'available_at']=issue+pd.Timedelta(1, unit="h")
     changed.loc[changed.index[-1],'aia_area_sector']=999.
     out=model.frame(issue,history,changed)
     assert out.v_q50.iloc[95]==pytest.approx(original.v_q50.iloc[95])
-    hourly=solar.iloc[[-1]].copy();hourly.slot_at=issue-pd.Timedelta(hours=1);hourly.observed_at=hourly.slot_at;hourly.available_at=hourly.slot_at;hourly.aia_area_sector=999
-    result=model.frame(issue,pd.concat([history,pd.DataFrame(dict(issue_time=[issue+pd.Timedelta(hours=1)],v=[9999.]))]),pd.concat([solar,hourly]))
+    hourly=solar.iloc[[-1]].copy();hourly.slot_at=issue-pd.Timedelta(1, unit="h");hourly.observed_at=hourly.slot_at;hourly.available_at=hourly.slot_at;hourly.aia_area_sector=999
+    result=model.frame(issue,pd.concat([history,pd.DataFrame(dict(issue_time=[issue+pd.Timedelta(1, unit="h")],v=[9999.]))]),pd.concat([solar,hourly]))
     np.testing.assert_allclose(result.v_q50,original.v_q50)
 
 
@@ -56,7 +56,7 @@ def test_no_aia_falls_back_to_dlinear_with_fallback_uncertainty():
 
 
 def test_shuffled_actual_receipts_do_not_require_observation_order():
-    issue,history,solar=inputs();solar.available_at=issue-pd.Timedelta(minutes=1)
+    issue,history,solar=inputs();solar.available_at=issue-pd.Timedelta(1, unit="m")
     out=AIAWindForecaster(bundle()).frame(issue,history,solar.sample(frac=1,random_state=2))
     np.testing.assert_allclose(out.v_q50,440.)
 

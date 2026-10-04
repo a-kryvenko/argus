@@ -138,8 +138,11 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
         'background_interpolated_days': 0, 'dtc_method': 'test',
         'history_start': ISSUE - timedelta(days=81), 'dtc_observed_at': ISSUE,
     } for lead in (0, 1)])
-    grid = AtmosphericDensityForecastService().forecast_grid(
-        drivers, altitudes_km=[400], latitudes_deg=[0], longitudes_deg=[0, 90])
+    grid = drivers.assign(
+        driver_mode='observed_persistence', altitude_km=400., latitude_deg=0.,
+        rho_kg_m3=[1.5e-12, 2.5e-12], rho_lon_p10_kg_m3=[1.1e-12, 2.1e-12],
+        rho_lon_p90_kg_m3=[1.9e-12, 2.9e-12],
+    )
     expected = grid.copy()
     expected.insert(0, 'issue_time', ISSUE)
     expected.insert(2, 'lead_hours', [0, 1])

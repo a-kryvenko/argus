@@ -81,9 +81,9 @@ def archive(tmp_path):
         rows['strategy'] = 'fixed_initial'
         extra = rows.iloc[:1].copy()
         extra['issue_time'] = pd.Timestamp(f'{year}-12-31T18:00Z')
-        extra['valid_time'] = extra.issue_time + pd.Timedelta(hours=48)
+        extra['valid_time'] = extra.issue_time + pd.Timedelta(48, unit='h')
         pd.concat([rows, extra]).to_parquet(oof / f'year={year}.parquet', index=False)
-        frames.append(pd.DataFrame({'observed_at': issues - pd.Timedelta(hours=3), 'available_at': issues - pd.Timedelta(hours=1), 'aia_area_x': np.sin(np.arange(len(issues)) / 5), 'aia_valid_fraction': 1.0, 'aia_b0_deg': 0.0, 'aia_delta_rotation_x': 0.2, 'aia_rotation_separation_h': 654.0}))
+        frames.append(pd.DataFrame({'observed_at': issues - pd.Timedelta(3, unit='h'), 'available_at': issues - pd.Timedelta(1, unit='h'), 'aia_area_x': np.sin(np.arange(len(issues)) / 5), 'aia_valid_fraction': 1.0, 'aia_b0_deg': 0.0, 'aia_delta_rotation_x': 0.2, 'aia_rotation_separation_h': 654.0}))
     features = pd.concat(frames, ignore_index=True)
     features.to_parquet(features_dir / 'features.parquet')
     (features_dir / 'extraction.json').write_text('{}')

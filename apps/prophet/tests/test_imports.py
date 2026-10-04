@@ -9,10 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def test_generation_imports_without_model_runtime():
     environment = os.environ.copy()
-    environment['PYTHONPATH'] = os.pathsep.join([
-        str(ROOT / 'apps/prophet/src'), str(ROOT / 'packages/common/src'),
-        str(ROOT / 'packages/forecast/src'), environment.get('PYTHONPATH', ''),
-    ])
+    environment.pop('PYTHONPATH', None)
     result = subprocess.run([sys.executable, '-c', '''
 import sys
 blocked = {'joblib', 'sklearn', 'lightgbm', 'forecast_core', 'intelligence_core', 'clio', 'numpy', 'pandas'}

@@ -152,9 +152,14 @@ Before manual production schema changes, stop affected writers and back up the
 databases; normal deployment performs these steps automatically. Review and commit
 new migration files before deployment.
 
-Run the combined Python suite with `./scripts/test-python -q`. The script uses
-`uv` and the locked environment in `tests/runtime`, synchronizing service and test
-dependencies automatically; it does not use the root `.venv`.
+Run all Python suites with `./scripts/test-python -q`. Each application uses its
+own locked `.venv` and `test` dependency group. `tests/runtime` is reserved for
+project-wide checks; packages and training have separate test environments.
+The script runs tests sequentially, synchronizing each owner's environment with
+`uv` before its tests, without injecting source paths. It stops on the first failure.
+Skip reasons are always shown. PostgreSQL integration tests require
+`TEST_DATABASE_ADMIN_DSN`; use `./scripts/test-domain-storage` to run them against
+a disposable PostgreSQL server.
 
 ## Prerequisites
 
@@ -219,6 +224,14 @@ not load changed env. Direct Compose operations must include `.env`, `.env.local
 and `.release-images.env` and must not overlap deployment.
 
 ## Release workflow
+
+Before any upload, commit or push, `deploy.sh` runs web lint, TypeScript checks,
+Node unit tests, Playwright browser tests, and the isolated Python suites.
+`./deploy.sh -t` runs the same checks without publishing. Install JavaScript
+dependencies with `pnpm install --frozen-lockfile` and the Playwright browser with
+`pnpm --filter web exec playwright install chromium` before the first run.
+Browser tests start their own server on port 3100 with a separate build directory
+inside `.next/playwright`, leaving the development server on port 3000 alone.
 
 A `v*` tag triggers deployment. Local `./deploy.sh -m "message"` only commits and
 pushes notebooks, private backend and main checkout; it does not upload artifacts

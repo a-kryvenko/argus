@@ -37,7 +37,7 @@ def test_affine_quantiles_nonnegative_and_no_future_inputs(monkeypatch):
     actual = model.frame(obs.issue_time[2], obs)
     np.testing.assert_allclose(actual[['n_q10', 'n_q50', 'n_q90']], [[0., 5.2, 8.], [2., 2.9, 5.]])
     assert actual.lead_hours.tolist() == [1, 2]
-    assert actual.valid_time.iloc[0] == obs.issue_time[2] + pd.Timedelta(hours=1)
+    assert actual.valid_time.iloc[0] == obs.issue_time[2] + pd.Timedelta(1, unit="h")
     obs.loc[3, 'n'] = -1e9
     pd.testing.assert_frame_equal(actual, model.frame(obs.issue_time[2], obs))
 

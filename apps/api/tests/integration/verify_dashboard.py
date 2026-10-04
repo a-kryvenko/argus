@@ -1,8 +1,13 @@
 """Dashboard end-to-end API checks in a disposable PostgreSQL schema.
 
-PYTHONPATH=apps/api apps/api/.venv/bin/python apps/api/tests/integration/verify_dashboard.py
+apps/api/.venv/bin/python apps/api/tests/integration/verify_dashboard.py
 """
 import asyncio
+from contextlib import contextmanager
+import os
+import socket
+import subprocess
+import time
 import importlib.util
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,11 +24,57 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from app.db.session import get_db_session
 from app.db.models.dashboard import Session, ApiMetric
-from clio.db.models.normalized_observation import NormalizedObservation
 from app.routers.dashboard import router, create_user, UserCreate
 from app.routers.public.observations import router as public_router
 from app.services import api_statistics
 
+
+
+@contextmanager
+def clio_server(root, schema):
+    """Run the observation owner in its own installed environment over real HTTP."""
+    with socket.socket() as listener:
+        listener.bind(('127.0.0.1', 0))
+        port = listener.getsockname()[1]
+    code = """
+import os
+import uvicorn
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from clio.main import app
+from clio.db.session import get_db_session
+url = make_url(os.environ['TEST_DATABASE_ADMIN_DSN']).set(drivername='postgresql+psycopg')
+engine = create_async_engine(url, execution_options={'schema_translate_map': {'clio': os.environ['TEST_DASHBOARD_SCHEMA']}})
+factory = async_sessionmaker(engine)
+async def session():
+    async with factory() as db:
+        yield db
+app.dependency_overrides[get_db_session] = session
+uvicorn.run(app, host='127.0.0.1', port=int(os.environ['TEST_DASHBOARD_PORT']), log_level='error')
+"""
+    process = subprocess.Popen([str(root / 'apps/clio/.venv/bin/python'), '-c', code],
+        env={**os.environ, 'PYTHONPATH': '', 'TEST_DASHBOARD_SCHEMA': schema,
+             'TEST_DASHBOARD_PORT': str(port), 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'})
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise RuntimeError('Clio test server exited before readiness')
+            try:
+                with socket.create_connection(('127.0.0.1', port), timeout=.2):
+                    break
+            except OSError:
+                time.sleep(.1)
+        else:
+            raise RuntimeError('Clio test server did not become ready')
+        yield f'http://127.0.0.1:{port}'
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
 
 
 def get_database_url():
@@ -54,14 +105,16 @@ async def verify():
             created = True
         async with engine.begin() as conn:
             await conn.run_sync(lambda c: migrate(c, 'upgrade'))
-            for model in [NormalizedObservation]:
-                await conn.run_sync(model.__table__.create)
+            await conn.execute(text('CREATE TABLE normalized_observation (observed_at timestamptz PRIMARY KEY, '
+                                    'bx float8, by float8, bz float8, v float8, n float8, t float8, '
+                                    'kp float8, dst float8, ap float8, f10_7 float8, s10 float8, m10 float8, y10 float8)'))
         async with factory() as db:
             primary = await create_user(db, UserCreate(username='Admin', password='administrator-password', groups=['admins']))
             other = await create_user(db, UserCreate(username='other', password='other-admin-password', groups=['admins']))
             reader = await create_user(db, UserCreate(username='reader', password='reader-password'))
             now = datetime.now(timezone.utc).replace(microsecond=0)
-            db.add(NormalizedObservation(observed_at=now, bx=1, by=2, bz=3, v=400, n=2, t=1, kp=1, dst=1, ap=1, f10_7=1))
+            await db.execute(text('INSERT INTO normalized_observation (observed_at,bx,by,bz,v,n,t,kp,dst,ap,f10_7) '
+                                  'VALUES (:now,1,2,3,400,2,1,1,1,1,1)'), {'now': now})
             await db.commit()
         app = FastAPI()
         app.include_router(router)
@@ -70,13 +123,9 @@ async def verify():
             async with factory() as db:
                 yield db
         app.dependency_overrides[get_db_session] = session
-        from clio.main import app as clio_app
-        from clio.db.session import get_db_session as clio_session
-        clio_app.dependency_overrides[clio_session] = session
-        clio_transport = ASGITransport(app=clio_app)
         transport = ASGITransport(app=app)
         headers = {'Origin': 'https://dashboard.test'}
-        with patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': 'http://clio', 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}), patch('app.services.observations_client.httpx.AsyncClient', side_effect=lambda **_: AsyncClient(transport=clio_transport)):
+        with clio_server(root, schema) as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
                 assert (await client.get('/public/observations/latest')).status_code == 200

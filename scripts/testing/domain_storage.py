@@ -52,18 +52,15 @@ def main():
                        'PYTHONPATH': '',
                        'MPLCONFIGDIR': str(workdir / 'matplotlib')}
 
-        def python(*args):
-            run(sys.executable, *args, env=environment)
+        def python(*args, domain=None):
+            executable = str(ROOT / 'apps' / domain / '.venv/bin/python') if domain else sys.executable
+            run(executable, *args, env=environment)
 
-        print('Preflight: service imports and migrations', flush=True)
+        print('Preflight: isolated service imports and migrations', flush=True)
         python('-c', """
-import sys
 from pathlib import Path
 import tempfile
-from sqlalchemy.ext.asyncio import create_async_engine
-from clio.cli import main
-from argus_prophet.cli import main
-from argus_intelligence.cli import main
+import sys
 sys.path.insert(0, 'tests/support')
 from domain_storage import provisioned_database, migrate
 with tempfile.TemporaryDirectory() as directory:
@@ -71,14 +68,14 @@ with tempfile.TemporaryDirectory() as directory:
         migrate(environment)
 """)
         print('Domain storage, ownership, scheduling and verification', flush=True)
-        python('-m', 'pytest', '--import-mode=importlib', '-q',
-               'tests/test_database_urls.py', 'tests/integration',
-               'apps/clio/tests/integration', 'apps/prophet/tests/integration',
-               'apps/intelligence/tests/integration', *sys.argv[1:])
-        for filename in ('test_solar_wind_aggregation.py', 'test_solar_wind_retention.py', 'test_observation_recovery.py'):
-            python(str(ROOT / 'apps/clio/tests/integration' / filename))
-        python('-m', 'pytest', '-q', 'apps/prophet/tests/test_observations.py', '-k', 'verification')
-        python('apps/api/tests/integration/verify_dashboard.py')
+        python('-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib', '-q',
+               'tests/test_database_urls.py', 'tests/integration', *sys.argv[1:])
+        for domain in ('clio', 'prophet', 'intelligence'):
+            python('-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib', '-q',
+                   f'apps/{domain}/tests/integration', *sys.argv[1:], domain=domain)
+        python(str(ROOT / 'apps/clio/tests/integration/test_observation_recovery.py'), domain='clio')
+        python('-m', 'pytest', '-q', 'apps/prophet/tests/test_observations.py', '-k', 'verification', domain='prophet')
+        python('apps/api/tests/integration/verify_dashboard.py', domain='api')
 
 
 if __name__ == '__main__':

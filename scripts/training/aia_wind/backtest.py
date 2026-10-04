@@ -21,7 +21,7 @@ def load_year(year, oof_dir, omni_dir, features, *, leads, stride_hours=6, max_a
     if not (frame.issue_time.dt.year == year).all() or frame.strategy.nunique() != 1:
         raise ValueError("OOF file contains an unexpected year/strategy")
     # Timestamp.hour preserves UTC six-hour sampling across year boundaries.
-    elapsed = (frame.issue_time-pd.Timestamp("1970-01-01", tz="UTC")) / pd.Timedelta(hours=1)
+    elapsed = (frame.issue_time-pd.Timestamp("1970-01-01", tz="UTC")) / pd.Timedelta(1, unit='h')
     frame = frame[(elapsed % stride_hours == 0) & (frame.valid_time.dt.year == year)].copy()
     observations = pd.read_parquet(Path(omni_dir)/f"omni_{year}.parquet", columns=["issue_time", "v"])
     observations["valid_time"] = pd.to_datetime(observations.issue_time, utc=True)

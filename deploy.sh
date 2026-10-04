@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 usage() {
     echo "Usage: $0 [patch|minor|major] [-m message] [-t]"
-    echo "  -t  Run Ruff and tests only, without committing, pushing or deploying."
+    echo "  -t  Run Python tests and web checks only, without committing, pushing or deploying."
 }
 
 BUMP=""
@@ -50,11 +50,17 @@ case "$BUMP" in
         ;;
 esac
 
-echo "Running pytest"
+echo "Running web lint, type checks and tests"
+pnpm --filter web lint
+pnpm --filter web check-types
+pnpm --filter web test
+pnpm --filter web test:dashboard
+
+echo "Running Python tests"
 ./scripts/test-python
 
 if [[ "$TESTS_ONLY" = true ]]; then
-    echo "Ruff and tests passed. Test-only run completed."
+    echo "All checks passed. Test-only run completed."
     exit 0
 fi
 

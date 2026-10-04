@@ -220,14 +220,23 @@ checks. An explicit `TEST_DATABASE_ADMIN_DSN` can instead select an existing
 The runner uses temporary configuration and disables Sentry; it does not load
 local `.env` credentials.
 
-`tests/runtime/pyproject.toml` depends on the four service packages and pytest.
-Service libraries are declared only in their own manifests; there is no second
-list in the workflow. `tests/runtime/uv.lock` fixes the combined integration
-environment, independently of each service's deployment lock. After changing
-service dependencies, update that service's lock and run
-`uv lock --project tests/runtime`. The runner uses `uv sync --locked`, so stale
-metadata fails during setup rather than producing dozens of test failures.
-No service virtualenv or inherited `PYTHONPATH` is used.
+`tests/runtime` contains only tools for project-wide checks (pytest, YAML/packaging
+and database administration). It does not install any application or model package.
+Each application's tests run in `apps/<app>/.venv`, synchronized from its own lock
+with the `test` dependency group. The runner removes inherited `PYTHONPATH` and
+`UV_PROJECT_ENVIRONMENT`; installed packages must supply all application imports.
+High-level migration checks launch the Python interpreter belonging to each service.
+
+Package suites use their own `packages/<package>/.venv` and `test` dependency
+group; training tests use `scripts/training/.venv`.
+PyTorch belongs to the forecast-core test environment only. Training tests explicitly
+install the ingestion and calibration dependencies exercised by their pipeline checks.
+Update the lock of the owner whose dependencies changed with `uv lock --project <path>`.
+All runners use `--locked`; no shared service dependency set is assembled for tests.
+The Python script synchronizes each owner's environment and runs its tests
+sequentially, stopping on the first failure.
+Without `TEST_DATABASE_ADMIN_DSN`, database modules are reported as skipped (`-rs`); execute
+`./scripts/test-domain-storage` to run them against a disposable PostgreSQL server.
 
 Public boundary checks run without private credentials. Domain integration uses
 private checkouts and therefore skips fork and Dependabot pull requests; it runs

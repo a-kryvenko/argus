@@ -19,7 +19,7 @@ for a, b in zip(first, second):
     assert len(a.frame) == 6
     assert a.frame.issue_time.eq(ISSUE_TIME).all()
     assert a.frame.lead_hours.tolist() == list(range(1, 7))
-    assert a.frame.valid_time.iloc[0] == pd.Timestamp(ISSUE_TIME) + pd.Timedelta(hours=1)
+    assert a.frame.valid_time.iloc[0] == pd.Timestamp(ISSUE_TIME) + pd.Timedelta(1, unit="h")
 for result, target in ((first[0], 'v'), (first[2], 'n')):
     assert result.frame[f'{target}_q10'].le(result.frame[f'{target}_q50']).all()
     assert result.frame[f'{target}_q50'].le(result.frame[f'{target}_q90']).all()

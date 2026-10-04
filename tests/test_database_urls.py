@@ -1,5 +1,7 @@
 """Service connections use isolated settings and preserve raw passwords."""
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,14 @@ PATHS = {
 
 @pytest.mark.parametrize('domain', PATHS)
 def test_raw_passwords_and_domain_settings_are_isolated(domain, monkeypatch):
+    if os.getenv('ARGUS_DATABASE_URL_TEST') != domain:
+        result = subprocess.run([
+            str(ROOT / 'apps' / domain / '.venv/bin/python'), '-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib',
+            '-q', f'{__file__}::test_raw_passwords_and_domain_settings_are_isolated[{domain}]'],
+            env={**os.environ, 'ARGUS_DATABASE_URL_TEST': domain, 'PYTHONPATH': ''},
+            cwd=ROOT, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+        return
     from sqlalchemy.engine import make_url
     spec = importlib.util.spec_from_file_location('storage_' + domain, ROOT / PATHS[domain])
     module = importlib.util.module_from_spec(spec)
@@ -65,20 +75,18 @@ def test_provisioning_rejects_shared_databases_before_connecting(monkeypatch):
 def test_full_migration_chain_compiles_for_a_single_owner(domain, tmp_path):
     import os
     import subprocess
-    import sys
     (tmp_path / 'configs').mkdir()
     (tmp_path / 'configs/project.yaml').write_text('project: {name: test}\n')
     (tmp_path / 'configs/models_registry.yaml').write_text('models: {}\n')
     environment = {**os.environ, 'ARGUS_WORKDIR': str(tmp_path),
                    **{domain.upper() + '_DB_' + key: value for key, value in
                       dict(HOST='localhost', PORT='5432', NAME=domain, USER='owner', PASSWORD='p@ss:word/%').items()},
-                   'PYTHONPATH': ':'.join(str(ROOT / p) for p in (
-                       'apps/api', 'apps/clio/src', 'apps/prophet/src', 'apps/intelligence/src',
-                       'packages/common/src', 'packages/forecast/src'))}
+                   'PYTHONPATH': ''}
+    python = str(ROOT / 'apps' / domain / '.venv/bin/python')
     if domain == 'api':
-        command = [sys.executable, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini')]
+        command = [python, '-m', 'alembic', '-c', str(ROOT / 'apps/api/alembic.ini')]
     else:
-        command = [sys.executable, '-c', f"from {'clio' if domain == 'clio' else 'argus_' + domain}.cli import main; main()", 'migrate']
+        command = [python, '-c', f"from {'clio' if domain == 'clio' else 'argus_' + domain}.cli import main; main()", 'migrate']
     result = subprocess.run([*command, 'upgrade', 'head', '--sql'], env=environment,
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

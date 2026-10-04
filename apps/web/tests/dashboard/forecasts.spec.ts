@@ -1,3 +1,4 @@
+import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from '@playwright/test';
 import { products, type ProductConfig } from '../../app/_config/products';
 import type { Forecast, ForecastPoint } from '../../app/_utils/api';
@@ -38,8 +39,7 @@ async function mockForecasts(page: Page, state: { failed?: boolean } = {}) {
   });
 }
 async function screenshot(page: Page, name: string) {
-  await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-  await page.screenshot({ path: `test-results/${name}.png`, fullPage: true });
+  await captureScreenshot(page, { path: `test-results/${name}.png`, fullPage: true });
 }
 
 test('forecast overview links summary, horizon, quantile interval and time inspector', async ({ page }) => {

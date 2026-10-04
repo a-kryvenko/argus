@@ -1,3 +1,4 @@
+import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from '@playwright/test';
 
 async function observations(page: Page, options: { stale?: boolean; unavailable?: boolean; historyFailure?: boolean } = {}) {
@@ -94,8 +95,7 @@ test('workspace renders compact observations and inspects quality without losing
   await expect(page.locator('.recharts-line-curve').first()).toBeVisible();
   await expect(page.getByRole('group', { name: 'History period' })).toHaveCount(1);
   await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Live observations' })).toHaveAttribute('aria-current', 'page');
-  await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-  await page.screenshot({ path: 'test-results/live-workspace-desktop.png', fullPage: true });
+  await captureScreenshot(page, { path: 'test-results/live-workspace-desktop.png', fullPage: true });
   await summary.getByRole('button', { name: 'Inspect Real-time Dst' }).click();
   await expect(inspector).toContainText('WDC Kyoto via NOAA SWPC');
   await inspector.getByLabel('Selected measurement').selectOption('by');
@@ -136,8 +136,7 @@ test('mobile keeps navigation, shared controls and an expandable inspector witho
   await expect(inspector.getByLabel('Selected measurement')).toBeHidden();
   await expect(page.locator('.recharts-line-curve').first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-  await page.screenshot({ path: 'test-results/live-workspace-mobile.png', fullPage: true });
+  await captureScreenshot(page, { path: 'test-results/live-workspace-mobile.png', fullPage: true });
 });
 
 test('delayed values do not produce an apparently current southward duration or trend', async ({ page }) => {
@@ -167,14 +166,15 @@ test('failed refresh keeps the last history, but switching period never relabels
   const options = { historyFailure: false };
   const requests = await observations(page, options);
   await page.goto('/live');
-  await expect(page.locator('.recharts-line-curve').first()).toBeVisible();
+  const windCurves = page.getByRole('region', { name: 'Solar wind at L1', exact: true }).locator('.recharts-line-curve');
+  await expect(windCurves.first()).toBeVisible();
   const originalCount = requests.length;
   options.historyFailure = true;
   await page.clock.fastForward(60000);
   await expect.poll(() => requests.length).toBeGreaterThan(originalCount);
   await expect(page.getByRole('alert').filter({ hasText: 'Solar wind history' })).toContainText('Showing the last response for this period');
-  await expect(page.locator('.recharts-line-curve').first()).toBeVisible();
+  await expect(windCurves.first()).toBeVisible();
   await page.getByRole('button', { name: '3 days', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Solar wind history' })).toContainText('No history available for this period');
-  await expect(page.locator('.recharts-line-curve')).toHaveCount(0);
+  await expect(windCurves).toHaveCount(0);
 });

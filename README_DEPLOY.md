@@ -86,6 +86,12 @@ pnpm install --frozen-lockfile
 pnpm --filter web exec playwright install chromium
 ```
 
+Run web checks separately with `pnpm --filter web test` (unit tests) and
+`pnpm --filter web test:dashboard` (browser tests). Browser tests start an isolated
+Turbopack dev server with its cache in `.next/playwright`. Failure screenshots
+are always enabled; set `PLAYWRIGHT_SCREENSHOTS=1` to also capture the manual
+review screenshots from successful tests.
+
 Review the main, notebooks and private-backend checkouts before publishing:
 
 ```bash

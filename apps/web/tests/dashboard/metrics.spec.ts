@@ -1,3 +1,4 @@
+import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from '@playwright/test';
 import { products, type ProductConfig } from '../../app/_config/products';
 import type { ForecastMetrics } from '../../app/_utils/api';
@@ -29,8 +30,7 @@ async function mock(page: Page, state: { failed?: boolean; empty?: boolean; miss
   });
 }
 async function screenshot(page: Page, name: string) {
-  await page.addStyleTag({ content: 'nextjs-portal { display: none; }' });
-  await page.screenshot({ path: `test-results/${name}.png`, fullPage: true });
+  await captureScreenshot(page, { path: `test-results/${name}.png`, fullPage: true });
 }
 
 test('metrics catalog uses the workspace and links all six products', async ({ page }) => {
@@ -56,6 +56,7 @@ test('continuous and threshold views share selected lead, preserve zero and expo
   await expect(inspector.getByLabel('Evaluation lead hour')).toHaveAttribute('aria-valuetext', '+48 hours');
   await expect(page.getByRole('region', { name: 'Reliability at selected lead hour' })).toContainText('Lead +48h');
   const slider = inspector.getByRole('slider', { name: 'Evaluation lead hour' });
+  await slider.scrollIntoViewIfNeeded();
   const track = (await slider.boundingBox())!;
   await page.mouse.move(track.x + track.width - 8, track.y + track.height / 2);
   await page.mouse.down();

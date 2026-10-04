@@ -1,3 +1,4 @@
+import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from "@playwright/test";
 
 const admin = {
@@ -182,7 +183,7 @@ test("overview, chart and shared workspace navigation", async ({
     "font-size",
     "12px",
   );
-  await page.screenshot({
+  await captureScreenshot(page, {
     path: "/tmp/argus-dashboard-overview.png",
     fullPage: true,
   });
@@ -231,7 +232,7 @@ test("create and edit dialogs preserve groups and submit correct mutations", asy
   await expect(dialog.getByRole("checkbox", { name: "admins" })).toBeChecked();
   await dialog.getByLabel("Account status").selectOption("false");
   await expect(dialog).toHaveCSS("opacity", "1");
-  await page.screenshot({
+  await captureScreenshot(page, {
     animations: "disabled",
     path: "/tmp/argus-dashboard-user-dialog.png",
     fullPage: true,
@@ -266,7 +267,7 @@ test("mobile workspace menu closes on navigation; statistics remain contained", 
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBeTruthy();
-  await page.screenshot({
+  await captureScreenshot(page, {
     path: "/tmp/argus-dashboard-mobile.png",
     fullPage: true,
   });
@@ -282,7 +283,7 @@ test("login errors, sign in and sign out", async ({ page }) => {
   await expect(page.locator(".dashboard").getByRole("alert")).toContainText(
     "Invalid username or password",
   );
-  await page.screenshot({
+  await captureScreenshot(page, {
     path: "/tmp/argus-dashboard-login.png",
     fullPage: true,
   });
@@ -356,7 +357,7 @@ test("client landing never requests project monitoring", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'LEO drag assessment', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Users & access', exact: true })).toHaveCount(0);
-  await page.screenshot({ path: '/tmp/argus-member-workspace.png', fullPage: true });
+  await captureScreenshot(page, { path: '/tmp/argus-member-workspace.png', fullPage: true });
   expect(
     reads.some((url) => /project-(monitoring|traffic)/.test(url.pathname)),
   ).toBeFalsy();

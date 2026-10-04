@@ -14,7 +14,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "pnpm exec next dev --webpack --port 3100",
+    command: "pnpm exec next dev --turbopack --port 3100",
     url: "http://localhost:3100",
     reuseExistingServer: false,
     env: { NEXT_DIST_DIR: ".next/playwright" },

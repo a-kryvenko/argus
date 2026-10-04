@@ -1,3 +1,4 @@
+import { captureScreenshot } from "./screenshot";
 import { test, expect } from "@playwright/test";
 
 const inputs = { altitude_km: 400, inclination_deg: 51.6, mass_kg: 100, effective_area_m2: 1, drag_coefficient: 2.2, horizon_hours: 24 };
@@ -45,7 +46,7 @@ test("member can calculate, inspect results and retry after unavailable data", a
   // An edited form must not relabel the previous result as a new calculation.
   await expect(page.getByText(/Calculated for.*100 kg/)).toBeVisible();
   await page.getByLabel("Mass (kg)").fill("100");
-  await page.screenshot({ path: "test-results/leo-drag-desktop.png", fullPage: true });
+  await captureScreenshot(page, { path: "test-results/leo-drag-desktop.png", fullPage: true });
   await page.getByRole("button", { name: "Calculate drag" }).click();
   await expect(page.locator('.dashboard [role="alert"]')).toContainText("Drag assessment is unavailable");
   await expect(page.getByText("86.4 m", { exact: true })).toHaveCount(0);
@@ -70,7 +71,7 @@ test("validates positive area and supports a mobile 48-hour request", async ({ p
   await page.getByRole("button", { name: "Calculate drag" }).click();
   await expect(page.locator('.dashboard [role="alert"]')).toContainText("model limits");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: "test-results/leo-drag-mobile.png", fullPage: true });
+  await captureScreenshot(page, { path: "test-results/leo-drag-mobile.png", fullPage: true });
 });
 
 test("requires a dashboard session", async ({ page }) => {

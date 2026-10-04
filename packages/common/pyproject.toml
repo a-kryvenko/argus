@@ -17,7 +17,7 @@ dependencies = [
 members = []
 
 [dependency-groups]
-test = ["pytest>=8,<10", "sentry-sdk"]
+test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "sentry-sdk"]
 
 [build-system]
 requires = ["setuptools>=68"]

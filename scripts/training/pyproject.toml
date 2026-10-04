@@ -2,7 +2,7 @@
 name = "argus-training-tests"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["common", "forecast", "pytest>=8,<10", "forecast-core[models,datasets]", "argus-clio", "matplotlib"]
+dependencies = ["common", "forecast", "pytest>=8,<10", "pytest-xdist>=3,<4", "forecast-core[models,datasets]", "argus-clio", "matplotlib"]
 
 [tool.uv]
 package = false

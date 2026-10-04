@@ -1,7 +1,7 @@
 """Separate databases on an explicitly disposable PostgreSQL server.
 
 Never reads project .env credentials. Creates/drops only UUID-named databases
-and owners. Run serially; TEST_DATABASE_ADMIN_DSN must be administrative.
+and owners. TEST_DATABASE_ADMIN_DSN must be administrative.
 """
 from contextlib import contextmanager
 import importlib.util

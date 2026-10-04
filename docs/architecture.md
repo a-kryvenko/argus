@@ -222,6 +222,11 @@ local `.env` credentials.
 
 `tests/runtime` contains only tools for project-wide checks (pytest, YAML/packaging
 and database administration). It does not install any application or model package.
+`./scripts/test-python` and the pytest stages of `./scripts/test-domain-storage`
+use eight pytest-xdist workers per suite. Pass `-n 0` for a sequential run or
+`-n N` to change the worker count. Project-wide checks are included in
+`./scripts/test-python`. PostgreSQL integration checks
+still require `TEST_DATABASE_ADMIN_DSN` or the dedicated domain-storage runner.
 Each application's tests run in `apps/<app>/.venv`, synchronized from its own lock
 with the `test` dependency group. The runner removes inherited `PYTHONPATH` and
 `UV_PROJECT_ENVIRONMENT`; installed packages must supply all application imports.
@@ -234,9 +239,13 @@ install the ingestion and calibration dependencies exercised by their pipeline c
 Update the lock of the owner whose dependencies changed with `uv lock --project <path>`.
 All runners use `--locked`; no shared service dependency set is assembled for tests.
 The Python script synchronizes each owner's environment and runs its tests
-sequentially, stopping on the first failure.
+one owner at a time, with eight workers within each suite, stopping on the first failure.
 Without `TEST_DATABASE_ADMIN_DSN`, database modules are reported as skipped (`-rs`); execute
 `./scripts/test-domain-storage` to run them against a disposable PostgreSQL server.
+
+Web tests use eight workers by default: `pnpm --filter web test:dashboard` for
+Playwright and `pnpm --filter web test` for Node tests. Playwright accepts
+`--workers=1` for sequential debugging or `--workers=N` to change concurrency.
 
 Public boundary checks run without private credentials. Domain integration uses
 private checkouts and therefore skips fork and Dependabot pull requests; it runs

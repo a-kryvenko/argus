@@ -41,4 +41,4 @@ common = { path = "../../packages/common", editable = true }
 members = []
 
 [dependency-groups]
-test = ["pytest>=8,<10", "httpx>=0.28,<1", "httpx2"]
+test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "httpx>=0.28,<1", "httpx2"]

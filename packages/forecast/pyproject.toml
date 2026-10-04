@@ -23,7 +23,7 @@ common = { path = "../common", editable = true }
 members = []
 
 [dependency-groups]
-test = ["pytest>=8,<10", "scikit-learn>=1.5", "lightgbm>=4.6.0", "joblib>=1.5.3"]
+test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "scikit-learn>=1.5", "lightgbm>=4.6.0", "joblib>=1.5.3"]
 
 [build-system]
 requires = ["setuptools>=68"]

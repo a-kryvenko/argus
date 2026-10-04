@@ -9,7 +9,9 @@ for package in forecast-core intelligence-core; do
 done
 unset PYTHONPATH UV_PROJECT_ENVIRONMENT
 for app in api clio prophet intelligence; do
+    started=$SECONDS
     uv sync --locked --project "apps/$app" --group test
+    printf '[domain-storage] sync %s: %ss\n' "$app" "$((SECONDS - started))"
 done
 uv sync --locked --project tests/runtime
 exec tests/runtime/.venv/bin/python scripts/testing/domain_storage.py "$@"

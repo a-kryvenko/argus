@@ -19,6 +19,15 @@ def load(name):
 release = load('release')
 
 
+def test_deployment_waits_for_validation_while_images_build_concurrently():
+    import yaml
+
+    jobs = yaml.safe_load((ROOT / '.github/workflows/deploy.yml').read_text())['jobs']
+    assert jobs['images']['needs'] == 'plan'
+    assert set(jobs['deploy']['needs']) == {'plan', 'images', 'domain-storage'}
+    assert 'if' not in jobs['deploy']  # Default success gate must remain in force.
+
+
 def tracked_repo(path, files):
     path.mkdir(parents=True, exist_ok=True)
     subprocess.run(['git', 'init', '-q', str(path)], check=True)

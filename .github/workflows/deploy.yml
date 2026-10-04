@@ -101,7 +101,8 @@ jobs:
         run: ./scripts/test-domain-storage
 
   images:
-    needs: [plan, domain-storage]
+    # Build and validate concurrently; deploy still requires both to succeed.
+    needs: plan
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -175,9 +176,9 @@ jobs:
           tags: ${{ steps.identity.outputs.repository }}:${{ steps.identity.outputs.tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-          cache-from: type=gha,scope=${{ matrix.component }}
-          # Avoid exporting large intermediate frontend builder layers.
-          cache-to: type=gha,mode=${{ matrix.component == 'frontend' && 'min' || 'max' }},scope=${{ matrix.component }}
+          # Registry cache is shared across release tags and includes builder stages.
+          cache-from: type=registry,ref=${{ steps.identity.outputs.repository }}:buildcache
+          cache-to: type=registry,ref=${{ steps.identity.outputs.repository }}:buildcache,mode=max
       - name: Attest newly built image
         if: steps.cache.outputs.exists != 'true'
         uses: actions/attest@v4

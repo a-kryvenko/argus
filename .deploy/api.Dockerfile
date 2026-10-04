@@ -11,6 +11,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 COPY apps/api/pyproject.toml apps/api/uv.lock ./
 
+# Keep third-party dependencies cached when application or local package code changes.
+RUN uv sync --frozen --no-cache --no-install-local
+
 COPY packages/common ./../../packages/common
 
 COPY apps/api/app ./app

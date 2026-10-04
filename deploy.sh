@@ -4,27 +4,27 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 usage() {
-    echo "Usage: $0 [patch|minor|major] [-m message] [-t]"
-    echo "  -t  Run Python tests and web checks only, without committing, pushing or deploying."
+    echo "Usage: $0 [patch|minor|major] [-m message]"
+    echo "  No arguments: run checks only."
+    echo "  -m message: run checks, commit and push."
+    echo "  patch|minor|major with -m: also upload artifacts and create/push a release tag."
 }
 
 BUMP=""
 TAG=""
-MESSAGE="Deploy update"
-TESTS_ONLY=false
+MESSAGE=""
+COMMIT=false
 
 if [[ $# -gt 0 && "$1" != -* ]]; then
     BUMP="$1"
     shift
 fi
 
-while getopts "m:t" opt; do
+while getopts "m:" opt; do
     case "$opt" in
         m)
             MESSAGE="$OPTARG"
-            ;;
-        t)
-            TESTS_ONLY=true
+            COMMIT=true
             ;;
         *)
             usage >&2
@@ -50,6 +50,12 @@ case "$BUMP" in
         ;;
 esac
 
+if [[ -n "$BUMP" && "$COMMIT" = false ]]; then
+    echo "A release bump requires -m message." >&2
+    usage >&2
+    exit 1
+fi
+
 echo "Running web lint, type checks and tests"
 pnpm --filter web lint
 pnpm --filter web check-types
@@ -59,7 +65,7 @@ pnpm --filter web test:dashboard
 echo "Running Python tests"
 ./scripts/test-python
 
-if [[ "$TESTS_ONLY" = true ]]; then
+if [[ "$COMMIT" = false ]]; then
     echo "All checks passed. Test-only run completed."
     exit 0
 fi

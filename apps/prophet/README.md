@@ -56,12 +56,19 @@ Forecast routes require a Bearer token matching `FORECASTS_SERVICE_TOKEN`.
 ./argus prophet generate                    # All supported products; refresh is an alias
 ./argus prophet generate solar-wind-speed
 ./argus prophet worker
-./argus prophet status                      # All products
 ./argus prophet verify all --days 7
 ./argus prophet verification-report all
 ./argus prophet cleanup --days 90           # Preview; --apply deletes eligible history
 ./argus prophet migrate
 ```
+
+For operational diagnostics, use the authenticated product `/status` HTTP route.
+`/health/live` and `/health/ready` check process/storage availability, not forecast
+freshness. Run evidence and schedule history remain in `prophet.forecast_run`,
+`prophet.forecast_artifact`, `prophet.forecast_release` and `prophet.forecast_slot`;
+inspect those tables directly when investigating a particular run.
+`verification-report` computes accuracy metrics from stored forecast/observation
+pairs for the requested window, grouped by artifact and model hash.
 
 See [setup](../../README_DEPLOY.md#local-development), [commands](../../docs/commands.md)
 and [forecast workflows](../../docs/forecast-workflows.md).

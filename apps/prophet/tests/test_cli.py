@@ -79,15 +79,14 @@ def test_refresh_alias_generates_selected_product(monkeypatch):
     generate.assert_called_once_with('solar-wind-speed', writer=None)
 
 
-def test_status_all_uses_service_product_catalog(monkeypatch, capsys):
-    import json
-    from types import SimpleNamespace
+def test_removed_inspection_commands_fail_before_loading_handlers(monkeypatch):
+    import pytest
     from unittest.mock import Mock
     from argus_prophet import cli
-    from argus_prophet.services.releases import status
-    from argus_prophet.services.generation.products import PRODUCTS
-    read = Mock(side_effect=lambda product: SimpleNamespace(model_dump=lambda **kwargs: {'product': product}))
-    monkeypatch.setattr(status, 'product_status', read)
-    cli.main(['status'])
-    assert [call.args[0] for call in read.call_args_list] == list(PRODUCTS)
-    assert len(json.loads(capsys.readouterr().out)) == len(PRODUCTS)
+    handler = Mock()
+    monkeypatch.setattr(cli, 'import_module', handler)
+    for command in ('status', 'runs', 'show-run', 'slots'):
+        with pytest.raises(SystemExit) as error:
+            cli.main([command])
+        assert error.value.code == 2
+    handler.assert_not_called()

@@ -8,7 +8,7 @@
 ./argus prophet --help
 ./argus intelligence --help
 ./argus demo --help
-./argus user --help
+./argus api user --help
 ```
 
 ## Service processes
@@ -44,7 +44,7 @@ handwritten migrations.
 
 ## Clio
 
-Clio `collect`, `backfill`, `normalize` and `aggregate` run once and exit.
+Clio `collect`, `backfill` and `normalize` run once and exit.
 Omitting metrics from `collect` or `backfill` selects all configured observations.
 Metrics are positional and space-separated: `collect bx by bz`, without
 `--metrics` or commas. The old Clio `fetch-live`, `refresh` and
@@ -53,13 +53,9 @@ Metrics are positional and space-separated: `collect bx by bz`, without
 | Command | Purpose |
 | --- | --- |
 | `./argus clio normalize` | Normalize stored observations |
-| `./argus clio aggregate [--limit N]` | Process queued aggregates |
-| `./argus clio status` | Show collection progress and source freshness |
-| `./argus clio worker` | Run native RTSW collection, normalization, aggregation and separate numeric/file live/backfill schedules |
+| `./argus clio worker` | Run collection, normalization and separate numeric/file live/backfill schedules |
 | `./argus clio collect [METRIC ...]` | Fetch selected observations using configured live priorities |
 | `./argus clio backfill [METRIC ...] [--from DATE --to DATE]` | Fill missing observations using configured history depths |
-| `./argus clio audit [--json]` | Inspect native solar-wind history and aggregation gaps |
-| `./argus clio cleanup [--json] [--apply]` | Preview native solar-wind retention cleanup; apply only with `--apply` |
 | `./argus clio check-health <solar-wind\|geomagnetic\|worker>` | Check collector health |
 
 An empty database needs `collect` / `backfill` before `normalize`.
@@ -72,23 +68,45 @@ lanes and at most two concurrent background jobs. Without positional metrics, ma
 
 ## Prophet
 
-Prophet `generate` (alias `refresh`) and Intelligence `process` (alias `refresh`)
-run once; omitting the product selects `all`. Prophet attempts every selected
-product and publishes successes independently; it exits with an error if any
-product fails. Omitting the product for their `status` commands also selects
-`all`. Multi-product status and Intelligence processing return a JSON array
-from one service invocation.
+Prophet `generate` (alias `refresh`) runs once; omitting the product selects
+`all`. It attempts every selected product and publishes successes independently;
+it exits with an error if any product fails. Workers handle routine generation
+and verification; manual commands are for recovery or explicitly requested work.
 
 | Command | Purpose |
 | --- | --- |
 | `./argus prophet generate [product]` | Generate and publish forecasts |
+| `./argus prophet verify [product] [--days 7]` | Re-evaluate published releases against observations |
+| `./argus prophet verification-report [product] [--days 7]` | Compute stored accuracy by artifact and model hash |
 | `./argus prophet cleanup [--days 90] [--apply]` | Preview/delete old forecast history; preserve current releases and latest attempts |
-| `./argus prophet status [product]` | Show the current release and latest generation attempt |
 
-Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
+Generation products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
 `hmf`, `atmospheric-density`, `all`. Prophet generation calculates only the selected
 product; `all` calculates every supported product using one observation snapshot.
 `solar-radiation` is not supported by these commands.
+
+`verify` and `verification-report` support the same products except
+`atmospheric-density`; their default product is `solar-wind-speed`. `--days`
+accepts 1–25 days and defaults to 7.
+
+## Diagnostics
+
+Clio and Prophet expose data status over authenticated HTTP:
+
+| Route | Purpose |
+| --- | --- |
+| Clio `GET /internal/v1/observations/status` | Collection progress, errors and source freshness |
+| Clio `GET /internal/v1/observations/monitoring` | Worker and data monitoring |
+| Prophet `GET /internal/v1/forecasts/{product}/status` | Current release freshness and latest generation attempt |
+
+These differ from `/health/live` (HTTP process) and `/health/ready` (storage
+readiness). Docker Compose also uses `clio check-health worker` for worker
+heartbeats. Diagnostic reads do not trigger collection or generation.
+
+Inspect Prophet's `forecast_run`, `forecast_artifact`, `forecast_release` and
+`forecast_slot` tables directly for run evidence and schedule history. The CLI
+keeps `verification-report` because it computes metrics over saved pairs rather
+than just listing database rows.
 
 ## Intelligence
 

@@ -31,6 +31,8 @@ async def run(args):
         await asyncio.sleep(0.05)
     return {'pid': os.getpid(), 'failed_metrics': ['v'], 'payload': 'x' * 1000000}
 
+# Worker execution must not import the command-line parser, including in spawn.
+sys.modules['clio.cli'] = None
 module = ModuleType('clio.commands.normalize')
 module.run = run
 sys.modules[module.__name__] = module

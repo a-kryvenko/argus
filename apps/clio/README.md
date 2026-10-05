@@ -45,6 +45,13 @@ runs; cleanup runs hourly. SDO images retain source units and are not model-norm
 ./argus clio backfill                       # Configured history windows
 ./argus clio backfill v n t --from 2026-08-04 --to 2026-08-05
 ./argus clio normalize
-./argus clio status
 ./argus clio migrate
 ```
+
+## Diagnostics
+
+Source freshness and collection errors are available through authenticated
+`GET /internal/v1/observations/status`; worker monitoring is available at
+`GET /internal/v1/observations/monitoring`. These are data/progress diagnostics.
+`/health/live` and `/health/ready` check the HTTP process and storage, while
+`clio check-health worker` checks the worker heartbeat for Docker Compose.

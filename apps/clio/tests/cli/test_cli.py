@@ -6,6 +6,7 @@ from unittest.mock import Mock, AsyncMock
 import pytest
 
 from clio import cli
+from clio.commands import runner
 from clio.scheduling import jobs as scheduler
 from common import runtime
 
@@ -16,10 +17,10 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
     args = SimpleNamespace(limit=12)
     command = AsyncMock(side_effect=ValueError('command failed'))
     dispose = AsyncMock()
-    monkeypatch.setattr(cli.importlib, 'import_module', lambda name: SimpleNamespace(run=command))
+    monkeypatch.setattr(runner.importlib, 'import_module', lambda name: SimpleNamespace(run=command))
     monkeypatch.setattr(session, 'dispose_engine', dispose)
     with pytest.raises(ValueError, match='command failed'):
-        cli.invoke('normalize', args)
+        runner.invoke('normalize', args)
     command.assert_awaited_once_with(args)
     dispose.assert_awaited_once()
     assert sys.argv is original
@@ -47,7 +48,7 @@ def test_manual_commands_keep_their_job_lock(monkeypatch, argv, job, command):
 
 @pytest.mark.parametrize('argv', [['collect', '--help'], ['refresh', 'solar-wind', '--watch'],
                                   ['sdo-images', 'live'], ['schedule', 'live'], ['schedule', 'normalize'],
-                                  ['aggregate', '--limit', '0'], ['collect', 'files-backfill', '--unknown'],
+                                  ['status'], ['aggregate', '--limit', '0'], ['collect', 'files-backfill', '--unknown'],
                                   ['backfill', '--from', '2026-08-01', '--to', '2026-09-09']])
 def test_help_and_invalid_arguments_do_not_run_or_lock(monkeypatch, argv):
     execute = Mock()

@@ -7,7 +7,7 @@ import traceback
 def _invoke(sender, name, args):
     try:
         from common.runtime import run_command
-        from clio.cli import invoke
+        from clio.commands.runner import invoke
         logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
         result = run_command(lambda: invoke(name, args))
         sender.send((True, result))

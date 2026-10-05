@@ -18,24 +18,14 @@ def main(argv=None) -> None:
     serve = commands.add_parser('serve', help='Serve published forecast contracts')
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
-    slots = commands.add_parser('slots', help='List product schedule slots and attempt counts')
-    slots.add_argument('--limit', type=int, default=20)
     cleanup = commands.add_parser('cleanup', help='Preview old history cleanup; preserve current releases')
     cleanup.add_argument('--days', type=int, default=90)
     cleanup.add_argument('--apply', action='store_true')
-    status_parser = commands.add_parser('status', help='Inspect current release age and input diagnostics')
-    status_parser.add_argument('product', nargs='?', default='all', choices=GENERATION_CHOICES)
     from argus_prophet.services.generation.products import VERIFIED_PRODUCTS
     for command in ('verify', 'verification-report'):
         verification = commands.add_parser(command, help='Verify published forecasts against later observations')
         verification.add_argument('product', nargs='?', default='solar-wind-speed', choices=(*VERIFIED_PRODUCTS, 'all'))
         verification.add_argument('--days', type=int, choices=range(1, 26), default=7)
-    runs = commands.add_parser('runs', help='List recorded executions')
-    runs.add_argument('--limit', type=int, default=20)
-    show = commands.add_parser('show-run', help='Show execution evidence')
-    from uuid import UUID
-    show.add_argument('run_id', type=UUID)
-    show.add_argument('--inputs', action='store_true', help='Include the saved observation snapshot')
     args, remaining = parser.parse_known_args(argv)
     if args.command == 'migrate':
         from argus_prophet.commands.migrate import run
@@ -50,7 +40,6 @@ def main(argv=None) -> None:
         'demo': 'demo',
         'generate': 'generation', 'refresh': 'generation', 'worker': 'generation',
         'verify': 'verification', 'verification-report': 'verification',
-        'runs': 'inspection', 'show-run': 'inspection', 'slots': 'inspection', 'status': 'inspection',
         'cleanup': 'cleanup',
     }
     handler = import_module('argus_prophet.commands.' + handlers[args.command])

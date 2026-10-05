@@ -2,7 +2,7 @@
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
-from argus_prophet.db.session import connect, open_connection, transaction
+from argus_prophet.db.session import open_connection, transaction
 
 # Distinct from the publication transaction lock (736218, 1) and Clio job locks.
 GENERATION_LOCK = (736218, 2)
@@ -77,12 +77,3 @@ def completed_products(conn, slot) -> set[str]:
         WHERE f.scheduled_slot=%s AND f.product='all' AND f.status IN ('succeeded','partial')""",
         (slot, slot)).fetchall()
     return {row[0] for row in rows}
-
-
-def list_slots(limit=20):
-    from psycopg.rows import dict_row
-    if not 1 <= limit <= 100:
-        raise ValueError('limit must be between 1 and 100')
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('SELECT product,slot,status,attempts,started_at,finished_at,error FROM prophet.forecast_slot ORDER BY slot DESC,product LIMIT %s', (limit,))
-        return cursor.fetchall()

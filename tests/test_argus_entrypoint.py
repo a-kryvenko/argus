@@ -90,21 +90,12 @@ def test_autogenerate_requires_service_metadata(entry, service):
     assert not calls
 
 
-def test_observe_collects_generates_then_verifies_actual_releases(entry):
+@pytest.mark.parametrize('args', [('observe',), ('observe', 'solar-wind-speed')])
+def test_removed_observe_has_no_side_effects(entry, args):
     _, run = entry
-    result, calls = run('observe', 'solar-wind-speed')
-    assert result.returncode == 0, result.stderr
-    assert calls == [['clio', 'collect'],
-                     ['clio', 'aggregate'], ['clio', 'normalize'], ['prophet', 'generate', 'solar-wind-speed'],
-                     ['prophet', 'verify', 'solar-wind-speed'],
-                     ['prophet', 'verification-report', 'solar-wind-speed']]
-
-
-def test_unsupported_observation_target_fails_before_collection(entry):
-    _, run = entry
-    result, calls = run('observe', 'atmospheric-density')
+    result, calls = run(*args)
     assert result.returncode == 2
-    assert calls == []
+    assert not calls
 
 
 def test_compose_routes_to_selected_environment(entry):

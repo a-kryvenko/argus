@@ -111,7 +111,7 @@ def test_compose_arguments_are_forwarded_without_running_app(cli):
     assert calls[0]['args'][-6:] == [str(root / 'docker-compose.yml'), 'up', '-d', '--wait', 'postgres', 'redis']
 
 
-@pytest.mark.parametrize('args', [('db', 'migrate'), ('prophet', 'status', 'dst'), ('api', 'user', '--help')])
+@pytest.mark.parametrize('args', [('db', 'migrate'), ('prophet', 'generate', 'dst'), ('api', 'user', '--help')])
 def test_deployment_lock_blocks_production_but_not_dev(cli, args):
     import fcntl
     mode, root, run = cli

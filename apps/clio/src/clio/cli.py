@@ -1,34 +1,12 @@
 """Clio command parsing and execution; handlers only perform their operation."""
 import argparse
-import asyncio
-import importlib
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from clio.commands._arguments import boundary
+from clio.commands.runner import invoke
 from clio.ingestion.products import OBSERVATIONS
-
-COMMANDS = {
-    'sdo-cleanup': 'sdo_images',
-    'backfill': 'backfill_observations', 'normalize': 'normalize',
-    'collect': 'collect',
-    'check-health': 'check_collector_health',
-}
-
-
-def invoke(name, args):
-    module = importlib.import_module(f'clio.commands.{COMMANDS[name]}')
-    if name == 'check-health':
-        return module.run(args)
-    from clio.db.session import dispose_engine
-    async def execute():
-        try:
-            return await module.run(args)
-        finally:
-            await dispose_engine()
-    return asyncio.run(execute())
 
 
 def main(argv=None):
@@ -47,7 +25,6 @@ def main(argv=None):
                           help='Fill configured gaps; sdo selects retained AIA/HMI images (default: all)')
     commands.add_parser('check-health').add_argument('collector', choices=['solar-wind', 'geomagnetic', 'worker'])
     commands.add_parser('migrate', add_help=False)
-    commands.add_parser('status')
     commands.add_parser('worker')
     args, remainder = parser.parse_known_args(argv)
     if args.command != 'migrate' and remainder:
@@ -76,17 +53,7 @@ def execute(args, remainder):
         load_observation_config()
     if args.command == 'check-health':
         return invoke('check-health', args)
-    if args.command == 'status':
-        from clio.db.session import get_session_factory, dispose_engine
-        from clio.monitoring.status import source_status
-        async def read_status():
-            try:
-                async with get_session_factory()() as session:
-                    return await source_status(session)
-            finally:
-                await dispose_engine()
-        print(json.dumps(asyncio.run(read_status()), default=str, indent=2))
-    elif args.command == 'serve':
+    if args.command == 'serve':
         import uvicorn
         uvicorn.run('clio.main:app', host=args.host, port=args.port)
     elif args.command == 'migrate':

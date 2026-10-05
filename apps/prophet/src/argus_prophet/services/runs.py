@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from argus_prophet.db.session import connect, transaction
+from argus_prophet.db.session import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -111,35 +111,3 @@ class RunRecorder:
                     (status, datetime.now(UTC), message, slot_product, slot))
                 if changed.rowcount != 1:
                     raise RuntimeError('Scheduled product slot is no longer active')
-
-
-def list_runs(limit=20):
-    from psycopg.rows import dict_row
-    if not 1 <= limit <= 100:
-        raise ValueError('limit must be between 1 and 100')
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('''SELECT id,product,trigger,scheduled_slot,started_at,finished_at,status,error
-            FROM prophet.forecast_run ORDER BY started_at DESC,id DESC LIMIT %s''', (limit,))
-        return cursor.fetchall()
-
-
-def describe_run(run_id, include_inputs=False):
-    from psycopg.rows import dict_row
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('''SELECT id,product,trigger,scheduled_slot,started_at,finished_at,status,error,
-            input_sha256,provenance FROM prophet.forecast_run WHERE id=%s''', (run_id,))
-        result = cursor.fetchone()
-        if result is None:
-            raise ValueError('Run not found')
-        if include_inputs:
-            cursor.execute('SELECT input_snapshot FROM prophet.forecast_run WHERE id=%s', (run_id,))
-            result['input_snapshot'] = cursor.fetchone()['input_snapshot']
-        cursor.execute('''SELECT name,status,created_at,sha256,row_count,columns,model_info,error
-            FROM prophet.forecast_artifact WHERE run_id=%s ORDER BY name''', (run_id,))
-        result['artifacts'] = cursor.fetchall()
-        cursor.execute('''SELECT r.id,r.product,r.published_at,r.issue_time,
-            (c.release_id IS NOT NULL) AS is_current FROM prophet.forecast_release r
-            LEFT JOIN prophet.current_forecast c ON c.release_id=r.id
-            WHERE r.run_id=%s ORDER BY r.product''', (run_id,))
-        result['releases'] = cursor.fetchall()
-        return result

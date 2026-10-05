@@ -9,7 +9,7 @@ import psycopg
 import pytest
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.observation import Observation
-from argus_prophet.services.runs import RunRecorder, describe_run
+from argus_prophet.services.runs import RunRecorder
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 
 
@@ -36,9 +36,9 @@ def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
         with runtime(dsn, domain, passwords) as conn:
             with pytest.raises(psycopg.errors.UndefinedTable):
                 conn.execute('SELECT * FROM prophet.forecast_run')
-    details = describe_run(run.run_id)
-    assert len(details['releases']) == 1
-    assert 'csv_written_at' not in details['artifacts'][0]
+    with runtime(dsn, 'prophet', passwords) as conn:
+        assert conn.execute('SELECT count(*) FROM prophet.forecast_release WHERE run_id=%s',
+                            (run.run_id,)).fetchone()[0] == 1
     assert read_release('dst').artifacts[0].csv_text.encode('utf-8') == content
 
 
@@ -97,7 +97,9 @@ def test_cleanup_preserves_current_release_latest_attempt_and_slots(recorder_set
     assert read_release('dst').run_id == current.run_id
     with pytest.raises(ReleaseNotFound):
         read_release('dst', first_release.release_id)
-    assert describe_run(latest.run_id)['status'] == 'failed'
+    with runtime(dsn, 'prophet', passwords) as conn:
+        assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s',
+                            (latest.run_id,)).fetchone()[0] == 'failed'
 
 
 def test_only_completed_products_publish_and_history_survives(recorder_setup):

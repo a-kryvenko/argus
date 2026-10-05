@@ -14,10 +14,8 @@ Usage: ./argus <command> (environment: $mode)
   <service> migration current | history | downgrade REVISION
   clio collect [METRIC ...] | clio normalize
   clio backfill [METRIC ...] [--from DATE --to DATE]
-  clio aggregate [--limit N] | clio status | clio worker
+  clio worker | clio check-health worker
   prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
-  prophet status [PRODUCT]
-  observe [solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|all]
   demo [SCENARIO] [--refresh-data] (default: january-2026)
   prophet verify [PRODUCT] [--days 7] | prophet verification-report [PRODUCT] [--days 7]
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
@@ -30,30 +28,11 @@ refresh runs once; omitted product/source means all supported products/sources.
 HELP
 }
 fail() { echo "$*" >&2; exit 2; }
-run() { "$backend" "$@"; }
 case "${1:-help}" in
     help|-h|--help) usage; exit 0 ;;
     compose) shift; exec "$backend" compose "$@" ;;
     logs) shift; exec "$root/scripts/logs" "$@" ;;
     demo) shift; exec "$backend" prophet demo "$@" ;;
-    observe)
-        shift
-        [[ $# -le 1 ]] || fail 'Usage: ./argus observe [product]'
-        selection="${1:-solar-wind-speed}"
-        case "$selection" in solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|all) ;; *) fail 'No observation verification protocol for this product' ;; esac
-        run clio collect
-        run clio aggregate
-        run clio normalize
-        if [[ "$selection" == all ]]; then
-            for product in solar-wind-speed solar-wind-density geomagnetic-activity dst hmf; do
-                run prophet generate "$product"
-            done
-        else
-            run prophet generate "$selection"
-        fi
-        run prophet verify "$selection"
-        run prophet verification-report "$selection"
-        exit ;;
     db)
         shift
         case "${1:-}" in

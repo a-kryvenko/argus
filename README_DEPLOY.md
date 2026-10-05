@@ -41,10 +41,11 @@ Frontend: `localhost:3000`. API / Clio / Prophet: `localhost:8000` / `8001` / `8
 `pnpm dev` runs the frontend; Compose runs the backend.
 
 ```bash
-# Initial data and forecasts, in another terminal
-./argus clio refresh
-./argus clio aggregate
-./argus prophet refresh
+# Optional manual warmup; workers also collect and calculate automatically
+./argus clio collect
+./argus clio backfill
+./argus clio normalize
+./argus prophet generate
 ./argus intelligence refresh
 
 # Daily use

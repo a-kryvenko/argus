@@ -122,3 +122,7 @@
 .mobileGroupLabel { padding: 10px 12px 4px; font-size: 9px; letter-spacing: .1em; color: #93aabe; text-transform: uppercase; }
 @media (min-width: 761px) and (max-width: 1350px) { .account summary { justify-content: center; padding: 14px 0; } .account summary > span, .account button > span { display: none; } .account button { justify-content: center; padding: 10px 0; } }
 @media (max-width: 760px) { .mobileResources nav { max-height: calc(100svh - 110px); overflow-y: auto; } .mobileResources nav a[aria-current='page'] { background: #263a4b; color: #e0edfa; } }
+
+.workspace[data-demo="true"] .sidebar { top: var(--demo-panel-height); }
+.workspace[data-demo="true"] .commandBar { top: var(--demo-panel-height); }
+.workspace[data-demo="true"] { min-height: calc(100svh - var(--demo-panel-height)); }

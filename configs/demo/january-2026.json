@@ -1,0 +1,60 @@
+{
+  "event": {
+    "name": "19 January 2026 · G4 geomagnetic storm onset",
+    "starts_at": "2026-01-19T19:38:00Z",
+    "source_url": "https://swpc-drupal.woc.noaa.gov/news/g4-severe-geomagnetic-storm-levels-reached-19-jan-2026",
+    "description": "The severe G4 phase first reached at 19:38 UTC on 19 January, as reported by NOAA SWPC. T0 marks this onset, not the storm peak."
+  },
+  "observation_source": "NASA SPDF hourly OMNI2 archive at Earth. Missing target values retained; Kp/Ap are archived three-hour indices, F10.7 is daily. Bt is the magnitude of the hourly mean GSM vector, matching model training. Retrospective revised observations, not original real-time L1 receipts.",
+  "input_source": "NASA OMNI2 hours strictly before each issue. Current speed model uses its DLinear fallback without AIA. Scalar geomagnetic/radiation inputs are normalized within each historical cutoff; Kp/Ap are admitted after their 3-hour bins close, daily F10.7 after day end. Integer index conversion matches the operational input contract. IMF uses the model’s OMNI training feature definition, not the native-L1 adapter. Retrospective revised data do not reconstruct original receipts. Southward IMF requires GONG and is unavailable; S10/M10/Y10 have no installed forecast artifacts.",
+  "products": [
+    "solar-wind-speed",
+    "solar-wind-density",
+    "geomagnetic-activity",
+    "dst",
+    "hmf",
+    "solar-radiation"
+  ],
+  "models": {
+    "plasma_speed_quantile": {
+      "sha256": "81c0daac34678b60bd8576a7b41af440fea5c22929ce25151f71200f0f64d4fa",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "data/metrics/plasma/frozen.json: matching model SHA256; point_training_end and all uncertainty validation folds end by 2025-01-01. Frozen DLinear base trained on 1995–1999."
+    },
+    "plasma_speed_threshold": {
+      "sha256": "81c0daac34678b60bd8576a7b41af440fea5c22929ce25151f71200f0f64d4fa",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "Same frozen speed bundle and residual calibration as plasma_speed_quantile; no 2026 labels used."
+    },
+    "plasma_density_quantile": {
+      "sha256": "ba75b116506d51bc231120cf9d344c72278881b64cd98beb035275e008433ad5",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "data/models/argus-plasma-density-dlinear-v1.json: matching model_sha256; refit before 2024-01-01, residual calibration before 2025-01-01."
+    },
+    "kp_threshold": {
+      "sha256": "130065c1610147769049a0a3ca3b579ca2ff348de9fed61a03822ea90dbd50e5",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "notebooks/9_train_kp.ipynb specifies training/calibration on 2010_2024; MLflow experiments 21–23: less_hour_buckets_2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+    },
+    "ap_quantile": {
+      "sha256": "16772e151739da1e3bdc9fc7fdeffe7c8b98e2c1ae4b06704af8eb4d610f2efc",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "notebooks/4_train_ap_quantiles.ipynb specifies training/calibration on 2010_2024; MLflow run a6d85d0d70e34448a3e36d79ea497e32: 2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+    },
+    "dst_quantile": {
+      "sha256": "f37c2649b99d75245c52a2259eccb34ef25e04eb5136c8497b4df2bf1368dd2e",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "notebooks/4_train_dst_quantiles.ipynb specifies training/calibration on 2010_2024; MLflow run 5147888f5a024e71955000de466de6f0: 2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+    },
+    "f10_7_quantile": {
+      "sha256": "3d8cc81f7cf0d46d12a551d8f7985c62651db72e8c1ec8ca96ba2718f7780d71",
+      "training_end": "2025-01-01T00:00:00Z",
+      "training_evidence": "notebooks/4_train_f10_7_quantiles.ipynb specifies training/calibration on 2010_2024; MLflow experiment 25: 2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+    },
+    "hmf_total_threshold": {
+      "sha256": "559dd85281f09245a7339861953976cd7f9040957d6dbc1a3fe52b2fee4f032c",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "data/models/argus-bt-t-v3.json: matching SHA256; training 2020–2024, calibration 2025."
+    }
+  }
+}

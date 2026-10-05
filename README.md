@@ -55,6 +55,7 @@ that backend and its model files.
 - [Architecture and data flow diagrams](docs/architecture.md)
 - [Forecast verification, model evaluation and MLflow](docs/forecast-workflows.md)
 - [Forecast accuracy report](docs/forecast-accuracy-report.md)
+- [Historical demo: event replay and dataset generation](docs/demo-mode.md)
 
 ---
 

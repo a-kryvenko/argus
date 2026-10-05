@@ -74,6 +74,14 @@ def test_logs_routes_to_environment(entry):
     assert calls == [['prophet', '--tail', '20', '-f']]
 
 
+@pytest.mark.parametrize('args', [(), ('january-2026',), ('--refresh-data',)])
+def test_demo_is_one_command_in_both_environments(entry, args):
+    _, run = entry
+    result, calls = run('demo', *args)
+    assert result.returncode == 0, result.stderr
+    assert calls == [['prophet', 'demo', *args]]
+
+
 @pytest.mark.parametrize('service', ['prophet', 'intelligence'])
 def test_autogenerate_requires_service_metadata(entry, service):
     _, run = entry

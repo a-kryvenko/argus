@@ -294,8 +294,11 @@ services:
     tty: true
     expose:
       - "3000"
+    environment:
+      DEMO_BUNDLE_PATH: /var/www/demo/current.json
     volumes:
       - ./log/frontend:/var/www/log
+      - ./data/demo:/var/www/demo:ro
     depends_on:
       - api
     networks:

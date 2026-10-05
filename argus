@@ -18,6 +18,7 @@ Usage: ./argus <command> (environment: $mode)
   prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
   prophet status [PRODUCT]
   observe [solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|all]
+  demo [SCENARIO] [--refresh-data] (default: january-2026)
   prophet verify [PRODUCT] [--days 7] | prophet verification-report [PRODUCT] [--days 7]
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
   api user <arguments>
@@ -34,6 +35,7 @@ case "${1:-help}" in
     help|-h|--help) usage; exit 0 ;;
     compose) shift; exec "$backend" compose "$@" ;;
     logs) shift; exec "$root/scripts/logs" "$@" ;;
+    demo) shift; exec "$backend" prophet demo "$@" ;;
     observe)
         shift
         [[ $# -le 1 ]] || fail 'Usage: ./argus observe [product]'

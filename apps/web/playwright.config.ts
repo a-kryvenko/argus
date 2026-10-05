@@ -1,4 +1,10 @@
 import { defineConfig } from "@playwright/test";
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { demoFixture } from './tests/fixtures/demo';
+const demoPath = path.join(mkdtempSync(path.join(tmpdir(), 'argus-demo-test-')), 'current.json');
+writeFileSync(demoPath, JSON.stringify(demoFixture()));
 export default defineConfig({
   testDir: "./tests/dashboard",
   fullyParallel: true,
@@ -17,7 +23,7 @@ export default defineConfig({
     command: "pnpm exec next dev --turbopack --port 3100",
     url: "http://localhost:3100",
     reuseExistingServer: false,
-    env: { NEXT_DIST_DIR: ".next/playwright" },
+    env: { NEXT_DIST_DIR: ".next/playwright", DEMO_BUNDLE_PATH: demoPath },
     timeout: 120000,
   },
 });

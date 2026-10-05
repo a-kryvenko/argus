@@ -18,3 +18,25 @@ def clean_omni_values(frame: pd.DataFrame) -> pd.DataFrame:
         frame[column] = values.mask(values.abs().eq(fill))
     return frame
 
+
+OMNI_WORDS = {'bx': 13, 'by': 16, 'bz': 17, 't': 23, 'n': 24, 'v': 25,
+         'kp': 39, 'dst': 41, 'ap': 50, 'f10_7': 51}
+
+
+def parse_annual(text, year):
+    import io
+    table = pd.read_csv(io.StringIO(text), sep=r'\s+', header=None)
+    if table.shape[1] < max(OMNI_WORDS.values()) or table.empty:
+        raise ValueError('Unexpected annual OMNI schema')
+    if not table[0].eq(year).all() or not table[2].between(0, 23).all():
+        raise ValueError('Invalid year/hour in annual OMNI file')
+    times = pd.to_datetime(table[0].astype(str) + table[1].astype(str).str.zfill(3),
+                           format='%Y%j', utc=True) + pd.to_timedelta(table[2], unit='h')
+    if times.duplicated().any() or not times.dt.year.eq(year).all():
+        raise ValueError('Duplicate or invalid observation timestamps')
+    frame = pd.DataFrame({key: pd.to_numeric(table[word-1], errors='raise') for key, word in OMNI_WORDS.items()})
+    frame['kp'] = frame['kp'] / 10
+    frame = clean_omni_values(frame)
+    frame.insert(0, 'issue_time', times)
+    return frame.sort_values('issue_time').reset_index(drop=True)
+

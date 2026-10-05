@@ -8,6 +8,9 @@ from argus_prophet.services.generation.products import GENERATION_CHOICES
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
+    demo = commands.add_parser('demo', help='Download inputs, calculate and publish the isolated demo dataset')
+    demo.add_argument('scenario', nargs='?', default='january-2026')
+    demo.add_argument('--refresh-data', action='store_true', help='Refresh cached observation archives')
     generate_parser = commands.add_parser('generate', aliases=['refresh'], help='Generate forecasts once')
     generate_parser.add_argument('product', nargs='?', choices=GENERATION_CHOICES, default='all')
     commands.add_parser('worker', help='Generate hourly at :10 UTC; retry failures')
@@ -44,6 +47,7 @@ def main(argv=None) -> None:
         uvicorn.run('argus_prophet.main:app', host=args.host, port=args.port)
         return
     handlers = {
+        'demo': 'demo',
         'generate': 'generation', 'refresh': 'generation', 'worker': 'generation',
         'verify': 'verification', 'verification-report': 'verification',
         'runs': 'inspection', 'show-run': 'inspection', 'slots': 'inspection', 'status': 'inspection',

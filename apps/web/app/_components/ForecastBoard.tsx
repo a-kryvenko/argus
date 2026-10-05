@@ -1,4 +1,6 @@
 'use client';
+import { useDemo } from '../demo/_components/DemoContext';
+import { comparisonRows, observationKnownAt } from '../demo/_lib/replay';
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, ChevronDown, Clock3, Crosshair, RefreshCw } from 'lucide-react';
@@ -20,6 +22,8 @@ export default function ForecastBoard({ product, resource, overview = false }: {
   product: ProductConfig; resource: ForecastResource; overview?: boolean;
 }) {
   const { data: forecast, error, retry } = resource;
+  const demo = useDemo();
+  const hrefFor = (href: string) => demo ? demo.href(href) : href;
   const [variableKey, setVariableKey] = useState(product.variables[0].key);
   const [horizon, setHorizon] = useState<number | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>();
@@ -31,12 +35,15 @@ export default function ForecastBoard({ product, resource, overview = false }: {
   const selectTime = (time: string) => { setSelectedTime(time); setInspectorOpen(true); };
   const primaryThreshold = variable.thresholds[0];
   const lastPoint = view?.predictions.at(-1);
+  const actualValue = (time: string) => demo && (demo.showFuture || observationKnownAt(time, variable.key) <= demo.now)
+    ? demo.bundle.observations.find(item => Date.parse(item.time) === Date.parse(time))?.values[variable.key] : null;
+  const actual = point ? actualValue(point.valid_time) : null;
   return <section aria-label={`${product.title} forecast workspace`}>
     <div className={styles.boardHeading}>
       <div><h2>{overview ? product.title : 'Forecast timeline'}</h2><p>{overview ? product.description : 'Select a variable and forecast time to inspect its values.'}</p></div>
       <div className={styles.actions}>
-        {overview && <Link href={`/products/${product.slug}`}>Open product<ArrowUpRight size={13} aria-hidden="true" /></Link>}
-        <button onClick={retry} disabled={!forecast && !error} aria-label={`Refresh ${product.title}`}><RefreshCw size={13} aria-hidden="true" />Refresh</button>
+        {overview && <Link href={hrefFor(`/products/${product.slug}`)}>Open product<ArrowUpRight size={13} aria-hidden="true" /></Link>}
+        {!demo && <button onClick={retry} disabled={!forecast && !error} aria-label={`Refresh ${product.title}`}><RefreshCw size={13} aria-hidden="true" />Refresh</button>}
       </div>
     </div>
     <div className={styles.toolbar}>
@@ -56,20 +63,20 @@ export default function ForecastBoard({ product, resource, overview = false }: {
     </div>}
     <div className={styles.boardGrid}>
       <div className={styles.plots}>
-        {!forecast && <ResourceState error={error} retry={retry} label={`${product.title.toLowerCase()} forecast`} />}
+        {!forecast && (demo ? <p className={styles.notice} role="status">{error ?? 'No demo release is available at this time.'}</p> : <ResourceState error={error} retry={retry} label={`${product.title.toLowerCase()} forecast`} />)}
         {forecast && !forecast.available_variables.includes(variable.key) && <p className={styles.notice} role="status">{variable.label} is not available in this release.</p>}
         {view && <>
-          {variable.quantile && <WindChart title={variable.label} unit={variable.unit} data={quantileData(view, variable.key)} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
+          {(variable.quantile || demo) && <WindChart title={variable.label} unit={variable.unit} data={demo ? comparisonRows(view, demo.bundle.observations, variable.key, demo.now, demo.showFuture) : quantileData(view, variable.key)} comparison={!!demo} now={demo?.now} eventTime={demo ? Date.parse(demo.bundle.event.starts_at) : undefined} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
           {variable.thresholds.length > 0 && <HeatMap title={`${variable.label} threshold probability`} yLabels={variable.thresholds.map(item => item.label)}
             data={probabilityData(view, variable.key, variable.thresholds.map(item => item.value))} times={view.predictions.map(item => item.valid_time)} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
           <details className={styles.dataTable}>
             <summary>Hourly forecast values <span>{view.predictions.length} forecast times · UTC</span></summary>
             <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Hourly forecast values, scroll horizontally">
               <table><caption>{variable.label} · {variable.unit}. Probabilities refer to meeting or exceeding a threshold.</caption>
-                <thead><tr><th>Valid time · UTC</th><th>Lead</th>{variable.quantile && <><th>q10</th><th>q50</th><th>q90</th></>}{variable.thresholds.map(item => <th key={item.value}>{item.label}</th>)}</tr></thead>
+                <thead><tr><th>Valid time · UTC</th><th>Lead</th>{variable.quantile && <><th>q10</th><th>q50</th><th>q90</th></>}{demo && <th>Observed</th>}{variable.thresholds.map(item => <th key={item.value}>{item.label}</th>)}</tr></thead>
                 <tbody>{view.predictions.map(item => <tr key={item.valid_time} data-selected={point?.valid_time === item.valid_time}>
                   <th scope="row"><button aria-label={`Inspect forecast at ${formatForecastTime(item.valid_time)}`} onClick={() => selectTime(item.valid_time)}>{item.valid_time.slice(0, 16).replace('T', ' ')}</button></th>
-                  <td>+{item.lead_hours}h</td>{variable.quantile && <>{(['q10', 'q50', 'q90'] as const).map(q => <td key={q}>{forecastNumber(item.variables[variable.key]?.continuous?.[q])}</td>)}</>}
+                  <td>+{item.lead_hours}h</td>{variable.quantile && <>{(['q10', 'q50', 'q90'] as const).map(q => <td key={q}>{forecastNumber(item.variables[variable.key]?.continuous?.[q])}</td>)}</>}{demo && <td>{forecastNumber(actualValue(item.valid_time))}</td>}
                   {variable.thresholds.map(threshold => <td key={threshold.value}>{formatProbability(probability(item, variable.key, threshold.value))}</td>)}
                 </tr>)}</tbody>
               </table>
@@ -94,6 +101,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
             <span>{point ? `Lead +${point.lead_hours} hours` : 'Awaiting forecast'}</span>
           </div>
           {point && !values && <p className={styles.notice}>No values for {variable.label} at this forecast time.</p>}
+          {demo && point && <dl className={styles.facts}><div><dt>Actual outcome</dt><dd>{demo.showFuture || observationKnownAt(point.valid_time, variable.key) <= demo.now ? forecastNumber(actual) : 'Hidden'} {variable.unit}</dd></div>{variable.quantile && <div><dt>q50 − observed</dt><dd>{forecastNumber(actual != null && values?.continuous ? values.continuous.q50 - actual : null)} {variable.unit}</dd></div>}</dl>}
           {variable.quantile && <div className={styles.quantileValues}><div><span>q10</span><strong>{forecastNumber(values?.continuous?.q10)}</strong></div><div><span>q90</span><strong>{forecastNumber(values?.continuous?.q90)}</strong></div></div>}
           {variable.thresholds.length > 0 && <div className={styles.thresholdValues}><h3>Threshold probabilities</h3>{variable.thresholds.map(threshold => {
             const value = probability(point, variable.key, threshold.value);
@@ -110,8 +118,8 @@ export default function ForecastBoard({ product, resource, overview = false }: {
             {variable.thresholds.length > 0 && <p>Each probability describes whether a value meets or exceeds a threshold at one forecast time. It is not the probability of an event occurring at any time during the full horizon or an impact score.</p>}
             <p>A dash or an empty cell means unavailable, not zero. Selecting a horizon does not change the model’s issue time.</p>
           </details>
-          <Link className={styles.inspectorLink} href={`/metrics/${product.slug}`}>Model performance<ArrowUpRight size={13} aria-hidden="true" /></Link>
-          <a className={styles.inspectorLink} href={`/api/v1${productApiPath(product)}`}>Forecast data · JSON<ArrowUpRight size={13} aria-hidden="true" /></a>
+          {!demo && <><Link className={styles.inspectorLink} href={`/metrics/${product.slug}`}>Model performance<ArrowUpRight size={13} aria-hidden="true" /></Link>
+          <a className={styles.inspectorLink} href={`/api/v1${productApiPath(product)}`}>Forecast data · JSON<ArrowUpRight size={13} aria-hidden="true" /></a></>}
         </div>
       </aside>
     </div>

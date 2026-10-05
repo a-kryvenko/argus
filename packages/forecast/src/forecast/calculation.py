@@ -7,7 +7,7 @@ from typing import Protocol
 from common.schemas.forecast_inputs import ForecastInputs
 from common.adapters import forecast_to_dataframe
 from common.schemas.observation import Observation
-from forecast.inference._forecast_service import DefaultForecastService
+from forecast.inference.base import DefaultForecastService
 
 
 @dataclass

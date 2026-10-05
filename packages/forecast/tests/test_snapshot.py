@@ -4,6 +4,7 @@ from unittest.mock import Mock
 from common.schemas.forecast_inputs import AIAFeatureFrame, ForecastInputs, SpeedObservation
 from common.schemas.observation import Observation
 from forecast.api import SWSpeedFS
+from test_aia_wind_service import bundle
 
 
 def test_snapshot_preserves_unfilled_speed_and_aia_receipts():
@@ -13,9 +14,7 @@ def test_snapshot_preserves_unfilled_speed_and_aia_receipts():
         aia_frames=[AIAFeatureFrame(slot_at=now, observed_at=now, available_at=now,
                                    sha256='a'*64, features={'aia_area_sector': .2})])
     # Input preparation must not fall back to normalized observations or files.
-    service = object.__new__(SWSpeedFS)
-    service._dlinear = object()
-    service.uses_aia = True
+    service = SWSpeedFS(bundle())
     service.forecast = Mock(return_value=object())
     import common.adapters
     from unittest.mock import patch

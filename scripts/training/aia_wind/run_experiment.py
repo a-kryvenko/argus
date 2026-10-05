@@ -120,13 +120,15 @@ def prepare():
 
 
 def protocol():
-    import forecast.aia_alignment as shared_alignment
+    import forecast.inputs.aia.alignment as shared_alignment
+    import forecast.inputs.aia.schema as shared_schema
     plan=json.loads(PLAN.read_text())
     paths=[ROOT/'features/features.parquet',ROOT/'features/manifest.parquet',ROOT/'features/extraction.json',DLINEAR]
     for year in plan['data_years']:
         paths += [ROOT/f'frames/year={year}.parquet',OOF/f'year={year}.parquet',Path(f'data/clean/omni_hourly/omni_{year}.parquet')]
     code = {n:digest(Path(__file__).with_name(n)) for n in CODE}
-    code['forecast.aia_alignment'] = digest(Path(shared_alignment.__file__))
+    for module in (shared_alignment, shared_schema):
+        code[module.__name__] = digest(Path(module.__file__))
     return dict(inputs={str(p):digest(p) for p in paths},code=code)
 
 

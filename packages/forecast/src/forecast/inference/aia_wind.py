@@ -1,10 +1,8 @@
 """Frozen DLinear + fixed-arrival-window AIA Ridge and residual uncertainty."""
-from datetime import UTC,datetime
 import numpy as np
 import pandas as pd
-from common.adapters import observations_to_dataframe
 from common.data.omni import OMNI_FILL_VALUES
-from forecast.aia_alignment import align
+from forecast.inputs.aia.alignment import align
 from forecast.inference.rotation_dlinear import RotationDLinearForecaster
 
 FORMAT='dlinear_aia_ridge_v1'
@@ -78,24 +76,9 @@ class AIAWindForecaster:
         return distribution(aligned,self.bundle,point,corrected)
 
 
-class AIAWindServiceMixin:
-    def snapshot_options(self, inputs):
-        options = super().snapshot_options(inputs)
-        if self.uses_aia:
-            options['aia_features'] = pd.DataFrame([
-                {**point.features, 'slot_at': point.slot_at,
-                 'observed_at': point.observed_at, 'available_at': point.available_at}
-                for point in inputs.aia_frames])
-        return options
-
-    def __init__(self,models_bundle):
-        super().__init__(models_bundle)
-        self.uses_aia=models_bundle.get('format')==FORMAT
-        self._aia=AIAWindForecaster(models_bundle) if self.uses_aia else None
-        if self.uses_aia:self.thresholds=models_bundle['thresholds']
-
-    def forecast(self,observations,*,issue_time=None,speed_history=None,aia_features=None):
-        if not self.uses_aia:return super().forecast(observations,issue_time=issue_time,speed_history=speed_history)
-        issue_time=issue_time or datetime.now(UTC)
-        history=observations_to_dataframe(observations) if speed_history is None else speed_history
-        return self.forecast_from_df(self._aia.frame(issue_time,history,aia_features))
+def __getattr__(name):
+    # Keep the former adapter import without an algorithm -> adapter import cycle.
+    if name == 'AIAWindServiceMixin':
+        from forecast.adapters.plasma import AIAWindServiceMixin
+        return AIAWindServiceMixin
+    raise AttributeError(name)

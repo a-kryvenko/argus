@@ -18,6 +18,29 @@ inference bundle explicitly. The package does not train models.
 Geomagnetic, magnetic-field, radiation and atmospheric-density products belong
 to the private backend. `forecast` never imports that backend.
 
+## Internal structure
+
+- `inputs.observations` and `inputs.aia`: shared observation features, AIA schema
+  and causal alignment used by training and inference.
+- `inference.base`: forecast lifecycle and the `FeatureModel` protocol. Feature
+  models are supplied explicitly; the base service does not select DLinear.
+- `inference.bucketed`: shared preparation of forecast-horizon buckets.
+- `inference.threshold`: threshold-exceedance probabilities from classifiers.
+- `inference.quantiles`: quantile prediction, blending and application of fitted
+  calibration.
+- `inference.feature_models`: preparation and application of embedded model
+  features selected by bucketed bundles, including `dlinear_v`.
+- `inference.aia_wind`, `rotation_dlinear`, `density_dlinear`, and `residual`:
+  model algorithms and serializable estimators.
+- `adapters.plasma`: public product names, saved-snapshot conversion and algorithm
+  selection for speed and density products.
+- `calculation` and `evaluation`: in-memory calculation contracts and scoring.
+
+The previous `features`, `aia_schema`, `aia_alignment`, `quantiles`,
+`inference._forecast_service`, and `inference.plasma_fs` imports remain available
+as compatibility exports. The `ResidualRegressor` serialization path is unchanged.
+Input preparation performs no HTTP, database or cache operations.
+
 ## Reproduce the public example
 
 From the repository root, in a Python 3.12+ environment:

@@ -1,36 +1,15 @@
 # Command reference
 
-Two supported forecast workflows, their protocols and MLflow/site publication:
-[Forecast workflows](forecast-workflows.md).
-
-```bash
-./argus observe solar-wind-speed
-./argus prophet verify solar-wind-speed
-./argus prophet verification-report solar-wind-speed
-```
-
-Model evaluation, MLflow export and optional website metrics saving are separate
-cells in `notebooks/evaluate_models.ipynb`; there is no model evaluation CLI.
-
-Run `./argus` from the project root locally or `/var/www` in production.
-Command arguments are identical in both environments. Python operations are exposed
-through `./argus`; the former pnpm `app:*` / `db:*` aliases have been removed.
-Service CLIs validate their own arguments; shell adapters handle Compose,
-migrations and cross-service workflows.
-
-Use `./argus clio --help` or `./argus prophet --help` for service commands.
-Clio handlers share one event-loop/connection cleanup boundary.
-`clio collect [METRIC ...]` fetches configured live observations;
-`clio normalize` only processes stored measurements.
-
 ## Help
 
 ```bash
 ./argus help
+./argus clio --help
+./argus prophet --help
+./argus intelligence --help
+./argus demo --help
+./argus user --help
 ```
-
-Shows available commands and the selected environment. For command-specific
-arguments use, for example, `./argus clio backfill --help`.
 
 ## Service processes
 
@@ -39,7 +18,7 @@ loading its env files. In dev:
 
 ```bash
 ./argus compose up -d --wait
-pnpm dev                         # frontend, in this terminal
+pnpm dev                         # frontend, dev, in this terminal
 ./argus compose restart prophet # after editing worker code
 ./argus compose down
 ```
@@ -63,20 +42,13 @@ Services: `api`, `clio`, `prophet`, `intelligence`.
 `--autogenerate` is available for API and Clio. Prophet and Intelligence use
 handwritten migrations.
 
-## Collection, generation and status
+## Clio
 
 Clio `collect`, `backfill`, `normalize` and `aggregate` run once and exit.
 Omitting metrics from `collect` or `backfill` selects all configured observations.
 Metrics are positional and space-separated: `collect bx by bz`, without
 `--metrics` or commas. The old Clio `fetch-live`, `refresh` and
 `collect solar-wind/geomagnetic/aia` interfaces have been removed.
-
-Prophet `generate` (alias `refresh`) and Intelligence `process` (alias `refresh`)
-run once; omitting the product selects `all`. Prophet attempts every selected
-product and publishes successes independently; it exits with an error if any
-product fails. Omitting the product for their `status` commands also selects
-`all`. Multi-product status and Intelligence processing return a JSON array
-from one service invocation.
 
 | Command | Purpose |
 | --- | --- |
@@ -89,11 +61,6 @@ from one service invocation.
 | `./argus clio audit [--json]` | Inspect native solar-wind history and aggregation gaps |
 | `./argus clio cleanup [--json] [--apply]` | Preview native solar-wind retention cleanup; apply only with `--apply` |
 | `./argus clio check-health <solar-wind\|geomagnetic\|worker>` | Check collector health |
-| `./argus prophet generate [product]` | Generate and publish forecasts |
-| `./argus prophet cleanup [--days 90] [--apply]` | Preview/delete old forecast history; preserve current releases and latest attempts |
-| `./argus prophet status [product]` | Show the current release and latest generation attempt |
-| `./argus intelligence process [product]` | Process available forecasts once, currently in stub mode |
-| `./argus intelligence status [product]` | Show processing status |
 
 An empty database needs `collect` / `backfill` before `normalize`.
 
@@ -103,10 +70,32 @@ Docker Compose starts the Clio worker in both dev and production.
 The worker uses one scheduler and temporary executors with independent live
 lanes and at most two concurrent background jobs. Without positional metrics, manual commands include all configured kinds.
 
+## Prophet
+
+Prophet `generate` (alias `refresh`) and Intelligence `process` (alias `refresh`)
+run once; omitting the product selects `all`. Prophet attempts every selected
+product and publishes successes independently; it exits with an error if any
+product fails. Omitting the product for their `status` commands also selects
+`all`. Multi-product status and Intelligence processing return a JSON array
+from one service invocation.
+
+| Command | Purpose |
+| --- | --- |
+| `./argus prophet generate [product]` | Generate and publish forecasts |
+| `./argus prophet cleanup [--days 90] [--apply]` | Preview/delete old forecast history; preserve current releases and latest attempts |
+| `./argus prophet status [product]` | Show the current release and latest generation attempt |
+
 Products: `solar-wind-speed`, `solar-wind-density`, `geomagnetic-activity`, `dst`,
 `hmf`, `atmospheric-density`, `all`. Prophet generation calculates only the selected
 product; `all` calculates every supported product using one observation snapshot.
 `solar-radiation` is not supported by these commands.
+
+## Intelligence
+
+| Command | Purpose |
+| --- | --- |
+| `./argus intelligence process [product]` | Process available forecasts once, currently in stub mode |
+| `./argus intelligence status [product]` | Show processing status |
 
 ## Users
 
@@ -114,8 +103,6 @@ product; `all` calculates every supported product using one observation snapshot
 ./argus api user <action> [arguments]
 ./argus api user --help
 ```
-
-Manage dashboard users; use `--help` for available actions and arguments.
 
 ## Logs
 

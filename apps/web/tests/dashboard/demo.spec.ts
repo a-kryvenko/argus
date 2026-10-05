@@ -35,9 +35,12 @@ test('panel remains visible without covering content on mobile and keyboard chan
   await page.goto('/demo?offset=-96');
   const panel = page.getByRole('region', { name: 'Demo time controls' });
   const slider = page.getByRole('slider', { name: 'Hours before event' });
+  await expect(slider).toBeEnabled();
   await slider.focus();
   await page.keyboard.press('ArrowRight');
   await expect(slider).toHaveValue('-95');
+  await expect(page).toHaveURL(/offset=-95$/);
+  await expect(page.getByText('T−95 h · Until event', { exact: true })).toBeVisible();
   const panelBounds = await panel.boundingBox();
   const navBounds = await page.getByRole('complementary', { name: 'Workspace navigation' }).boundingBox();
   expect(navBounds!.y).toBeGreaterThanOrEqual(panelBounds!.height);
@@ -90,4 +93,30 @@ test('other products replay probabilities, signed indices and partial model avai
   await page.getByRole('button', { name: 'S10 S10' }).click();
   await expect(page.getByText('S10 is not available in this release.')).toBeVisible();
   expect(operationalRequests).toEqual([]);
+});
+
+
+test('demo controls wait for hydration before accepting replay input', async ({ page }) => {
+  let releaseScripts!: () => void;
+  const scriptsReady = new Promise<void>(resolve => { releaseScripts = resolve; });
+  await page.route('**/_next/**/*.js*', async route => {
+    await scriptsReady;
+    await route.continue();
+  });
+  await page.goto('/demo?offset=-96', { waitUntil: 'commit' });
+  const slider = page.getByRole('slider', { name: 'Hours before event' });
+  try {
+    await expect(slider).toBeVisible();
+    await expect(slider).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Play replay' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'T0', exact: true })).toBeDisabled();
+    await expect(page.getByRole('checkbox', { name: 'Show actual future values' })).toBeDisabled();
+  } finally {
+    releaseScripts();
+  }
+  await expect(slider).toBeEnabled();
+  await slider.press('ArrowRight');
+  await expect(slider).toHaveValue('-95');
+  await expect(page).toHaveURL(/offset=-95$/);
+  await expect(page.getByText('T−95 h · Until event', { exact: true })).toBeVisible();
 });

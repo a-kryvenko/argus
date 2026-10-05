@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import WorkspaceShell from '../../_components/WorkspaceShell';
@@ -12,7 +12,11 @@ import { DemoContext } from './DemoContext';
 import styles from './demo.module.css';
 import forecastStyles from '../../_components/forecast.module.css';
 
+const subscribeToHydration = () => () => {};
+
 export default function DemoWorkspace({ bundle, sectionPath }: { bundle: DemoBundle | null; sectionPath: string }) {
+  // The server preview must not accept input before Next's History API effects run.
+  const interactive = useSyncExternalStore(subscribeToHydration, () => true, () => false);
   const pathname = usePathname();
   const search = useSearchParams();
   const offset = parseOffset(search.get('offset'));
@@ -65,7 +69,7 @@ export default function DemoWorkspace({ bundle, sectionPath }: { bundle: DemoBun
         {availableProducts.flatMap(product => product.variables.filter(variable => bundle.releases[product.slug]?.some(release => release.available_variables.includes(variable.key)))).map(variable => <WindChart key={variable.key} title={variable.label} unit={variable.unit} comparison now={now} eventTime={Date.parse(bundle.event.starts_at)} data={comparisonRows(null, bundle.observations, variable.key, now, false)} />)}
       </div> : <>
         <nav className={forecastStyles.variableTabs} aria-label="Demo forecast products">{availableProducts.map(product => <Link className={forecastStyles.headingLink} key={product.slug} href={href(`/products/${product.slug}`)} aria-current={selectedProduct?.slug === product.slug ? 'page' : undefined}>{product.title}</Link>)}</nav>
-        <label className={styles.toggle}><input type="checkbox" checked={showFuture} onChange={event => setShowFuture(event.target.checked)} />Show actual future values</label>
+        <label className={styles.toggle}><input type="checkbox" disabled={!interactive} checked={showFuture} onChange={event => setShowFuture(event.target.checked)} />Show actual future values</label>
         {selectedProduct && <ForecastBoard key={selectedProduct.slug} product={selectedProduct} resource={{ data: forecast, error: forecast ? null : 'No demo release is available at this time.', retry: () => undefined }} />}
       </>}
     </main>
@@ -75,8 +79,8 @@ export default function DemoWorkspace({ bundle, sectionPath }: { bundle: DemoBun
       <div className={styles.top}><div className={styles.event}><strong className={styles.badge}>DEMO</strong><strong>{bundle?.event.name ?? 'Historical event replay'}</strong>{bundle && <span>Event begins: {formatForecastTime(bundle.event.starts_at)}</span>}</div><Link className={styles.exit} href={sectionPath}>Exit demo</Link></div>
       {bundle && now != null ? <>
         <div className={styles.time}><time dateTime={new Date(now).toISOString()}>{formatForecastTime(new Date(now).toISOString())} · Simulated now</time><output htmlFor="demo-time">{countdown(offset)}</output></div>
-        <div className={styles.range}><span>T−96 h</span><input id="demo-time" aria-label="Hours before event" aria-valuetext={`${countdown(offset)}, ${formatForecastTime(new Date(now).toISOString())}`} type="range" min={-96} max={0} step={1} value={offset} onChange={event => { setPlaying(false); setOffset(Number(event.target.value)); }} /><span>T0</span></div>
-        <div className={styles.controls}><button aria-label={playing ? 'Pause replay' : 'Play replay'} onClick={() => { if (offset === 0) setOffset(-96); setPlaying(value => !value); }}>{playing ? 'Pause' : 'Play'}</button>{[-96, -72, -48, -24, -12, 0].map(value => <button key={value} aria-pressed={offset === value} onClick={() => { setPlaying(false); setOffset(value); }}>{value === 0 ? 'T0' : `−${Math.abs(value)}h`}</button>)}<span className={styles.method}>Retrospective forecasts · Current models</span></div>
+        <div className={styles.range}><span>T−96 h</span><input id="demo-time" aria-label="Hours before event" aria-valuetext={`${countdown(offset)}, ${formatForecastTime(new Date(now).toISOString())}`} type="range" disabled={!interactive} min={-96} max={0} step={1} value={offset} onChange={event => { setPlaying(false); setOffset(Number(event.target.value)); }} /><span>T0</span></div>
+        <div className={styles.controls}><button disabled={!interactive} aria-label={playing ? 'Pause replay' : 'Play replay'} onClick={() => { if (offset === 0) setOffset(-96); setPlaying(value => !value); }}>{playing ? 'Pause' : 'Play'}</button>{[-96, -72, -48, -24, -12, 0].map(value => <button key={value} disabled={!interactive} aria-pressed={offset === value} onClick={() => { setPlaying(false); setOffset(value); }}>{value === 0 ? 'T0' : `−${Math.abs(value)}h`}</button>)}<span className={styles.method}>Retrospective forecasts · Current models</span></div>
       </> : <p>Demo data unavailable · Live forecasts are available on the normal site.</p>}
     </section>
     {bundle && now != null ? <DemoContext.Provider value={{ bundle, now, offset, showFuture, href }}>{content}</DemoContext.Provider> : content}

@@ -12,6 +12,7 @@ import pytest
 from astropy.io import fits
 
 from argus_prophet.services import source_features as service
+from argus_prophet.services import source_cache
 from common.schemas.forecast_inputs import ForecastInputs, RawObservationFile
 from common.schemas.observation import Observation, ObservationPoint
 
@@ -41,7 +42,7 @@ def test_prophet_extracts_real_gong_original_and_preserves_receipt(tmp_path, mon
     content = gong_original()
     ref = reference(content)
     calls = []
-    monkeypatch.setattr(service, 'cache_root', lambda: tmp_path)
+    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
     def handler(request):
         calls.append(request)
         assert request.url.path == '/internal/v1/observations/files/gong/' + ref.sha256
@@ -62,7 +63,7 @@ def test_unusable_original_never_becomes_gong_features(tmp_path, monkeypatch, pr
     ref = reference(content)
     if problem == 'future':
         ref.available_at = NOW + timedelta(seconds=1)
-    monkeypatch.setattr(service, 'cache_root', lambda: tmp_path)
+    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
     calls = []
     def handler(request):
         calls.append(request)
@@ -77,11 +78,11 @@ def test_unusable_original_never_becomes_gong_features(tmp_path, monkeypatch, pr
 def test_original_cache_detects_corruption_and_refetches(tmp_path, monkeypatch):
     content = gong_original()
     ref = reference(content)
-    monkeypatch.setattr(service, 'cache_root', lambda: tmp_path)
+    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
     with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200, content=content))) as client:
-        path = service.original(client, 'http://clio', 'secret', ref)
+        path = source_cache.original(client, 'http://clio', 'secret', ref)
         path.write_bytes(b'broken cache')
-        assert service.original(client, 'http://clio', 'secret', ref).read_bytes() == content
+        assert source_cache.original(client, 'http://clio', 'secret', ref).read_bytes() == content
 
 
 @pytest.fixture
@@ -130,7 +131,7 @@ def test_wire_features_and_legacy_calibrations_are_not_trusted():
 def test_aia_history_rebuilds_from_clio_after_deleting_cache(tmp_path, monkeypatch):
     import shutil
     from argus_prophet.services.aia import extraction
-    monkeypatch.setattr(service, 'cache_root', lambda: tmp_path)
+    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
     references, originals, frames = [], {}, {}
     for days, value in [(27, 1.), (0, 2.)]:
         observed = NOW - timedelta(days=days)
@@ -168,7 +169,7 @@ def test_aia_history_rebuilds_from_clio_after_deleting_cache(tmp_path, monkeypat
 def test_source_cache_prunes_old_files_only(tmp_path, monkeypatch):
     import os
     from datetime import datetime
-    monkeypatch.setattr(service, 'cache_root', lambda: tmp_path)
+    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
     folder = tmp_path / 'aia'
     folder.mkdir()
     old = folder / 'old.features-v1.npz'
@@ -177,5 +178,5 @@ def test_source_cache_prunes_old_files_only(tmp_path, monkeypatch):
     current.write_bytes(b'current')
     expired = datetime.now(UTC).timestamp() - timedelta(days=46).total_seconds()
     os.utime(old, (expired, expired))
-    service.prune_source_cache()
+    source_cache.prune_source_cache()
     assert not old.exists() and current.read_bytes() == b'current'

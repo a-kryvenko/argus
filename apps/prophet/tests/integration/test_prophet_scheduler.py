@@ -1,72 +1,94 @@
-"""Per-product scheduling, transaction boundaries and crash recovery on PostgreSQL."""
+"""Production dispatcher, transaction boundaries and crash recovery on PostgreSQL."""
 from .storage import recorder_database, database, store_product
 from domain_storage import runtime
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import psycopg
 import pytest
 
-from argus_prophet.db.session import require_writer
 from argus_prophet.services.runs import RunRecorder
 from argus_prophet.services.generation.products import PRODUCTS
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
-from argus_prophet.scheduling.jobs import generation_lock, run_due, due_slot, GenerationBusy
-from argus_prophet.services.generation import cycle as generation_cycle
+from argus_prophet.scheduling.jobs import generation_lock, GenerationBusy
+from argus_prophet.config import ProductSchedule, ProphetConfig
+from argus_prophet.scheduling.execution import ExecutionControl
+from argus_prophet.services.generation.calculation import Artifact
+from argus_prophet import worker
 
 NOW = datetime(2026, 9, 13, 10, 10, tzinfo=UTC)
+due_slot = ProductSchedule().due_slot
 
 
-def generate(config, *, fail=(), seen=None):
-    def calculate(slot, products):
-        failures = {}
-        for product in products:
-            if seen is not None:
-                seen.append(product)
-            run = RunRecorder.begin(product, 'scheduled', config, scheduled_slot=slot)
-            if product in fail:
-                error = ValueError('model unavailable')
-                run.finish(error=error)
-                failures[product] = error
-            else:
-                store_product(run, names=PRODUCTS[product].artifacts, issue=slot.isoformat())
-                run.finish()
-        if failures:
-            raise generation_cycle.GenerationFailed(failures)
-    return calculate
+def dispatch(config, now=NOW, *, fail=(), seen=None):
+    """Real scheduler and DB; replace only process/model work with ready futures."""
+    from common.schemas.forecast_inputs import ForecastInputs
+    from common.schemas.observation import Observation
+    class Pool:
+        def submit(self, execute, target, *args, **kwargs):
+            future = Future()
+            try:
+                if target is worker.load_inputs:
+                    result = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))
+                else:
+                    product = args[0]
+                    if seen is not None:
+                        seen.append(product)
+                    if product in fail:
+                        raise ValueError('model unavailable')
+                    result = []
+                    recorder = SimpleNamespace(store=lambda *values: result.append(Artifact(*values)))
+                    store_product(recorder, names=PRODUCTS[product].artifacts, issue=due_slot(now).isoformat())
+                future.set_result(result)
+            except Exception as exc:
+                future.set_exception(exc)
+            return future
+        def shutdown(self, **kwargs):
+            pass
+    config.models_registry.setdefault('models', {})
+    d = worker.Dispatcher(ProphetConfig(), config, ExecutionControl(), Pool())
+    try:
+        # Each turn drains the two phases and gives the next products capacity.
+        for _ in range(len(PRODUCTS)):
+            d.launch_due(now, 0)
+            d.finish_tasks()
+            d.finish_tasks()
+    finally:
+        d.close()
 
 
 def test_partial_cycle_publishes_successes_and_retries_only_failures(recorder_database):
     dsn, passwords, config = recorder_database
-    with generation_lock():
-        manual = RunRecorder.begin('dst', 'manual', config)
+    with generation_lock() as writer:
+        manual = RunRecorder.begin('dst', 'manual', config, writer=writer)
         store_product(manual)
         manual.finish()
     old_dst = read_release('dst')
     failed = {'dst', 'atmospheric-density'}
-    with pytest.raises(generation_cycle.GenerationFailed):
-        run_due(generate(config, fail=failed), NOW)
+    dispatch(config, fail=failed)
     assert read_release('dst') == old_dst
     speed = read_release('solar-wind-speed')
     seen = []
-    assert run_due(generate(config, seen=seen), NOW)
+    dispatch(config, seen=seen)
     assert set(seen) == failed
     assert read_release('solar-wind-speed') == speed
     assert read_release('dst').run_id != manual.run_id
-    assert not run_due(lambda *_: pytest.fail('Completed slot repeated'), NOW)
+    seen.clear()
+    dispatch(config, seen=seen)
+    assert not seen
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT product,status,attempts,error FROM prophet.forecast_slot ORDER BY product').fetchall() == [
             (p, 'succeeded', 2 if p in failed else 1, None) for p in sorted(PRODUCTS)]
         assert conn.execute('SELECT scheduled_slot FROM prophet.forecast_run WHERE id=%s', (manual.run_id,)).fetchone()[0] is None
+        assert conn.execute('SELECT count(DISTINCT input_sha256) FROM prophet.forecast_run WHERE scheduled_slot IS NOT NULL').fetchone()[0] == 1
 
 
 def test_new_hour_drops_old_retries_and_does_not_replay_missed_hours(recorder_database):
     dsn, passwords, config = recorder_database
-    with pytest.raises(generation_cycle.GenerationFailed):
-        run_due(generate(config, fail=('dst',)), NOW)
+    dispatch(config, fail=('dst',))
     seen = []
-    assert run_due(generate(config, seen=seen), NOW + timedelta(hours=3))
+    dispatch(config, NOW + timedelta(hours=3), seen=seen)
     assert seen == list(PRODUCTS)
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT product,slot,status FROM prophet.forecast_slot ORDER BY slot,product').fetchall() == [
@@ -76,11 +98,8 @@ def test_new_hour_drops_old_retries_and_does_not_replay_missed_hours(recorder_da
 
 def test_all_failed_products_retry_and_keep_history(recorder_database):
     dsn, passwords, config = recorder_database
-    with pytest.raises(generation_cycle.GenerationFailed):
-        run_due(generate(config, fail=PRODUCTS), NOW)
-    with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT status FROM prophet.forecast_slot').fetchone()[0] == 'failed'
-    assert run_due(generate(config), NOW)
+    dispatch(config, fail=PRODUCTS)
+    dispatch(config)
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT status,attempts FROM prophet.forecast_slot').fetchall() == [('succeeded', 2)] * 6
         assert conn.execute("SELECT count(*) FROM prophet.forecast_run WHERE status='failed'").fetchone()[0] == 6
@@ -89,53 +108,45 @@ def test_all_failed_products_retry_and_keep_history(recorder_database):
 def test_crash_between_products_keeps_committed_product_and_recovers_next(recorder_database, tmp_path):
     _, _, config = recorder_database
     first, second, *_ = PRODUCTS
-    def crash(slot, products):
-        generate(config)(slot, (first,))
-        RunRecorder.begin(second, 'scheduled', config, scheduled_slot=slot)
-        raise RuntimeError('crashed before second product finished')
-    with pytest.raises(RuntimeError):
-        run_due(crash, NOW)
+    with generation_lock() as writer:
+        run = RunRecorder.begin(first, 'scheduled', config, writer=writer, scheduled_slot=due_slot(NOW))
+        store_product(run, names=PRODUCTS[first].artifacts)
+        run.finish()
+        unfinished = RunRecorder.begin(second, 'scheduled', config, writer=writer, scheduled_slot=due_slot(NOW))
     release = read_release(first)
     seen = []
     other = SimpleNamespace(workdir=tmp_path / 'new-workdir', models_registry={})
-    assert run_due(generate(other, seen=seen), NOW)
+    dispatch(other, seen=seen)
     assert set(seen) == set(PRODUCTS) - {first}
     assert read_release(first) == release
-
-
-def test_crash_after_final_commit_does_not_repeat_slot(recorder_database):
-    _, _, config = recorder_database
-    def crash(slot, products):
-        generate(config)(slot, products)
-        raise RuntimeError('crash after commit')
-    with pytest.raises(RuntimeError):
-        run_due(crash, NOW)
-    assert not run_due(lambda *_: pytest.fail('Committed slot repeated'), NOW)
+    with generation_lock() as writer:
+        assert writer.execute('SELECT status FROM prophet.forecast_run WHERE id=%s',
+                                        (unfinished.run_id,)).fetchone()[0] == 'interrupted'
 
 
 def test_independent_sessions_cannot_generate_concurrently(recorder_database):
-    with generation_lock(), ThreadPoolExecutor(max_workers=1) as pool:
+    with generation_lock() as writer, ThreadPoolExecutor(max_workers=1) as pool:
         def contender():
-            with generation_lock():
+            with generation_lock() as writer:
                 pytest.fail('Competing writer acquired the lock')
         with pytest.raises(GenerationBusy):
             pool.submit(contender).result(timeout=10)
-    with generation_lock():
-        assert require_writer().execute('SELECT 1').fetchone()[0] == 1
+    with generation_lock() as writer:
+        assert writer.execute('SELECT 1').fetchone()[0] == 1
 
 
 def test_disconnected_writer_cannot_publish_after_new_owner(recorder_database):
     dsn, passwords, config = recorder_database
-    with generation_lock():
-        old = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=due_slot(NOW))
+    with generation_lock() as writer:
+        old = RunRecorder.begin('dst', 'scheduled', config, writer=writer, scheduled_slot=due_slot(NOW))
         store_product(old)
-        pid = require_writer().info.backend_pid
+        pid = writer.info.backend_pid
         with psycopg.connect(dsn['prophet'], autocommit=True) as admin:
             assert admin.execute('SELECT pg_terminate_backend(%s)', (pid,)).fetchone()[0]
         with pytest.raises((psycopg.Error, RuntimeError)):
             old.finish()
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            assert pool.submit(run_due, generate(config), NOW).result(timeout=30)
+        # Even a new writer in the same thread cannot rebind the old recorder.
+        dispatch(config)
         with pytest.raises((psycopg.Error, RuntimeError)):
             old.finish()
     with runtime(dsn, 'prophet', passwords) as conn:
@@ -146,8 +157,8 @@ def test_disconnected_writer_cannot_publish_after_new_owner(recorder_database):
 
 def test_publication_and_product_completion_roll_back_together(recorder_database):
     dsn, passwords, config = recorder_database
-    with generation_lock():
-        run = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=due_slot(NOW))
+    with generation_lock() as writer:
+        run = RunRecorder.begin('dst', 'scheduled', config, writer=writer, scheduled_slot=due_slot(NOW))
         store_product(run)
         with runtime(dsn, 'prophet', passwords) as conn:
             conn.execute('UPDATE prophet.forecast_artifact SET sha256=%s', ('0' * 64,))
@@ -158,81 +169,43 @@ def test_publication_and_product_completion_roll_back_together(recorder_database
         with runtime(dsn, 'prophet', passwords) as conn:
             assert conn.execute('SELECT status FROM prophet.forecast_slot').fetchone()[0] == 'running'
             assert conn.execute('SELECT status FROM prophet.forecast_run').fetchone()[0] == 'running'
-    assert run_due(generate(config), NOW)
+    dispatch(config)
+    assert read_release('dst').run_id != run.run_id
 
 
 def test_legacy_partial_batch_retries_only_unpublished_products(recorder_database):
     dsn, passwords, config = recorder_database
-    # Reproduce a historical all-products run without changing historical migrations.
-    with generation_lock():
-        run = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=due_slot(NOW))
+    with generation_lock() as writer:
+        run = RunRecorder.begin('dst', 'scheduled', config, writer=writer, scheduled_slot=due_slot(NOW))
         store_product(run)
         run.finish()
     with runtime(dsn, 'prophet', passwords) as conn:
         conn.execute("UPDATE prophet.forecast_run SET product='all',status='partial' WHERE id=%s", (run.run_id,))
     seen = []
-    assert run_due(generate(config, seen=seen), NOW)
+    dispatch(config, seen=seen)
     assert set(seen) == set(PRODUCTS) - {'dst'}
     assert read_release('dst').run_id == run.run_id
-
-
-def test_real_cycle_records_shared_inputs_and_retries_failed_product(recorder_database, monkeypatch):
-    from common import config as common_config
-    from common.schemas.forecast_inputs import ForecastInputs
-    from common.schemas.observation import Observation
-    from argus_prophet.services import inputs as observations
-    from argus_prophet.services.generation import calculation as generation
-    from unittest.mock import Mock
-    dsn, passwords, config = recorder_database
-    monkeypatch.setattr(common_config, 'get_config', lambda: config)
-    inputs = ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[]))
-    load = Mock(return_value=inputs)
-    monkeypatch.setattr(observations, 'load_inputs', load)
-    failed = {'dst'}
-    seen = []
-    def calculate(product, *, inputs, recorder):
-        seen.append(product)
-        if product in failed:
-            raise ValueError('model unavailable')
-        store_product(recorder, names=PRODUCTS[product].artifacts, issue=due_slot(NOW).isoformat())
-    monkeypatch.setattr(generation, 'calculate', calculate)
-    def cycle(slot, products):
-        generation_cycle.generate_products(products, 'scheduled', scheduled_slot=slot)
-    with pytest.raises(generation_cycle.GenerationFailed):
-        run_due(cycle, NOW)
-    assert seen == list(PRODUCTS)
-    assert load.call_count == 1
-    speed = read_release('solar-wind-speed')
-    with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT count(DISTINCT input_sha256) FROM prophet.forecast_run').fetchone()[0] == 1
-        assert conn.execute("SELECT status FROM prophet.forecast_run WHERE product='dst'").fetchone()[0] == 'failed'
-    seen.clear()
-    failed.clear()
-    assert run_due(cycle, NOW)
-    assert seen == ['dst'] and load.call_count == 2
-    assert read_release('solar-wind-speed') == speed
-    assert read_release('dst').product == 'dst'
 
 
 def test_product_slots_allow_subhour_retries_and_independent_clock_rollback(recorder_database):
     from argus_prophet.scheduling.jobs import product_pending
     dsn, passwords, config = recorder_database
     slot = NOW.replace(minute=5)
-    with generation_lock():
-        assert product_pending('dst', slot)
-        run = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=slot)
+    with generation_lock() as writer:
+        assert product_pending('dst', slot, writer=writer)
+        run = RunRecorder.begin('dst', 'scheduled', config, writer=writer, scheduled_slot=slot)
         store_product(run)
         run.finish()
-        assert not product_pending('dst', slot)
-        assert not product_pending('dst', slot-timedelta(minutes=5))
-        assert product_pending('hmf', slot)
-        assert product_pending('dst', slot+timedelta(minutes=5))
-        failed = RunRecorder.begin('dst', 'scheduled', config, scheduled_slot=slot+timedelta(minutes=5))
+        assert not product_pending('dst', slot, writer=writer)
+        assert not product_pending('dst', slot-timedelta(minutes=5), writer=writer)
+        assert product_pending('hmf', slot, writer=writer)
+        assert product_pending('dst', slot+timedelta(minutes=5), writer=writer)
+        failed = RunRecorder.begin('dst', 'scheduled', config, writer=writer, scheduled_slot=slot+timedelta(minutes=5))
         failed.finish(error=ValueError('model timeout'))
-        assert product_pending('dst', slot+timedelta(minutes=5))
-    with generation_lock():
-        assert not product_pending('dst', slot)
-        assert product_pending('dst', slot+timedelta(minutes=5))
+        assert product_pending('dst', slot+timedelta(minutes=5), writer=writer)
+    with generation_lock() as writer:
+        assert not product_pending('dst', slot, writer=writer)
+        assert product_pending('dst', slot+timedelta(minutes=5), writer=writer)
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT product,slot,status FROM prophet.forecast_slot ORDER BY slot').fetchall() == [
             ('dst', slot, 'succeeded'), ('dst', slot+timedelta(minutes=5), 'failed')]
@@ -243,24 +216,24 @@ def test_verification_can_write_during_generation_and_blocks_cleanup(recorder_da
     import threading
     acquired, release = threading.Event(), threading.Event()
     def verify():
-        with verification_lock():
-            require_writer().execute("INSERT INTO prophet.scheduled_job VALUES ('test', now(), now())")
+        with verification_lock() as writer:
+            writer.execute("INSERT INTO prophet.scheduled_job VALUES ('test', now(), now())")
             acquired.set()
             assert release.wait(10)
     with ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(verify)
         try:
             assert acquired.wait(10)
-            with generation_lock():
-                require_writer().execute('SELECT 1')
+            with generation_lock() as writer:
+                writer.execute('SELECT 1')
             with pytest.raises(GenerationBusy):
-                with retention_lock():
+                with retention_lock() as writer:
                     pytest.fail('Cleanup overlapped verification')
         finally:
             release.set()
             future.result(timeout=10)
-    with retention_lock():
-        require_writer().execute('SELECT 1')
+    with retention_lock() as writer:
+        writer.execute('SELECT 1')
 
 
 def test_product_slot_migration_preserves_aggregate_history(database, monkeypatch):
@@ -292,7 +265,33 @@ def test_product_slot_migration_preserves_aggregate_history(database, monkeypatc
             'all', due_slot(NOW), 'partial', 1)
         assert conn.execute('SELECT scheduled_product,scheduled_slot,status FROM prophet.forecast_run').fetchone() == (
             'all', due_slot(NOW), 'partial')
-    with generation_lock():
-        assert not product_pending('dst', due_slot(NOW))
-        assert product_pending('hmf', due_slot(NOW))
-        assert product_pending('dst', NOW.replace(minute=15))
+    with generation_lock() as writer:
+        assert not product_pending('dst', due_slot(NOW), writer=writer)
+        assert product_pending('hmf', due_slot(NOW), writer=writer)
+        assert product_pending('dst', NOW.replace(minute=15), writer=writer)
+
+
+def test_legacy_batch_is_readable_but_cannot_be_finished_or_republished(recorder_database):
+    from argus_prophet.services.releases.publication import publish_run
+    from argus_prophet.db.session import transaction
+    dsn, passwords, config = recorder_database
+    with generation_lock() as writer:
+        with pytest.raises(ValueError, match='one supported'):
+            RunRecorder.begin('all', 'manual', config, writer=writer)
+        run = RunRecorder.begin('dst', 'manual', config, writer=writer)
+        store_product(run)
+        run.finish()
+        release = read_release('dst')
+        with runtime(dsn, 'prophet', passwords) as conn:
+            conn.execute("UPDATE prophet.forecast_run SET product='all' WHERE id=%s", (run.run_id,))
+        with transaction(writer) as conn:
+            assert publish_run(conn, run.run_id) is None
+        assert read_release('dst') == release
+        with runtime(dsn, 'prophet', passwords) as conn:
+            conn.execute("UPDATE prophet.forecast_run SET status='running' WHERE id=%s", (run.run_id,))
+        with pytest.raises(RuntimeError):
+            run.finish()
+        with runtime(dsn, 'prophet', passwords) as conn:
+            assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s',
+                                (run.run_id,)).fetchone()[0] == 'running'
+        assert read_release('dst') == release

@@ -126,20 +126,14 @@ def test_verification_incomplete_vectors_have_no_magnitude():
 
 
 def mock_models(monkeypatch):
-    from argus_prophet.services.generation import calculation as generation
     from types import SimpleNamespace
-    from pathlib import Path
-    monkeypatch.setattr(generation, 'get_config', lambda: SimpleNamespace(
-        workdir=Path('/unused'), models_registry={'models': {}}, project_config={}))
     load = Mock(side_effect=lambda service, **_: (SimpleNamespace(registry_name=service.registry_name), {}))
     compute = Mock(side_effect=lambda service, *args, **kwargs:
                    ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
     from argus_prophet.services.generation import models
-    from argus_prophet.scheduling import execution
     from forecast import api
     monkeypatch.setattr(models, 'load_model', load)
     monkeypatch.setattr(api, 'calculate_snapshot', compute)
-    monkeypatch.setattr(execution, 'execute', lambda target, *args, **kwargs: target(*args))
     return compute
 
 
@@ -153,14 +147,14 @@ def mock_models(monkeypatch):
 def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
     from argus_prophet.services.generation import calculation as generation
     inputs = stored_inputs()
-    recorder = Mock()
+    from pathlib import Path
     compute = mock_models(monkeypatch)
-    generation.calculate(selection, inputs=inputs, recorder=recorder)
+    results = generation.calculate_product(selection, inputs, Path('/unused'), {})
     assert [call.args[0].registry_name for call in compute.call_args_list] == artifacts
     for call in compute.call_args_list:
         assert call.args[1] is inputs
         assert call.kwargs['issue_time'] == NOW
-    assert [call.args[0] for call in recorder.store.call_args_list] == artifacts
+    assert [result.name for result in results] == artifacts
 
 
 def test_catalog_matches_public_contract():

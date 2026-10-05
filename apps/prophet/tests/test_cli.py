@@ -51,7 +51,7 @@ def test_removed_aliases_are_rejected_before_starting_a_run(monkeypatch):
             cli.main()
         assert error.value.code == 2
         with pytest.raises(ValueError, match='Unsupported forecast product'):
-            cycle.generate(alias)
+            cycle.generate(alias, writer=None)
     begin.assert_not_called()
 
 
@@ -76,7 +76,7 @@ def test_refresh_alias_generates_selected_product(monkeypatch):
     monkeypatch.setattr(worker, 'generation_lock', nullcontext)
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())
     cli.main(['refresh', 'solar-wind-speed'])
-    generate.assert_called_once_with('solar-wind-speed')
+    generate.assert_called_once_with('solar-wind-speed', writer=None)
 
 
 def test_status_all_uses_service_product_catalog(monkeypatch, capsys):

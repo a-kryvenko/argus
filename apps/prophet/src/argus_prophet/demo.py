@@ -130,7 +130,7 @@ def calculate_demo_snapshot(service, inputs, issue, metadata):
     # archive values as native L1 measurements just to pass the live adapter.
     import numpy as np
     import pandas as pd
-    from forecast_core.imf_features import build_imf_features
+    from forecast_core.api import build_imf_features
     if not inputs.solar_wind_hourly or inputs.solar_wind_hourly.get('schema') != 'omni-hourly-v1':
         raise ValueError('Missing historical OMNI IMF inputs')
     frame = pd.DataFrame(inputs.solar_wind_hourly['rows'])

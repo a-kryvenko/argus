@@ -1,17 +1,17 @@
 """Explicit, bounded cleanup; current releases and latest attempts survive."""
 from datetime import UTC, datetime, timedelta
 
-from argus_prophet.db.session import connect
+from argus_prophet.db.session import connect, transaction
 
 
-def cleanup(*, days=90, apply=False, now=None):
+def cleanup(*, days=90, apply=False, now=None, writer=None):
     if not isinstance(days, int) or days < 26:
         raise ValueError('Retain at least 26 days, covering the verification window')
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError('now must include a timezone')
     cutoff = now-timedelta(days=days)
-    with connect(writing=apply) as conn:
+    with (transaction(writer) if apply else connect()) as conn:
         if not apply:
             conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         ids = [row[0] for row in conn.execute('''SELECT f.id FROM prophet.forecast_run f

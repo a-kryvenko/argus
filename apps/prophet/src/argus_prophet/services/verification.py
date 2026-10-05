@@ -13,7 +13,7 @@ import pandas as pd
 
 from forecast.evaluation import TARGETS, match_observations, score, validate_predictions
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
-from argus_prophet.db.session import connect
+from argus_prophet.db.session import connect, transaction
 from argus_prophet.services.releases.publication import read_release
 
 from argus_prophet.services.generation.products import VERIFIED_PRODUCTS as PRODUCTS
@@ -102,7 +102,7 @@ def read_targets(start, end, *, deadline=None):
             'points': targets(frame, start, end)}
 
 
-def verify(selection='solar-wind-speed', *, days=7, now=None, deadline=None):
+def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=None):
     from psycopg.types.json import Jsonb
     if selection not in (*PRODUCTS, 'all') or not 1 <= days <= 25:
         raise ValueError('Select a supported product and 1..25 days')
@@ -140,7 +140,7 @@ def verify(selection='solar-wind-speed', *, days=7, now=None, deadline=None):
                       'forecast_sha256': artifact.sha256, 'model_info': artifact.model_info,
                       'evidence_sha256': hashlib.sha256(evidence).hexdigest(),
                       **score(matched, artifact.name), 'pairs': records}
-            with connect(writing=True) as conn:
+            with transaction(writer) as conn:
                 conn.execute('''INSERT INTO prophet.forecast_verification
                     (release_id,artifact,evaluated_at,report) VALUES (%s,%s,%s,%s)
                     ON CONFLICT (release_id,artifact) DO UPDATE

@@ -7,12 +7,13 @@ import numpy as np
 import pandas as pd
 
 from common.schemas.forecast_inputs import AIAFeatureFrame
+from argus_prophet.services.aia.cache import AIARecord
 from argus_prophet.services.aia.extraction import sectors, weighted_mean, aligned_change, ROTATION_HOURS
 
 logger = logging.getLogger(__name__)
 
 
-def feature_frames(records, as_of: datetime) -> list[AIAFeatureFrame]:
+def feature_frames(records: list[AIARecord], as_of: datetime) -> list[AIAFeatureFrame]:
     # Use the identical six-hour subset for current areas and temporal pairs.
     records = sorted(
         (row for row in records

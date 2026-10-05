@@ -42,7 +42,6 @@ def calculation_setup(tmp_path, monkeypatch):
     joblib.dump(bundle, path)
     # No forecast output path is required to calculate or store a forecast.
     config = SimpleNamespace(workdir=tmp_path, models_registry={'models': {'dst_quantile': {'model': 'dst'}}})
-    monkeypatch.setattr(generation, 'get_config', lambda: config)
     points = [ObservationPoint(issue_time=ISSUE - timedelta(hours=8-i),
                                bx=1, by=2, bz=-3, v=420, n=5, t=100000,
                                kp=2, dst=-10, ap=5, f10_7=120) for i in range(8)]
@@ -66,7 +65,11 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
     reference = tmp_path / 'reference.csv'
     expected.to_csv(reference, index=False)
     recorder = Mock()
-    generation.calculate('dst', inputs=inputs, recorder=recorder)
+    from argus_prophet.services.generation.cycle import ProductRun
+    from argus_prophet.config import ProphetConfig
+    run = ProductRun('dst', recorder, config, ProphetConfig())
+    from argus_prophet.scheduling.execution import execute
+    run.complete(execute(generation.calculate_product, *run.prepare(inputs)))
     name, content, info, rows, columns = recorder.store.call_args.args
     assert content == reference.read_bytes()
     assert info == metadata
@@ -78,14 +81,17 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
 
 
 def test_storage_failure_stops_run_without_touching_live_exports(calculation_setup, tmp_path):
-    _, _, inputs, _ = calculation_setup
+    config, _, inputs, _ = calculation_setup
     live = tmp_path / 'data/forecast/dst.csv'
     live.parent.mkdir()
     live.write_bytes(b'previous release')
     recorder = Mock()
     recorder.store.side_effect = RuntimeError('database unavailable')
     with pytest.raises(RuntimeError, match='database unavailable'):
-        generation.calculate('dst', inputs=inputs, recorder=recorder)
+        from argus_prophet.services.generation.cycle import ProductRun
+        from argus_prophet.config import ProphetConfig
+        run = ProductRun('dst', recorder, config, ProphetConfig())
+        run.complete(generation.calculate_product(*run.prepare(inputs)))
     assert live.read_bytes() == b'previous release'
     assert list(live.parent.iterdir()) == [live]
     recorder.skip.assert_not_called()
@@ -102,10 +108,10 @@ def test_recorder_stores_exact_bytes_without_files(monkeypatch):
     content = b'issue_time,value\n2026-09-18T12:00:00Z,4\n'
     connection = Mock()
     connect = Mock(return_value=nullcontext(connection))
-    monkeypatch.setattr(ledger, 'connect', connect)
-    recorder = ledger.RunRecorder('run-id')
+    monkeypatch.setattr(ledger, 'transaction', connect)
+    recorder = ledger.RunRecorder('run-id', connection)
     recorder.store('test', content, {'sha256': 'model-hash'}, 1, ['issue_time', 'value'])
-    connect.assert_called_once_with(writing=True)
+    connect.assert_called_once_with(connection)
     values = connection.execute.call_args.args[1]
     assert values[:2] == ('run-id', 'test')
     assert gzip.decompress(values[3]) == content
@@ -116,10 +122,11 @@ def test_recorder_stores_exact_bytes_without_files(monkeypatch):
 
 
 def test_empty_result_is_rejected_before_database_access(monkeypatch):
+    connection = Mock()
     connect = Mock()
-    monkeypatch.setattr(ledger, 'connect', connect)
+    monkeypatch.setattr(ledger, 'transaction', connect)
     with pytest.raises(ValueError, match='empty forecast'):
-        ledger.RunRecorder('run-id').store('test', b'value\n', {}, 0, ['value'])
+        ledger.RunRecorder('run-id', connection).store('test', b'value\n', {}, 0, ['value'])
     connect.assert_not_called()
 
 
@@ -159,9 +166,9 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
                                  'issue_time': ISSUE.isoformat()}
     reference = tmp_path / 'reference.csv'
     expected.to_csv(reference, index=False)
-    recorder = Mock()
-    generation.store_result(recorder, result)
-    name, content, info, rows, columns = recorder.store.call_args.args
+    serialized = generation.serialize(result)
+    name, content, info, rows, columns = (serialized.name, serialized.content, serialized.model_info,
+                                        serialized.row_count, serialized.columns)
     assert content == reference.read_bytes()
     assert rows == 2 and columns == list(expected.columns)
     artifact = ForecastArtifact(name=name, csv_text=content.decode('utf-8'),

@@ -24,7 +24,7 @@ from argus_prophet.services.generation import calculation as generation
 from argus_prophet.services.generation import models
 from argus_prophet.services.generation import products
 assert callable(cycle.generate_products)
-assert callable(generation.calculate)
+assert callable(generation.calculate_product)
 assert callable(models.load_model)
 assert products.select_products('solar-wind-speed') == ('solar-wind-speed',)
 assert not blocked.intersection(sys.modules)

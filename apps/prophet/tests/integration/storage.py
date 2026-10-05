@@ -19,8 +19,8 @@ def recorder_database(database, monkeypatch, tmp_path):
 @pytest.fixture
 def recorder_setup(recorder_database):
     from argus_prophet.scheduling.jobs import generation_lock
-    with generation_lock():
-        yield recorder_database
+    with generation_lock() as writer:
+        yield (*recorder_database, writer)
 
 
 def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00'):

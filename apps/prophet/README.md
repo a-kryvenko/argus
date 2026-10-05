@@ -26,6 +26,14 @@ Products run hourly at `:10 UTC` by default, with up to two calculations in para
 Products dispatched together share one Clio snapshot. Each complete product publishes
 independently; failures retain its previous release. Manual runs do not consume scheduled slots.
 
+Manual generation and the worker share the product run lifecycle: snapshot, input
+policy, calculation, artifact storage and transactional publication. Input preparation
+and model calculations both run in supervised child processes with the configured
+calculation timeout. The coordinator passes its lock-owning database connection
+explicitly to writers; a lost connection terminates the attempt without reconnecting.
+Historical batch runs remain readable and still prevent duplicate scheduled products;
+new runs and publications always belong to one product.
+
 Published-release verification runs every six hours over the preceding seven days.
 It compares forecasts with Clio observations and stores results separately from static
 website model metrics. Atmospheric density is excluded from verification.

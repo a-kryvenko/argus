@@ -7,18 +7,11 @@ import time
 import pytest
 
 from argus_prophet.scheduling.execution import execute, supervise, before_dispatch, ShutdownRequested
-from argus_prophet.db.session import writer_session, require_writer
 
 
 def test_spawn_does_not_inherit_writer_and_is_reaped():
-    from types import SimpleNamespace
-    connection = SimpleNamespace(closed=False, broken=False)
     before = {child.pid for child in multiprocessing.active_children()}
-    with writer_session(connection):
-        assert execute(os.getpid) != os.getpid()
-        with pytest.raises(RuntimeError, match='writes require a database writer lock'):
-            execute(require_writer)
-        assert require_writer() is connection
+    assert execute(os.getpid) != os.getpid()
     assert {child.pid for child in multiprocessing.active_children()} == before
 
 

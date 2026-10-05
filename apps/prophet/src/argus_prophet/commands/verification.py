@@ -10,8 +10,8 @@ def run(args):
         from argus_prophet.scheduling.execution import supervise, ShutdownRequested
         from argus_prophet.scheduling.jobs import verification_lock
         try:
-            with supervise(load_config().shutdown_grace_seconds), verification_lock():
-                result = verify(args.product, days=args.days)
+            with supervise(load_config().shutdown_grace_seconds), verification_lock() as writer:
+                result = verify(args.product, writer=writer, days=args.days)
         except ShutdownRequested:
             raise SystemExit(130)
     else:

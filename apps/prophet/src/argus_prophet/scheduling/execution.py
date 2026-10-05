@@ -1,4 +1,4 @@
-"""Spawn calculation-only processes; the caller retains the database lock."""
+"""Supervise bounded child tasks; generation keeps its writer in the caller."""
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field

@@ -6,14 +6,15 @@ from datetime import UTC, datetime
 import logging
 from time import monotonic, sleep
 
-from argus_prophet.config import InputPolicy, ProductSchedule, load_config
+from argus_prophet.config import ProductSchedule, load_config
 from argus_prophet.scheduling.execution import ShutdownRequested, execute, supervise
 from argus_prophet.scheduling.jobs import GenerationBusy, generation_lock, product_pending
 from argus_prophet.scheduling.verification import run_due as verify_due
 from argus_prophet.services.generation.calculation import calculate_product
 from argus_prophet.services.generation.products import PRODUCTS
 from argus_prophet.services.inputs import load_inputs
-from argus_prophet.services.runs import RunRecorder, provenance
+from argus_prophet.services.generation.cycle import ProductRun
+from argus_prophet.services.runs import provenance
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class Task:
 
 @dataclass
 class Active:
-    recorder: RunRecorder
+    run: ProductRun
     future: Future
     phase: str = 'inputs'
 
@@ -38,7 +39,7 @@ class Dispatcher:
         self.tasks = [Task(name, config.schedules.get(name, ProductSchedule())) for name in PRODUCTS]
         self.active = {}
         self.writer = ExitStack()
-        self.locked = False
+        self.connection = None
         self.verification = None
         self.verify_after = 0
         self.details = provenance(runtime)
@@ -55,26 +56,16 @@ class Dispatcher:
                 result = task.future.result()
                 if task.phase == 'inputs':
                     self.control.before_dispatch()
-                    task.recorder.snapshot(result)
-                    self.config.inputs.get(product, InputPolicy()).validate_inputs(result)
-                    task.future = self.submit(calculate_product, product, result, self.runtime.workdir,
-                                              self.runtime.models_registry['models'])
+                    task.future = self.submit(calculate_product, *task.run.prepare(result))
                     task.phase = 'calculation'
                     continue
-                for artifact in result:
-                    task.recorder.store(artifact.name, artifact.content, artifact.model_info,
-                                        artifact.row_count, artifact.columns)
-                task.recorder.finish()
-                logger.info('Prophet run %s published (%s)', task.recorder.run_id, product)
+                task.run.complete(result)
             except (Exception, ShutdownRequested) as exc:
-                # Losing the writer session is fatal: finish also fails, and the
-                # caller cancels/reaps all children before releasing the lock.
-                task.recorder.finish(error=exc)
-                logger.warning('Prophet run %s failed (%s): %s', task.recorder.run_id, product, exc)
+                task.run.fail(exc)
             del self.active[product]
         if not self.active:
             self.writer.close()
-            self.locked = False
+            self.connection = None
         if self.verification is not None and self.verification.done():
             try:
                 if self.verification.result():
@@ -94,24 +85,22 @@ class Dispatcher:
             if task.product in self.active or task.next_check > clock:
                 continue
             task.next_check = clock + 60
-            if not self.locked:
+            if self.connection is None:
                 try:
-                    self.writer.enter_context(generation_lock())
+                    self.connection = self.writer.enter_context(generation_lock())
                 except GenerationBusy:
                     continue
-                self.locked = True
             slot = task.schedule.due_slot(now)
-            if not product_pending(task.product, slot):
+            if not product_pending(task.product, slot, writer=self.connection):
                 continue
-            recorder = RunRecorder.begin(task.product, 'scheduled', self.runtime,
-                                         scheduled_slot=slot, details=self.details)
+            run = ProductRun.begin(task.product, 'scheduled', self.runtime, self.config,
+                                   writer=self.connection, scheduled_slot=slot, details=self.details)
             if inputs is None:
                 inputs = self.submit(load_inputs)
-            self.active[task.product] = Active(recorder, inputs)
-            logger.info('Prophet run %s started (%s, slot %s)', recorder.run_id, task.product, slot)
+            self.active[task.product] = Active(run, inputs)
         if not self.active:
             self.writer.close()
-            self.locked = False
+            self.connection = None
         if self.config.verification.enabled and self.verification is None and clock >= self.verify_after:
             self.verification = self.submit(verify_due, self.config.verification,
                                             timeout=self.config.verification.timeout_seconds + 30)

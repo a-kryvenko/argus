@@ -1,9 +1,5 @@
 """Prophet storage; writers reuse the connection holding their advisory lock."""
 from contextlib import contextmanager
-from contextvars import ContextVar
-
-
-_writer_session = ContextVar('prophet_writer_session', default=None)
 
 
 def get_database_url():
@@ -27,33 +23,19 @@ def open_connection(*, autocommit=False):
                            options='-csearch_path=prophet,pg_catalog,pg_temp -cstatement_timeout=60000')
 
 
-def require_writer():
-    conn = _writer_session.get()
-    if conn is None:
+@contextmanager
+def transaction(writer):
+    """Use the exact lock-owning connection; never reconnect a failed writer."""
+    if writer is None:
         raise RuntimeError('Prophet writes require a database writer lock')
-    if conn.closed or conn.broken:
+    if writer.closed or writer.broken:
         raise RuntimeError('Prophet lock connection was lost; reacquire the lock for a new attempt')
-    return conn
+    with writer.transaction():
+        yield writer
 
 
 @contextmanager
-def writer_session(conn):
-    if _writer_session.get() is not None:
-        raise RuntimeError('Prophet writer session is not reentrant')
-    token = _writer_session.set(conn)
-    try:
-        yield
-    finally:
-        _writer_session.reset(token)
-
-
-@contextmanager
-def connect(*, writing=False):
-    conn = require_writer() if writing else _writer_session.get()
-    if conn is not None:
-        # Never silently reconnect a writer: a new connection would not own its lock.
-        with conn.transaction():
-            yield conn
-    else:
-        with open_connection() as connection:
-            yield connection
+def connect():
+    """Independent read connection; writers pass their connection explicitly."""
+    with open_connection() as connection:
+        yield connection

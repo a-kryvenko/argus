@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from argus_prophet.db.session import connect
+from argus_prophet.db.session import connect, transaction
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +34,12 @@ def provenance(config):
 
 
 class RunRecorder:
-    def __init__(self, run_id):
+    def __init__(self, run_id, writer):
         self.run_id = run_id
+        self.writer = writer
 
     @classmethod
-    def begin(cls, product, trigger, config, *, scheduled_slot=None, details=None):
+    def begin(cls, product, trigger, config, *, writer, scheduled_slot=None, details=None):
         from psycopg.types.json import Jsonb
         from argus_prophet.services.generation.products import PRODUCTS
         if product not in PRODUCTS:
@@ -48,7 +49,7 @@ class RunRecorder:
             raise ValueError('Scheduled attempts require a slot; manual attempts must not have one')
         scope = str(config.workdir.resolve())
         details = provenance(config) if details is None else details
-        with connect(writing=True) as conn:
+        with transaction(writer) as conn:
             if scheduled_slot is not None:
                 result = conn.execute("""INSERT INTO prophet.forecast_slot(product,slot,status,attempts,started_at)
                     VALUES (%s,%s,'running',1,%s) ON CONFLICT(product,slot) DO UPDATE
@@ -63,14 +64,14 @@ class RunRecorder:
                 VALUES (%s,%s,%s,%s,%s,'running',%s,%s,%s)""",
                 (run_id, scope, product, trigger, datetime.now(UTC), Jsonb(details), scheduled_slot,
                  product if scheduled_slot is not None else None))
-        return cls(run_id)
+        return cls(run_id, writer)
 
     def snapshot(self, inputs):
         from psycopg.types.json import Jsonb
         payload = inputs.model_dump(mode='json')
         from argus_prophet.services.releases.status import input_diagnostics
         diagnostics = input_diagnostics(inputs)
-        with connect(writing=True) as conn:
+        with transaction(self.writer) as conn:
             result = conn.execute("""UPDATE prophet.forecast_run SET input_snapshot=%s,input_sha256=%s,
                 provenance=jsonb_set(provenance,'{input_diagnostics}',%s)
                 WHERE id=%s AND status='running' AND input_snapshot IS NULL""",
@@ -84,7 +85,7 @@ class RunRecorder:
         from psycopg.types.json import Jsonb
         compressed = gzip.compress(content, mtime=0)
         digest = hashlib.sha256(content).hexdigest()
-        with connect(writing=True) as conn:
+        with transaction(self.writer) as conn:
             conn.execute("""INSERT INTO prophet.forecast_artifact
                 (run_id,name,status,created_at,csv_gzip,sha256,row_count,columns,model_info)
                 VALUES (%s,%s,'stored',%s,%s,%s,%s,%s,%s)""",
@@ -95,32 +96,21 @@ class RunRecorder:
         status = ('succeeded' if error is None else
                   'failed' if isinstance(error, Exception) else 'interrupted')
         message = f'{type(error).__name__}: {error}'[:2000] if error is not None else None
-        with connect(writing=True) as conn:
+        with transaction(self.writer) as conn:
             result = conn.execute("""UPDATE prophet.forecast_run SET status=%s,finished_at=%s,error=%s
-                WHERE id=%s AND status='running' RETURNING scheduled_slot,scheduled_product""", (status, datetime.now(UTC), message, self.run_id))
+                WHERE id=%s AND status='running' AND product<>'all' RETURNING scheduled_slot,scheduled_product""", (status, datetime.now(UTC), message, self.run_id))
             if result.rowcount != 1:
                 raise RuntimeError("Run is no longer running")
             if error is None:
                 from argus_prophet.services.releases.publication import publish_run
                 publish_run(conn, self.run_id)
             slot, slot_product = result.fetchone()
-            if slot is not None and slot_product != 'all':
+            if slot is not None:
                 changed = conn.execute("""UPDATE prophet.forecast_slot SET status=%s,finished_at=%s,error=%s
                     WHERE product=%s AND slot=%s AND status='running'""",
                     (status, datetime.now(UTC), message, slot_product, slot))
                 if changed.rowcount != 1:
                     raise RuntimeError('Scheduled product slot is no longer active')
-            elif slot is not None:
-                from argus_prophet.scheduling.jobs import completed_products
-                from argus_prophet.services.generation.products import PRODUCTS
-                completed = completed_products(conn, slot)
-                pending = set(PRODUCTS) - completed
-                slot_status = 'succeeded' if not pending else 'partial' if completed else 'failed'
-                slot_error = 'Pending products: ' + ', '.join(sorted(pending)) if pending else None
-                changed = conn.execute("""UPDATE prophet.forecast_slot SET status=%s,finished_at=%s,error=%s
-                    WHERE product='all' AND slot=%s AND status='running'""", (slot_status, datetime.now(UTC), slot_error, slot))
-                if changed.rowcount != 1:
-                    raise RuntimeError('Scheduled slot is no longer active')
 
 
 def list_runs(limit=20):

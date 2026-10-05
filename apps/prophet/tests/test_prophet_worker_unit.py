@@ -7,6 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from argus_prophet import worker
+from argus_prophet.services.runs import RunRecorder
 from argus_prophet.config import ProductSchedule, ProphetConfig
 from argus_prophet.scheduling.execution import ExecutionControl, ShutdownRequested
 
@@ -32,7 +33,7 @@ def dispatcher(monkeypatch):
     def lock():
         events.append('lock')
         try:
-            yield
+            yield 'writer'
         finally:
             events.append('unlock')
     def begin(product, *args, **kwargs):
@@ -47,9 +48,9 @@ def dispatcher(monkeypatch):
         events.append(('submit', args[0].__name__))
         return future
     monkeypatch.setattr(worker, 'generation_lock', lock)
-    monkeypatch.setattr(worker, 'product_pending', lambda *_: True)
+    monkeypatch.setattr(worker, 'product_pending', lambda *_, **kw: True)
     monkeypatch.setattr(worker, 'provenance', lambda _: {})
-    monkeypatch.setattr(worker.RunRecorder, 'begin', begin)
+    monkeypatch.setattr(RunRecorder, 'begin', begin)
     pool = Mock(submit=submit)
     dispatcher = worker.Dispatcher(ProphetConfig(), SimpleNamespace(workdir='models', models_registry={'models': {}}),
                                    ExecutionControl(), pool)
@@ -99,7 +100,7 @@ def test_capacity_failure_retry_and_shutdown_do_not_overlap_products(dispatcher)
     assert len(submitted) == 2  # shutdown never starts a new calculation
     with pytest.raises(ShutdownRequested):
         d.launch_due(NOW, 60)
-    assert not d.active and not d.locked
+    assert not d.active and d.connection is None
 
 
 def test_verification_dispatches_while_all_product_slots_are_busy(dispatcher):

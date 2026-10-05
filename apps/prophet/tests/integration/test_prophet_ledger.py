@@ -14,8 +14,8 @@ from argus_prophet.services.releases.publication import read_release, ReleaseNot
 
 
 def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
-    dsn, passwords, config = recorder_setup
-    run = RunRecorder.begin('dst', 'manual', config)
+    dsn, passwords, config, writer = recorder_setup
+    run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     now = datetime.now(UTC)
     inputs = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))
     run.snapshot(inputs)
@@ -43,11 +43,11 @@ def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
 
 
 def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
-    dsn, passwords, config = recorder_setup
-    first = RunRecorder.begin('dst', 'manual', config)
+    dsn, passwords, config, writer = recorder_setup
+    first = RunRecorder.begin('dst', 'manual', config, writer=writer)
     from argus_prophet.scheduling.jobs import recover_interrupted
-    recover_interrupted()
-    second = RunRecorder.begin('dst', 'manual', config)
+    recover_interrupted(writer)
+    second = RunRecorder.begin('dst', 'manual', config, writer=writer)
     second.finish(error=ValueError('bad model'))
     with runtime(dsn, 'prophet', passwords) as conn:
         rows = dict(conn.execute('SELECT id,status FROM prophet.forecast_run').fetchall())
@@ -57,8 +57,8 @@ def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
 
 def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
     from argus_prophet.scheduling.execution import ShutdownRequested
-    dsn, passwords, config = recorder_setup
-    run = RunRecorder.begin('dst', 'manual', config)
+    dsn, passwords, config, writer = recorder_setup
+    run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     run.finish(error=ShutdownRequested('deadline'))
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s',
@@ -68,16 +68,16 @@ def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
 def test_cleanup_preserves_current_release_latest_attempt_and_slots(recorder_setup):
     from argus_prophet.services.retention import cleanup
     from psycopg.types.json import Jsonb
-    dsn, passwords, config = recorder_setup
+    dsn, passwords, config, writer = recorder_setup
     old = datetime.now(UTC)-timedelta(days=100)
-    first = RunRecorder.begin('dst', 'manual', config)
+    first = RunRecorder.begin('dst', 'manual', config, writer=writer)
     store_product(first)
     first.finish()
     first_release = read_release('dst')
-    current = RunRecorder.begin('dst', 'manual', config)
+    current = RunRecorder.begin('dst', 'manual', config, writer=writer)
     store_product(current)
     current.finish()
-    latest = RunRecorder.begin('dst', 'manual', config)
+    latest = RunRecorder.begin('dst', 'manual', config, writer=writer)
     latest.finish(error=ValueError('test failure'))
     with runtime(dsn, 'prophet', passwords) as conn:
         conn.execute('INSERT INTO prophet.forecast_verification VALUES (%s,%s,%s,%s)',
@@ -92,7 +92,7 @@ def test_cleanup_preserves_current_release_latest_attempt_and_slots(recorder_set
     assert preview['runs'] == preview['releases'] == preview['artifacts'] == preview['verifications'] == 1
     assert not preview['applied']
     assert read_release('dst', first_release.release_id)
-    result = cleanup(apply=True)
+    result = cleanup(apply=True, writer=writer)
     assert result['runs'] == 1 and result['applied']
     assert read_release('dst').run_id == current.run_id
     with pytest.raises(ReleaseNotFound):
@@ -101,23 +101,23 @@ def test_cleanup_preserves_current_release_latest_attempt_and_slots(recorder_set
 
 
 def test_only_completed_products_publish_and_history_survives(recorder_setup):
-    _, _, config = recorder_setup
-    first = RunRecorder.begin('dst', 'manual', config)
+    _, _, config, writer = recorder_setup
+    first = RunRecorder.begin('dst', 'manual', config, writer=writer)
     store_product(first)
     with pytest.raises(ReleaseNotFound):
         read_release('dst')
     first.finish()
     old = read_release('dst')
-    failed = RunRecorder.begin('dst', 'manual', config)
+    failed = RunRecorder.begin('dst', 'manual', config, writer=writer)
     store_product(failed)
     failed.finish(error=ValueError('model failed'))
     assert read_release('dst').release_id == old.release_id
-    second = RunRecorder.begin('dst', 'manual', config)
+    second = RunRecorder.begin('dst', 'manual', config, writer=writer)
     store_product(second)
     second.finish()
     assert read_release('dst').run_id == second.run_id
     assert read_release('dst', old.release_id) == old
-    incomplete = RunRecorder.begin('solar-wind-speed', 'manual', config)
+    incomplete = RunRecorder.begin('solar-wind-speed', 'manual', config, writer=writer)
     store_product(incomplete, names=('plasma_speed_quantile',))
     with pytest.raises(ValueError, match='Incomplete'):
         incomplete.finish()
@@ -127,11 +127,11 @@ def test_only_completed_products_publish_and_history_survives(recorder_setup):
 
 
 def test_publication_failure_does_not_roll_back_another_product(recorder_setup):
-    dsn, passwords, config = recorder_setup
-    success = RunRecorder.begin('solar-wind-density', 'manual', config)
+    dsn, passwords, config, writer = recorder_setup
+    success = RunRecorder.begin('solar-wind-density', 'manual', config, writer=writer)
     store_product(success, names=('plasma_density_quantile',))
     success.finish()
-    failed = RunRecorder.begin('dst', 'manual', config)
+    failed = RunRecorder.begin('dst', 'manual', config, writer=writer)
     store_product(failed)
     with runtime(dsn, 'prophet', passwords) as conn:
         conn.execute("UPDATE prophet.forecast_artifact SET sha256=%s WHERE name='dst_quantile'", ('0' * 64,))
@@ -146,15 +146,15 @@ def test_publication_failure_does_not_roll_back_another_product(recorder_setup):
 
 def test_status_reports_product_failure_not_unrelated_success(recorder_setup):
     from argus_prophet.services.releases.status import product_status
-    _, _, config = recorder_setup
-    run = RunRecorder.begin('dst', 'manual', config)
+    _, _, config, writer = recorder_setup
+    run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     now = datetime(2026, 9, 13, 1, tzinfo=UTC)
     run.snapshot(ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[])))
     store_product(run)
     run.finish()
-    failure = RunRecorder.begin('dst', 'manual', config)
+    failure = RunRecorder.begin('dst', 'manual', config, writer=writer)
     failure.finish(error=ValueError('model unavailable'))
-    unrelated = RunRecorder.begin('solar-wind-density', 'manual', config)
+    unrelated = RunRecorder.begin('solar-wind-density', 'manual', config, writer=writer)
     store_product(unrelated, names=('plasma_density_quantile',))
     unrelated.finish()
     status = product_status('dst', now=now)
@@ -173,8 +173,8 @@ def test_export_migration_preserves_release_bytes_on_upgrade_and_downgrade(recor
     from alembic.operations import Operations
     from sqlalchemy import create_engine
     from argus_prophet.db.session import get_database_url
-    _, _, config = recorder_setup
-    run = RunRecorder.begin('dst', 'manual', config)
+    _, _, config, writer = recorder_setup
+    run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     expected = store_product(run)
     run.finish()
     release = read_release('dst')

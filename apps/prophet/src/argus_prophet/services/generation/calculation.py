@@ -1,8 +1,7 @@
-"""Coordinate isolated calculations and persist their exact serialized bytes."""
+"""Calculate one product and return its exact serialized artifact bytes."""
 from dataclasses import dataclass
 from datetime import UTC
 
-from common.config import get_config
 from argus_prophet.services.generation.products import PRODUCTS
 
 
@@ -43,20 +42,3 @@ def calculate_product(product, inputs, workdir, registry):
     if sum(len(item.content) for item in artifacts) > 64 * 1024 * 1024:
         raise ValueError('Forecast product exceeds 64 MiB')
     return artifacts
-
-
-def calculate(product: str, *, inputs, recorder):
-    from argus_prophet.config import ProphetConfig, InputPolicy
-    from argus_prophet.scheduling.execution import execute
-    config = get_config()
-    policy = ProphetConfig.model_validate(getattr(config, 'project_config', {}).get('prophet', {}))
-    policy.inputs.get(product, InputPolicy()).validate_inputs(inputs)
-    artifacts = execute(calculate_product, product, inputs, config.workdir, config.models_registry['models'],
-                        timeout_seconds=policy.calculation_timeout_seconds)
-    for artifact in artifacts:
-        recorder.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
-
-
-def store_result(recorder, result):
-    artifact = serialize(result)
-    recorder.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)

@@ -15,8 +15,8 @@ def run(args):
 
     def once():
         try:
-            with supervise(load_config().shutdown_grace_seconds), generation_lock():
-                generate(args.product)
+            with supervise(load_config().shutdown_grace_seconds), generation_lock() as writer:
+                generate(args.product, writer=writer)
         except ShutdownRequested:
             logging.info('Prophet generation stopped')
             raise SystemExit(130)

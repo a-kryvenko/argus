@@ -18,8 +18,8 @@ def test_verification_checkpoint_only_follows_complete_scoring(monkeypatch):
     now = datetime(2026, 9, 29, 13, tzinfo=UTC)
     conn = Mock()
     conn.execute.return_value.fetchone.return_value = None
-    monkeypatch.setattr(verification, 'connect', lambda **_: nullcontext(conn))
-    monkeypatch.setattr(verification, 'verification_lock', nullcontext)
+    monkeypatch.setattr(verification, 'transaction', lambda writer: nullcontext(conn))
+    monkeypatch.setattr(verification, 'verification_lock', lambda: nullcontext(conn))
     config = VerificationSchedule(enabled=True)
     score = Mock(side_effect=ValueError('Clio unavailable'))
     with pytest.raises(ValueError):

@@ -5,8 +5,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 usage() {
     echo "Usage: $0 [patch|minor|major] [-m message]"
-    echo "  No arguments: run checks only."
-    echo "  -m message: run checks, commit and push."
+    echo "  No arguments: run checks and generate architecture diagrams."
+    echo "  -m message: run checks, generate diagrams, commit and push."
     echo "  patch|minor|major with -m: also upload artifacts and create/push a release tag."
 }
 
@@ -65,8 +65,11 @@ pnpm --filter web test:dashboard
 echo "Running Python tests"
 ./scripts/test-python
 
+echo "Generating architecture diagrams"
+pnpm docs:architecture
+
 if [[ "$COMMIT" = false ]]; then
-    echo "All checks passed. Test-only run completed."
+    echo "All checks passed and architecture diagrams generated."
     exit 0
 fi
 

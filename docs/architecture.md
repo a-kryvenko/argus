@@ -1,53 +1,15 @@
 # Architecture
 
+Diagram sources, rendered views and build instructions live in
+[docs/architecture/](architecture/README.md).
+
 ## Service map
 
 Arrows show the direction of requests or storage access, not the direction of
 response data. Internal service calls use HTTP; each service accesses only its
 own database. Worker and HTTP processes are shown separately where their roles differ.
 
-```mermaid
-flowchart TB
-    web["apps/web · Next.js"] -->|HTTP| api["apps/api · Public API"]
-    clients["External API clients"] -->|HTTP| api
-
-    subgraph clio["apps/clio · Observations"]
-        cw["Clio worker"]
-        ch["Clio HTTP"]
-    end
-    subgraph prophet["apps/prophet · Forecasts"]
-        pw["Prophet worker"]
-        ph["Prophet HTTP"]
-    end
-    subgraph intelligence["apps/intelligence · Impacts"]
-        ih["Intelligence HTTP · LEO drag"]
-        iw["Intelligence worker · Release integration stub"]
-    end
-    subgraph postgres["One PostgreSQL instance · Four isolated databases"]
-        cdb[("clio")]
-        pdb[("argus_prophet")]
-        idb[("argus_intelligence")]
-        adb[("argus_api")]
-    end
-
-    cw -->|Fetch observations and images| providers["SWPC / OMNI / JSOC / GONG / other providers"]
-    cw -->|Write observations and archive records| cdb
-    cw -->|Write AIA / HMI files| images["Clio image archive · Shared disk"]
-    ch -->|Read image catalog| images
-    ch -->|Read| cdb
-    pw -->|HTTP · Read observations| ch
-    pw -->|Write snapshots, forecasts and verification| pdb
-    ph -->|Read releases and status| pdb
-    ih -->|HTTP · Read density release| ph
-    ih -->|Calculate assessment| core["packages/intelligence-core · Private backend"]
-    iw -->|HTTP · Poll solar-wind-speed releases| ph
-    iw -->|Write attempts and stub results| idb
-    api -->|HTTP · Observations| ch
-    api -->|HTTP · Forecasts| ph
-    api -->|HTTP · Drag assessment| ih
-    api -->|Sessions and usage statistics| adb
-    api -->|Read| metrics["Static model evaluation files"]
-```
+[Runtime container diagram](architecture/generated/c4/containers.md)
 
 Intelligence's HTTP assessment path does not use its worker database. The worker
 currently records integration stub results; it does not calculate drag assessments.
@@ -61,35 +23,12 @@ Here arrows show **data movement**. Collection, generation and verification run
 on their own schedules or through explicit commands. Public reads serve stored
 observations and releases without triggering collection or forecast generation.
 
-```mermaid
-flowchart TD
-    sources["External observation providers"] --> collect["Clio · Live collection and historical backfill"]
-    collect --> stored["Clio DB · Measurements and archive records"]
-    collect --> images["Shared disk · AIA / HMI image files"]
-    stored --> prepare["Clio · Aggregation and normalization"]
-    prepare --> inputs["Clio DB · Aggregates and normalized observations"]
-    stored --> reads["Clio HTTP · Stored observation contracts"]
-    inputs --> reads
-    images -->|Image catalog| reads
-    reads -->|Forecast inputs| snapshot["Prophet · Save input snapshot"]
-    snapshot --> calculate["Per-product calculation processes"]
-    models["Configured model artifacts + forecast / forecast-core"] --> calculate
-    calculate -->|Serialized results| coordinator["Prophet coordinator · Save results"]
-    coordinator --> complete{"Product complete?"}
-    complete -->|Yes| release["Prophet DB · Publish product release"]
-    complete -->|No| previous["Keep previous published release"]
-    release --> serving["Prophet HTTP · Stored releases"]
-    previous --> serving
-    serving --> api["Public API"]
-    reads -->|Observations| api
-    api --> web["Web UI and external clients"]
+See the separate flow diagrams:
 
-    release --> verify["Prophet verification · Compare forecast with observations"]
-    reads -->|Raw measurements as target hours finish| verify
-    verify --> scores["Prophet DB · Verification records"]
-    scores --> report["CLI verification report"]
-    static["Static historical model evaluation files"] -->|Separate metrics path| api
-```
+- [Observation collection and preparation](architecture/flows/observations.md)
+- [Forecast publication](architecture/flows/forecast-release.md)
+- [Operational verification](architecture/flows/verification.md)
+- [Training and artifact delivery](architecture/flows/training.md)
 
 Products publish independently. Failed calculations leave the previous release
 available; calculation processes receive saved inputs and do not write to the
@@ -143,22 +82,6 @@ other applications' runtimes. `intelligence-api` reads the density release over
 HTTP and needs no database credentials; the existing worker remains a separate
 release-integration process.
 
-## Database ownership
-
-One PostgreSQL instance hosts four independent databases. Each service and its
-Alembic migrations share one database owner. Provisioning revokes public database
-access; cross-service reads use HTTP. Resources and server availability remain shared.
-
-| Service | Suggested database / owner | Schema | Migrations |
-| --- | --- | --- | --- |
-| API | `argus_api` | `api` | `apps/api/alembic` |
-| Clio | `clio` | `clio` | `apps/clio/src/clio/migrations` |
-| Prophet | `argus_prophet` | `prophet` | `apps/prophet/src/argus_prophet/migrations` |
-| Intelligence | `argus_intelligence` | `intelligence` | `apps/intelligence/src/argus_intelligence/migrations` |
-
-Each application receives only its own prefixed database credentials. Session
-advisory locks serialize supported writers; Prophet and Intelligence reuse the
-lock connection for writes and require direct or session-pooled PostgreSQL.
 
 ## Dependencies and configuration
 

@@ -52,7 +52,7 @@ that backend and its model files.
 - [Usage help](https://argussun.com/help)
 - [API documentation](https://argussun.com/api/v1/docs)
 - [Development, configuration and deployment](README_DEPLOY.md)
-- [Architecture and data flow diagrams](docs/architecture.md)
+- [Architecture and data flow diagrams](docs/architecture/README.md)
 - [Forecast verification, model evaluation and MLflow](docs/forecast-workflows.md)
 - [Forecast accuracy report](docs/forecast-accuracy-report.md)
 - [Historical demo: event replay and dataset generation](docs/demo-mode.md)

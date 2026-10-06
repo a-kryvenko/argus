@@ -14,6 +14,7 @@ CHECKS = [
     'pnpm --filter web test',
     'pnpm --filter web test:dashboard',
     'test-python',
+    'pnpm docs:architecture',
 ]
 
 

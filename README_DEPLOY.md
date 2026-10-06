@@ -102,7 +102,7 @@ review screenshots from successful tests.
 Review the main, notebooks and private-backend checkouts before publishing:
 
 ```bash
-./deploy.sh                         # Checks only
+./deploy.sh                         # Checks and architecture generation
 ./deploy.sh -m "message"             # Checks, commits and pushes; no release
 ./deploy.sh patch -m "message"       # Also uploads artifacts and pushes a release tag
 # Use minor or major instead of patch when needed; a bump requires -m.
@@ -110,6 +110,19 @@ Review the main, notebooks and private-backend checkouts before publishing:
 
 All modes run web lint, TypeScript, Node, Playwright and Python tests before
 publishing. Python tests require `uv`; run them separately with `./scripts/test-python -q`.
+
+After the tests pass, all modes regenerate the C4 architecture pages. Generation
+requires Python 3.10+, Java 21+ and curl for the first Structurizr download.
+A generation failure stops the script; with `-m`, updated pages are included in
+the main repository commit. Run generation or its read-only check separately:
+
+```bash
+pnpm docs:architecture        # Regenerate C4 pages from workspace.dsl
+pnpm docs:architecture:check  # Check that generated pages are up to date
+```
+
+See [architecture documentation](docs/architecture/README.md) for sources and
+editing instructions.
 
 The login edge regression checks use a disposable nginx container and mock HTTP
 upstreams, and run in PR CI. To run them locally (requires Docker):

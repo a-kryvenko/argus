@@ -2,6 +2,8 @@
   "name": "argus-sunwatch",
   "private": true,
   "scripts": {
+    "docs:architecture": "python3 scripts/build-architecture",
+    "docs:architecture:check": "python3 scripts/build-architecture --check",
     "build": "turbo run build",
     "dev": "pnpm --filter web dev",
     "dev:web": "turbo run dev --filter=web",

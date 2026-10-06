@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Build C4 Markdown from Structurizr, or check it without modifying files."""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+ROOT = Path(__file__).resolve().parent.parent
+DOCS = ROOT / "docs/architecture"
+CACHE = ROOT / "vendor/architecture-tools"
+
+
+def run(*args):
+    subprocess.run([str(arg) for arg in args], cwd=ROOT, check=True)
+
+
+def install(name, spec):
+    """Download the pinned distribution and verify its hash on every build."""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    archive = CACHE / spec["url"].rsplit("/", 1)[1]
+    if not archive.is_file():
+        if not shutil.which("curl"):
+            raise RuntimeError("Install curl to download Structurizr.")
+        print(f"Downloading {name} {spec['version']} ...", flush=True)
+        temporary = archive.with_suffix(archive.suffix + ".part")
+        run("curl", "--fail", "--location", "--retry", "2", "--connect-timeout", "20",
+            "--max-time", "300", spec["url"], "--output", temporary)
+        temporary.replace(archive)
+    actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if actual != spec["sha256"]:
+        raise RuntimeError(f"SHA256 mismatch: {archive}. Remove this cached file and retry.")
+    return archive
+
+
+def files_under(directory):
+    return {p.relative_to(directory): p.read_bytes()
+            for p in directory.rglob("*") if p.is_file()}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true",
+                        help="Fail if committed diagrams differ; do not write generated files")
+    args = parser.parse_args()
+    if not shutil.which("java"):
+        raise RuntimeError("Install Java 21 or newer to run Structurizr.")
+    specs = json.loads((ROOT / "scripts/architecture-tools.json").read_text())
+    structurizr = install("structurizr", specs["structurizr"])
+    # Prevent user locale/timezone from changing generated output.
+    os.environ.update({"LC_ALL": "C.UTF-8", "TZ": "UTC"})
+    with tempfile.TemporaryDirectory(prefix="argus-architecture-") as temporary:
+        stage = Path(temporary)
+        exported = stage / "exported"
+        output = stage / "generated"
+        run("java", "-jar", structurizr, "export",
+            "-workspace", DOCS / "workspace.dsl", "-format", "mermaid", "-output", exported)
+        sources = sorted(exported.glob("*.mmd"))
+        if not sources:
+            raise RuntimeError("Structurizr did not export any Mermaid views.")
+        (output / "c4").mkdir(parents=True)
+        for source in sources:
+            name = source.stem.removeprefix("structurizr-")
+            title = name.replace("-", " ").capitalize()
+            # Structurizr emits styled div labels requiring Mermaid's loose mode.
+            # Plain labels with line breaks also work in restricted Markdown viewers.
+            mermaid = re.sub(r"</div><div[^>]*>", "<br/>", source.read_text())
+            mermaid = re.sub(r"<div[^>]*>|</div>", "", mermaid).strip()
+            content = (f"# {title}\n\n"
+                       "Generated from [workspace.dsl](../../workspace.dsl). "
+                       "Do not edit by hand.\n\n"
+                       "Arrows show requests or storage access, not response data.\n\n"
+                       "```mermaid\n" + mermaid + "\n```\n\n"
+                       "[Architecture overview](../../README.md)\n")
+            (output / "c4" / f"{name}.md").write_text(content)
+        generated = DOCS / "generated"
+        expected, existing = files_under(output), files_under(generated)
+        changed = sorted(key for key in expected.keys() | existing.keys()
+                         if expected.get(key) != existing.get(key))
+        if args.check:
+            if changed:
+                print("Architecture diagrams are out of date:", file=sys.stderr)
+                for key in changed:
+                    print(f"  {key}", file=sys.stderr)
+                print("Run pnpm docs:architecture and commit generated/.", file=sys.stderr)
+                return 1
+            print(f"Architecture diagrams are up to date ({len(expected)} files).")
+            return 0
+        # Publish only after every view has exported successfully.
+        for key, data in expected.items():
+            target = generated / key
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        for key in existing.keys() - expected.keys():
+            (generated / key).unlink()
+        print(f"Built {len(expected)} C4 diagrams in {generated.relative_to(ROOT)}.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (RuntimeError, OSError, subprocess.CalledProcessError) as error:
+        print(f"Architecture build failed: {error}", file=sys.stderr)
+        sys.exit(1)

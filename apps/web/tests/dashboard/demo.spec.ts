@@ -25,6 +25,9 @@ test('demo replays forecasts, preserves time between sections and exits to the m
   expect(requests).toEqual([]);
   await page.goto('/demo/products/solar-wind-density?offset=-24');
   await expect(page.getByRole('link', { name: 'Exit demo' })).toHaveAttribute('href', '/products/solar-wind-density');
+  await page.route('**/api/v1/public/forecasts/solar-wind-density', route => route.fulfill({
+    status: 503, json: { success: false, data: null, error: { message: 'No test forecast' } },
+  }));
   await page.getByRole('link', { name: 'Exit demo' }).click();
   await expect(page).toHaveURL('/products/solar-wind-density');
   await expect(page.getByRole('region', { name: 'Demo time controls' })).toHaveCount(0);

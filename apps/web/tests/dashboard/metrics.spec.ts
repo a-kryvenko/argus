@@ -19,6 +19,15 @@ function evaluation(product: ProductConfig): ForecastMetrics {
   }])) };
 }
 async function mock(page: Page, state: { failed?: boolean; empty?: boolean; missing?: boolean } = {}) {
+  // Operational verification is independent of historical model metrics.
+  await page.route('**/api/v1/**/forecasts/**/verification', async route => {
+    const path = new URL(route.request().url()).pathname;
+    const product = products.find(item => path.endsWith(`/forecasts/${item.apiTarget}/verification`))!;
+    expect(path).toBe(`/api/v1/${product.visibility}/forecasts/${product.apiTarget}/verification`);
+    await route.fulfill({ json: { success: true, error: null, data: {
+      product: product.apiTarget, start: '2026-09-03T00:00:00Z', end: '2026-10-03T00:00:00Z', groups: [],
+    } } });
+  });
   await page.route('**/api/v1/**/forecasts/**/metrics', async route => {
     const path = new URL(route.request().url()).pathname;
     const product = products.find(item => path.endsWith(`/forecasts/${item.apiTarget}/metrics`))!;
@@ -119,9 +128,13 @@ for (const slug of ['solar-radiation', 'solar-wind-density', 'dst']) test(`${slu
 
 test('failed metrics retry and empty response remain explicit', async ({ page }) => {
   const state = { failed: true, empty: false }; await mock(page, state); await page.goto('/metrics/dst');
-  await expect(page.getByRole('alert').filter({ hasText: 'Could not load data' })).toBeVisible();
+  const monthly = page.getByRole('region', { name: 'Last 30 days average accuracy' });
+  await expect(monthly).toContainText('No verified forecast data available for this period.');
+  await expect(monthly.getByRole('alert')).toHaveCount(0);
+  const error = page.getByRole('alert').filter({ hasText: 'Could not load data' });
+  await expect(error).toBeVisible();
   state.failed = false; state.empty = true;
-  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await error.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Dst Index metrics are not available' })).toBeVisible();
   state.empty = false;
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();

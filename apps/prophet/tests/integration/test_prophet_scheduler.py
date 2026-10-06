@@ -32,7 +32,7 @@ def dispatch(config, now=NOW, *, fail=(), seen=None):
                 if target is worker.load_inputs:
                     result = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))
                 else:
-                    product = args[0]
+                    product = args[0].product
                     if seen is not None:
                         seen.append(product)
                     if product in fail:

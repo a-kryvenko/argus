@@ -65,6 +65,9 @@ pnpm --filter web test:dashboard
 echo "Running Python tests"
 ./scripts/test-python
 
+echo "Running Domain isolation tests"
+./scripts/test-domain-storage
+
 echo "Generating architecture diagrams"
 pnpm docs:architecture
 

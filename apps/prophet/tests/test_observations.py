@@ -149,7 +149,7 @@ def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
     inputs = stored_inputs()
     from pathlib import Path
     compute = mock_models(monkeypatch)
-    results = generation.calculate_product(selection, inputs, Path('/unused'), {})
+    results = generation.calculate_product(generation.CalculationRequest(selection, inputs, Path('/unused'), {}))
     assert [call.args[0].registry_name for call in compute.call_args_list] == artifacts
     for call in compute.call_args_list:
         assert call.args[1] is inputs

@@ -69,7 +69,7 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
     from argus_prophet.config import ProphetConfig
     run = ProductRun('dst', recorder, config, ProphetConfig())
     from argus_prophet.scheduling.execution import execute
-    run.complete(execute(generation.calculate_product, *run.prepare(inputs)))
+    run.complete(execute(generation.calculate_product, run.prepare_calculation(inputs)))
     name, content, info, rows, columns = recorder.store.call_args.args
     assert content == reference.read_bytes()
     assert info == metadata
@@ -91,7 +91,7 @@ def test_storage_failure_stops_run_without_touching_live_exports(calculation_set
         from argus_prophet.services.generation.cycle import ProductRun
         from argus_prophet.config import ProphetConfig
         run = ProductRun('dst', recorder, config, ProphetConfig())
-        run.complete(generation.calculate_product(*run.prepare(inputs)))
+        run.complete(generation.calculate_product(run.prepare_calculation(inputs)))
     assert live.read_bytes() == b'previous release'
     assert list(live.parent.iterdir()) == [live]
     recorder.skip.assert_not_called()

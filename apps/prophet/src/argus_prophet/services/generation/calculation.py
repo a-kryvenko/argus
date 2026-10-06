@@ -1,8 +1,21 @@
 """Calculate one product and return its exact serialized artifact bytes."""
 from dataclasses import dataclass
 from datetime import UTC
+from pathlib import Path
+
+from common.schemas.forecast_inputs import ForecastInputs
 
 from argus_prophet.services.generation.products import PRODUCTS
+
+
+@dataclass(frozen=True)
+class CalculationRequest:
+    """Serializable input for a child process; never carries a database writer."""
+
+    product: str
+    inputs: ForecastInputs
+    workdir: Path
+    registry: dict
 
 
 @dataclass(frozen=True)
@@ -19,10 +32,12 @@ def serialize(result):
                     result.model_info, len(result.frame), list(result.frame.columns))
 
 
-def calculate_product(product, inputs, workdir, registry):
+def calculate_product(request: CalculationRequest) -> list[Artifact]:
     """Child entry point: only model files are read; no configuration, HTTP or DB."""
     from forecast.api import calculate_snapshot
     from argus_prophet.services.generation.models import load_model
+    product, inputs = request.product, request.inputs
+    workdir, registry = request.workdir, request.registry
     issue_time = inputs.as_of.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
     artifacts = []
     for model in PRODUCTS[product].models:

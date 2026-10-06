@@ -56,7 +56,7 @@ class Dispatcher:
                 result = task.future.result()
                 if task.phase == 'inputs':
                     self.control.before_dispatch()
-                    task.future = self.submit(calculate_product, *task.run.prepare(result))
+                    task.future = self.submit(calculate_product, task.run.prepare_calculation(result))
                     task.phase = 'calculation'
                     continue
                 task.run.complete(result)

@@ -1,0 +1,22 @@
+{
+  "id": "forecast-benchmark-v1",
+  "frozen_on": "2026-10-07",
+  "train_start": "2011-01-01T00:00:00Z",
+  "as_of": "2026-10-07T00:00:00Z",
+  "issue_stride_hours": 1,
+  "max_lead_hours": 96,
+  "folds": {
+    "train2024_test2025": {"train_end": "2025-01-01T00:00:00Z", "test_start": "2025-01-01T00:00:00Z", "test_end": "2026-01-01T00:00:00Z"},
+    "train2025_test2026": {"train_end": "2026-01-01T00:00:00Z", "test_start": "2026-01-01T00:00:00Z", "test_end": "2027-01-01T00:00:00Z"},
+    "train2024_test2026_control": {"train_end": "2025-01-01T00:00:00Z", "test_start": "2026-01-01T00:00:00Z", "test_end": "2027-01-01T00:00:00Z"}
+  },
+  "history_availability": "assumed observation interval end + latency; retrospective revised observations, not operational replay",
+  "latency_hours": {"omni": 0, "solfsmy": 24},
+  "max_persistence_age_hours": {"hourly": 24, "three_hourly": 24, "daily": 72},
+  "climatology": "unconditional empirical training distribution; mean for point prediction, quantiles for intervals, frequency for thresholds",
+  "required_baselines": ["persistence", "climatology"],
+  "thresholds": {"v": [450, 500, 600], "kp": [4, 5, 6], "bt": [5, 10, 15], "bs": [5, 10, 15]},
+  "test_policy": "No test-based tuning, normalization, early stopping, calibration or feature selection. 2025 is test only in fold A and training in fold B. Prior exploration must be disclosed.",
+  "known_exposure": {"2025": "Previously explored and used for some calibration; retrospective test, not pristine holdout", "2026": "Earlier Q2 research exists; reserved from this protocol onward, prior exposure must be audited per model"},
+  "unsupported_targets": {"solar_flare": "Validated event catalogue and coverage labels not yet available", "atmospheric_density": "No independent density observations matched by time, altitude, latitude and longitude", "dtc": "No independent target adapter in this benchmark"}
+}

@@ -114,3 +114,10 @@ Clio worker автоматически собирает наблюдения, з
 неполная история не означает, что наблюдения есть за весь месяц. Чтение не запускает
 верификацию; её выполняет существующее задание Prophet. Статические оценки моделей
 остаются в отдельном блоке **Model evaluation by lead hour**.
+
+## Historical accuracy reports
+
+[Evaluation periods, required reference forecasts and commands](accuracy/README.md).
+Service accuracy tables are stored in `docs/accuracy/snapshots/`.
+Local numerical results remain in `data/metrics/`; experiments and model details
+are recorded in MLflow. Operational verification is separate.

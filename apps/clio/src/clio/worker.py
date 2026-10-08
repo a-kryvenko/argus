@@ -1,11 +1,11 @@
 """One scheduler with temporary executors and independent live lanes."""
+import logging
+import signal
+import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
-import logging
-import signal
-import threading
 from time import monotonic
 from types import SimpleNamespace
 

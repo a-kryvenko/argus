@@ -5,14 +5,21 @@ from common.config import get_config
 from common.schemas.response import error_response
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from clio.db.session import dispose_engine, get_session_factory
 from clio.config import load_observation_config
+from clio.db.session import dispose_engine, get_session_factory
 from clio.routers import (
-    observations, solar_wind, geomagnetic, observation_summary, collection_status,
-    forecast_inputs, browse, sdo_images, observation_files,
+    browse,
+    collection_status,
+    forecast_inputs,
+    geomagnetic,
+    observation_files,
+    observation_summary,
+    observations,
+    sdo_images,
+    solar_wind,
 )
 
 get_config()
@@ -30,17 +37,30 @@ async def lifespan(_):
 
 
 app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)
-for module in (observations, solar_wind, geomagnetic, observation_summary,
-               collection_status, forecast_inputs, browse, sdo_images, observation_files):
+
+for module in (
+    observations,
+    solar_wind,
+    geomagnetic,
+    observation_summary,
+    collection_status,
+    forecast_inputs,
+    browse,
+    sdo_images,
+    observation_files
+):
     app.include_router(module.router, dependencies=[Depends(forecast_inputs.require_service_token)])
 
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error(_, exc):
-    return JSONResponse(status_code=exc.status_code, content=error_response(
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response(
         code={404: 'NOT_FOUND', 503: 'NOT_READY'}.get(exc.status_code, 'HTTP_ERROR'),
         msg=exc.detail,
-    ).model_dump(exclude_none=True))
+    ).model_dump(exclude_none=True)
+)
 
 
 @app.get('/health/live')

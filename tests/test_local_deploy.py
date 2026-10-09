@@ -94,7 +94,10 @@ if 'status --porcelain' in command:
         assert f'git -C {repo} push origin HEAD' in commands
     uploads = [command for command in commands if command.startswith('rsync ')]
     if tag:
-        assert len(uploads) == 2
+        assert len(uploads) == 3
+        assert uploads[-1] == (
+            'rsync -avzh --rsync-path=mkdir -p /var/www/data/demo && rsync '
+            'data/demo/current.json argus:/var/www/data/demo/current.json')
         assert commands[-2:] == [f'git tag -a {tag} -m Release message', f'git push origin {tag}']
     else:
         assert not uploads

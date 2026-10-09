@@ -10,7 +10,7 @@ WEIGHTS = [0.03933113755799481, 0.06723997380003054, 0.1843781075839117,
 VERSION = 'proswin-dlinear-mae-2025-v2'
 
 
-def select_predictions(issue, valid_times, predictions=(), *, ready_at=None, source_cutoff=None):
+def select_predictions(issue, valid_times, predictions=(), *, ready_at=None, source_cutoff=None, allowed_model_versions=('proswin-fold1-nrt-v1',)):
     """Select the earliest available causal native +96h speed for each target."""
     cutoff = pd.Timestamp(source_cutoff) if source_cutoff is not None else issue
     ready_limit = pd.Timestamp(ready_at) if ready_at is not None else cutoff
@@ -29,7 +29,7 @@ def select_predictions(issue, valid_times, predictions=(), *, ready_at=None, sou
             if (any(t.tzinfo is None for t in [valid,image,ready]) or
                 valid-image != pd.Timedelta(hours=96) or ready > ready_limit or ready < image or
                 image > issue or not np.isfinite(value) or value <= 0 or
-                r.get('model_version') != 'proswin-fold1-nrt-v1'):
+                r.get('model_version') not in allowed_model_versions):
                 continue
             if valid not in chosen or ready < chosen[valid][0]: chosen[valid] = (ready,value)
         except (KeyError, TypeError, ValueError):
@@ -40,6 +40,7 @@ def select_predictions(issue, valid_times, predictions=(), *, ready_at=None, sou
 class ProswinBlendForecaster:
     def __init__(self, bundle):
         self.bundle = bundle
+        self.allowed_model_versions = ('proswin-fold1-nrt-v1',)
         self.dlinear = RotationDLinearForecaster(bundle['feature_models']['dlinear_v']['bundle'])
 
     def frame(self, issue_time, speed_history, predictions=(), *, ready_at=None, source_cutoff=None):
@@ -50,7 +51,8 @@ class ProswinBlendForecaster:
         request = pd.DataFrame({'issue_time':issue, 'lead_hours':leads})
         base = self.dlinear.add_rotation_v(request, speed_history, column='dlinear_v', require_history=True)
         base['valid_time'] = issue + pd.to_timedelta(leads, unit='h')
-        p = select_predictions(issue, base.valid_time, predictions, ready_at=ready_at, source_cutoff=source_cutoff)
+        p = select_predictions(issue, base.valid_time, predictions, ready_at=ready_at, source_cutoff=source_cutoff,
+                               allowed_model_versions=self.allowed_model_versions)
         active = np.isfinite(p) & (leads <= 96)
         w = np.where(active,np.interp(leads,KNOTS,WEIGHTS),0.)
         point = base.dlinear_v.to_numpy().copy()

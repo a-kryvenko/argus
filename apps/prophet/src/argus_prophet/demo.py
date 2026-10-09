@@ -14,6 +14,7 @@ import os
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
@@ -64,6 +65,14 @@ class ModelEvidence(BaseModel):
     training_evidence: str = Field(min_length=1)
 
 
+class ProswinArchive(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    path: str
+    sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+    model_version: Literal['proswin-fold1-nrt-v1', 'proswin-fold1-science-v1']
+    description: str = Field(min_length=1)
+
+
 class Manifest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     event: Event
@@ -71,6 +80,7 @@ class Manifest(BaseModel):
     input_source: str = Field(min_length=1)
     products: list[str] = Field(min_length=1)
     models: dict[str, ModelEvidence]
+    proswin_archive: ProswinArchive | None = None
 
     @field_validator('products')
     @classmethod
@@ -106,6 +116,11 @@ def validate_inputs(inputs, issue):
     for row in [*inputs.files, *inputs.aia_frames, *([inputs.gong] if inputs.gong else [])]:
         if row.observed_at > issue or row.available_at > issue:
             raise ValueError('Source was not available at issue time')
+    for row in getattr(inputs, 'proswin_predictions', []):
+        if (row.available_at > issue or row.image_slot > issue or
+                row.valid_time-row.image_slot != 96*HOUR or
+                (row.source_cutoff is not None and row.source_cutoff > issue)):
+            raise ValueError('PROSWIN input is unavailable or has invalid native horizon')
     if getattr(inputs, 'solar_wind_hourly', None) is not None:
         history = inputs.solar_wind_hourly
         if history.get('schema') != 'omni-hourly-v1':
@@ -265,6 +280,11 @@ def build(manifest, observations, output, snapshots=None):
             service, metadata = load_model(model.service_class(), workdir=config.workdir, registry=config.models_registry['models'])
             if metadata['sha256'] != manifest.models[model.artifact].sha256:
                 raise ValueError(f'{model.artifact}: model changed; update its training evidence before rebuilding')
+            if manifest.proswin_archive:
+                if getattr(service, 'uses_aia', False):
+                    service._aia.allowed_model_versions = (manifest.proswin_archive.model_version,)
+                if getattr(service, 'uses_density_blend', False):
+                    service._density.allowed_model_versions = (manifest.proswin_archive.model_version,)
             services[model.artifact] = (service, metadata)
     releases = {product: [] for product in manifest.products}
     evidence = []
@@ -282,7 +302,8 @@ def build(manifest, observations, output, snapshots=None):
             inputs.solar_wind_hourly = None
         validate_inputs(inputs, issue)
         evidence.append({'issue_time': issue.isoformat(), 'sha256': hashlib.sha256(inputs.model_dump_json().encode()).hexdigest(),
-                         'aia_frames': len(inputs.aia_frames)})
+                         'aia_frames': len(inputs.aia_frames), 'proswin_records': len(inputs.proswin_predictions),
+                         'models': {}})
         for product in manifest.products:
             # GONG policy applies to southward IMF, not to the independent Bt model.
             if product != 'hmf' or 'hmf_southward_threshold' in manifest.models:
@@ -294,6 +315,18 @@ def build(manifest, observations, output, snapshots=None):
                 if result.name != model.artifact:
                     raise ValueError('Unexpected model output')
                 frames[result.name] = result.frame
+                if getattr(service, 'uses_density_blend', False):
+                    count = service._density.last_status['candidate_leads']
+                    evidence[-1]['models'][model.artifact] = {'candidate_leads': count,
+                        'fallback_leads': HORIZONS[product]-count}
+                elif getattr(service, 'uses_aia', False):
+                    from forecast.inference.proswin_blend import select_predictions, VERSION, KNOTS, WEIGHTS
+                    import pandas as pd
+                    values = select_predictions(pd.Timestamp(issue), result.frame.valid_time,
+                        inputs.proswin_predictions, allowed_model_versions=service._aia.allowed_model_versions)
+                    count = int(sum(math.isfinite(v) for v in values[:96]))
+                    evidence[-1]['models'][model.artifact] = {'candidate_leads': count, 'fallback_leads': 96-count,
+                        'version': VERSION, 'knots': KNOTS, 'weights': WEIGHTS}
             releases[product].append(forecast_payload(product, frames, issue))
         print(f'Demo {index + 1}/97: {issue.isoformat()}', flush=True)
     observations = observation_grid(observations, manifest, releases)

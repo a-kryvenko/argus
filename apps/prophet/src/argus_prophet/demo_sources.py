@@ -17,6 +17,22 @@ from common.data.omni import parse_annual
 def prepare(manifest_path, archives, destination):
     manifest = Manifest.model_validate_json(manifest_path.read_text())
     frames, sources = [], []
+    proswin = []
+    if manifest.proswin_archive:
+        from common.config import get_config
+        from common.schemas.forecast_inputs import ProswinPrediction
+        archive = manifest.proswin_archive
+        content = (get_config().workdir / archive.path).read_bytes()
+        if hashlib.sha256(content).hexdigest() != archive.sha256:
+            raise ValueError('Demo PROSWIN archive checksum mismatch')
+        proswin = [ProswinPrediction.model_validate(row) for row in json.loads(content)['predictions']]
+        if len({row.valid_time for row in proswin}) != len(proswin):
+            raise ValueError('Duplicate native PROSWIN target')
+        for row in proswin:
+            if (row.model_version != archive.model_version or row.valid_time-row.image_slot != timedelta(hours=96)
+                    or row.available_at < row.image_slot):
+                raise ValueError('Invalid demo PROSWIN archive')
+        sources.append({'file': archive.path, 'sha256': archive.sha256, 'description': archive.description})
     for archive in archives:
         content = archive.read_bytes()
         if archive.suffix == '.parquet':
@@ -39,7 +55,11 @@ def prepare(manifest_path, archives, destination):
     read_at = datetime.now(UTC).isoformat()
     for index, issue in enumerate(issue_times(manifest.event)):
         frame = history.loc[(history.issue_time < issue) & (history.issue_time >= issue - timedelta(days=88))]
-        payload = {'as_of': issue.isoformat(), 'read_at': read_at, 'observations': {'points': []}}
+        payload = {'as_of': issue.isoformat(), 'read_at': read_at, 'observations': {'points': []},
+                   'proswin_predictions': [row.model_dump(mode='json') for row in proswin
+                       if row.image_slot <= issue and row.available_at <= issue and
+                       (row.source_cutoff is None or row.source_cutoff <= issue) and
+                       issue < row.valid_time <= issue+timedelta(hours=96)]}
         for variable, key in [('v', 'speed_observations'), ('n', 'density_observations')]:
             rows = frame[['issue_time', variable]].dropna()
             payload[key] = [{'issue_time': row.issue_time.isoformat(), variable: float(getattr(row, variable))}

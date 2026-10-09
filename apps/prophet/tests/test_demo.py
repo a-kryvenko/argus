@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from argus_prophet.demo import (Manifest, atomic_publish, forecast_payload, issue_times,
-                                observation_grid, validate_evidence, validate_inputs)
+                                observation_grid, validate_evidence, validate_inputs, HOUR)
 
 
 def manifest():
@@ -104,3 +104,17 @@ def test_invalid_publication_keeps_old_version(tmp_path):
     atomic_publish({'version': 'two', 'value': 2}, current)
     assert json.loads(current.read_text())['version'] == 'two'
     assert json.loads((tmp_path / 'one.json').read_text())['value'] == 1
+
+
+def test_demo_rejects_unavailable_proswin_and_wrong_horizon():
+    from common.schemas.forecast_inputs import ForecastInputs, ProswinPrediction
+    issue = issue_times(manifest().event)[0]
+    inputs = ForecastInputs(as_of=issue, read_at=issue, observations={'points': []})
+    row = ProswinPrediction(valid_time=issue+24*HOUR, image_slot=issue-72*HOUR,
+                            available_at=issue, value=500, model_version='proswin-fold1-science-v1')
+    inputs.proswin_predictions = [row]
+    validate_inputs(inputs, issue)
+    inputs.proswin_predictions = [row.model_copy(update={'available_at': issue+HOUR})]
+    with pytest.raises(ValueError, match='PROSWIN'):validate_inputs(inputs, issue)
+    inputs.proswin_predictions = [row.model_copy(update={'image_slot': issue-71*HOUR})]
+    with pytest.raises(ValueError, match='PROSWIN'):validate_inputs(inputs, issue)

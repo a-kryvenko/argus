@@ -130,9 +130,11 @@ commit_and_push_if_needed() {
 }
 
 if [[ -n "$BUMP" ]]; then
-  echo "Syncing models and metrics..."
+  echo "Syncing models, metrics and demo..."
   rsync -avzh data/models/ argus:/var/www/data/models
   rsync -avzh data/metrics/ argus:/var/www/data/metrics
+  rsync -avzh --rsync-path="mkdir -p /var/www/data/demo && rsync" \
+    data/demo/current.json argus:/var/www/data/demo/current.json
 fi
 
 commit_and_push_if_needed "notebooks" "$MESSAGE"

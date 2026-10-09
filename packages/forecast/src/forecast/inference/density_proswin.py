@@ -59,11 +59,13 @@ class DensityProswinForecaster:
         if any(head.feature_name() != FEATURES for head in self.heads):
             raise ValueError('Density head feature order mismatch')
         self.last_status = {}
+        self.allowed_model_versions = ('proswin-fold1-nrt-v1',)
 
     def frame(self, issue_time, density_history, speed_history, predictions=(), *, ready_at=None, source_cutoff=None):
         base = self.dlinear.frame(issue_time, density_history)
         issue = pd.Timestamp(base.issue_time.iloc[0])
-        p = select_predictions(issue, base.valid_time, predictions, ready_at=ready_at, source_cutoff=source_cutoff)
+        p = select_predictions(issue, base.valid_time, predictions, ready_at=ready_at, source_cutoff=source_cutoff,
+                               allowed_model_versions=self.allowed_model_versions)
         row = {**history_features(issue, density_history, 'n'), **history_features(issue, speed_history, 'v')}
         x = pd.DataFrame([row] * len(base)); x['proswin'] = p
         x = x[self.features].astype(np.float32)

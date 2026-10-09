@@ -75,7 +75,7 @@ class ProswinPrediction(BaseModel):
     available_at: AwareDatetime
     value: FiniteFloat = Field(gt=0)
     source_cutoff: AwareDatetime | None = None
-    model_version: Literal['proswin-fold1-nrt-v1'] = 'proswin-fold1-nrt-v1'
+    model_version: Literal['proswin-fold1-nrt-v1', 'proswin-fold1-science-v1'] = 'proswin-fold1-nrt-v1'
 
 
 class ForecastInputs(ObservationInputs):

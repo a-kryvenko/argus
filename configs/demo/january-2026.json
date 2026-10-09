@@ -1,12 +1,12 @@
 {
   "event": {
-    "name": "19 January 2026 · G4 geomagnetic storm onset",
+    "name": "19 January 2026 \u00b7 G4 geomagnetic storm onset",
     "starts_at": "2026-01-19T19:38:00Z",
     "source_url": "https://swpc-drupal.woc.noaa.gov/news/g4-severe-geomagnetic-storm-levels-reached-19-jan-2026",
     "description": "The severe G4 phase first reached at 19:38 UTC on 19 January, as reported by NOAA SWPC. T0 marks this onset, not the storm peak."
   },
   "observation_source": "NASA SPDF hourly OMNI2 archive at Earth. Missing target values retained; Kp/Ap are archived three-hour indices, F10.7 is daily. Bt is the magnitude of the hourly mean GSM vector, matching model training. Retrospective revised observations, not original real-time L1 receipts.",
-  "input_source": "NASA OMNI2 hours strictly before each issue. Current speed model uses its DLinear fallback without AIA. Scalar geomagnetic/radiation inputs are normalized within each historical cutoff; Kp/Ap are admitted after their 3-hour bins close, daily F10.7 after day end. Integer index conversion matches the operational input contract. IMF uses the model’s OMNI training feature definition, not the native-L1 adapter. Retrospective revised data do not reconstruct original receipts. Southward IMF requires GONG and is unavailable; S10/M10/Y10 have no installed forecast artifacts.",
+  "input_source": "NASA OMNI2 closed hours strictly before each issue. Current DLinear+PROSWIN speed and DLinear+PROSWIN-speed-assisted LightGBM density models. PROSWIN uses the full author-preprocessed hourly archive, not NRT images; assumed image-slot+1hour availability, with per-lead fallback. Archived observation timestamps label hour starts, matching the existing demo raw-history contract; revised data and assumed image times are not historical live receipts. Kp/Ap enter after three-hour bins close, F10.7 after day end. IMF uses the OMNI training feature definition. Southward IMF/GONG and S10/M10/Y10 forecasts remain unavailable.",
   "products": [
     "solar-wind-speed",
     "solar-wind-density",
@@ -18,23 +18,23 @@
   "models": {
     "plasma_speed_quantile": {
       "sha256": "81c0daac34678b60bd8576a7b41af440fea5c22929ce25151f71200f0f64d4fa",
-      "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "data/metrics/plasma/frozen.json: matching model SHA256; point_training_end and all uncertainty validation folds end by 2025-01-01. Frozen DLinear base trained on 1995–1999."
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "Current frozen speed bundle plus proswin-dlinear-mae-2025-v2 horizon weights fitted on2025; official PROSWIN fold1. No January2026 fitting. Legacy DLinear empirical uncertainty offsets retained. Runtime knots/weights recorded in demo inputs."
     },
     "plasma_speed_threshold": {
       "sha256": "81c0daac34678b60bd8576a7b41af440fea5c22929ce25151f71200f0f64d4fa",
-      "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "Same frozen speed bundle and residual calibration as plasma_speed_quantile; no 2026 labels used."
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "Current frozen speed bundle plus proswin-dlinear-mae-2025-v2 horizon weights fitted on2025; official PROSWIN fold1. No January2026 fitting. Legacy DLinear empirical uncertainty offsets retained. Runtime knots/weights recorded in demo inputs."
     },
     "plasma_density_quantile": {
-      "sha256": "ba75b116506d51bc231120cf9d344c72278881b64cd98beb035275e008433ad5",
-      "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "data/models/argus-plasma-density-dlinear-v1.json: matching model_sha256; refit before 2024-01-01, residual calibration before 2025-01-01."
+      "sha256": "b6eb76ce7f48dda8339d49b6eacdb95d4a31ed6630314bd85d71af28a06331c6",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "argus-plasma-density-proswin-blend-v1.json: matching model SHA; hourly heads trained2011-2024, mixture weights and NRT residual intervals fitted on2025. No2026 fitting."
     },
     "kp_threshold": {
       "sha256": "130065c1610147769049a0a3ca3b579ca2ff348de9fed61a03822ea90dbd50e5",
       "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "notebooks/9_train_kp.ipynb specifies training/calibration on 2010_2024; MLflow experiments 21–23: less_hour_buckets_2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+      "training_evidence": "notebooks/9_train_kp.ipynb specifies training/calibration on 2010_2024; MLflow experiments 21\u201323: less_hour_buckets_2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
     },
     "ap_quantile": {
       "sha256": "16772e151739da1e3bdc9fc7fdeffe7c8b98e2c1ae4b06704af8eb4d610f2efc",
@@ -54,7 +54,13 @@
     "hmf_total_threshold": {
       "sha256": "559dd85281f09245a7339861953976cd7f9040957d6dbc1a3fe52b2fee4f032c",
       "training_end": "2026-01-01T00:00:00Z",
-      "training_evidence": "data/models/argus-bt-t-v3.json: matching SHA256; training 2020–2024, calibration 2025."
+      "training_evidence": "data/models/argus-bt-t-v3.json: matching SHA256; training 2020\u20132024, calibration 2025."
     }
+  },
+  "proswin_archive": {
+    "path": "data/demo/january-2026/proswin-science-hourly.json",
+    "sha256": "b62a4e10fb5dc451f550ac74a0b526a1af9f408b16524123388a7eccc17a0d9a",
+    "model_version": "proswin-fold1-science-v1",
+    "description": "Official fold1 hourly speed forecasts from author-preprocessed AIA171/211 images, not NRT preprocessing. Assumed availability image_slot+1hour, not observed historical publication latency. Missing/unavailable slots retain DLinear."
   }
 }

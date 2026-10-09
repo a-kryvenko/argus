@@ -6,13 +6,18 @@ optional actual future values. T0 is the **G4 onset on 19 January 2026 at
 
 ## Build or update
 
-Run from the installation directory in dev or production:
+Build locally from the installation directory:
 
 ```bash
 ./argus demo                   # Build using cached archives
 ./argus demo --refresh-data    # Download archives again and rebuild
 ./argus demo january-2026      # Select a scenario
 ```
+
+Release deployment (`./deploy.sh patch -m "…"`, or minor/major) uploads only the
+ready `data/demo/current.json` bundle to production. No production rebuild or
+source archives are needed. The transfer replaces the bundle atomically after
+upload; reload `/demo` to see the new version.
 
 Requires installed Prophet models and Docker Compose; archive downloads need
 HTTPS access. The command prepares inputs, generates 97 forecast issues per
@@ -43,7 +48,10 @@ from operational forecasts and do not train models or affect operational scores.
   calibration must end before T−96.
 - Legacy Kp/Ap, Dst and F10.7 training cutoffs rely on saved recipes and MLflow
   records; their model files do not contain training dates.
-- Speed uses the DLinear fallback without AIA. Bt uses OMNI features matching
-  its training data and provides probabilities, not magnitude quantiles.
+- Speed and density use archived PROSWIN predictions from author-preprocessed
+  images, with per-lead fallback. Local builds require the scenario’s checksum-pinned
+  `data/demo/january-2026/proswin-science-hourly.json`.
+  Bt uses OMNI features matching its training data and provides probabilities,
+  not magnitude quantiles.
 - Bs requires historical GONG inputs and is unavailable. S10/M10/Y10 have no
   installed models.

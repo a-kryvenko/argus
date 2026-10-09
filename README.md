@@ -48,15 +48,15 @@ The configured forecasting pipeline uses the following models:
 | **Thermospheric density** | **JB2008**, driven by F10.7, calibrated S10/M10/Y10 and the geomagnetic temperature correction. Current operation holds observed drivers constant over the forecast horizon. | Atmospheric-density grids by time, altitude and location. |
 
 Prophet schedules forecasts hourly and runs heavy calculations sequentially.
-Before generating speed or density, it requests PROSWIN through a shared job
+Before generating speed, density or temperature, it requests PROSWIN through a shared job
 queue and waits for completion or a timeout. PROSWIN runs in a temporary CPU
 process and releases model memory when the task finishes. Cached predictions are
-shared between both products; the neural model loads only when new inference is needed.
+shared between these products; the neural model loads only when new inference is needed.
 
 The speed blend's prediction intervals and threshold probabilities currently use
 DLinear residual distributions around the blended point forecast; they have not
-yet been calibrated separately for the blend. Proton-temperature and signed-Bz
-point forecasts are not part of the current scheduled products. The solar-index
+yet been calibrated separately for the blend. Signed-Bz point forecasts are not
+part of the current scheduled products. The solar-index
 models listed in the registry are not separate scheduled radiation forecasts.
 
 See the [model registry](configs/models_registry.yaml) and

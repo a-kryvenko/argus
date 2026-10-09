@@ -56,3 +56,12 @@ def test_job_result_after_hour_boundary_uses_frozen_source_cutoff():
     assert model.frame(issue, history, [item], source_cutoff=cutoff, ready_at=finished).iloc[23].proswin_weight == 0
     item.pop('source_cutoff')
     assert model.frame(issue, history, [item], source_cutoff=cutoff, ready_at=finished).iloc[23].proswin_weight == 0
+
+
+def test_science_predictions_require_explicit_demo_opt_in():
+    from forecast.inference.proswin_blend import select_predictions
+    issue=pd.Timestamp('2026-01-05T12:00Z')
+    r=record(issue,lead=24);r['model_version']='proswin-fold1-science-v1'
+    times=[issue+pd.Timedelta(hours=24)]
+    assert np.isnan(select_predictions(issue,times,[r])[0])
+    assert select_predictions(issue,times,[r],allowed_model_versions=('proswin-fold1-science-v1',))[0]==r['value']

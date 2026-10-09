@@ -4,7 +4,7 @@ project:
 prophet:
   calculation_timeout_seconds: 540
   shutdown_grace_seconds: 570
-  max_parallel_products: 2
+  max_parallel_products: 1
   # Unspecified products run hourly at :10 UTC.
   # Example override: dst: {every_minutes: 5, offset_minutes: 0}
   schedules: {}

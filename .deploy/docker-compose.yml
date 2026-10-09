@@ -44,6 +44,25 @@ services:
         condition: service_healthy
     networks: [backend, forecasts]
 
+  proswin:
+    image: ${ARGUS_PROSWIN_IMAGE:-ghcr.io/a-kryvenko/argus-proswin:latest}
+    command: ["python", "-m", "argus_prophet.services.proswin_queue"]
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    restart: unless-stopped
+    init: true
+    environment:
+      ARGUS_WORKDIR: /var/www
+      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
+    depends_on:
+      clio:
+        condition: service_healthy
+    networks: [observations]
+
   intelligence-api:
     image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
     restart: unless-stopped

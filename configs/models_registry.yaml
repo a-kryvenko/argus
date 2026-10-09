@@ -7,6 +7,7 @@ models:
   plasma_speed_quantile:
     model: argus-plasma-speed-aia-ridge-v1
     metrics: data/metrics/plasma/speed_quantile
+    metrics_report: configs/evaluations/solar-wind-speed.json
   
   plasma_speed_threshold:
     model: argus-plasma-speed-aia-ridge-v1

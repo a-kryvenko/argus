@@ -107,7 +107,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [frontend, api, clio, prophet, intelligence]
+        component: [frontend, api, clio, prophet, proswin, intelligence]
     permissions:
       contents: read
       packages: write

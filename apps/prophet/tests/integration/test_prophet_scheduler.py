@@ -29,7 +29,7 @@ def dispatch(config, now=NOW, *, fail=(), seen=None):
         def submit(self, execute, target, *args, **kwargs):
             future = Future()
             try:
-                if target is worker.load_inputs:
+                if getattr(target, 'func', target) is worker.load_inputs:
                     result = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))
                 else:
                     product = args[0].product
@@ -211,7 +211,7 @@ def test_product_slots_allow_subhour_retries_and_independent_clock_rollback(reco
             ('dst', slot, 'succeeded'), ('dst', slot+timedelta(minutes=5), 'failed')]
 
 
-def test_verification_can_write_during_generation_and_blocks_cleanup(recorder_database):
+def test_verification_excludes_generation_and_cleanup(recorder_database):
     from argus_prophet.scheduling.jobs import verification_lock, retention_lock
     import threading
     acquired, release = threading.Event(), threading.Event()
@@ -224,14 +224,36 @@ def test_verification_can_write_during_generation_and_blocks_cleanup(recorder_da
         future = pool.submit(verify)
         try:
             assert acquired.wait(10)
-            with generation_lock() as writer:
-                writer.execute('SELECT 1')
+            with pytest.raises(GenerationBusy):
+                with generation_lock():
+                    pytest.fail('Generation overlapped verification')
             with pytest.raises(GenerationBusy):
                 with retention_lock() as writer:
                     pytest.fail('Cleanup overlapped verification')
         finally:
             release.set()
             future.result(timeout=10)
+    with retention_lock() as writer:
+        writer.execute('SELECT 1')
+
+
+def test_generation_excludes_verification_and_releases_locks_after_failure(recorder_database):
+    from argus_prophet.scheduling.jobs import verification_lock, retention_lock
+    with pytest.raises(ValueError, match='calculation failed'):
+        with generation_lock():
+            with pytest.raises(GenerationBusy):
+                with verification_lock():
+                    pytest.fail('Verification overlapped generation')
+            raise ValueError('calculation failed')
+    with pytest.raises(ValueError, match='verification failed'):
+        with verification_lock() as writer:
+            writer.execute('SELECT 1')
+            raise ValueError('verification failed')
+    # Neither the failed acquisition nor either task failure leaks a lock.
+    with generation_lock() as writer:
+        writer.execute('SELECT 1')
+    with verification_lock() as writer:
+        writer.execute('SELECT 1')
     with retention_lock() as writer:
         writer.execute('SELECT 1')
 

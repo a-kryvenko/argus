@@ -1,6 +1,48 @@
 # Forecast accuracy
 
-[Latest snapshot](snapshots/2026-10-07.md) · [Settings](../../scripts/benchmarks/protocol.json)
+[Earlier multi-product snapshot](snapshots/2026-10-07.md) · [Settings](../../scripts/benchmarks/protocol.json)
+
+## Solar wind speed — updated October 9, 2026
+
+Current blend: **DLinear + PROSWIN**. These are recorded retrospective point-forecast
+scores, not a new evaluation of the deployed request/response pipeline.
+MAE and RMSE are in **km/s**; N is the number of forecast–observation pairs per lead.
+
+| Lead | 2025 calibration N | MAE | RMSE | 2026 evaluation N | MAE | RMSE |
+|---|---:|---:|---:|---:|---:|---:|
+| +3h | 311 | 22.9765 | 34.3429 | 156 | 16.4311 | 23.7132 |
+| +6h | 311 | 30.6392 | 47.8329 | 156 | 27.7023 | 58.5307 |
+| +12h | 311 | 40.7819 | 59.2379 | 156 | 39.4741 | 67.6885 |
+| +24h | 311 | 54.0816 | 79.1735 | 156 | 50.7619 | 78.4618 |
+| +48h | 311 | 63.3316 | 90.7719 | 156 | 56.3193 | 82.1268 |
+| +72h | 311 | 63.9996 | 91.0749 | 156 | 56.7200 | 82.8033 |
+| +96h | 311 | 64.4824 | 92.4438 | 156 | 56.3307 | 82.6130 |
+
+- **2025 calibration:** January 1–December 31; 311 daily target timestamps.
+  Blend weights were selected on this sample. These are calibration scores,
+  not independent test results.
+- **2026 evaluation:** January 5–August 3; 156 daily target timestamps, with
+  weights fixed from 2025. This period was previously inspected during research;
+  it is a separate time split, not a blind holdout.
+- Every lead uses the same daily targets within its period. This is not a full
+  hourly replay of either year. The saved evaluation covers all leads 1–96h;
+  the table shows selected horizons.
+- Image publication latency is omitted, including at +96h. Revised SILSO data
+  use assumed monthly availability. Historical publication vintages are not
+  established. These scores do not measure live image coverage, fallback
+  frequency, or the deployed queue/cutoff policy.
+- Interval coverage, interval width, pinball, Brier and ROC AUC for this blend
+  have **not been evaluated**. Earlier speed probability and interval scores
+  must not be attributed to the new blend.
+
+At +96h on the same 2026 sample, MAE is **65.9907** for DLinear, **58.2501**
+for PROSWIN and **56.3307** for the blend. No persistence/climatology comparison
+on these exact pairs is available in this report.
+
+Source: the completed local experiment `proswin_blend_2025_2026_v1/report.json`,
+periods `calibration_2025` and `evaluation_2026`, `per_lead` → `metrics` → `blend`.
+The October 7 snapshot below retains the earlier models' results; other products
+have not been re-evaluated by this update.
 
 ## Evaluation periods
 
@@ -51,8 +93,8 @@ The October 7 snapshot uses recorded 2025 evaluations for speed and density,
 and the notebook evaluator on prepared 2025 data for Ap, Dst, F10.7, Kp and Bs.
 These service evaluations use their existing data and training periods, not the
 new 2011-based training experiment. The available Bt scores combine multiple
-years and cannot be assigned to the 2025 column. No 2026 service evaluation is
-available. Missing goals remain listed with empty results.
+years and cannot be assigned to the 2025 column. That snapshot contains no 2026 service evaluation; the newer solar-wind blend
+evaluation is reported above. Missing goals remain listed with empty results.
 
 The separate reference calculations use native-cadence observations and different
 samples. They cannot establish improvement over persistence or climatology until

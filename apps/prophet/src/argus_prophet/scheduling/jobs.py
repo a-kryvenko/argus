@@ -39,8 +39,14 @@ def generation_lock():
     return writer_lock(GENERATION_LOCK, recover=True)
 
 
+@contextmanager
 def verification_lock():
-    return writer_lock(VERIFICATION_LOCK)
+    # Same acquisition order as retention; scoring must not overlap inference.
+    from common.config import get_config
+    from argus_prophet.services.heavy_task import heavy_task
+    with writer_lock(GENERATION_LOCK), writer_lock(VERIFICATION_LOCK) as writer:
+        with heavy_task(get_config().data_root):
+            yield writer
 
 
 @contextmanager

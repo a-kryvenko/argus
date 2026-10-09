@@ -121,6 +121,34 @@ services:
       clio:
         condition: service_healthy
 
+  proswin:
+    build:
+      context: .
+      dockerfile: .deploy/proswin.Dockerfile
+    image: argus-proswin-dev
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    command: ["python", "-m", "argus_prophet.services.proswin_queue"]
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    restart: unless-stopped
+    init: true
+    environment:
+      XDG_CACHE_HOME: /tmp/proswin-cache
+      TORCHINDUCTOR_CACHE_DIR: /tmp/torchinductor
+      SUNPY_DOWNLOADDIR: /tmp/sunpy-downloads
+      ARGUS_WORKDIR: /var/www
+      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:-}
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./data:/var/www/data
+      - ./apps/prophet/src:/var/www/apps/prophet/src
+      - ./packages/common/src:/var/www/packages/common/src
+      - ./packages/forecast/src:/var/www/packages/forecast/src
+    depends_on:
+      clio:
+        condition: service_healthy
+
   prophet-api:
     build: *prophet-build
     image: argus-prophet-dev

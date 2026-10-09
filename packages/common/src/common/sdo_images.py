@@ -17,8 +17,8 @@ import numpy as np
 
 OBSERVED_CHANNELS = ('aia94', 'aia131', 'aia171', 'aia193', 'aia211', 'aia304',
             'aia335', 'aia1600', 'hmi_m')
-# The current AIA wind model needs the native 193-Angstrom grid.
-ORIGINAL_CHANNELS = ('aia193',)
+# PROSWIN needs native 171/211 FITS; retain 193 for existing archive consumers.
+ORIGINAL_CHANNELS = ('aia171', 'aia193', 'aia211')
 IMAGE_SHAPE = (512, 512)
 RETENTION_HOURS = 45 * 24
 VERSION = 1
@@ -38,8 +38,11 @@ def hourly_slots(now):
 
 
 def archive_root():
+    override = os.getenv('ARGUS_SDO_ARCHIVE')
+    if override is not None:
+        return Path(override)
     from common.config import get_config
-    return Path(os.getenv('ARGUS_SDO_ARCHIVE', str(get_config().data_root / 'observations/sdo')))
+    return get_config().data_root / 'observations/sdo'
 
 
 def image_path(root, slot, channel):

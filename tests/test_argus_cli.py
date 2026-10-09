@@ -30,13 +30,17 @@ def cli(tmp_path, request):
         executable.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
 with open(os.environ['CALL_LOG'], 'a') as output:
     output.write(json.dumps({'args': sys.argv[1:], 'cwd': os.getcwd(), 'workdir': os.getenv('ARGUS_WORKDIR')}) + '\\n')
+if 'ps' in sys.argv and os.getenv('POSTGRES_RUNNING'):
+    print('existing-postgres-id')
+if os.getenv('FAIL_POSTGRES') and 'up' in sys.argv:
+    sys.exit(8)
 if os.getenv('FAIL_CLIO') and any('clio' in arg for arg in sys.argv[1:]):
     sys.exit(7)
 ''')
         executable.chmod(0o755)
     environment = {**os.environ, 'PATH': str(bindir) + ':' + os.environ['PATH'], 'CALL_LOG': str(log)}
-    def run(*args, fail=False):
-        result = subprocess.run([str(wrapper), *args], cwd=tmp_path, env={**environment, 'FAIL_CLIO': '1' if fail else ''}, capture_output=True, text=True)
+    def run(*args, fail=False, fail_postgres=False, running=False):
+        result = subprocess.run([str(wrapper), *args], cwd=tmp_path, env={**environment, 'FAIL_CLIO': '1' if fail else '', 'FAIL_POSTGRES': '1' if fail_postgres else '', 'POSTGRES_RUNNING': '1' if running else ''}, capture_output=True, text=True)
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return result, calls
     return request.param, root, run
@@ -70,6 +74,11 @@ def test_all_migrations_are_sequential_and_stop_on_failure(cli, fail):
     mode, _, run = cli
     result, calls = run('db', 'migrate', fail=fail)
     assert result.returncode == (7 if fail else 0), result.stderr
+    if mode == 'local':
+        assert calls[0]['args'][-5:] == ['ps', '--status', 'running', '-q', 'postgres']
+        assert calls[1]['args'][-6:] == ['up', '-d', '--wait', '--wait-timeout', '60', 'postgres']
+        assert calls[-1]['args'][-2:] == ['stop', 'postgres']
+        calls = calls[2:-1]
     assert len(calls) == (2 if fail else 4)
     for domain, call in zip(('api', 'clio', 'prophet', 'intelligence'), calls):
         args = call['args']
@@ -82,6 +91,11 @@ def test_specific_migration_uses_maintenance_service(cli):
     mode, _, run = cli
     result, calls = run('clio', 'migrate', 'current')
     assert result.returncode == 0, result.stderr
+    if mode == 'local':
+        assert calls[0]['args'][-5:] == ['ps', '--status', 'running', '-q', 'postgres']
+        assert calls[1]['args'][-6:] == ['up', '-d', '--wait', '--wait-timeout', '60', 'postgres']
+        assert calls[-1]['args'][-2:] == ['stop', 'postgres']
+        calls = calls[2:-1]
     assert calls[0]['args'][-3:] == ['clio', 'migrate', 'current']
     if mode == 'production':
         assert calls[0]['args'][-4] == 'clio-migrate'
@@ -122,3 +136,24 @@ def test_deployment_lock_blocks_production_but_not_dev(cli, args):
         assert result.returncode != 0 and not calls
     else:
         assert result.returncode == 0 and calls
+
+
+@pytest.mark.parametrize('cli', ['local'], indirect=True)
+@pytest.mark.parametrize('args', [('db', 'migrate'), ('clio', 'migrate', 'current')])
+def test_database_start_failure_prevents_migrations(cli, args):
+    _, _, run = cli
+    result, calls = run(*args, fail_postgres=True)
+    assert result.returncode == 8
+    assert len(calls) == 3
+    assert calls[-1]['args'][-2:] == ['stop', 'postgres']
+    assert not any('run' in call['args'] for call in calls)
+
+
+@pytest.mark.parametrize('cli', ['local'], indirect=True)
+@pytest.mark.parametrize('fail', [False, True])
+def test_existing_database_is_left_running(cli, fail):
+    _, _, run = cli
+    result, calls = run('db', 'migrate', running=True, fail=fail)
+    assert result.returncode == (7 if fail else 0)
+    assert calls[0]['args'][-5:] == ['ps', '--status', 'running', '-q', 'postgres']
+    assert not any('up' in call['args'] or 'stop' in call['args'] for call in calls)

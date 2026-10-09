@@ -28,7 +28,7 @@ def test_quantile_and_threshold_share_point_distribution_and_keep_contract():
     q=SWSpeedFS(b).forecast(Observation(points=[]),issue_time=issue,speed_history=history,aia_features=solar)
     p=SWSpeedProbaFS(b).forecast(Observation(points=[]),issue_time=issue,speed_history=history,aia_features=solar)
     assert len(q.points)==len(p.points)==120
-    assert q.points[95].v_q50==pytest.approx(440.)
+    assert q.points[95].v_q50==pytest.approx(400.)  # No PROSWIN: pure DLinear, no legacy AIA correction.
     for v,prob in zip(q.points,p.points):
         assert v.v_q10<=v.v_q50<=v.v_q90
         assert 0<=prob.p_v_ge_600<=prob.p_v_ge_500<=prob.p_v_ge_450<=1

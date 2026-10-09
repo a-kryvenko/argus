@@ -9,8 +9,9 @@ from pathlib import Path
 import shutil
 import subprocess
 
-IMAGES = {'frontend': 'argus-frontend', 'api': 'argus-forecast', 'clio': 'argus-clio', 'prophet': 'argus-prophet', 'intelligence': 'argus-intelligence'}
+IMAGES = {'proswin': 'argus-proswin', 'frontend': 'argus-frontend', 'api': 'argus-forecast', 'clio': 'argus-clio', 'prophet': 'argus-prophet', 'intelligence': 'argus-intelligence'}
 INPUTS = {
+    'proswin': ['apps/prophet/src', 'packages/common', 'packages/forecast'],
     'intelligence': ['apps/intelligence/pyproject.toml', 'apps/intelligence/uv.lock', 'apps/intelligence/src', 'packages/common'],
     'frontend': ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web'],
     'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/app', 'apps/api/alembic',

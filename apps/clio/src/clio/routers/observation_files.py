@@ -56,7 +56,7 @@ def aia_files(as_of):
     return files
 
 
-def aia_original(sha256, slot_at=None):
+def aia_original(sha256, slot_at=None, channel="aia193"):
     from datetime import UTC, datetime
     from common.sdo_images import archive_root, hourly_slots, read_metadata, original_path
     root = archive_root()
@@ -64,11 +64,11 @@ def aia_original(sha256, slot_at=None):
     slots = retained if slot_at is None else [slot_at] if slot_at in retained else []
     for slot in slots:
         try:
-            metadata = read_metadata(root, slot, 'aia193')
+            metadata = read_metadata(root, slot, channel)
         except FileNotFoundError:
             continue
         if metadata['sha256'] == sha256:
-            return original_path(root, slot, 'aia193').read_bytes()
+            return original_path(root, slot, channel).read_bytes()
     raise FileNotFoundError('AIA original is not retained')
 
 
@@ -76,10 +76,11 @@ def aia_original(sha256, slot_at=None):
 async def original_file(kind: Literal['aia', 'gong', 'goes'],
                         sha256: str = PathParameter(pattern=r'^[0-9a-f]{64}$'),
                         session: AsyncSession = Depends(get_db_session),
-                        slot_at: AwareDatetime | None = None):
+                        slot_at: AwareDatetime | None = None,
+                        channel: Literal["aia171", "aia193", "aia211"] = "aia193"):
     if kind == 'aia':
         try:
-            content = await asyncio.to_thread(aia_original, sha256, slot_at)
+            content = await asyncio.to_thread(aia_original, sha256, slot_at, channel)
             if hashlib.sha256(content).hexdigest() != sha256:
                 raise ValueError('AIA checksum differs from receipt')
         except FileNotFoundError:

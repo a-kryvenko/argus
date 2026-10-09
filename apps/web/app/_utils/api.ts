@@ -66,6 +66,7 @@ export type BinaryMetricsPoint = {
 };
 
 export type ForecastMetrics = {
+  evaluation?: { label: string; period: string; sample: string; notes: string[] } | null;
   target: string;
   meta?: { variables: Record<string, { unit: string }> };
   variables: Record<string, {

@@ -80,3 +80,25 @@ def test_native_original_matches_first_receipt_and_expires_with_image(tmp_path):
     assert original_path(tmp_path, slot, 'aia193').read_bytes() == content
     assert prune(tmp_path, now=NOW + timedelta(hours=1080)) == 1
     assert not original_path(tmp_path, slot, 'aia193').exists()
+
+
+def test_archive_override_does_not_load_configuration_or_replace_credentials(tmp_path, monkeypatch):
+    from common import config
+    from common.sdo_images import archive_root
+    import os
+    monkeypatch.setenv('ARGUS_SDO_ARCHIVE', str(tmp_path))
+    monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
+    def unexpected_config():
+        raise AssertionError('Explicit archive path must not load .env.local')
+    monkeypatch.setattr(config, 'get_config', unexpected_config)
+    assert archive_root() == tmp_path
+    assert os.environ['OBSERVATIONS_SERVICE_TOKEN'] == 'test-token'
+
+
+def test_archive_default_uses_configured_data_root(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from common import config
+    from common.sdo_images import archive_root
+    monkeypatch.delenv('ARGUS_SDO_ARCHIVE', raising=False)
+    monkeypatch.setattr(config, 'get_config', lambda: SimpleNamespace(data_root=tmp_path))
+    assert archive_root() == tmp_path / 'observations/sdo'

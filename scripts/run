@@ -23,6 +23,26 @@ lock() {
     exec 9>"$root/.deployment.lock"
     flock "-$1n" 9
 }
+cleanup_migration_database() {
+    local status=$? cleanup_status=0
+    trap - EXIT
+    "${compose[@]}" stop postgres || cleanup_status=$?
+    if (( status == 0 )); then status=$cleanup_status; fi
+    exit "$status"
+}
+prepare_migration_database() {
+    # Production infrastructure is managed by deployment. Dev may be stopped.
+    [[ "$mode" == dev ]] || return 0
+    local running
+    running=$("${compose[@]}" ps --status running -q postgres)
+    if [[ -z "$running" ]]; then
+        # Install cleanup before startup: even an unhealthy start needs stopping.
+        trap cleanup_migration_database EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        "${compose[@]}" up -d --wait --wait-timeout 60 postgres
+    fi
+}
 migrate() {
     local domain="$1" target="$1"
     shift
@@ -47,6 +67,7 @@ case "${1:-}" in
                 shift
                 [[ $# == 0 ]] || { usage >&2; exit 2; }
                 lock x
+                prepare_migration_database
                 for domain in api clio prophet intelligence; do migrate "$domain" upgrade head; done
                 ;;
             *) usage >&2; exit 2 ;;
@@ -58,6 +79,7 @@ case "${1:-}" in
         if [[ "${1:-}" == migrate ]]; then
             shift
             lock x
+            prepare_migration_database
             migrate "$domain" "$@"
         elif [[ "$domain" == api ]]; then
             case "${1:-}" in

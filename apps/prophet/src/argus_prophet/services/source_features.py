@@ -1,7 +1,6 @@
 """Prophet derives model inputs exclusively from Clio's recorded originals."""
 import io
 import logging
-from datetime import timedelta
 
 import httpx
 import numpy as np
@@ -11,7 +10,6 @@ from common.config import get_config
 from common.schemas.forecast_inputs import GONGFeatureFrame, SourceMeasurement
 
 from argus_prophet.services.source_cache import original, prune_source_cache
-from argus_prophet.services.aia.cache import aia_record
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +55,12 @@ def select_sources(inputs):
     for ref in refs:
         if ref.kind == 'goes':
             selected_goes[(ref.source_product, ref.slot_at.date())] = ref
-    selected = [r for r in refs if r.kind == 'aia' and r.slot_at.hour % 6 == 0
-                and r.observed_at >= inputs.as_of - timedelta(days=40)]
-    selected += gong[-1:] + sorted(selected_goes.values(), key=lambda r: r.available_at)
-    return selected
+    return gong[-1:] + sorted(selected_goes.values(), key=lambda r: r.available_at)
 
 
 def enrich_inputs(inputs, client, url, token):
     """Keep optional-product failures isolated; model policies enforce coverage."""
-    aia, goes = [], []
+    goes = []
     for ref in select_sources(inputs):
         try:
             path = original(client, url, token, ref)
@@ -76,16 +71,11 @@ def enrich_inputs(inputs, client, url, token):
                     raise ValueError('GONG extraction returned no features')
                 inputs.gong = GONGFeatureFrame(**{k: getattr(ref, k) for k in (
                     'observed_at', 'available_at', 'sha256', 'source_product')}, features=features)
-            elif ref.kind == 'aia':
-                aia.append(aia_record(ref, path))
             else:
                 goes.append(pd.read_json(io.StringIO(path.read_text()), orient='records'))
         except (OSError, ValueError, KeyError, TypeError, RuntimeError, httpx.HTTPError):
             logger.exception('Cannot prepare %s model inputs from %s', ref.kind, ref.sha256)
     inputs.aia_frames = []
-    if aia:
-        from argus_prophet.services.aia.features import feature_frames
-        inputs.aia_frames = feature_frames(aia, inputs.as_of)
     apply_solar_measurements(inputs, solar_measurements(goes, inputs.as_of) if goes else [])
     prune_source_cache()
     return inputs

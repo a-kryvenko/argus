@@ -14,6 +14,7 @@ CHECKS = [
     'pnpm --filter web test',
     'pnpm --filter web test:dashboard',
     'test-python',
+    'test-domain-storage',
     'pnpm docs:architecture',
 ]
 
@@ -36,7 +37,7 @@ if Path(sys.argv[0]).name in ('git', 'rsync'):
 raise SystemExit(17 if command == os.getenv('FAIL_CHECK') else 0)
 '''
     for file in [*(binaries / name for name in ('pnpm', 'git', 'rsync')),
-                 tmp_path / 'scripts/test-python']:
+                 tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
         file.write_text(stub)
         file.chmod(0o755)
     result = subprocess.run(['bash', str(tmp_path / 'deploy.sh'), *(['patch', '-m', 'Release'] if failure else [])],
@@ -78,7 +79,7 @@ if 'status --porcelain' in command:
     print(' M example')
 '''
     for file in [*(binaries / name for name in ('pnpm', 'git', 'rsync')),
-                 tmp_path / 'scripts/test-python']:
+                 tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
         file.write_text(stub)
         file.chmod(0o755)
     args = ([bump] if bump else []) + ['-m', 'Release message']

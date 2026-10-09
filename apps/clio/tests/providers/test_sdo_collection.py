@@ -1,3 +1,4 @@
+import pytest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
@@ -94,19 +95,20 @@ def test_failed_download_does_not_publish_or_block_other_channels(tmp_path, monk
     assert not list(tmp_path.glob('*/*.npz'))
 
 
-def test_existing_reduced_image_recovers_native_fits_without_changing_receipt(tmp_path, monkeypatch):
+@pytest.mark.parametrize('channel', ['aia171', 'aia193', 'aia211'])
+def test_existing_reduced_image_recovers_native_fits_without_changing_receipt(tmp_path, monkeypatch, channel):
     from common.sdo_images import original_path, save_image
     now = SLOT + timedelta(minutes=30)
     content = b'first original'
     metadata = dict(observed_at=SLOT.isoformat(), available_at=(SLOT+timedelta(minutes=5)).isoformat(),
                     source='first', sha256=hashlib.sha256(content).hexdigest(), preprocessing='test-v1', units='DN')
-    save_image(tmp_path, SLOT, 'aia193', np.ones((512, 512), np.float32), metadata, now=now)
-    download = Mock(return_value=(np.ones((1024, 1024), np.float32), dict(metadata, channel='aia193', header={}), content))
+    save_image(tmp_path, SLOT, channel, np.ones((512, 512), np.float32), metadata, now=now)
+    download = Mock(return_value=(np.ones((1024, 1024), np.float32), dict(metadata, channel=channel, header={}), content))
     monkeypatch.setattr(collector, 'download_observation', download)
-    assert collector.collect_one(tmp_path, SLOT, 'aia193', clock=lambda: now) == 'restored'
-    assert original_path(tmp_path, SLOT, 'aia193').read_bytes() == content
-    assert read_image(tmp_path, SLOT, 'aia193')[1]['available_at'] == metadata['available_at']
-    assert collector.collect_one(tmp_path, SLOT, 'aia193', clock=lambda: now) == 'existing'
+    assert collector.collect_one(tmp_path, SLOT, channel, clock=lambda: now) == 'restored'
+    assert original_path(tmp_path, SLOT, channel).read_bytes() == content
+    assert read_image(tmp_path, SLOT, channel)[1]['available_at'] == metadata['available_at']
+    assert collector.collect_one(tmp_path, SLOT, channel, clock=lambda: now) == 'existing'
     download.assert_called_once()
 
 

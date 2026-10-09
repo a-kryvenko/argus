@@ -1,5 +1,5 @@
 """Public product adapters: snapshot conversion and algorithm selection."""
-from forecast.inference.aia_wind import AIAWindForecaster, FORMAT
+from forecast.inference.aia_wind import FORMAT
 from common.adapters import observations_to_dataframe
 from forecast.inference.density_dlinear import DensityDLinearForecaster
 from datetime import UTC, datetime
@@ -13,6 +13,9 @@ class AIAWindServiceMixin:
     def snapshot_options(self, inputs):
         options = super().snapshot_options(inputs)
         if self.uses_aia:
+            options['proswin_predictions'] = inputs.proswin_predictions
+            options['proswin_ready_at'] = inputs.proswin_ready_at or inputs.as_of
+            options['source_cutoff'] = inputs.as_of
             options['aia_features'] = pd.DataFrame([
                 {**point.features, 'slot_at': point.slot_at,
                  'observed_at': point.observed_at, 'available_at': point.available_at}
@@ -22,14 +25,15 @@ class AIAWindServiceMixin:
     def __init__(self,models_bundle):
         super().__init__(models_bundle)
         self.uses_aia=models_bundle.get('format')==FORMAT
-        self._aia=AIAWindForecaster(models_bundle) if self.uses_aia else None
+        from forecast.inference.proswin_blend import ProswinBlendForecaster
+        self._aia=ProswinBlendForecaster(models_bundle) if self.uses_aia else None
         if self.uses_aia:self.thresholds=models_bundle['thresholds']
 
-    def forecast(self,observations,*,issue_time=None,speed_history=None,aia_features=None):
+    def forecast(self,observations,*,issue_time=None,speed_history=None,aia_features=None,proswin_predictions=(),proswin_ready_at=None,source_cutoff=None):
         if not self.uses_aia:return super().forecast(observations,issue_time=issue_time,speed_history=speed_history)
         issue_time=issue_time or datetime.now(UTC)
         history=observations_to_dataframe(observations) if speed_history is None else speed_history
-        return self.forecast_from_df(self._aia.frame(issue_time,history,aia_features))
+        return self.forecast_from_df(self._aia.frame(issue_time,history,proswin_predictions, ready_at=proswin_ready_at, source_cutoff=source_cutoff))
 
 
 class SWSpeedFS(AIAWindServiceMixin, QuantileForecastService):

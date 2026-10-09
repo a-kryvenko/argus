@@ -128,42 +128,13 @@ def test_wire_features_and_legacy_calibrations_are_not_trusted():
     assert result.observations.points[0].s10 is None
 
 
-def test_aia_history_rebuilds_from_clio_after_deleting_cache(tmp_path, monkeypatch):
-    import shutil
-    from argus_prophet.services.aia import extraction
-    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
-    references, originals, frames = [], {}, {}
-    for days, value in [(27, 1.), (0, 2.)]:
-        observed = NOW - timedelta(days=days)
-        content = f'AIA at {observed}'.encode()
-        ref = RawObservationFile(kind='aia', slot_at=observed, observed_at=observed,
-            available_at=observed, sha256=hashlib.sha256(content).hexdigest(), source_product='aia.nrt_193')
-        originals[ref.sha256] = content
-        frames[ref.sha256] = (np.full((61, 61), value), np.ones((61, 61)),
-            dict(observed_at=observed.isoformat(), sha256=ref.sha256,
-                 b0_deg=0., valid_fraction=1., carrington_lon=0.))
-        references.append(ref)
-    monkeypatch.setattr(extraction, 'extract_frame', lambda path, **kw: frames[path.stem])
-    calls = []
-    def handler(request):
-        digest = request.url.path.rsplit('/', 1)[1]
-        ref = next(r for r in references if r.sha256 == digest)
-        assert request.url.params['slot_at'] == ref.slot_at.isoformat()
-        calls.append(digest)
-        return httpx.Response(200, content=originals[digest])
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        first = service.enrich_inputs(inputs(*references), client, 'http://clio', 'secret')
-        assert len(first.aia_frames) == 1
-        assert first.aia_frames[0].features['aia_delta_rotation_lat1_lon2'] == pytest.approx(1.)
-        shutil.rmtree(tmp_path / 'aia')
-        rebuilt = service.enrich_inputs(inputs(*references), client, 'http://clio', 'secret')
-        assert rebuilt.aia_frames == first.aia_frames
-        assert len(calls) == 4
-        # A cache is never an independent source of history.
-        assert not service.enrich_inputs(inputs(), client, 'http://clio', 'secret').aia_frames
-        future = references[0].model_copy(update={'available_at': NOW + timedelta(hours=1)})
-        causal = service.enrich_inputs(inputs(future, references[1]), client, 'http://clio', 'secret')
-        assert causal.aia_frames[0].features['aia_delta_rotation_lat1_lon2'] is None
+def test_retired_aia_inputs_do_not_download_or_load_sunpy(monkeypatch):
+    ref = RawObservationFile(kind='aia', slot_at=NOW, observed_at=NOW,
+        available_at=NOW, sha256='a'*64, source_product='aia.nrt_193')
+    monkeypatch.setattr(service, 'original', lambda *args: pytest.fail('Retired AIA must not be downloaded'))
+    result = service.enrich_inputs(inputs(ref), None, 'http://clio', 'secret')
+    assert result.aia_frames == []
+
 
 
 def test_source_cache_prunes_old_files_only(tmp_path, monkeypatch):

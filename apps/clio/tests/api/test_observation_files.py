@@ -101,3 +101,25 @@ def test_aia_uses_shared_sdo_original_and_receipt_without_database(tmp_path, mon
                        headers={'Authorization': 'Bearer secret'})
     assert missing.status_code == 404
     session.scalars.assert_not_awaited()
+
+
+@pytest.mark.parametrize('channel', ['aia171', 'aia211'])
+def test_proswin_channel_originals(tmp_path, monkeypatch, channel):
+    import numpy as np
+    from common.sdo_images import save_image, save_original
+    now = datetime.now(UTC)
+    slot = now.replace(minute=0, second=0, microsecond=0)
+    content = channel.encode()
+    digest = hashlib.sha256(content).hexdigest()
+    metadata = dict(observed_at=slot.isoformat(), available_at=now.isoformat(), source='nrt',
+                    preprocessing='sdo-area-mean-unregistered-v1', units='DN', sha256=digest)
+    monkeypatch.setenv('ARGUS_SDO_ARCHIVE', str(tmp_path))
+    save_image(tmp_path, slot, channel, np.ones((512, 512), np.float32), metadata, now=now)
+    save_original(tmp_path, slot, channel, content, now=now)
+    http, _ = client(monkeypatch, None)
+    url = '/internal/v1/observations/files/aia/' + digest
+    headers = {'Authorization': 'Bearer secret'}
+    response = http.get(url, params={'slot_at': slot.isoformat(), 'channel': channel}, headers=headers)
+    assert response.status_code == 200 and response.content == content
+    assert http.get(url, params={'slot_at': slot.isoformat()}, headers=headers).status_code == 404
+    assert http.get(url, params={'channel': 'arbitrary'}, headers=headers).status_code == 422

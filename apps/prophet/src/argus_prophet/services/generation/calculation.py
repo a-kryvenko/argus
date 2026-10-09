@@ -47,6 +47,21 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
             service = model.service_class()()
             metadata = {'backend': 'forecast_core', 'registry_name': service.registry_name,
                         'issue_time': issue_time.isoformat()}
+        if product == 'solar-wind-speed' and getattr(service, 'uses_aia', False):
+            from forecast.inference.proswin_blend import VERSION, KNOTS, WEIGHTS
+            from forecast.inference.proswin_runtime import CHECKPOINT_SHA
+            import hashlib
+            import json
+            identity = {'base_bundle_sha256': metadata['sha256'], 'version': VERSION,
+                        'proswin_checkpoint_sha256': CHECKPOINT_SHA, 'knots': KNOTS, 'weights': WEIGHTS}
+            identity_sha = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+            metadata = {**metadata, **identity, 'sha256': identity_sha,
+                        'model': VERSION, 'speed_point_model': VERSION,
+                        'uncertainty': 'DLinear empirical offsets; blend calibration pending',
+                        'proswin_input_records': len(inputs.proswin_predictions),
+                        'input_cutoff': inputs.as_of.isoformat(),
+                        'proswin_ready_at': inputs.proswin_ready_at.isoformat() if inputs.proswin_ready_at else None,
+                        'proswin_job': {k:v for k,v in inputs.proswin_job.items() if k != 'predictions'}}
         result = calculate_snapshot(service, inputs, issue_time=issue_time, model_info=metadata)
         if result.name != model.artifact:
             raise ValueError(f'Expected artifact {model.artifact}, received {result.name}')
@@ -57,3 +72,10 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
     if sum(len(item.content) for item in artifacts) > 64 * 1024 * 1024:
         raise ValueError('Forecast product exceeds 64 MiB')
     return artifacts
+
+
+def calculate_serialized(request):
+    """Share the memory budget with the optional remote-container child."""
+    from argus_prophet.services.heavy_task import heavy_task
+    with heavy_task(request.workdir / 'data'):
+        return calculate_product(request)

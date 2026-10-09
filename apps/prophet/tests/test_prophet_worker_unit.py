@@ -45,7 +45,7 @@ def dispatcher(monkeypatch):
     def submit(target, *args, **kwargs):
         future = Future()
         submitted.append((target, args, future))
-        events.append(('submit', args[0].__name__))
+        events.append(('submit', getattr(args[0], 'func', args[0]).__name__))
         return future
     monkeypatch.setattr(worker, 'generation_lock', lock)
     monkeypatch.setattr(worker, 'product_pending', lambda *_, **kw: True)
@@ -59,27 +59,23 @@ def dispatcher(monkeypatch):
     return dispatcher, submitted, runs, events
 
 
-def test_shared_inputs_precede_calculations_and_fast_product_publishes_independently(dispatcher):
+def test_products_run_sequentially_and_inputs_precede_calculation(dispatcher):
     d, submitted, runs, events = dispatcher
     d.launch_due(NOW, 0)
-    assert len(submitted) == 1 and len(d.active) == 2
-    assert events.count('lock') == 1
+    assert len(submitted) == 1 and set(d.active) == {'dst'}
     inputs = SimpleNamespace(observations=SimpleNamespace(points=[]))
     submitted[0][2].set_result(inputs)
     d.finish_tasks()
-    assert len(submitted) == 3
-    assert events.index(('snapshot', 'dst')) < events.index(('submit', 'calculate_product'))
-    runs['dst'].snapshot.assert_called_once_with(inputs)
-    runs['hmf'].snapshot.assert_called_once_with(inputs)
-    # HMF finishes while the slow Dst calculation still owns a process.
-    submitted[2][2].set_result([])
+    assert len(submitted) == 2
+    assert events.index(('snapshot', 'dst')) < events.index(('submit', 'calculate_serialized'))
+    d.launch_due(NOW, 1)
+    assert len(submitted) == 2
+    submitted[1][2].set_result([])
     d.finish_tasks()
-    runs['hmf'].finish.assert_called_once_with()
-    runs['dst'].finish.assert_not_called()
-    assert 'unlock' not in events
-    d.launch_due(NOW + timedelta(minutes=5), 300)
-    assert len(submitted) == 4 and len(d.active) == 2
-    assert d.active['dst'].future is submitted[1][2]
+    runs['dst'].finish.assert_called_once_with()
+    d.launch_due(NOW, 2)
+    assert set(d.active) == {'hmf'}
+
 
 
 def test_capacity_failure_retry_and_shutdown_do_not_overlap_products(dispatcher):
@@ -103,15 +99,21 @@ def test_capacity_failure_retry_and_shutdown_do_not_overlap_products(dispatcher)
     assert not d.active and d.connection is None
 
 
-def test_verification_dispatches_while_all_product_slots_are_busy(dispatcher):
+def test_verification_waits_for_products_and_blocks_new_launches(dispatcher):
     d, submitted, runs, events = dispatcher
     d.config.verification.enabled = True
     d.launch_due(NOW, 0)
-    assert len(d.active) == 2
+    assert len(d.active) == 1 and d.verification is None
+    submitted[0][2].set_exception(ValueError('test failure'))
+    d.finish_tasks()
+    d.tasks = []
+    d.launch_due(NOW, 1)
     assert submitted[-1][1][0] is worker.verify_due
     assert d.verification is submitted[-1][2]
-    d.launch_due(NOW, 1)
-    assert len(submitted) == 2
+    d.tasks = [worker.Task('dst', ProductSchedule())]
+    d.launch_due(NOW, 100)
+    assert not d.active and len(submitted) == 2
+
 
 
 def test_failed_writer_cancels_children_before_releasing_lock(dispatcher):

@@ -58,7 +58,7 @@ class ProphetConfig(BaseModel):
     shutdown_grace_seconds: int = Field(default=570, ge=1, le=570)
     inputs: dict[str, InputPolicy] = Field(default_factory=dict)
     verification: VerificationSchedule = Field(default_factory=VerificationSchedule)
-    max_parallel_products: int = Field(default=2, ge=1, le=16)
+    max_parallel_products: int = Field(default=1, ge=1, le=16)
     schedules: dict[str, ProductSchedule] = Field(default_factory=dict)
 
     @field_validator('inputs', 'schedules')

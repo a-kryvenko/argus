@@ -58,6 +58,11 @@ function MetricsBoard({ product, data, retry }: { product: ProductConfig; data: 
   const firstThreshold = metrics?.binary[0];
   const firstScores = firstThreshold?.by_lead_hour.find(row => row.lead_hours === hour);
   return <>
+    {data.evaluation && <section className={styles.notice} aria-label="Evaluation scope">
+      <strong>{data.evaluation.label}</strong>
+      <p>{data.evaluation.period} · {data.evaluation.sample}</p>
+      {data.evaluation.notes.map(note => <p key={note}>{note}</p>)}
+    </section>}
     <div className={styles.toolbar}>
       <div className={styles.variableTabs} role="group" aria-label="Metrics variable">{product.variables.map(item => <button key={item.key} aria-pressed={item.key === variableKey} onClick={() => setVariableKey(item.key)}><span>{item.key.toUpperCase()}</span>{item.label}</button>)}</div>
       <div className={styles.horizonControl}><span>LEAD HORIZON</span><div className={styles.periods} role="group" aria-label="Metrics horizon">{[24, 48, null].map(value => <button key={value ?? 'full'} aria-label={value == null ? 'Full evaluation horizon' : `First ${value} hours`} aria-pressed={horizon === value} onClick={() => setHorizon(value)}>{value == null ? 'Full' : `${value}h`}</button>)}</div></div>
@@ -92,7 +97,7 @@ function MetricsBoard({ product, data, retry }: { product: ProductConfig; data: 
             {keys.length > 0 && <dl className={local.values} aria-label="Continuous scores">{keys.map(key => { const unit = metricUnit(key, variable.unit); return <div key={key}><dt>{metricLabel(key)}{unit && !['samples', 'fraction'].includes(unit) && <small>, {unit}</small>}</dt><dd><MetricValue value={continuous?.[key]} /></dd></div>; })}</dl>}
             {metrics.binary.length > 0 && <div className={styles.thresholdValues}><h3>{scoreLabels[score]}</h3>{Object.entries(labels).map(([key, label]) => <div key={key}><p><span>{label}</span><strong><MetricValue value={binary.find(row => row.lead_hours === hour)?.values[key]} /></strong></p></div>)}</div>}
             <dl className={styles.facts}><div><dt>Product</dt><dd>{product.title}</dd></div><div><dt>Evaluated lead range</dt><dd>+{allHours[0]}h – +{allHours.at(-1)}h</dd></div>{metrics.continuous && <div><dt>Evaluated quantiles</dt><dd>{metrics.continuous.quantiles.join(' · ')}</dd></div>}</dl>
-            <details className={styles.methodDetails}><summary>Reading these metrics</summary><p>Scores describe model evaluation at each lead hour. Missing values are unavailable, not zero. Calibration uses the same selected lead hour.</p><p>Sample counts, where supplied, apply to the continuous evaluation. The metrics response does not identify the evaluation period.</p></details>
+            <details className={styles.methodDetails}><summary>Reading these metrics</summary><p>Scores describe model evaluation at each lead hour. Missing values are unavailable, not zero. Calibration uses the same selected lead hour.</p><p>Sample counts, where supplied, apply to the continuous evaluation. {data.evaluation ? 'The evaluation period and limitations are shown above.' : 'The evaluation period has not been supplied.'}</p></details>
             <Link className={styles.inspectorLink} href={`/products/${product.slug}`}>Open forecast<ArrowUpRight size={12} aria-hidden="true" /></Link>
             <a className={styles.inspectorLink} href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics data · JSON<ArrowUpRight size={12} aria-hidden="true" /></a>
           </div>

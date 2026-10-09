@@ -5,39 +5,60 @@ forecasting platform. It brings together solar-wind measurements, geomagnetic
 observations and forecasts to help users follow current conditions and explore
 how they change over time.
 
-The project connects the full journey from collecting observations to publishing
-forecasts, with a web interface for exploring the data and an API for using it
-in other applications and analyses.
-
 ## What you can explore
 
-- **Live solar wind:** minute-by-minute NOAA measurements of the magnetic field,
+- **Live solar wind:** NOAA measurements of the magnetic field,
   speed, density and temperature.
 - **Geomagnetic activity:** three-hour Kp and hourly Dst observations.
 - **Historical observations:** solar-wind time series, five-minute and hourly
   summaries, with information about data coverage and collection status.
-- **Forecasts:** published model outputs alongside observational data. Available
-  products depend on the configured models and input data.
+- **Forecasts:** published model outputs alongside observational data.
+- **Metrics:** accuracy of each forecast.
 
-The `/live` observation workspace combines a selectable measurement summary,
-solar-wind and geomagnetic charts with a shared UTC history window, and an
-inspector for source, quality, freshness and coverage. The inspector collapses on
-smaller screens. Collection diagnostics and additional hourly indices remain
-available below the charts.
+## Observations sources
 
-The forecast overview (`/`), product catalog (`/products`) and product pages share
-the observation workspace's navigation and graphite theme. Forecasts provide
-variable selection, 24/48-hour or full-release views, median and q10–q90 charts,
-threshold probability heatmaps, and an inspector with exact UTC times and values.
-The hourly table also supports keyboard selection. Missing values remain gaps;
-changing the visible horizon never changes the model's issue time.
+| Source | Observations used by Argus |
+|---|---|
+| **NOAA SWPC** | Live solar-wind speed, proton density and temperature, and IMF components from the real-time solar-wind feeds; estimated Kp, Ap derived from Kp, Kyoto Dst distributed by SWPC, and F10.7 radio flux. |
+| **NASA OMNIWeb / OMNI 2** | Historical hourly solar-wind plasma, magnetic-field and geomagnetic data for backfilling and model evaluation. |
+| **ACE/SWEPAM via NASA SPDF; SOHO/CELIAS Proton Monitor** | Additional historical plasma sources, aggregated to hourly values when filling gaps. |
+| **GFZ** | Historical F10.7 radio flux. |
+| **SDO via Stanford JSOC** | Numerical near-real-time FITS: AIA 94, 131, 171, 193, 211, 304, 335 and 1600 Å, plus HMI line-of-sight magnetograms. PROSWIN uses the original AIA 171/211 Å pair. |
+| **NSO GONG** | Solar magnetograms from the SWPC live feed and NSO archive, used to derive magnetic-field features for southward IMF forecasting. |
+| **NOAA GOES** | Live EUV and X-ray background measurements from SWPC, with historical files from the NOAA archive. These support calibrated estimates of S10, M10 and Y10; those estimates are derived indices, not direct observations of the indices. |
+| **SILSO** | Monthly sunspot numbers used as additional PROSWIN inputs. |
 
-The model performance workspace (`/metrics`) uses the same navigation and layout.
-Product pages connect continuous scores, threshold scores and calibration through
-a shared lead-hour inspector, with metric and variable selectors, horizon controls
-and accessible value tables. Charts use the actual evaluated lead hours and retain
-gaps and unavailable scores instead of shifting values or replacing them with zero.
+Clio collects and stores the configured observation feeds. The PROSWIN process
+also maintains its own SILSO snapshot. Source priority, collection intervals and
+backfill windows are defined in [the project configuration](configs/project.yaml).
 
+## Forecasting
+
+The configured forecasting pipeline uses the following models:
+
+| Forecast | Model and inputs | Published output |
+|---|---|---|
+| **Solar-wind speed (`v`)** | **DLinear + PROSWIN**: hourly speed history combined with the official PROSWIN fold-1 model using AIA 171/211 Å images and physical features. Blend weights depend on lead time and were fitted on 2025 data. | Central speed forecast, q10/q90 intervals and speed-threshold probabilities. Missing PROSWIN predictions fall back to DLinear. |
+| **Proton density (`n`)** | **DLinear**, using hourly density history. | q10/q50/q90 density forecasts. |
+| **Kp** | Calibrated classification models using solar-wind and geomagnetic history (`argus-kp-t-v2`). | Probabilities of exceeding Kp thresholds. |
+| **Ap and Dst** | **LightGBM quantile regression**, using observation-history features (`argus-ap-q-v2`, `argus-dst-q-v2`). | q10/q50/q90 forecasts. |
+| **Total IMF (`Bt`)** | **LightGBM classifiers with logistic probability calibration**, using hourly IMF/plasma history (`argus-bt-t-v3`). | Probabilities of Bt ≥ 5, 10 and 15 nT over +1…+24 hours. |
+| **Southward IMF (`Bs`)** | Calibrated classification models using observation history and GONG magnetic features (`argus-bs-t-v2`). | Threshold probabilities for `Bs = max(−Bz, 0)`, rather than a signed Bz point forecast. |
+| **Thermospheric density** | **JB2008**, driven by F10.7, calibrated S10/M10/Y10 and the geomagnetic temperature correction. Current operation holds observed drivers constant over the forecast horizon. | Atmospheric-density grids by time, altitude and location. |
+
+Prophet schedules forecasts hourly and runs heavy calculations sequentially.
+Before generating the speed forecast, it requests PROSWIN through a shared job
+queue and waits for completion or a timeout. PROSWIN runs in a temporary CPU
+process and releases model memory when the task finishes.
+
+The speed blend's prediction intervals and threshold probabilities currently use
+DLinear residual distributions around the blended point forecast; they have not
+yet been calibrated separately for the blend. Proton-temperature and signed-Bz
+point forecasts are not part of the current scheduled products. The solar-index
+models listed in the registry are not separate scheduled radiation forecasts.
+
+See the [model registry](configs/models_registry.yaml) and
+[accuracy report](docs/accuracy/README.md) for configuration and evaluation scope.
 
 ## About this repository
 

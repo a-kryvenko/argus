@@ -62,12 +62,12 @@ def changed_components(before, after):
 
 @pytest.mark.parametrize('path,expected', [
     ('apps/intelligence/src/argus_intelligence/cli.py', {'intelligence'}),
-    ('packages/forecast/src/forecast/example.py', {'prophet'}),
+    ('packages/forecast/src/forecast/example.py', {'prophet', 'proswin'}),
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
-    ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'intelligence'}),
+    ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'proswin', 'intelligence'}),
     ('packages/forecast-core/src/forecast_core/api.py', {'prophet'}),
     ('packages/intelligence-core/src/intelligence_core/api.py', {'intelligence'}),
-    ('apps/prophet/src/argus_prophet/worker.py', {'prophet'}), ('configs/project.yaml', set()),
+    ('apps/prophet/src/argus_prophet/worker.py', {'prophet', 'proswin'}), ('configs/project.yaml', set()),
 ])
 def test_only_actual_consumers_rebuild(source, path, expected):
     before = release.plan(source)

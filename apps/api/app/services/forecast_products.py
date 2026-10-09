@@ -267,6 +267,25 @@ def _binary_metrics(variable: Variable, max_horizon_hours: int) -> list[BinaryMe
 
 
 def load_metrics(product: Product, *, meta: bool = False) -> ForecastMetrics:
+    # A versioned report replaces the complete product evaluation: never mix
+    # point scores from a new model with legacy probability/interval scores.
+    for variable in product.variables:
+        report_path = _registry(variable).get("metrics_report")
+        if report_path:
+            path = get_config().workdir / report_path
+            if not path.is_file():
+                raise ArtifactNotReadyError(product.target)
+            report = ForecastMetrics.model_validate_json(path.read_text())
+            if report.target != product.target:
+                raise ValueError("Evaluation report target mismatch")
+            for metrics in report.variables.values():
+                if metrics.continuous:
+                    metrics.continuous.by_lead_hour = [r for r in metrics.continuous.by_lead_hour
+                                                       if r.lead_hours <= product.max_horizon_hours]
+                for series in metrics.binary:
+                    series.by_lead_hour = [r for r in series.by_lead_hour if r.lead_hours <= product.max_horizon_hours]
+            report.meta = product_metadata(product, list(report.variables)) if meta else None
+            return report
     variables = {}
     for variable in product.variables:
         continuous = _continuous_metrics(variable, product.max_horizon_hours)

@@ -1,12 +1,13 @@
 """Observation reads go exclusively through the owner's versioned HTTP API."""
 import os
+import logging
 from datetime import UTC, datetime
 
 import httpx
 from common.schemas.forecast_inputs import ForecastInputs, ObservationInputs
 
 
-def load_inputs(as_of: datetime | None = None) -> ForecastInputs:
+def load_inputs(as_of: datetime | None = None, *, prepare_proswin=False) -> ForecastInputs:
     url = os.getenv('OBSERVATIONS_URL')
     token = os.getenv('OBSERVATIONS_SERVICE_TOKEN')
     if not url or not token:
@@ -28,4 +29,12 @@ def load_inputs(as_of: datetime | None = None) -> ForecastInputs:
             raise RuntimeError('No stored observations available in the requested history range; check ingestion')
         from argus_prophet.services.source_features import enrich_inputs
         inputs = enrich_inputs(inputs, client, url, token)
+    from argus_prophet.services.proswin_cache import read_predictions
+    inputs.proswin_predictions = read_predictions(inputs.as_of)
+    if prepare_proswin:
+        from argus_prophet.services.proswin_queue import prepare
+        try:
+            inputs = prepare(inputs)
+        except (OSError, ValueError, RuntimeError):
+            logging.getLogger(__name__).exception('PROSWIN queue unavailable; retaining causal cache / DLinear')
     return inputs

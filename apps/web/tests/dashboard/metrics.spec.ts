@@ -198,3 +198,22 @@ test('monthly observed accuracy is independent of static metrics and preserves z
   await page.reload();
   await expect(monthly).toContainText('No verified forecast data available for this period.');
 });
+
+test('solar wind blend shows evaluation scope without legacy probability scores', async ({ page }) => {
+  const { readFile } = await import('node:fs/promises');
+  const report = JSON.parse(await readFile(new URL('../../../../configs/evaluations/solar-wind-speed.json', import.meta.url), 'utf8'));
+  await mock(page);
+  await page.route('**/api/v1/public/forecasts/solar-wind-speed/metrics', route => route.fulfill({ json: { success: true, data: report, error: null } }));
+  await page.goto('/metrics/solar-wind-speed');
+  const scope = page.getByRole('region', { name: 'Evaluation scope' });
+  await expect(scope).toContainText('DLinear + PROSWIN');
+  await expect(scope).toContainText('156 daily target timestamps');
+  await expect(scope).toContainText('not a blind holdout');
+  await expect(page.getByLabel('Threshold metric')).toHaveCount(0);
+  await expect(page.getByLabel('Continuous metric').locator('option[value="coverage_80"]')).toHaveCount(0);
+  const slider = page.getByRole('slider', { name: 'Evaluation lead hour' });
+  await slider.focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('region', { name: 'Selected lead metrics' })).toContainText('MAE56km/sLead +96h');
+  await screenshot(page, 'metrics-proswin-evaluation');
+});

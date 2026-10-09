@@ -69,7 +69,20 @@ class ObservationInputs(BaseModel):
     solar_wind_hourly: dict | None = None
 
 
+class ProswinPrediction(BaseModel):
+    valid_time: AwareDatetime
+    image_slot: AwareDatetime
+    available_at: AwareDatetime
+    value: FiniteFloat = Field(gt=0)
+    source_cutoff: AwareDatetime | None = None
+    model_version: Literal['proswin-fold1-nrt-v1'] = 'proswin-fold1-nrt-v1'
+
+
 class ForecastInputs(ObservationInputs):
     """Prophet-owned enrichment of the source observation response."""
     aia_frames: list[AIAFeatureFrame] = Field(default_factory=list)
     gong: GONGFeatureFrame | None = None
+    proswin_predictions: list[ProswinPrediction] = Field(default_factory=list)
+
+    proswin_ready_at: AwareDatetime | None = None
+    proswin_job: dict = Field(default_factory=dict)

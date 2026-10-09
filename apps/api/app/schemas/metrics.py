@@ -55,9 +55,19 @@ class VariableMetrics(BaseModel):
     binary: list[BinaryMetricsSeries] = Field(default_factory=list, description="Metrics for available thresholds; empty when unavailable or unsupported.")
 
 
+class EvaluationContext(BaseModel):
+    """Scope and limitations of a recorded model evaluation."""
+
+    label: str
+    period: str
+    sample: str
+    notes: list[str] = Field(default_factory=list)
+
+
 class ForecastMetrics(BaseModel):
     """Evaluation metrics for one product; these are scores, not forecast values."""
 
+    evaluation: EvaluationContext | None = None
     target: str = Field(description="Forecast product identifier; see the endpoint's visibility/target table.", examples=["solar-wind-speed"])
     variables: dict[str, VariableMetrics] = Field(description="Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted.")
     meta: ForecastMetadata | None = metadata_field()

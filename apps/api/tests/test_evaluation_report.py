@@ -44,3 +44,16 @@ def test_density_report_uses_blend_intervals_and_matched_nrt_cohort(monkeypatch)
     assert last.values['n'] == 156
     assert last.values['mae'] == pytest.approx(2.7292544318690695)
     assert 'coverage_80' in last.values
+
+
+def test_temperature_report_covers_all_hours_and_calibrated_intervals(monkeypatch):
+    import yaml
+    registry = yaml.safe_load((ROOT/'configs/models_registry.yaml').read_text())
+    monkeypatch.setattr(service, 'get_config', lambda: SimpleNamespace(workdir=ROOT, models_registry=registry))
+    result = service.load_metrics(service.PRODUCTS['solar-wind-temperature'], meta=True)
+    assert result.meta.variables['t'].unit == 'K'
+    temperature = result.variables['t'].continuous
+    assert temperature.quantiles == [.1, .5, .9]
+    assert [row.lead_hours for row in temperature.by_lead_hour] == list(range(1, 97))
+    assert temperature.by_lead_hour[-1].values['mae'] == pytest.approx(51892.1, abs=.1)
+    assert 0 <= temperature.by_lead_hour[-1].values['coverage_80'] <= 1

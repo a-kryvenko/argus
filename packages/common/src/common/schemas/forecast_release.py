@@ -13,6 +13,7 @@ from pydantic import AwareDatetime, BaseModel, Field, model_validator
 PRODUCT_ARTIFACTS = {
     'solar-wind-speed': ('plasma_speed_quantile', 'plasma_speed_threshold'),
     'solar-wind-density': ('plasma_density_quantile',),
+    'solar-wind-temperature': ('plasma_temperature_quantile',),
     'hmf': ('hmf_total_threshold', 'hmf_southward_threshold'),
     'solar-radiation': ('f10_7_quantile', 's10_quantile', 'm10_quantile', 'y10_quantile'),
     'geomagnetic-activity': ('kp_threshold', 'ap_quantile'),
@@ -21,7 +22,7 @@ PRODUCT_ARTIFACTS = {
 }
 PREDICTION_COLUMNS = {
     **{name: tuple(f'{prefix}_q{q}' for q in (10, 50, 90)) for name, prefix in (
-        ('plasma_speed_quantile', 'v'), ('plasma_density_quantile', 'n'),
+        ('plasma_speed_quantile', 'v'), ('plasma_density_quantile', 'n'), ('plasma_temperature_quantile', 't'),
         ('ap_quantile', 'ap'), ('dst_quantile', 'dst'), ('f10_7_quantile', 'f107'),
         ('s10_quantile', 's10'), ('m10_quantile', 'm10'), ('y10_quantile', 'y10'))},
     **{name: tuple(f'p_{prefix}_ge_{threshold}' for threshold in thresholds) for name, prefix, thresholds in (

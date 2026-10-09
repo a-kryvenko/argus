@@ -24,7 +24,7 @@ type Verification = {
   }>;
 };
 const variables: Record<string, string> = {
-  plasma_speed_quantile: 'v', plasma_speed_threshold: 'v', plasma_density_quantile: 'n',
+  plasma_speed_quantile: 'v', plasma_speed_threshold: 'v', plasma_density_quantile: 'n', plasma_temperature_quantile: 't',
   kp_threshold: 'kp', ap_quantile: 'ap', dst_quantile: 'dst',
   hmf_total_threshold: 'bt', hmf_southward_threshold: 'bs',
   f10_7_quantile: 'f10_7', s10_quantile: 's10', m10_quantile: 'm10', y10_quantile: 'y10',

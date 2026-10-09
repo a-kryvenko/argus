@@ -97,7 +97,7 @@ class Dispatcher:
                 continue
             run = ProductRun.begin(task.product, 'scheduled', self.runtime, self.config,
                                    writer=self.connection, scheduled_slot=slot, details=self.details)
-            inputs = self.submit(partial(load_inputs, prepare_proswin=task.product in {'solar-wind-speed', 'solar-wind-density'}))
+            inputs = self.submit(partial(load_inputs, prepare_proswin=task.product in {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'}))
             self.active[task.product] = Active(run, inputs)
         if not self.active:
             self.writer.close()

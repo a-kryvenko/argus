@@ -7,3 +7,4 @@ from forecast.inference.threshold import ThresholdForecastService
 from forecast.adapters.plasma import SWDensityFS, SWSpeedFS, SWSpeedProbaFS
 from forecast.inference.rotation_dlinear import RotationDLinearForecaster
 from forecast.inference.density_dlinear import DensityDLinearForecaster
+from forecast.inference.temperature_proswin import TemperatureProswinForecaster

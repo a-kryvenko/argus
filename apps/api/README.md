@@ -21,7 +21,7 @@ Paths are relative to `/api/v1`. See `/api/v1/docs` for schemas, parameters and 
 | GET | `/public/forecasts/atmospheric-density` | 48-hour JB2008 density grid. |
 | POST | `/public/risks/leo-drag` | Circular-orbit drag assessment; [request and limits](../../docs/leo-drag.md). |
 
-Forecast targets: `public` — `solar-wind-speed`, `solar-wind-density`,
+Forecast targets: `public` — `solar-wind-speed`, `solar-wind-density`, `solar-wind-temperature`,
 `geomagnetic-activity`, `dst`; `private` — `hmf`, `solar-radiation`.
 Atmospheric density uses its separate route. Unavailable forecast artifacts return 503.
 

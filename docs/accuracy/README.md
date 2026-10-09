@@ -170,3 +170,17 @@ period, target and forecast method. Metric `step` is the lead in hours.
 Each export creates a new run without changing local results.
 
 Tests: `.venv/bin/python -m pytest scripts/benchmarks/test_*.py -q`.
+
+## Proton temperature: LightGBM with PROSWIN speed
+
+The working temperature model is `argus-plasma-temperature-proswin-v1`, predicting
+T in K at each lead +1…+96 h. Its inputs are hourly T/n/v history and a causal
+PROSWIN speed forecast. Heads were trained on2011–2024; residual q10/q90 intervals
+were calibrated separately for each head on2025 NRT. Without PROSWIN the service
+uses a T/n/v-only head, then T-only if n/v is missing. No DLinear blend is used.
+
+The cached retrospective NRT2026 cohort has156 target dates and14,884 forecast
+pairs. MAE48,869.92 K, RMSE73,927.93 K, empirical80% interval coverage83.45%.
+These rows all have PROSWIN; fallback correctness was tested separately. This is
+not a live availability benchmark or blind holdout; image latency is idealized.
+Full per-lead results: `configs/evaluations/solar-wind-temperature.json`.

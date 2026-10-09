@@ -183,3 +183,26 @@ The adapter prepares its own raw speed and AIA inputs; callers do not inspect
 private fields or model flags. The older `calculate_forecast` interface remains
 available for explicit observation-based examples. Both interfaces return
 `ForecastResult` and perform no storage or network operations.
+
+### Proton temperature
+
+`plasma_temperature_quantile` uses `argus-plasma-temperature-proswin-v1`:96
+LightGBM heads with hourly T/n/v history and causal native PROSWIN speed for
+each valid time. No DLinear or blending. Without usable PROSWIN, use the
+T/n/v-only head; missing recent n/v uses the T-only head. If T is older than
+two hours, fail the product rather than publish a filled forecast. Intervals
+are per-head residual q10/q90 calibrated on NRT2025; switch intervals together
+with the point head. Output unit K; horizons1–96h.
+
+`TemperatureProswinForecaster` consumes saved Clio `solar_wind_hourly` snapshots:
+closed hourly means, receipt <= input cutoff, no interpolation. Input timestamps
+are shifted from hour start to hour end to match training availability. All
+valid-sample hourly aggregates follow the existing Clio contract. Predictor
+features use24h history; partial missing features are handled by the trained trees.
+Prophet prepares PROSWIN through its existing queue before calculating this
+product and records candidate/fallback lead counts in artifact metadata.
+
+The model artifact is deployed with `data/models/argus-plasma-temperature-proswin-v1.joblib`
+and `configs/models_registry.yaml`. Export/calibration scripts remain under
+`notebooks/solar_research/proswin_check/temperature_deployment/`. No database
+migration is needed for the new product.

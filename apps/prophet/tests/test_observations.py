@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import httpx
@@ -143,6 +143,7 @@ def mock_models(monkeypatch):
     ('hmf', ['hmf_total_threshold', 'hmf_southward_threshold']),
     ('dst', ['dst_quantile']),
     ('solar-wind-density', ['plasma_density_quantile']),
+    ('solar-wind-temperature', ['plasma_temperature_quantile']),
 ])
 def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
     from argus_prophet.services.generation import calculation as generation
@@ -171,3 +172,11 @@ def test_status_selections_include_canonical_names_and_historical_aliases():
     assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
     assert attempt_selections('dst') == ['all', 'dst']
     assert attempt_selections('solar-radiation') == []
+
+
+def test_temperature_verification_uses_hourly_observations():
+    from argus_prophet.services.verification import targets
+    frame = pd.DataFrame({'metric': ['t', 't'], 'observed_at': [NOW, NOW+timedelta(minutes=30)],
+                          'value': [100000., 200000.]})
+    assert targets(frame, NOW, NOW+timedelta(hours=1)) == [
+        {'valid_time': NOW.isoformat(), 'metric': 't', 'value': 150000., 'sample_count': 2}]

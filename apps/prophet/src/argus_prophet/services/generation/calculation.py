@@ -69,11 +69,19 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
                         'input_cutoff': inputs.as_of.isoformat(),
                         'proswin_ready_at': inputs.proswin_ready_at.isoformat() if inputs.proswin_ready_at else None,
                         'proswin_job': {k:v for k,v in inputs.proswin_job.items() if k != 'predictions'}}
+        if getattr(service, 'uses_temperature_proswin', False):
+            metadata = {**metadata, 'temperature_point_model': 'LightGBM with T/n/v history and PROSWIN speed',
+                        'uncertainty': 'Per-head NRT 2025 residual q10/q90',
+                        'proswin_input_records': len(inputs.proswin_predictions),
+                        'input_cutoff': inputs.as_of.isoformat(),
+                        'proswin_job': {k:v for k,v in inputs.proswin_job.items() if k != 'predictions'}}
         result = calculate_snapshot(service, inputs, issue_time=issue_time, model_info=metadata)
         if result.name != model.artifact:
             raise ValueError(f'Expected artifact {model.artifact}, received {result.name}')
         if getattr(service, 'uses_density_blend', False):
             result.model_info.update(service._density.last_status)
+        if getattr(service, 'uses_temperature_proswin', False):
+            result.model_info.update(service.last_status)
         artifact = serialize(result)
         if len(artifact.content) > 32 * 1024 * 1024:
             raise ValueError('Forecast artifact exceeds 32 MiB')

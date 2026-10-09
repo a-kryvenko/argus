@@ -51,6 +51,9 @@ PRODUCTS = {
     "solar-wind-density": Product("solar-wind-density", "public", 96, (
         Variable("n", "plasma_density_quantile", "cm^-3", "n", quantiles=True),
     )),
+    "solar-wind-temperature": Product("solar-wind-temperature", "public", 96, (
+        Variable("t", "plasma_temperature_quantile", "K", "t", quantiles=True),
+    )),
     "hmf": Product("hmf", "private", 48, (
         Variable("bt", "hmf_total_threshold", "nT", "bt", (5, 10, 15)),
         Variable("bs", "hmf_southward_threshold", "nT", "bs", (5, 10, 15)),

@@ -145,3 +145,20 @@ def test_public_verification_route_preserves_visibility_and_upstream_failure(mon
             raise ArtifactNotReadyError('unavailable')
         monkeypatch.setattr(forecasts_client, 'read_verification', unavailable)
         assert client.get('/public/forecasts/dst/verification').status_code == 503
+
+
+def test_temperature_public_forecast_contract(monkeypatch):
+    import pandas as pd
+    issue = pd.Timestamp('2026-10-09T12:00Z')
+    frame = pd.DataFrame({'issue_time': [issue], 'valid_time': [issue+pd.Timedelta(hours=96)],
+                          'lead_hours': [96], 't_q10': [10000.], 't_q50': [100000.], 't_q90': [200000.]})
+    monkeypatch.setattr(forecast_products, 'read_frames', lambda _: {'plasma_temperature_quantile': frame})
+    result = forecast_products.load_forecast(forecast_products.get_product('solar-wind-temperature', 'public'), meta=True)
+    assert result.horizon_hours == 96 and result.available_variables == ['t']
+    assert result.meta.variables['t'].unit == 'K'
+    assert result.predictions[0].variables['t'].continuous.q50 == 100000.
+    content = frame.to_csv(index=False)
+    ForecastRelease(release_id=uuid4(), run_id=uuid4(), product='solar-wind-temperature',
+        issue_time=issue, published_at=datetime.now(UTC), artifacts=[ForecastArtifact(
+            name='plasma_temperature_quantile', csv_text=content, columns=list(frame), row_count=1,
+            sha256=hashlib.sha256(content.encode()).hexdigest(), model_info={})])

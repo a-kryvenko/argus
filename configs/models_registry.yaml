@@ -19,6 +19,12 @@ models:
     metrics: data/metrics/plasma/density_proswin
     metrics_report: configs/evaluations/solar-wind-density.json
 
+  plasma_temperature_quantile:
+    model: argus-plasma-temperature-proswin-v1
+    artifact_path: data/models/argus-plasma-temperature-proswin-v1.joblib
+    metrics: data/metrics/plasma/temperature_proswin
+    metrics_report: configs/evaluations/solar-wind-temperature.json
+
   kp_threshold:
     model: argus-kp-t-v2
     metrics: data/metrics/geomagnetic/kp_proba

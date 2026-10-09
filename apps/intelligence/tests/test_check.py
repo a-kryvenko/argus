@@ -60,13 +60,16 @@ def test_cli_failure_is_nonzero_and_does_not_leak_inputs(monkeypatch, capsys):
 
 def test_refresh_all_is_handled_by_service_and_stops_on_failure(monkeypatch, capsys):
     from unittest.mock import Mock
+    from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     from argus_intelligence import worker
     operation = Mock(side_effect=lambda product: {'product': product})
     monkeypatch.setattr(worker, 'process_once', operation)
     cli.main(['refresh'])
-    assert len(cli.PROCESS_PRODUCTS) == 6
-    assert [call.args[0] for call in operation.call_args_list] == list(cli.PROCESS_PRODUCTS)
-    assert len(json.loads(capsys.readouterr().out)) == len(cli.PROCESS_PRODUCTS)
+    expected = [product for product in PRODUCT_ARTIFACTS if product != 'solar-radiation']
+    assert 'solar-wind-temperature' in expected
+    assert list(cli.PROCESS_PRODUCTS) == expected
+    assert [call.args[0] for call in operation.call_args_list] == expected
+    assert json.loads(capsys.readouterr().out) == [{'product': product} for product in expected]
     operation.reset_mock()
     operation.side_effect = ValueError('failed')
     with pytest.raises(SystemExit) as result:

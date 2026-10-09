@@ -36,6 +36,14 @@ export const products: ProductConfig[] = [
     variables: [{ key: "n", label: "Plasma Density", unit: "cm⁻³", quantile: true, thresholds: [] }],
   },
   {
+    slug: "solar-wind-temperature",
+    apiTarget: "solar-wind-temperature",
+    visibility: "public",
+    title: "Solar Wind Temperature",
+    description: "Hourly forecast of proton temperature in the solar wind, up to 96 hours ahead.",
+    variables: [{ key: "t", label: "Proton Temperature", unit: "K", quantile: true, thresholds: [] }],
+  },
+  {
     slug: "hmf",
     apiTarget: "hmf",
     visibility: "private",

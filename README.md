@@ -40,6 +40,7 @@ The configured forecasting pipeline uses the following models:
 |---|---|---|
 | **Solar-wind speed (`v`)** | **DLinear + PROSWIN**: hourly speed history combined with the official PROSWIN fold-1 model using AIA 171/211 Å images and physical features. Blend weights depend on lead time and were fitted on 2025 data. | Central speed forecast, q10/q90 intervals and speed-threshold probabilities. Missing PROSWIN predictions fall back to DLinear. |
 | **Proton density (`n`)** | **DLinear + LightGBM**, using hourly n/v history and the native PROSWIN **speed forecast** as an additional input. | q10/q50/q90 density forecast.
+| **Proton temperature (`T`)** | **LightGBM** with hourly T/n/v history and the PROSWIN speed forecast as an input (`argus-plasma-temperature-proswin-v1`). | Hourly q10/q50/q90 in K over +1…+96 h; without PROSWIN uses T/n/v history, then T-only if n/v is unavailable. |
 | **Kp** | Calibrated classification models using solar-wind and geomagnetic history (`argus-kp-t-v2`). | Probabilities of exceeding Kp thresholds. |
 | **Ap and Dst** | **LightGBM quantile regression**, using observation-history features (`argus-ap-q-v2`, `argus-dst-q-v2`). | q10/q50/q90 forecasts. |
 | **Total IMF (`Bt`)** | **LightGBM classifiers with logistic probability calibration**, using hourly IMF/plasma history (`argus-bt-t-v3`). | Probabilities of Bt ≥ 5, 10 and 15 nT over +1…+24 hours. |

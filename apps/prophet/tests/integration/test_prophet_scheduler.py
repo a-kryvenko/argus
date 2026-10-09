@@ -101,8 +101,10 @@ def test_all_failed_products_retry_and_keep_history(recorder_database):
     dispatch(config, fail=PRODUCTS)
     dispatch(config)
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT status,attempts FROM prophet.forecast_slot').fetchall() == [('succeeded', 2)] * 6
-        assert conn.execute("SELECT count(*) FROM prophet.forecast_run WHERE status='failed'").fetchone()[0] == 6
+        assert conn.execute('SELECT product,status,attempts FROM prophet.forecast_slot ORDER BY product').fetchall() == [
+            (product, 'succeeded', 2) for product in sorted(PRODUCTS)]
+        assert conn.execute("SELECT product FROM prophet.forecast_run WHERE status='failed' ORDER BY product").fetchall() == [
+            (product,) for product in sorted(PRODUCTS)]
 
 
 def test_crash_between_products_keeps_committed_product_and_recovers_next(recorder_database, tmp_path):
@@ -151,7 +153,8 @@ def test_disconnected_writer_cannot_publish_after_new_owner(recorder_database):
             old.finish()
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s', (old.run_id,)).fetchone()[0] == 'interrupted'
-        assert conn.execute('SELECT count(*) FROM prophet.forecast_release').fetchone()[0] == 6
+        assert conn.execute('SELECT product FROM prophet.forecast_release ORDER BY product').fetchall() == [
+            (product,) for product in sorted(PRODUCTS)]
     assert read_release('dst').run_id != old.run_id
 
 

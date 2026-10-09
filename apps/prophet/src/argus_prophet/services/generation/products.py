@@ -34,6 +34,7 @@ PRODUCTS = {
         Model('plasma_speed_quantile', 'forecast.api.SWSpeedFS'),
         Model('plasma_speed_threshold', 'forecast.api.SWSpeedProbaFS'))),
     'solar-wind-density': Product((Model('plasma_density_quantile', 'forecast.api.SWDensityFS'),)),
+    'solar-wind-temperature': Product((Model('plasma_temperature_quantile', 'forecast.api.TemperatureProswinForecaster'),)),
     'hmf': Product((
         Model('hmf_total_threshold', 'forecast_core.api.HMFTotalProbaFS'),
         Model('hmf_southward_threshold', 'forecast_core.api.HMFSouthProbaFS'))),

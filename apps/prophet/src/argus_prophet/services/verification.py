@@ -40,7 +40,7 @@ def cached_monthly_accuracy(product):
 
 def targets(frame, start, end):
     """Prepare verification targets from raw observations, without filling gaps."""
-    data = frame[frame.metric.isin(['v', 'n', 'kp', 'ap', 'dst', 'bx', 'by', 'bz'])].copy()
+    data = frame[frame.metric.isin(['v', 'n', 't', 'kp', 'ap', 'dst', 'bx', 'by', 'bz'])].copy()
     data['observed_at'] = pd.to_datetime(data.observed_at, utc=True)
     # browse includes its end boundary; verification uses [start, end).
     data = data[(data.observed_at >= start) & (data.observed_at < end)]
@@ -52,7 +52,7 @@ def targets(frame, start, end):
     if 'bz' in wide:
         wide['bs'] = (-wide.bz).clip(lower=0)
     rows = []
-    for metric in ('v', 'n', 'kp', 'ap', 'dst', 'bt', 'bs'):
+    for metric in ('v', 'n', 't', 'kp', 'ap', 'dst', 'bt', 'bs'):
         if metric not in wide:
             continue
         series = wide[metric].replace([np.inf, -np.inf], np.nan).dropna()

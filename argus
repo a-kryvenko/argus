@@ -15,7 +15,7 @@ Usage: ./argus <command> (environment: $mode)
   clio collect [METRIC ...] | clio normalize
   clio backfill [METRIC ...] [--from DATE --to DATE]
   clio worker | clio check-health worker
-  prophet refresh [all|solar-wind-speed|solar-wind-density|geomagnetic-activity|dst|hmf|atmospheric-density]
+  prophet refresh [all|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (default: january-2026)
   prophet verify [PRODUCT] [--days 7] | prophet verification-report [PRODUCT] [--days 7]
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]

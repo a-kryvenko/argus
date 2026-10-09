@@ -62,7 +62,7 @@ def generate_products(products, *, writer) -> None:
     policy = ProphetConfig.model_validate(getattr(runtime, 'project_config', {}).get('prophet', {}))
     details = provenance(runtime)
     service = ForecastGenerationService(
-        input_loader=partial(load_inputs, prepare_proswin=True) if 'solar-wind-speed' in products else load_inputs,
+        input_loader=partial(load_inputs, prepare_proswin=True) if {'solar-wind-speed', 'solar-wind-density'}.intersection(products) else load_inputs,
         calculator=calculate_product,
         executor=execute,
         run_factory=partial(ProductRun.begin, trigger='manual', runtime=runtime,

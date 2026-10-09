@@ -83,6 +83,13 @@ and `up --wait`.
 
 Provisioning only creates missing databases/owners; it does not rotate passwords.
 Models and metrics are uploaded separately from application images.
+The density blend requires `data/models/argus-plasma-density-proswin-blend-v1.joblib`
+(and its `.json` / `.validation.json` provenance files) alongside the existing
+PROSWIN assets. The 3.25 MB bundle embeds the DLinear fallback, 96 LightGBM heads,
+weights and interval calibration; it has no runtime dependency on notebooks.
+Upload it before activating the updated registry, then restart Prophet. The normal
+`deploy.sh` model sync includes this artifact. Missing PROSWIN records fall back to
+DLinear; a missing/corrupt *model bundle* is a deployment error, not a data fallback.
 
 ## Release
 

@@ -39,7 +39,7 @@ The configured forecasting pipeline uses the following models:
 | Forecast | Model and inputs | Published output |
 |---|---|---|
 | **Solar-wind speed (`v`)** | **DLinear + PROSWIN**: hourly speed history combined with the official PROSWIN fold-1 model using AIA 171/211 Å images and physical features. Blend weights depend on lead time and were fitted on 2025 data. | Central speed forecast, q10/q90 intervals and speed-threshold probabilities. Missing PROSWIN predictions fall back to DLinear. |
-| **Proton density (`n`)** | **DLinear**, using hourly density history. | q10/q50/q90 density forecasts. |
+| **Proton density (`n`)** | **DLinear + LightGBM**, using hourly n/v history and the native PROSWIN **speed forecast** as an additional input. | q10/q50/q90 density forecast.
 | **Kp** | Calibrated classification models using solar-wind and geomagnetic history (`argus-kp-t-v2`). | Probabilities of exceeding Kp thresholds. |
 | **Ap and Dst** | **LightGBM quantile regression**, using observation-history features (`argus-ap-q-v2`, `argus-dst-q-v2`). | q10/q50/q90 forecasts. |
 | **Total IMF (`Bt`)** | **LightGBM classifiers with logistic probability calibration**, using hourly IMF/plasma history (`argus-bt-t-v3`). | Probabilities of Bt ≥ 5, 10 and 15 nT over +1…+24 hours. |
@@ -47,9 +47,10 @@ The configured forecasting pipeline uses the following models:
 | **Thermospheric density** | **JB2008**, driven by F10.7, calibrated S10/M10/Y10 and the geomagnetic temperature correction. Current operation holds observed drivers constant over the forecast horizon. | Atmospheric-density grids by time, altitude and location. |
 
 Prophet schedules forecasts hourly and runs heavy calculations sequentially.
-Before generating the speed forecast, it requests PROSWIN through a shared job
+Before generating speed or density, it requests PROSWIN through a shared job
 queue and waits for completion or a timeout. PROSWIN runs in a temporary CPU
-process and releases model memory when the task finishes.
+process and releases model memory when the task finishes. Cached predictions are
+shared between both products; the neural model loads only when new inference is needed.
 
 The speed blend's prediction intervals and threshold probabilities currently use
 DLinear residual distributions around the blended point forecast; they have not

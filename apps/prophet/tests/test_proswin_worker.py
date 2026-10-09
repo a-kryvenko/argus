@@ -59,9 +59,19 @@ def test_failed_slot_resumes_and_completed_slot_is_immutable(tmp_path, monkeypat
     record = json.loads(saved)
     assert pd.Timestamp(record['available_at']) >= now
     assert pd.Timestamp(record['valid_time']) == slot + pd.Timedelta(hours=96)
-    worker.cycle(runtime, None, 'https://clio.test', 'secret')
+    def unexpected_model_load():
+        raise AssertionError('Cached predictions must not load the neural model')
+    worker.cycle(None, None, 'https://clio.test', 'secret', runtime_factory=unexpected_model_load)
     assert files[0].read_bytes() == saved and state['predictions'] == 1
     files[0].write_text('{broken')
-    worker.cycle(runtime, None, 'https://clio.test', 'secret')
+    state['loaded'] = False
+    def load_runtime():
+        state['loaded'] = True
+        return runtime
+    def physical_after_runtime(*_):
+        assert state['loaded'], 'Trusted vendor modules must be registered before physical features'
+        return [400.] * 63
+    monkeypatch.setattr(worker, 'physical_features', physical_after_runtime)
+    worker.cycle(None, None, 'https://clio.test', 'secret', runtime_factory=load_runtime)
     assert json.loads(files[0].read_text())['value'] == 500
     assert state['predictions'] == 2

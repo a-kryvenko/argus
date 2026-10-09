@@ -49,7 +49,7 @@ def physical_features(inputs,slot,sunspots):
     return [*wind,*selected.to_numpy(),float(B0(Time(slot.to_pydatetime())).value),float(cycle)]
 
 
-def cycle(runtime,client,url,token,inputs=None):
+def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
     now=pd.Timestamp(inputs.as_of) if inputs is not None else pd.Timestamp.now(tz='UTC')
     hour=now.floor('h');root=cache_root()
     headers={'Authorization':f'Bearer {token}'}
@@ -97,6 +97,10 @@ def cycle(runtime,client,url,token,inputs=None):
             except (OSError, ValueError):
                 logger.warning('Rebuilding invalid PROSWIN record: %s', dest)
         try:
+            # Runtime registers the trusted vendor modules used by physical_features.
+            if runtime is None:
+                if runtime_factory is None: raise RuntimeError('PROSWIN runtime factory required')
+                runtime = runtime_factory()
             features=physical_features(inputs,slot,sunspots)
             with TemporaryDirectory(prefix='proswin-') as temporary:
                 crops={}
@@ -145,9 +149,10 @@ def main():
     url=os.environ['OBSERVATIONS_URL'].rstrip('/');token=os.environ['OBSERVATIONS_SERVICE_TOKEN']
     with heavy_task(get_config().data_root):
         from forecast.inference.proswin_runtime import ProswinRuntime
-        runtime=ProswinRuntime(Path(os.getenv('PROPHET_PROSWIN_ASSETS',str(get_config().data_root/'models/proswin-fold1-nrt-v1'))))
+        def runtime_factory():
+            return ProswinRuntime(Path(os.getenv('PROPHET_PROSWIN_ASSETS',str(get_config().data_root/'models/proswin-fold1-nrt-v1'))))
         with httpx.Client(timeout=httpx.Timeout(60,connect=10),follow_redirects=False) as client:
-            cycle(runtime,client,url,token,inputs=inputs)
+            cycle(None,client,url,token,inputs=inputs,runtime_factory=runtime_factory)
         from argus_prophet.services.proswin_cache import read_predictions
         records=read_predictions(inputs.as_of, ready_at=datetime.now(UTC))
         atomic_write(job/'predictions.json', json.dumps([r.model_dump(mode='json') for r in records]).encode())

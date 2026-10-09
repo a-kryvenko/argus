@@ -141,3 +141,12 @@ def test_shutdown_publishes_already_running_calculations(dispatcher):
     assert not d.active and events[-1] == 'unlock'
     for run in runs.values():
         run.finish.assert_called_once_with()
+
+
+@pytest.mark.parametrize('product,expected', [('solar-wind-speed', True), ('solar-wind-density', True), ('dst', False)])
+def test_plasma_products_prepare_proswin_before_calculation(dispatcher, product, expected):
+    d, submitted, runs, events = dispatcher
+    d.tasks = [worker.Task(product, ProductSchedule())]
+    d.launch_due(NOW, 0)
+    loader = submitted[0][1][0]
+    assert loader.keywords['prepare_proswin'] is expected

@@ -14,9 +14,10 @@ models:
     metrics: data/metrics/plasma/speed_proba
 
   plasma_density_quantile:
-    model: argus-plasma-density-dlinear-v1
-    artifact_path: data/models/argus-plasma-density-dlinear-v1.joblib
-    metrics: data/metrics/plasma/density_dlinear
+    model: argus-plasma-density-proswin-blend-v1
+    artifact_path: data/models/argus-plasma-density-proswin-blend-v1.joblib
+    metrics: data/metrics/plasma/density_proswin
+    metrics_report: configs/evaluations/solar-wind-density.json
 
   kp_threshold:
     model: argus-kp-t-v2

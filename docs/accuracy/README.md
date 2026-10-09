@@ -41,8 +41,33 @@ on these exact pairs is available in this report.
 
 Source: the completed local experiment `proswin_blend_2025_2026_v1/report.json`,
 periods `calibration_2025` and `evaluation_2026`, `per_lead` → `metrics` → `blend`.
-The October 7 snapshot below retains the earlier models' results; other products
-have not been re-evaluated by this update.
+The October 7 snapshot below retains the earlier models' results;
+
+## Proton density — updated October 9, 2026
+
+Configured model: **DLinear + PROSWIN-speed-assisted LightGBM**. PROSWIN still
+predicts speed; 96 frozen LightGBM heads predict density from that speed forecast
+and hourly n/v history. Heads trained on 2011–2024; weights fitted on 2025 science
+inputs; q10/q90 residual offsets calibrated on 2025 NRT inputs. +97…+120h retain
+DLinear. Missing usable PROSWIN or recent n/v falls back to DLinear, including its
+original intervals, independently for each lead.
+
+2026 retrospective NRT evaluation: **156 daily target dates, January 5–August 3**,
+14,976 target/lead pairs over +1…+96h. MAE/RMSE in **cm⁻³**:
+
+| Lead | DLinear MAE | Blend MAE | Blend RMSE |
+|---|---:|---:|---:|
+| +1h | 1.0859 | 1.0507 | 2.4386 |
+| +3h | 1.7928 | 1.6872 | 4.1004 |
+| +6h | 2.2215 | 1.9951 | 4.7169 |
+| +12h | 2.4488 | 2.2465 | 5.0483 |
+| +24h | 2.9533 | 2.4538 | 5.3282 |
+| +48h | 2.9584 | 2.6680 | 5.5705 |
+| +72h | 2.8243 | 2.7253 | 5.6368 |
+| +96h | 2.8206 | 2.7293 | 5.5862 |
+
+Source: `proswin_density_nrt_v1/report.json`, `predictions.parquet`; portable report:
+[solar-wind-density.json](../../configs/evaluations/solar-wind-density.json).
 
 ## Evaluation periods
 

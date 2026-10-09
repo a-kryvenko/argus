@@ -62,21 +62,37 @@ class SWDensityFS(QuantileForecastService):
 
     def __init__(self, models_bundle):
         super().__init__(models_bundle)
-        self._density = (DensityDLinearForecaster(models_bundle)
-                         if models_bundle.get('format') == 'density_dlinear' else None)
+        self.uses_density_blend = models_bundle.get('format') == 'density_proswin_blend'
+        if self.uses_density_blend:
+            from forecast.inference.density_proswin import DensityProswinForecaster
+            self._density = DensityProswinForecaster(models_bundle)
+        else:
+            self._density = (DensityDLinearForecaster(models_bundle)
+                             if models_bundle.get('format') == 'density_dlinear' else None)
 
     def snapshot_options(self, inputs):
         if self._density is None:
             return super().snapshot_options(inputs)
-        return {'density_history': pd.DataFrame(
+        options = {'density_history': pd.DataFrame(
             [point.model_dump() for point in inputs.density_observations], columns=['issue_time', 'n'])}
+        if self.uses_density_blend:
+            options.update(speed_history=pd.DataFrame(
+                [point.model_dump() for point in inputs.speed_observations], columns=['issue_time', 'v']),
+                proswin_predictions=inputs.proswin_predictions,
+                proswin_ready_at=inputs.proswin_ready_at or inputs.as_of, source_cutoff=inputs.as_of)
+        return options
 
-    def forecast(self, observations, *, issue_time=None, density_history=None, **kwargs):
+    def forecast(self, observations, *, issue_time=None, density_history=None, speed_history=None,
+                 proswin_predictions=(), proswin_ready_at=None, source_cutoff=None, **kwargs):
         if self._density is None:
-            return super().forecast(observations, issue_time=issue_time, **kwargs)
+            return super().forecast(observations, issue_time=issue_time, speed_history=speed_history, **kwargs)
         if density_history is None:
             raise ValueError('Density DLinear requires unfilled density_history from Clio')
-        return self.forecast_from_df(self._density.frame(issue_time or datetime.now(UTC), density_history))
+        options = {}
+        if self.uses_density_blend:
+            options = {'speed_history': speed_history if speed_history is not None else pd.DataFrame(columns=['issue_time', 'v']),
+                       'predictions': proswin_predictions, 'ready_at': proswin_ready_at, 'source_cutoff': source_cutoff}
+        return self.forecast_from_df(self._density.frame(issue_time or datetime.now(UTC), density_history, **options))
 
     def _build_features(self, raw_observations_frame: pd.DataFrame) -> pd.DataFrame:
         from forecast.inputs.observations import build_features

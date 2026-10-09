@@ -29,3 +29,18 @@ def test_missing_new_report_never_falls_back_to_old_metrics(tmp_path, monkeypatc
     monkeypatch.setattr(service, 'get_config', lambda: SimpleNamespace(workdir=tmp_path, models_registry=registry))
     with pytest.raises(ArtifactNotReadyError):
         service.load_metrics(service.PRODUCTS['solar-wind-speed'])
+
+
+def test_density_report_uses_blend_intervals_and_matched_nrt_cohort(monkeypatch):
+    import yaml
+    registry = yaml.safe_load((ROOT/'configs/models_registry.yaml').read_text())
+    monkeypatch.setattr(service, 'get_config', lambda: SimpleNamespace(workdir=ROOT, models_registry=registry))
+    result = service.load_metrics(service.PRODUCTS['solar-wind-density'])
+    assert '156 daily' in result.evaluation.sample
+    density = result.variables['n'].continuous
+    assert density.quantiles == [.1, .5, .9]
+    assert len(density.by_lead_hour) == 96
+    last = density.by_lead_hour[-1]
+    assert last.values['n'] == 156
+    assert last.values['mae'] == pytest.approx(2.7292544318690695)
+    assert 'coverage_80' in last.values

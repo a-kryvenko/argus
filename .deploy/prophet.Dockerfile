@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 git openssh-client \
+    && apt-get install -y --no-install-recommends libgomp1 libgfortran5 git openssh-client \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /var/www/apps/prophet

@@ -35,7 +35,8 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
         )
         usable = or_(Measurement.quality.is_(None), Measurement.quality.not_in(['flagged', 'missing']))
         rows = (await session.execute(
-            select(Measurement.metric, Measurement.value, Measurement.observed_at)
+            select(Measurement.metric, Measurement.value, Measurement.observed_at,
+                   Measurement.received_at, Measurement.interval_end)
             .where(Measurement.metric.in_(['f10_7', 'dst', 'ap']), usable, Measurement.value.is_not(None),
                    Measurement.observed_at >= as_of - timedelta(days=88),
                    Measurement.observed_at <= as_of)
@@ -73,7 +74,9 @@ async def forecast_inputs(as_of: AwareDatetime, session: AsyncSession = Depends(
             as_of=as_of, read_at=now, observations=observations, files=files,
             solar_wind_hourly=hourly,
             measurements=[SourceMeasurement(metric=row.metric, value=row.value,
-                                            observed_at=row.observed_at) for row in rows],
+                                            observed_at=row.observed_at,
+                                            available_at=max(t for t in (row.observed_at, row.received_at, row.interval_end)
+                                                             if t is not None)) for row in rows],
             speed_observations=[SpeedObservation(issue_time=row.issue_time, v=row.v) for row in speed_rows],
             density_observations=[DensityObservation(issue_time=row.issue_time, n=row.n) for row in density_rows],
         )

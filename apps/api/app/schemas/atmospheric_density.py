@@ -8,11 +8,12 @@ from app.schemas.metadata import metadata_field
 
 
 class DensityMetadata(BaseModel):
-    model: Literal['JB2008'] = 'JB2008'
+    model: Literal['JB2008', 'DTM2020'] = 'JB2008'
     history_start: datetime
     background_method: Literal['trailing_81_daily_values', 'trailing_81_daily_values_linear_gapfill']
     background_interpolated_days: dict[str, list[date]]
-    dtc_method: Literal['causal_dst_ap_v1']
+    dtc_method: Literal['causal_dst_ap_v1'] | None = None
+    geomagnetic_method: Literal['causal_dst_ap_v1', 'ap_to_kp_lag3h_mean24h_v1'] | None = None
 
 
 class DensityForecast(BaseModel):
@@ -20,7 +21,8 @@ class DensityForecast(BaseModel):
     driver_mode: Literal['observed_persistence'] = 'observed_persistence'
     issue_time: datetime
     observed_at: datetime
-    dtc_observed_at: datetime
+    dtc_observed_at: datetime | None = None
+    geomagnetic_observed_at: datetime | None = None
     background_interpolated: bool = Field(description='True when background drivers include gap-filled daily values. Details are available with meta=true.')
     horizon_hours: int
     predictions: list[DensityPoint]

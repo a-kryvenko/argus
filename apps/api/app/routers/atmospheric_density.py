@@ -14,7 +14,7 @@ router = APIRouter(tags=["forecasts"])
     response_model=ApiResponse[DensityForecast],
     summary="Get the latest atmospheric density forecast",
     description=(
-        "Returns the application's precomputed 48-hour JB2008 grid from internal "
+        "Returns the application's precomputed 48-hour thermospheric grid from internal "
         "observations. No request body or model inputs are required. Drivers are "
         "held constant at issue time. Backgrounds use trailing 81-day means; "
         "DTC is a causal estimate from observed Dst/ap, identified in the response. "

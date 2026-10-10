@@ -154,11 +154,11 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
     expected.insert(0, 'issue_time', ISSUE)
     expected.insert(2, 'lead_hours', [0, 1])
     monkeypatch.setattr(config, 'get_config', lambda: pytest.fail('Calculation must not load configuration'))
-    monkeypatch.setattr(density_forecast, 'observed_driver_frame', lambda *args: drivers)
+    monkeypatch.setattr(density_forecast.ObservedPersistenceDrivers, 'prepare', lambda *args: drivers)
     monkeypatch.setattr(AtmosphericDensityForecastService, 'forecast_grid', lambda *args, **kwargs: grid.copy())
     monkeypatch.chdir(tmp_path)
     inputs = ForecastInputs(as_of=ISSUE, read_at=ISSUE, observations=Observation(points=[]))
-    result = calculate_snapshot(AtmosphericDensityForecastService(), inputs, issue_time=ISSUE,
+    result = calculate_snapshot(AtmosphericDensityForecastService(density_model='DTM2020'), inputs, issue_time=ISSUE,
         model_info={'backend': 'forecast_core', 'registry_name': 'atmospheric_density', 'issue_time': ISSUE.isoformat()})
     pd.testing.assert_frame_equal(result.frame, expected)
     assert list(tmp_path.iterdir()) == []
@@ -175,3 +175,19 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
                                 sha256=hashlib.sha256(content).hexdigest(),
                                 row_count=rows, columns=columns, model_info=info)
     assert artifact.issue_time() == ISSUE
+
+
+@pytest.mark.parametrize('model', ['DTM2020', 'JB2008'])
+def test_density_generation_passes_registry_and_records_actual_model(tmp_path, monkeypatch, model):
+    from forecast_core.api import AtmosphericDensityForecastService
+    inputs = ForecastInputs(as_of=ISSUE, read_at=ISSUE, observations=Observation(points=[]))
+    registry = {'atmospheric_density': {'model': model, 'runtime_path': 'data/models/licensed-dtm'}}
+    def snapshot(service, inputs, *, issue_time):
+        assert service.density_model == model
+        assert service.runtime_path == tmp_path/'data/models/licensed-dtm'
+        return pd.DataFrame({'issue_time': [issue_time], 'valid_time': [issue_time], 'lead_hours': [0],
+            'rho_kg_m3': [1e-12]})
+    monkeypatch.setattr(AtmosphericDensityForecastService, 'forecast_snapshot', snapshot)
+    artifacts = generation.calculate_product(generation.CalculationRequest('atmospheric-density', inputs, tmp_path, registry))
+    assert artifacts[0].model_info['density_model'] == model
+    assert artifacts[0].model_info['driver_mode'] == 'observed_persistence'

@@ -88,6 +88,9 @@ models:
     metrics: data/metrics/dtc
 
   atmospheric_density:
+    # Switch to DTM2020 after a suitable CNES license and runtime provisioning.
+    model: JB2008
+    runtime_path: data/models/dtm2020
     history_cache: data/observations/jb2008
     max_age_hours: 6
     active_versions: null

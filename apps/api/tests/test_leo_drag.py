@@ -108,3 +108,19 @@ def test_public_error_mapping(error, status, monkeypatch):
         response = api.post('/public/risks/leo-drag', json=REQUEST)
     assert response.status_code == status
     assert 'private detail' not in response.text
+
+
+def test_dtm_source_survives_public_projection(result, monkeypatch):
+    source = result['source']
+    source.update(density_model='DTM2020', geomagnetic_method='ap_to_kp_lag3h_mean24h_v1',
+                  geomagnetic_observed_at=source['issue_time'], dtc_method=None, dtc_observed_at=None)
+    monkeypatch.setattr(leo_drag, 'assess_drag', lambda request: service.assess_drag(
+        request, transport=httpx.MockTransport(lambda _: httpx.Response(200, json=result))))
+    with client() as api:
+        response = api.post('/public/risks/leo-drag?meta=true', json=REQUEST)
+    assert response.status_code == 200
+    data = response.json()['data']
+    assert data['meta']['source']['model'] == 'DTM2020'
+    assert data['meta']['source']['geomagnetic_method'] == 'ap_to_kp_lag3h_mean24h_v1'
+    assert data['source']['geomagnetic_observed_at']
+    assert data['source'].get('dtc_observed_at') is None

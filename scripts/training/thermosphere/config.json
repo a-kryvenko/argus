@@ -1,0 +1,9 @@
+{
+  "experiment": "dtm2020_jb2008_v1",
+  "windows": [["2025-01-01", "2025-01-14"], ["2025-06-01", "2025-06-14"], ["2025-11-10", "2025-11-23"]],
+  "lead_hours": [0, 6, 12, 24, 48],
+  "sample_minutes": 30,
+  "upstream_commit": "a488a7c9d030bfbe86e88ab3d28a7ec5589b92e0",
+  "density_product_version": "0003",
+  "seed": 20251010
+}

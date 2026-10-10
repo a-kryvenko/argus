@@ -16,7 +16,7 @@ def client_with_session(monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
     session = AsyncMock()
     session.execute.return_value = Mock(all=lambda: [SimpleNamespace(
-        metric='dst', value=-10, observed_at=NOW, issue_time=NOW, v=420., n=4.5)])
+        metric='dst', value=-10, observed_at=NOW, received_at=NOW, interval_end=None, issue_time=NOW, v=420., n=4.5)])
     loader = AsyncMock(return_value=Observation(points=[]))
     monkeypatch.setattr(routes, 'load_normalized_observations', loader)
     monkeypatch.setattr(routes, 'load_observation_files', AsyncMock(return_value=[]))
@@ -53,6 +53,7 @@ def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
     assert args[4] == 3600
     routes.load_observation_files.assert_awaited_once_with(session, NOW)
     assert payload['measurements'][0]['metric'] == 'dst'
+    assert datetime.fromisoformat(payload['measurements'][0]['available_at'].replace('Z', '+00:00')) == NOW
     assert payload['speed_observations'][0]['v'] == 420.
     assert payload['density_observations'][0]['n'] == 4.5
     statements = session.execute.call_args_list

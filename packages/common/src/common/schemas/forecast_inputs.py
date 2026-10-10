@@ -12,6 +12,7 @@ class SourceMeasurement(BaseModel):
     metric: DensityMetric
     value: FiniteFloat
     observed_at: AwareDatetime
+    available_at: AwareDatetime | None = None
 
 
 class SpeedObservation(BaseModel):

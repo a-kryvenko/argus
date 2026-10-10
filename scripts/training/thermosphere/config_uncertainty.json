@@ -1,0 +1,9 @@
+{
+  "experiment": "dtm2020_uncertainty_v3",
+  "calibration_windows": [["2024-12-03", "2024-12-28"]],
+  "lead_hours": [6, 12, 24, 48],
+  "upper_ap_quantiles": [0.9, 0.95],
+  "density_upper_coverages": [0.9, 0.95],
+  "density_interval_coverage": 0.9,
+  "seed": 20251010
+}

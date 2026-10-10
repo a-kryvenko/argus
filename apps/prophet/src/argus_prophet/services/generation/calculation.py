@@ -44,7 +44,10 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
         if model.bundled:
             service, metadata = load_model(model.service_class(), workdir=workdir, registry=registry)
         else:
-            service = model.service_class()()
+            entry = registry[model.artifact]
+            service = model.service_class()(
+                density_model=entry.get('model', 'JB2008'),
+                runtime_path=workdir / entry.get('runtime_path', 'data/models/dtm2020'))
             metadata = {'backend': 'forecast_core', 'registry_name': service.registry_name,
                         'issue_time': issue_time.isoformat()}
         if product == 'solar-wind-speed' and getattr(service, 'uses_aia', False):
@@ -82,6 +85,8 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
             result.model_info.update(service._density.last_status)
         if getattr(service, 'uses_temperature_proswin', False):
             result.model_info.update(service.last_status)
+        if product == 'atmospheric-density':
+            result.model_info.update(service.model_info)
         artifact = serialize(result)
         if len(artifact.content) > 32 * 1024 * 1024:
             raise ValueError('Forecast artifact exceeds 32 MiB')

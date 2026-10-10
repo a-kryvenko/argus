@@ -114,3 +114,15 @@ integration results; it does not precompute satellite assessments.
 Production requires publishing the corresponding private `intelligence-core`
 commit before building the Intelligence image. Public source alone does not
 contain the numerical implementation.
+
+
+Density releases may come from JB2008 or DTM2020 Operational. The source model is
+reported in `meta.source.model` with `meta=true`; the selected release determines
+which model was used. DTM uses fixed observed F10.7/ap-derived drivers across the
+horizon. Its `geomagnetic_method` is `ap_to_kp_lag3h_mean24h_v1` and
+`geomagnetic_observed_at` identifies the latest ap bin start. Legacy DTC fields
+are null for DTM. Longitude density spread is not a calibrated risk interval.
+
+DTM support is implemented but the registry remains on JB2008 pending a suitable
+CNES license and runtime provisioning. Native model files are supplied separately,
+not distributed in the public image. Forecast ap is not enabled.

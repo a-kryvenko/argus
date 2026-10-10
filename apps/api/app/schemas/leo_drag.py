@@ -13,7 +13,8 @@ class DragSource(BaseModel):
     release_id: UUID
     issue_time: datetime
     observed_at: datetime
-    dtc_observed_at: datetime
+    dtc_observed_at: datetime | None = None
+    geomagnetic_observed_at: datetime | None = None
     driver_mode: Literal['observed_persistence']
     background_interpolated: bool
 

@@ -1,6 +1,6 @@
 # Forecast accuracy
 
-[Earlier multi-product snapshot](snapshots/2026-10-07.md) · [Settings](../../scripts/benchmarks/protocol.json)
+[Earlier multi-product snapshot](snapshots/2026-10-07.md) · [Settings](../../scripts/benchmarks/protocol.json) · [Atmospheric density: JB2008 and DTM2020](ATMOSPHERIC.md)
 
 ## Solar wind speed — updated October 9, 2026
 

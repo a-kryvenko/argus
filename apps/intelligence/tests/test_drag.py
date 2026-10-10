@@ -117,3 +117,16 @@ def test_real_backend_end_to_end(release):
     assert len(result['predictions']) == 49
     assert 0 < result['estimated_altitude_loss_m'] < 1000
     assert result['predictions'][-1]['estimated_altitude_loss_m'] == result['estimated_altitude_loss_m']
+
+
+def test_dtm_provenance_reaches_drag_assessment(release, backend):
+    release['model'] = 'DTM2020'
+    release['geomagnetic_method'] = 'ap_to_kp_lag3h_mean24h_v1'
+    release['geomagnetic_observed_at'] = release.issue_time-pd.Timedelta(hours=3)
+    release['dtc_method'] = None
+    release['dtc_observed_at'] = None
+    result = drag.assess_drag(LeoDragRequest(**REQUEST))
+    assert result.source.density_model == 'DTM2020'
+    assert result.source.geomagnetic_method == 'ap_to_kp_lag3h_mean24h_v1'
+    assert result.source.dtc_method is None
+    assert result.source.dtc_observed_at is None

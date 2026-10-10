@@ -98,3 +98,23 @@ def test_gap_filled_metadata_is_returned_and_required(artifact):
         assert result.json()['data']['meta']['background_interpolated_days'] == dates
         frame.drop(columns='background_interpolated_days').to_csv(path, index=False)
         assert api.get('/public/forecasts/atmospheric-density').status_code == 503
+
+
+def test_dtm_metadata_and_missing_runtime_metadata(artifact):
+    path, frame = artifact
+    frame['model'] = 'DTM2020'
+    frame['geomagnetic_method'] = 'ap_to_kp_lag3h_mean24h_v1'
+    frame['geomagnetic_observed_at'] = frame.issue_time-pd.Timedelta(hours=3)
+    frame['dtc_method'] = None
+    frame['dtc_observed_at'] = None
+    frame.to_csv(path, index=False)
+    with client() as api:
+        response = api.get('/public/forecasts/atmospheric-density?meta=true')
+        assert response.status_code == 200
+        data = response.json()['data']
+        assert data['meta']['model'] == 'DTM2020'
+        assert data['meta']['geomagnetic_method'] == 'ap_to_kp_lag3h_mean24h_v1'
+        assert data.get('dtc_observed_at') is None
+        assert data['geomagnetic_observed_at']
+        frame.drop(columns='geomagnetic_method').to_csv(path, index=False)
+        assert api.get('/public/forecasts/atmospheric-density').status_code == 503

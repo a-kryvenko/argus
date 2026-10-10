@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class DensityCell(BaseModel):
@@ -22,15 +22,35 @@ class DensityPoint(BaseModel):
 
 class DensityForecast(BaseModel):
     target: Literal["atmospheric-density"] = "atmospheric-density"
-    model: Literal["JB2008"] = "JB2008"
+    model: Literal["JB2008", "DTM2020"] = "JB2008"
     driver_mode: Literal["observed_persistence"] = "observed_persistence"
     unit: Literal["kg/m^3"] = "kg/m^3"
     issue_time: datetime
     observed_at: datetime
     history_start: datetime
-    dtc_observed_at: datetime
+    dtc_observed_at: datetime | None = None
+    geomagnetic_observed_at: datetime | None = None
     background_method: Literal["trailing_81_daily_values", "trailing_81_daily_values_linear_gapfill"]
     background_interpolated_days: dict[str, list[date]] = Field(default_factory=dict)
-    dtc_method: Literal["causal_dst_ap_v1"]
+    dtc_method: Literal["causal_dst_ap_v1"] | None = None
+    geomagnetic_method: Literal["causal_dst_ap_v1", "ap_to_kp_lag3h_mean24h_v1"] | None = None
     horizon_hours: int
     predictions: list[DensityPoint]
+
+    @model_validator(mode='after')
+    def model_metadata(self):
+        if self.model == 'DTM2020':
+            if (self.dtc_method is not None or self.dtc_observed_at is not None
+                    or self.geomagnetic_method != 'ap_to_kp_lag3h_mean24h_v1'
+                    or self.geomagnetic_observed_at is None):
+                raise ValueError('Invalid DTM2020 driver metadata')
+        else:
+            if self.dtc_method != 'causal_dst_ap_v1' or self.dtc_observed_at is None:
+                raise ValueError('Missing JB2008 DTC metadata')
+            if self.geomagnetic_method not in (None, self.dtc_method):
+                raise ValueError('Inconsistent JB2008 geomagnetic method')
+            if self.geomagnetic_observed_at not in (None, self.dtc_observed_at):
+                raise ValueError('Inconsistent JB2008 geomagnetic timestamp')
+            self.geomagnetic_method = self.dtc_method
+            self.geomagnetic_observed_at = self.dtc_observed_at
+        return self

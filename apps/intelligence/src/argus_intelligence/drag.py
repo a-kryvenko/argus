@@ -51,9 +51,11 @@ def assess_drag(request: LeoDragRequest) -> LeoDragAssessment:
     return LeoDragAssessment(
         computed_at=now, start_time=density.issue_time, end_time=points[-1].valid_time,
         inputs=request,
-        source=DragSource(release_id=release.release_id, **density.model_dump(include={
+        source=DragSource(release_id=release.release_id, density_model=density.model,
+                          driver_mode=density.driver_mode, **density.model_dump(include={
             'issue_time', 'observed_at', 'dtc_observed_at', 'history_start',
-            'background_method', 'background_interpolated_days', 'dtc_method'})),
+            'background_method', 'background_interpolated_days', 'dtc_method',
+            'geomagnetic_method', 'geomagnetic_observed_at'})),
         **{key: value for key, value in result.items() if key != 'predictions'},
         predictions=[dict(valid_time=point.valid_time, lead_hours=point.lead_hours, **values)
                      for point, values in zip(points, result['predictions'], strict=True)],

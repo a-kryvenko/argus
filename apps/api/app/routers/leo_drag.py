@@ -11,7 +11,7 @@ router = APIRouter(tags=['risks'])
 
 @router.post('/public/risks/leo-drag', response_model=ApiResponse[LeoDragAssessment],
              summary='Estimate drag for a circular LEO orbit',
-             description=('First-order drag assessment for 200–800 km using fresh JB2008 density. '
+             description=('First-order drag assessment for 200–800 km using a fresh thermospheric density grid. '
                           '24/48 hours start at the forecast issue time. Drivers persist at observed values. '
                           'Optional cumulative altitude-loss thresholds determine risk categories; no probabilities. '
                           'Returns 422 outside the grid or above 1000 m estimated decay, and 503 when unavailable.'),

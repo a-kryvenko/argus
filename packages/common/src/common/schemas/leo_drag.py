@@ -47,13 +47,35 @@ class DragSource(DragModel):
     release_id: UUID
     issue_time: AwareDatetime
     observed_at: AwareDatetime
-    dtc_observed_at: AwareDatetime
+    dtc_observed_at: AwareDatetime | None = None
+    geomagnetic_observed_at: AwareDatetime | None = None
     history_start: AwareDatetime
     background_method: str
     background_interpolated_days: dict[str, list[date]]
-    dtc_method: Literal['causal_dst_ap_v1']
-    density_model: Literal['JB2008'] = 'JB2008'
+    dtc_method: Literal['causal_dst_ap_v1'] | None = None
+    geomagnetic_method: Literal['causal_dst_ap_v1', 'ap_to_kp_lag3h_mean24h_v1'] | None = None
+    density_model: Literal['JB2008', 'DTM2020'] = 'JB2008'
     driver_mode: Literal['observed_persistence'] = 'observed_persistence'
+
+    @model_validator(mode='after')
+    def consistent_density_source(self):
+        if self.density_model == 'DTM2020':
+            if (self.dtc_method is not None or self.dtc_observed_at is not None
+                    or self.geomagnetic_method != 'ap_to_kp_lag3h_mean24h_v1'
+                    or self.geomagnetic_observed_at is None):
+                raise ValueError('Invalid DTM source metadata')
+        else:
+            if self.dtc_method != 'causal_dst_ap_v1' or self.dtc_observed_at is None:
+                raise ValueError('Missing JB2008 source metadata')
+            if self.geomagnetic_method not in (None, self.dtc_method):
+                raise ValueError('Inconsistent geomagnetic method')
+            if self.geomagnetic_observed_at not in (None, self.dtc_observed_at):
+                raise ValueError('Inconsistent geomagnetic timestamp')
+            self.geomagnetic_method = self.dtc_method
+            self.geomagnetic_observed_at = self.dtc_observed_at
+        if self.geomagnetic_observed_at > self.issue_time:
+            raise ValueError('Geomagnetic observation is after issue time')
+        return self
 
 
 class LeoDragAssessment(DragModel):

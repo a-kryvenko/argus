@@ -1,5 +1,8 @@
 # Observation collection and preparation
 
+The [model observation requirements](../../observation-requirements.md) inventory
+sources, sampling, history, provenance and validation datasets, including DTM2020.
+
 Arrows show data movement. Clio owns source history and original-file receipts.
 Prophet derives model features from downloaded originals and owns a disposable
 derivative cache. Public reads do not trigger collection or preparation.

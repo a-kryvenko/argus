@@ -1,5 +1,8 @@
 # LEO drag assessment
 
+See [observation requirements](observation-requirements.md) for model inputs,
+JB2008/DTM2020 history and freshness requirements, and density/orbit validation data.
+
 ## Dashboard panel
 
 `/dashboard/risk/leo` renders the standalone `LeoDragView` with orbit/spacecraft

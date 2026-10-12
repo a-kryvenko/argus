@@ -16,3 +16,7 @@ for package in common forecast forecast-core intelligence-core; do
 done
 uv sync --locked --project scripts/training
 scripts/training/.venv/bin/python -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs -n 8 scripts/training/tests "$@"
+
+# Private research has its own dependencies; never use a serving environment.
+uv sync --locked --project notebooks
+notebooks/.venv/bin/python -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs notebooks/workflows/revalidation notebooks/workflows/training/thermosphere notebooks/tests/forecast_core notebooks/tests/test_evaluation.py "$@"

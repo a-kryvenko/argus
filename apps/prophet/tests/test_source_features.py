@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
+from dataclasses import asdict
 import hashlib
 import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -88,12 +90,16 @@ def test_original_cache_detects_corruption_and_refetches(tmp_path, monkeypatch):
 @pytest.fixture
 def calibrated_goes(tmp_path, monkeypatch):
     from forecast_core.data_pipelines.solar_indices import (
-        SolarIndexCalibration, INDEX_FEATURE_COLUMNS, REQUIRED_GOES_COLUMNS, save_solar_index_calibrations)
+        SolarIndexCalibration, INDEX_FEATURE_COLUMNS, REQUIRED_GOES_COLUMNS)
     artifact = tmp_path / 'calibration.json'
-    save_solar_index_calibrations({name: SolarIndexCalibration(
+    calibrations = {name: SolarIndexCalibration(
         feature_columns=features, feature_means=(0.,)*len(features), feature_scales=(1.,)*len(features),
         intercept=100., coefficients=(1.,)+(0.,)*(len(features)-1))
-        for name, features in INDEX_FEATURE_COLUMNS.items()}, artifact)
+        for name, features in INDEX_FEATURE_COLUMNS.items()}
+    artifact.write_text(json.dumps({
+        'version': 1,
+        'calibrations': {name: asdict(value) for name, value in calibrations.items()},
+    }, allow_nan=False))
     monkeypatch.setattr(service, 'get_config', lambda: SimpleNamespace(workdir=tmp_path,
         models_registry={'models': {'solar_index_calibration': {'calibration_path': artifact.name}}}))
     rows = []

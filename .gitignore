@@ -59,4 +59,5 @@ yarn-error.log*
 
 # Mlflow
 mlflow.db
+/mlartifacts/
 .argus-mode

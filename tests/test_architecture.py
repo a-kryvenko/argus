@@ -161,3 +161,16 @@ def test_private_inference_has_no_configuration_or_observation_file_access():
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 assert not (isinstance(node.func, ast.Name) and node.func.id == 'open'), path
+
+
+def test_research_namespaces_are_only_private_launchers():
+    """Prevent proprietary recipes or tuning configs returning to the public tree."""
+    for directory in ('scripts/revalidation', 'scripts/training/aia_wind',
+                      'scripts/training/thermosphere'):
+        for path in (ROOT / directory).iterdir():
+            if not path.is_file():
+                continue
+            assert path.suffix == '.py', f'Private research asset in public tree: {path}'
+            tree = ast.parse(path.read_text())
+            assert not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                           for node in ast.walk(tree)), f'Implementation in research launcher: {path}'

@@ -11,6 +11,7 @@ from pydantic import AwareDatetime, BaseModel, Field, model_validator
 
 # A release includes all sources needed to render one public/private product.
 PRODUCT_ARTIFACTS = {
+    'solar-wind-events': ('solar_wind_events',),
     'solar-wind-speed': ('plasma_speed_quantile', 'plasma_speed_threshold'),
     'solar-wind-density': ('plasma_density_quantile',),
     'solar-wind-temperature': ('plasma_temperature_quantile',),
@@ -21,6 +22,7 @@ PRODUCT_ARTIFACTS = {
     'atmospheric-density': ('atmospheric_density',),
 }
 PREDICTION_COLUMNS = {
+    'solar_wind_events': ('event_count', 'detection_count'),
     **{name: tuple(f'{prefix}_q{q}' for q in (10, 50, 90)) for name, prefix in (
         ('plasma_speed_quantile', 'v'), ('plasma_density_quantile', 'n'), ('plasma_temperature_quantile', 't'),
         ('ap_quantile', 'ap'), ('dst_quantile', 'dst'), ('f10_7_quantile', 'f107'),
@@ -64,12 +66,23 @@ class ForecastArtifact(BaseModel):
             lead = int(row['lead_hours'])
             if current.tzinfo is None or valid.tzinfo is None or lead < 0:
                 raise ValueError('Artifact times must be timezone-aware with nonnegative leads')
+            if self.name == 'solar_wind_events':
+                from common.schemas.solar_wind_events import SolarWindEventForecast
+                report = SolarWindEventForecast.model_validate_json(row.get('report_json', ''))
+                if (report.issue_time != current or valid != current or lead != 0 or
+                    float(row['event_count']) != len(report.events) or
+                    float(row['detection_count']) != len(report.l1_detections) or
+                    ('hss_count' in row and float(row['hss_count']) != len(report.hss_forecasts)) or
+                    ('cme_ensemble_count' in row and float(row['cme_ensemble_count']) != len(report.cme_ensembles))):
+                    raise ValueError('Event artifact does not match its report')
             if issue is not None and issue != current:
                 raise ValueError('Mixed issue times in artifact')
             issue = current
             count += 1
         if count != self.row_count:
             raise ValueError('Artifact row count does not match')
+        if self.name == 'solar_wind_events' and count != 1:
+            raise ValueError('Expected one event report per artifact')
         return issue
 
     @model_validator(mode='after')

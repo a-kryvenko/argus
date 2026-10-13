@@ -1,4 +1,8 @@
 models:
+  solar_event_speed:
+    model: argus-cme-speed-v2
+    sha256: 9eee53f8996b044f95d523ac79fc8ca6508a7c6d29ede2fe8d9b923526b48379
+
   plasma_speed_dlinear:
     model: argus-plasma-speed-dlinear-v1
     artifact_path: data/models/argus-plasma-speed-dlinear-v1.joblib

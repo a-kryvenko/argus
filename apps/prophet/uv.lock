@@ -734,14 +734,16 @@ requires-dist = [
     { name = "scikit-learn", marker = "extra == 'models'", specifier = ">=1.5" },
     { name = "scipy", marker = "extra == 'models'", specifier = ">=1.17.1" },
     { name = "setuptools", marker = "extra == 'models'", specifier = "<81" },
+    { name = "sunpy", extras = ["map"], marker = "extra == 'images'", specifier = ">=6" },
     { name = "xarray", marker = "extra == 'datasets'", specifier = ">=2026.4.0" },
 ]
-provides-extras = ["datasets", "models"]
+provides-extras = ["datasets", "images", "models"]
 
 [package.metadata.requires-dev]
 test = [
     { name = "pytest", specifier = ">=8,<10" },
     { name = "pytest-xdist", specifier = ">=3,<4" },
+    { name = "sunpy", extras = ["map"], specifier = ">=6" },
     { name = "torch", index = "https://download.pytorch.org/whl/cpu" },
 ]
 

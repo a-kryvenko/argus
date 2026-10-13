@@ -20,6 +20,7 @@ from clio.routers import (
     observations,
     sdo_images,
     solar_wind,
+    solar_wind_events,
 )
 
 get_config()
@@ -41,6 +42,7 @@ app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)
 for module in (
     observations,
     solar_wind,
+    solar_wind_events,
     geomagnetic,
     observation_summary,
     collection_status,

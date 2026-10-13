@@ -46,6 +46,9 @@ def tasks_for(config, heartbeats, abort):
     def normalize():
         return jobs.execute('refresh', lambda: invoke('normalize'), scheduled=True)
     tasks.append(Task('normalize', normalize, background=True))
+    if config.solar_wind_events.enabled:
+        tasks.append(Task('events', lambda: jobs.execute('events', lambda: invoke('collect-events')),
+                          config.solar_wind_events.every_seconds, background=True))
     if config.sdo_images.enabled:
         for mode in ('live', 'warmup', 'cleanup'):
             tasks.append(Task(

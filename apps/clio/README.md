@@ -1,5 +1,8 @@
 # Clio
 
+Clio also retains versioned NASA DONKI responses for the experimental
+[solar-wind events product](../../docs/solar-wind-events.md).
+
 Clio collects space-weather observations, fills historical gaps, normalizes numeric
 measurements and stores solar images. Its HTTP API serves stored data to other services.
 

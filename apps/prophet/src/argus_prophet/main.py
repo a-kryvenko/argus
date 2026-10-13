@@ -87,6 +87,8 @@ def ready():
          response_model=ForecastVerification,
          dependencies=[Depends(require_service_token)])
 def verification(product: str):
+    if product == 'solar-wind-events':
+        raise HTTPException(404, 'Event verification is not available yet')
     if product not in PRODUCT_ARTIFACTS:
         raise HTTPException(404, 'Unknown forecast product')
     from argus_prophet.services.verification import cached_monthly_accuracy

@@ -6,3 +6,4 @@ SOURCE_LOCKS = {
     'dst': 730111,
 }
 JOB_LOCKS = {'refresh': 730200, 'files-backfill': 730202, 'live': 730203, 'files-live': 730204}
+JOB_LOCKS['events'] = 730205

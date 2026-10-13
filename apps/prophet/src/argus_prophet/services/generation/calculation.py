@@ -34,6 +34,10 @@ def serialize(result):
 
 def calculate_product(request: CalculationRequest) -> list[Artifact]:
     """Child entry point: only model files are read; no configuration, HTTP or DB."""
+    if request.product == 'solar-wind-events':
+        from argus_prophet.services.events import calculate
+        from argus_prophet.services.solar_event_speed import calculate_speed
+        return calculate(request.inputs, speed_calculator=lambda events: calculate_speed(request, events))
     from forecast.api import calculate_snapshot
     from argus_prophet.services.generation.models import load_model
     product, inputs = request.product, request.inputs
@@ -98,6 +102,8 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
 
 def calculate_serialized(request):
     """Share the memory budget with the optional remote-container child."""
+    if request.product == 'solar-wind-events':
+        return calculate_product(request)
     from argus_prophet.services.heavy_task import heavy_task
     with heavy_task(request.workdir / 'data'):
         return calculate_product(request)

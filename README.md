@@ -38,6 +38,7 @@ The configured forecasting pipeline uses the following models:
 
 | Forecast | Model and inputs | Published output |
 |---|---|---|
+| **CME** | **ENLIL** | Coronal Mass Ejection forecast |
 | **Solar-wind speed (`v`)** | **DLinear + PROSWIN**: hourly speed history combined with the official PROSWIN fold-1 model using AIA 171/211 Å images and physical features. Blend weights depend on lead time and were fitted on 2025 data. | Central speed forecast, q10/q90 intervals and speed-threshold probabilities. Missing PROSWIN predictions fall back to DLinear. |
 | **Proton density (`n`)** | **DLinear + LightGBM**, using hourly n/v history and the native PROSWIN **speed forecast** as an additional input. | q10/q50/q90 density forecast.
 | **Proton temperature (`T`)** | **LightGBM** with hourly T/n/v history and the PROSWIN speed forecast as an input (`argus-plasma-temperature-proswin-v1`). | Hourly q10/q50/q90 in K over +1…+96 h; without PROSWIN uses T/n/v history, then T-only if n/v is unavailable. |
@@ -61,6 +62,11 @@ models listed in the registry are not separate scheduled radiation forecasts.
 
 See the [model registry](configs/models_registry.yaml) and
 [accuracy report](docs/accuracy/README.md) for configuration and evaluation scope.
+
+The experimental [solar-wind events module](docs/solar-wind-events.md) publishes
+DONKI/ENLIL and own experimental DBEM arrival predictions, HSS candidates using AIA/HMI/PROSWIN/recurrence,
+and L1 compression candidates as a separate product.
+Its event context does not yet modify the existing forecast models.
 
 ## About this repository
 

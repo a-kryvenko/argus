@@ -13,7 +13,7 @@ from argus_prophet.scheduling.jobs import GenerationBusy, generation_lock, produ
 from argus_prophet.scheduling.verification import run_due as verify_due
 from argus_prophet.services.generation.calculation import calculate_serialized as calculate_product
 from argus_prophet.services.generation.products import PRODUCTS
-from argus_prophet.services.inputs import load_inputs
+from argus_prophet.services.inputs import load_inputs, load_event_inputs
 from argus_prophet.services.generation.cycle import ProductRun
 from argus_prophet.services.runs import provenance
 
@@ -97,7 +97,9 @@ class Dispatcher:
                 continue
             run = ProductRun.begin(task.product, 'scheduled', self.runtime, self.config,
                                    writer=self.connection, scheduled_slot=slot, details=self.details)
-            inputs = self.submit(partial(load_inputs, prepare_proswin=task.product in {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'}))
+            loader = partial(load_event_inputs, include_speed=True) if task.product == 'solar-wind-events' else partial(
+                load_inputs, prepare_proswin=task.product in {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'})
+            inputs = self.submit(loader)
             self.active[task.product] = Active(run, inputs)
         if not self.active:
             self.writer.close()

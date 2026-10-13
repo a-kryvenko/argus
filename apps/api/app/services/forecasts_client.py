@@ -1,5 +1,6 @@
 """Read complete Prophet releases over HTTP, with no filesystem/SQL fallback."""
 import io
+import csv
 import os
 
 import httpx
@@ -8,6 +9,13 @@ from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
 from app.services.forecast_errors import ArtifactNotReadyError
 
 MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+
+
+def read_event_forecast():
+    from common.schemas.solar_wind_events import SolarWindEventForecast
+    release = read_release('solar-wind-events')
+    row = next(csv.DictReader(io.StringIO(release.artifacts[0].csv_text)))
+    return SolarWindEventForecast.model_validate_json(row['report_json'])
 
 
 def read_release(product: str) -> ForecastRelease:

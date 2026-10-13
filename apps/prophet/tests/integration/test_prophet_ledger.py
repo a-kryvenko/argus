@@ -13,6 +13,71 @@ from argus_prophet.services.runs import RunRecorder
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 
 
+@pytest.mark.parametrize('speed_available', [True, False])
+def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, speed_available):
+    import csv
+    import io
+    import json
+    from uuid import uuid4
+    from common.schemas.solar_wind_events import EventInputs, SourcePoll, SolarWindEventForecast
+    from argus_prophet.services.events import calculate
+    dsn, passwords, config, writer = recorder_setup
+    now = datetime(2026, 10, 13, 12, tzinfo=UTC)
+    rows = [dict(activityID='cme1', startTime='2026-10-13T00:00Z', cmeAnalyses=[dict(
+        isMostAccurate=True, featureCode='LE', time21_5='2026-10-13T03:00Z', speed=900,
+        latitude=0, longitude=5, halfAngle=45, submissionTime='2026-10-13T04:00Z')])]
+    poll = SourcePoll(endpoint='CME', poll_id=uuid4(), received_at=now,
+        sha256=hashlib.sha256(json.dumps(rows).encode()).hexdigest(), request_start=now-timedelta(days=30),
+        request_end=now, records=rows)
+    arrival = now + timedelta(hours=24)
+    simulations = [dict(cmeInputs=[dict(CMEID='cme1')], link='enlil-run1',
+        modelCompletionTime=(now-timedelta(hours=1)).isoformat(),
+        estimatedShockArrivalTime=arrival.isoformat())]
+    enlil_poll = SourcePoll(endpoint='WSAEnlilSimulations', poll_id=uuid4(), received_at=now,
+        sha256=hashlib.sha256(json.dumps(simulations).encode()).hexdigest(),
+        request_start=now-timedelta(days=30), request_end=now, records=simulations)
+    inputs = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]),
+        solar_wind_events=EventInputs(as_of=now, read_at=now, polls=[poll, enlil_poll]))
+    run = RunRecorder.begin('solar-wind-events', 'manual', config, writer=writer)
+    run.snapshot(inputs)
+    speed = dict(model_version='cme-speed-v2', state='available', model_sha256='a'*64,
+        points=[dict(valid_time=arrival, speed_background=400, speed_nominal=800,
+            speed_early=600, speed_late=400, scenario_lower=400, scenario_upper=1000)])
+
+    def speed_calculator(events):
+        assert len(events) == 1 and events[0].arrival_at == arrival
+        return speed
+
+    artifact = calculate(inputs, speed_calculator=speed_calculator if speed_available else None)[0]
+    run.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
+    run.finish()
+    release = read_release('solar-wind-events')
+    assert release.run_id == run.run_id
+    assert release.artifacts[0].csv_text.encode() == artifact.content
+    row = next(csv.DictReader(io.StringIO(release.artifacts[0].csv_text)))
+    report = SolarWindEventForecast.model_validate_json(row['report_json'])
+    assert report.model_version == 'solar-wind-events-v4'
+    assert report.cme_ensembles == [] and report.hss_forecasts == []
+    assert report.source_status['DBEM']['state'] == 'disabled'
+    assert report.source_status['CME']['poll_id'] == str(poll.poll_id)
+    assert report.source_status['WSAEnlilSimulations']['sha256'] == enlil_poll.sha256
+    assert report.events[0].event_id == 'cme1'
+    assert report.events[0].status == 'predicted_hit'
+    assert report.events[0].arrival_at == arrival
+    assert report.cme_speed.state == ('available' if speed_available else 'unavailable')
+    if speed_available:
+        assert report.cme_speed.model_dump(mode='json')['points'] == [
+            {**speed['points'][0], 'valid_time': arrival.isoformat().replace('+00:00', 'Z')}]
+        assert report.cme_speed.model_sha256 == speed['model_sha256']
+        assert report.cme_speed.scenario_kind == 'conditional_scenarios_not_quantiles'
+    else:
+        assert report.cme_speed.points == []
+    with runtime(dsn, 'prophet', passwords) as conn:
+        snapshot = conn.execute('SELECT input_snapshot FROM prophet.forecast_run WHERE id=%s',
+                                (run.run_id,)).fetchone()[0]
+        assert snapshot['solar_wind_events'] == inputs.model_dump(mode='json')['solar_wind_events']
+
+
 def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
     dsn, passwords, config, writer = recorder_setup
     run = RunRecorder.begin('dst', 'manual', config, writer=writer)

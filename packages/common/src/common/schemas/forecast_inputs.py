@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat
 from common.schemas.observation import Observation
+from common.schemas.solar_wind_events import CoronalHoleFrame, EventInputs
 
 DensityMetric = Literal['f10_7', 's10', 'm10', 'y10', 'dst', 'ap']
 DENSITY_METRICS = ('f10_7', 's10', 'm10', 'y10', 'dst', 'ap')
@@ -87,3 +88,6 @@ class ForecastInputs(ObservationInputs):
 
     proswin_ready_at: AwareDatetime | None = None
     proswin_job: dict = Field(default_factory=dict)
+    solar_wind_events: EventInputs | None = None
+    coronal_holes: CoronalHoleFrame | None = None
+    hss_input_status: dict = Field(default_factory=dict)

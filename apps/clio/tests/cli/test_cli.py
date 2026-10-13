@@ -27,6 +27,7 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
 
 
 @pytest.mark.parametrize(('argv', 'job', 'command'), [
+    (['collect-events'], 'events', 'collect-events'),
     (['backfill', '--from', '2026-08-31', '--to', '2026-09-01'], 'refresh', 'backfill'),
     (['normalize'], 'refresh', 'normalize'),
     (['collect', 'kp', 'dst'], 'live', 'collect'),

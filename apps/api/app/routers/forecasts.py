@@ -1,4 +1,5 @@
 from common.schemas.forecast_verification import ForecastVerification
+from common.schemas.solar_wind_events import SolarWindEventForecast
 from typing import Annotated, Literal
 
 from app.schemas.forecast import Forecast
@@ -91,6 +92,21 @@ def _product(target: str, visibility: str):
         raise HTTPException(status_code=404, detail="Forecast product not found")
 
 TargetType = Literal[*PRODUCTS.keys()]
+
+
+@router.get('/public/forecasts/solar-wind-events',
+            response_model=ApiResponse[SolarWindEventForecast],
+            summary='Get CME arrivals and conditional solar-wind speed forecasts',
+            description='Published DONKI/ENLIL Earth impacts with a separate CME-conditioned speed outlook. '
+                        'Nominal, early and late scenarios retain the event peak. Scenario envelopes are not '
+                        'calibrated quantiles or hit probabilities. HSS forecasts are disabled in the current release.')
+def solar_wind_events():
+    from app.services.forecasts_client import read_event_forecast
+    try:
+        return success_response(read_event_forecast())
+    except ArtifactNotReadyError:
+        raise HTTPException(status_code=503, detail='Solar-wind event forecast is not ready') from None
+
 
 @router.get(
     "/{visibility}/forecasts/{target}",

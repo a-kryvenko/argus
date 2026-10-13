@@ -162,3 +162,63 @@ def test_temperature_public_forecast_contract(monkeypatch):
         issue_time=issue, published_at=datetime.now(UTC), artifacts=[ForecastArtifact(
             name='plasma_temperature_quantile', csv_text=content, columns=list(frame), row_count=1,
             sha256=hashlib.sha256(content.encode()).hexdigest(), model_info={})])
+
+
+@pytest.mark.parametrize('version', ['solar-wind-events-v1', 'solar-wind-events-v2', 'solar-wind-events-v3', 'solar-wind-events-v4'])
+def test_events_route_reads_typed_report_and_preserves_source_availability(monkeypatch, version):
+    import csv
+    import io
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.routers.forecasts import router
+    from common.schemas.solar_wind_events import SolarWindEventForecast, HSSForecast, CMEEnsembleForecast
+    issue = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
+    hss = [] if version.endswith('v1') else [HSSForecast(forecast_id='hss1', status='expected',
+        timing_method='proswin_profile', arrival_at=issue, arrival_window_start=issue,
+        arrival_window_end=issue, window_kind='uncalibrated_timing_envelope', evidence_sources=['PROSWIN'])]
+    cmes = [] if version != 'solar-wind-events-v3' else [CMEEnsembleForecast(
+        forecast_id='dbem:cme1', cme_id='cme1', source_poll_id=uuid4(), source_sha256='a'*64,
+        analysis_sha256='b'*64, available_at=issue, initial_time=issue, initial_parameters={}, policy={},
+        seed=42, ensemble_size=4096, geometric_hit_count=0, geometric_hit_fraction=0,
+        arrival_count=0, right_censored_count=0, future_arrival_count=0,
+        arrival_within_horizon_count=0, status='geometric_miss')]
+    report = SolarWindEventForecast(issue_time=issue, events=[], l1_detections=[], model_version=version, hss_forecasts=hss,
+                                   cme_ensembles=cmes,
+                                   source_status={'CME': {'state': 'unavailable'}})
+    if version == 'solar-wind-events-v4':
+        from common.schemas.solar_wind_events import CMESpeedOutlook
+        report.cme_speed = CMESpeedOutlook(model_version='cme-speed-v2',state='available',points=[dict(
+            valid_time=issue.replace(hour=13),speed_background=400,speed_nominal=800,
+            speed_early=600,speed_late=400,scenario_lower=400,scenario_upper=1000)])
+    columns = ['issue_time', 'valid_time', 'lead_hours', 'event_count', 'detection_count', 'report_json']
+    stream = io.StringIO()
+    writer = csv.DictWriter(stream, fieldnames=columns)
+    writer.writeheader()
+    writer.writerow(dict(issue_time=issue.isoformat(), valid_time=issue.isoformat(), lead_hours=0,
+                         event_count=0, detection_count=0, report_json=report.model_dump_json()))
+    content = stream.getvalue()
+    release = ForecastRelease(product='solar-wind-events', release_id=uuid4(), run_id=uuid4(),
+        issue_time=issue, published_at=issue, artifacts=[ForecastArtifact(
+            name='solar_wind_events', csv_text=content, sha256=hashlib.sha256(content.encode()).hexdigest(),
+            columns=columns, row_count=1, model_info={})])
+    monkeypatch.setattr(forecasts_client, 'read_release', lambda product: release)
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        response = client.get('/public/forecasts/solar-wind-events')
+        assert response.status_code == 200
+        assert response.json()['data']['experimental'] is True
+        assert response.json()['data']['source_status']['CME']['state'] == 'unavailable'
+        assert response.json()['data']['model_version'] == version
+        assert len(response.json()['data']['hss_forecasts']) == len(hss)
+        assert len(response.json()['data']['cme_ensembles']) == len(cmes)
+        if version == 'solar-wind-events-v4':
+            assert response.json()['data']['cme_speed']['points'][0]['speed_nominal'] == 800
+            assert response.json()['data']['cme_speed']['scenario_kind'] == 'conditional_scenarios_not_quantiles'
+        if cmes:
+            assert response.json()['data']['cme_ensembles'][0]['calibrated'] is False
+            assert response.json()['data']['cme_ensembles'][0]['source_poll_id'] == str(cmes[0].source_poll_id)
+        def unavailable(product):
+            raise ArtifactNotReadyError('unavailable')
+        monkeypatch.setattr(forecasts_client, 'read_release', unavailable)
+        assert client.get('/public/forecasts/solar-wind-events').status_code == 503

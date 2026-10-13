@@ -23,7 +23,8 @@ def prepare(inputs, timeout=TIMEOUT):
     job = cache_root() / 'jobs' / uuid.uuid4().hex
     job.mkdir(parents=True)
     deadline = datetime.now(UTC) + timedelta(seconds=timeout)
-    source = inputs.model_dump(mode='json', exclude={'aia_frames', 'gong', 'proswin_predictions', 'proswin_ready_at', 'proswin_job'})
+    source = inputs.model_dump(mode='json', exclude={'aia_frames', 'gong', 'proswin_predictions', 'proswin_ready_at', 'proswin_job',
+                                                    'solar_wind_events', 'coronal_holes', 'hss_input_status'})
     source.update(observations={'points': []}, files=[], measurements=[], solar_wind_hourly=None, density_observations=[])
     atomic_write(job/'inputs.json', json.dumps(source).encode())
     atomic_write(job/'request.json', json.dumps({'deadline': deadline.isoformat()}).encode())

@@ -27,6 +27,19 @@ def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00
     from common.schemas.forecast_release import PREDICTION_COLUMNS
     valid = (datetime.fromisoformat(issue) + timedelta(hours=1)).isoformat()
     for name in names:
+        if name == 'solar_wind_events':
+            from pathlib import Path
+            from common.schemas.forecast_inputs import ForecastInputs
+            from common.schemas.observation import Observation
+            from common.schemas.solar_wind_events import EventInputs
+            from argus_prophet.services.generation.calculation import CalculationRequest, calculate_product
+            time = datetime.fromisoformat(issue)
+            inputs = ForecastInputs(as_of=time, read_at=time, observations=Observation(points=[]),
+                                    solar_wind_events=EventInputs(as_of=time, read_at=time))
+            artifact = calculate_product(CalculationRequest('solar-wind-events', inputs, Path('/unused'), {}))[0]
+            run.store(name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
+            content = artifact.content.decode()
+            continue
         columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
         values = [issue, valid, '1', *('0' for _ in PREDICTION_COLUMNS[name])]
         content = ','.join(columns) + '\n' + ','.join(values) + '\n'

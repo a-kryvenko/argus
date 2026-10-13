@@ -58,7 +58,14 @@ class SDOImages(StrictModel):
     warmup_hours_per_batch: int = Field(default=6, ge=1, le=24)
 
 
+class SolarWindEvents(StrictModel):
+    enabled: bool = False
+    every_seconds: int = Field(default=900, ge=300, le=3600)
+    lookback_days: int = Field(default=30, ge=7, le=90)
+
+
 class ClioObservations(StrictModel):
+    solar_wind_events: SolarWindEvents = Field(default_factory=SolarWindEvents)
     sdo_images: SDOImages = Field(default_factory=SDOImages)
     observations: dict[str, ObservationPolicy]
 

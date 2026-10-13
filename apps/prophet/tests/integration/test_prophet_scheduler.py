@@ -29,7 +29,7 @@ def dispatch(config, now=NOW, *, fail=(), seen=None):
         def submit(self, execute, target, *args, **kwargs):
             future = Future()
             try:
-                if getattr(target, 'func', target) is worker.load_inputs:
+                if getattr(target, 'func', target) in (worker.load_inputs, worker.load_event_inputs):
                     result = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))
                 else:
                     product = args[0].product

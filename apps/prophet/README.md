@@ -10,6 +10,7 @@ calculations; `prophet-api` serves stored releases.
 
 | Product | Output |
 | --- | --- |
+| `solar-wind-events` | Experimental DONKI/ENLIL and own DBEM CME arrivals, HSS candidates from AIA/HMI/PROSWIN/recurrence, observed DONKI HSS/shocks and L1 compression candidates. |
 | `solar-wind-speed` | Speed quantiles and threshold probabilities. |
 | `solar-wind-density` | Proton density quantiles. |
 | `geomagnetic-activity` | Kp threshold probabilities and Ap quantiles. |
@@ -18,6 +19,8 @@ calculations; `prophet-api` serves stored releases.
 | `atmospheric-density` | JB2008 atmospheric density grid. |
 
 Generation requires configured models and the private forecast-core backend.
+The `solar-wind-events` product runs independently of model bundles and the private
+backend; see [its contract and limitations](../../docs/solar-wind-events.md).
 Model settings are in [models_registry.yaml](../../configs/models_registry.yaml);
 schedules and input policies are in [project.yaml](../../configs/project.yaml).
 `solar-radiation` has a read contract but no supported generator.

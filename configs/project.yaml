@@ -7,7 +7,8 @@ prophet:
   max_parallel_products: 1
   # Unspecified products run hourly at :10 UTC.
   # Example override: dst: {every_minutes: 5, offset_minutes: 0}
-  schedules: {}
+  schedules:
+    solar-wind-events: {every_minutes: 5, offset_minutes: 0}
   verification:
     enabled: true
     every_hours: 6
@@ -19,6 +20,10 @@ prophet:
 # Numeric and file observations use these sources, schedules and backfill depths.
 # Native RTSW remains a separate product; AIA uses file adapters.
 clio:
+  solar_wind_events:
+    enabled: true
+    every_seconds: 900
+    lookback_days: 30
   sdo_images:
     enabled: true
   observations:

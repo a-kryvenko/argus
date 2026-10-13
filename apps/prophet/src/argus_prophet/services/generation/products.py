@@ -26,6 +26,7 @@ class Product:
 
 
 PRODUCTS = {
+    'solar-wind-events': Product((Model('solar_wind_events', bundled=False),)),
     'geomagnetic-activity': Product((
         Model('kp_threshold', 'forecast_core.api.KPProbaFS'),
         Model('ap_quantile', 'forecast_core.api.APFS'))),
@@ -42,7 +43,7 @@ PRODUCTS = {
         'forecast_core.api.AtmosphericDensityForecastService', bundled=False),)),
 }
 GENERATION_CHOICES = ('all', *PRODUCTS)
-VERIFIED_PRODUCTS = tuple(name for name in PRODUCTS if name != 'atmospheric-density')
+VERIFIED_PRODUCTS = tuple(name for name in PRODUCTS if name not in ('atmospheric-density', 'solar-wind-events'))
 
 
 def select_products(selection: str) -> tuple[str, ...]:

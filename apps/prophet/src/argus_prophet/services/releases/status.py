@@ -37,7 +37,7 @@ def input_diagnostics(inputs):
             'future_count': sum(time > as_of for time in times),
         }
     issues = []
-    if not timestamps:
+    if not timestamps and inputs.solar_wind_events is None:
         issues.append('no_aware_normalized_timestamps')
     if invalid_timestamps:
         issues.append('naive_normalized_timestamps')
@@ -70,6 +70,10 @@ def input_diagnostics(inputs):
                   'source_product': inputs.gong.source_product, 'sha256': inputs.gong.sha256,
                   'feature_version': inputs.gong.feature_version}
                  if inputs.gong else None),
+        'solar_wind_events': ({'poll_count': len(inputs.solar_wind_events.polls),
+                              'l1_sample_count': len(inputs.solar_wind_events.l1_samples),
+                              'as_of': inputs.solar_wind_events.as_of.isoformat()}
+                             if inputs.solar_wind_events else None),
     }
 
 

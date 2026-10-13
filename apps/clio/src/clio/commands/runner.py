@@ -3,6 +3,7 @@ import asyncio
 import importlib
 
 COMMANDS = {
+    'collect-events': 'collect_events',
     'sdo-cleanup': 'sdo_images',
     'backfill': 'backfill_observations', 'normalize': 'normalize',
     'collect': 'collect',

@@ -10,6 +10,7 @@ import styles from './workspace.module.css';
 const navigation = [
   { href: '/', label: 'Forecast overview', icon: LayoutGrid },
   { href: '/live', label: 'Live observations', icon: Radio },
+  { href: '/products/solar-events', label: 'Solar events', icon: Gauge },
   { href: '/products', label: 'Forecast products', icon: Activity },
   { href: '/metrics', label: 'Model performance', icon: ChartNoAxesCombined },
   { href: '/dashboard/risk/leo', label: 'LEO drag', icon: Orbit },

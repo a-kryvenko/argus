@@ -55,14 +55,20 @@ def generate(product: str, *, writer) -> None:
 def generate_products(products, *, writer) -> None:
     """Composition root for manual generation; bind infrastructure to the use case."""
     from common.config import get_config
-    from argus_prophet.services.inputs import load_inputs
+    from argus_prophet.services.inputs import load_inputs, load_event_inputs
     if not products or len(set(products)) != len(products) or any(name not in PRODUCTS for name in products):
         raise ValueError('Expected distinct supported forecast products')
     runtime = get_config()
     policy = ProphetConfig.model_validate(getattr(runtime, 'project_config', {}).get('prophet', {}))
     details = provenance(runtime)
+    loader = partial(load_event_inputs, include_speed=True) if tuple(products) == ('solar-wind-events',) else load_inputs
+    options = {}
+    if {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'}.intersection(products):
+        options['prepare_proswin'] = True
+    if 'solar-wind-events' in products and loader is load_inputs:
+        options['include_events'] = True
     service = ForecastGenerationService(
-        input_loader=partial(load_inputs, prepare_proswin=True) if {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'}.intersection(products) else load_inputs,
+        input_loader=partial(loader, **options) if options else loader,
         calculator=calculate_product,
         executor=execute,
         run_factory=partial(ProductRun.begin, trigger='manual', runtime=runtime,

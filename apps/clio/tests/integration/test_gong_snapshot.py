@@ -149,7 +149,7 @@ def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, t
     subprocess.run([*command, 'head'], env=environment, check=True, capture_output=True)
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute("SELECT to_regclass('clio.aia_snapshot')").fetchone()[0] is None
-        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261004_drop_aia_snapshot'
+        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261013_donki_poll'
         assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (True, True)
     assert original.read_bytes() == b'retained SDO original'
     from clio.db.base import Base

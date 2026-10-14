@@ -13,6 +13,7 @@ trap 'printf "[deploy] %s: %ss; exit=%s\n" "$phase_name" "$((SECONDS - phase_sta
 root="${1:-/var/www}"
 bundle="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 command -v rsync >/dev/null
+command -v gzip >/dev/null
 exec 9>"$root/.deployment.lock"
 flock -n 9
 base=(docker compose --project-directory "$root" --env-file "$root/.env" --env-file "$root/.env.local")
@@ -68,6 +69,12 @@ for service in "${stop[@]}"; do
     fi
 done
 printf 'Migrations: %s\n' "${migrations[*]:-none}"
+phase image-cleanup
+# Run under the deployment lock, before pulling candidate images. Keep the
+# recent rollback window and every image referenced by a container (even stopped).
+if ! docker image prune -a -f --filter 'until=168h'; then
+    echo '[deploy] warning: image cleanup failed; continuing deployment' >&2
+fi
 phase download-images
 "${candidate[@]}" pull --policy missing
 if ((${#migrations[@]})); then
@@ -84,9 +91,14 @@ if ((${#migrations[@]})); then
     phase database-backup
     umask 077
     mkdir -p "$root/backups"
+    backup="$root/backups/pre-migration-$(date -u +%Y%m%dT%H%M%S).sql.gz"
+    # pipefail prevents a failed/truncated dump from becoming a completed backup.
+    # Leave failures as .partial for inspection; never include them in retention.
     "${installed[@]}" exec -T postgres sh -c \
         'pg_dumpall --username="$POSTGRES_USER"' \
-        > "$root/backups/pre-migration-$(date -u +%Y%m%dT%H%M%S).sql"
+        | gzip -c > "$backup.partial"
+    gzip -t "$backup.partial"
+    mv "$backup.partial" "$backup"
 fi
 phase install-configuration
 # These directories are repository-owned; data, models and operator env files are separate.
@@ -125,4 +137,20 @@ done
 cp "$bundle/fingerprints.tsv" "$root/.release-fingerprints.tsv.next"
 mv "$root/.release-fingerprints.tsv.next" "$root/.release-fingerprints.tsv"
 cp "$bundle/release.json" "$root/.release.json"
+if ((${#migrations[@]})); then
+    phase backup-cleanup
+    # Only rotate after both a new backup and the deployment have succeeded.
+    # Timestamped names sort chronologically, including legacy uncompressed SQL.
+    mapfile -t backups < <(find "$root/backups" -maxdepth 1 -type f \
+        \( -name 'pre-migration-*.sql' -o -name 'pre-migration-*.sql.gz' \) \
+        -printf '%f\n' | LC_ALL=C sort -r)
+    for old_backup in "${backups[@]:7}"; do
+        rm -- "$root/backups/$old_backup"
+    done
+    for kept_backup in "${backups[@]:0:7}"; do
+        if [[ "$kept_backup" == *.sql ]]; then
+            gzip -- "$root/backups/$kept_backup"
+        fi
+    done
+fi
 echo 'Release applied successfully'

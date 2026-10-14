@@ -141,10 +141,18 @@ TEST_NGINX_IMAGE=nginx:stable-alpine tests/runtime/.venv/bin/python -m pytest -q
 A `v*` tag triggers GitHub Actions. It builds or reuses images, pins their digests
 in `.release-images.env`, uploads the release bundle, and deploys to `/var/www`:
 
-1. Lock deployment, validate configuration and pull images.
-2. Stop affected writers and back up PostgreSQL before migrations (`/var/www/backups/`).
-3. Install release files, apply changed migrations and reconcile services.
-4. Reload nginx and record the successful release fingerprints.
+1. Lock deployment and validate configuration.
+2. Remove unused Docker images created more than 7 days ago, then download release images.
+   Images referenced by running or stopped containers are preserved; older rollback
+   images may need to be downloaded again.
+3. Stop affected writers and back up PostgreSQL before migrations (`/var/www/backups/`).
+   Dumps are gzip-compressed and become completed `.sql.gz` files only after the
+   dump succeeds. Failed dumps remain `.partial` for operator inspection.
+4. Install release files, apply changed migrations and reconcile services.
+5. Reload nginx and record the successful release fingerprints. After a successful
+   deployment with a new backup, keep the latest 7 timestamped pre-migration dumps
+   and compress retained legacy `.sql` dumps. Other backup files and subdirectories
+   are untouched. Failed deployments do not rotate backups.
 
 Operator env, models and data remain separate. Do not override generated image references.
 `./argus` defaults to dev mode; deployment sets `.argus-mode` to `prod`.

@@ -54,6 +54,8 @@ class ForecastArtifact(BaseModel):
             raise ValueError('Artifact prediction columns are missing')
         issue = None
         count = 0
+        cme_speed = None
+        speed_background = {}
         for row in reader:
             if None in row or None in row.values():
                 raise ValueError('Malformed CSV row')
@@ -66,6 +68,13 @@ class ForecastArtifact(BaseModel):
             lead = int(row['lead_hours'])
             if current.tzinfo is None or valid.tzinfo is None or lead < 0:
                 raise ValueError('Artifact times must be timezone-aware with nonnegative leads')
+            if self.name == 'plasma_speed_quantile':
+                speed_background[valid] = float(row['v_q50'])
+                if row.get('cme_speed_json'):
+                    from common.schemas.solar_wind_events import CMESpeedOutlook
+                    if cme_speed is not None:
+                        raise ValueError('Expected one CME speed report per speed artifact')
+                    cme_speed = CMESpeedOutlook.model_validate_json(row['cme_speed_json'])
             if self.name == 'solar_wind_events':
                 from common.schemas.solar_wind_events import SolarWindEventForecast
                 report = SolarWindEventForecast.model_validate_json(row.get('report_json', ''))
@@ -83,6 +92,12 @@ class ForecastArtifact(BaseModel):
             raise ValueError('Artifact row count does not match')
         if self.name == 'solar_wind_events' and count != 1:
             raise ValueError('Expected one event report per artifact')
+        if cme_speed is not None:
+            for point in cme_speed.points:
+                reference = speed_background.get(point.valid_time)
+                if (point.valid_time <= issue or reference is None or
+                    not math.isclose(point.speed_background, reference, abs_tol=1e-8, rel_tol=1e-10)):
+                    raise ValueError('CME scenario must use this release time grid and speed background')
         return issue
 
     @model_validator(mode='after')

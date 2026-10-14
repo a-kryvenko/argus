@@ -216,6 +216,7 @@ class CMESpeedPoint(BaseModel):
 
 class CMESpeedOutlook(BaseModel):
     model_version: str
+    as_of: AwareDatetime | None = None
     state: Literal['available', 'partial', 'unavailable']
     conditional_on_impact: Literal[True] = True
     units: Literal['km/s'] = 'km/s'

@@ -222,3 +222,26 @@ def test_events_route_reads_typed_report_and_preserves_source_availability(monke
             raise ArtifactNotReadyError('unavailable')
         monkeypatch.setattr(forecasts_client, 'read_release', unavailable)
         assert client.get('/public/forecasts/solar-wind-events').status_code == 503
+
+
+def test_speed_serves_CME_from_same_artifact_without_reading_event_release(monkeypatch):
+    import pandas as pd
+    from common.schemas.solar_wind_events import CMESpeedOutlook
+    issue=pd.Timestamp('2026-10-14T12:00Z')
+    valid=issue+pd.offsets.Hour(1)
+    speed=CMESpeedOutlook(model_version='cme-speed-v2',state='available',points=[dict(
+        valid_time=valid,speed_background=400,speed_nominal=800,speed_early=600,speed_late=400,
+        scenario_lower=400,scenario_upper=1000)])
+    quantiles=pd.DataFrame([dict(issue_time=issue,valid_time=valid,lead_hours=1,v_q10=350,v_q50=400,v_q90=450,
+        cme_speed_json=speed.model_dump_json())])
+    thresholds=pd.DataFrame([dict(issue_time=issue,valid_time=valid,lead_hours=1,
+        p_v_ge_450=.1,p_v_ge_500=.05,p_v_ge_600=.01)])
+    monkeypatch.setattr(forecast_products,'read_frames',lambda product:{'plasma_speed_quantile':quantiles,'plasma_speed_threshold':thresholds})
+    monkeypatch.setattr(forecasts_client,'read_event_forecast',lambda:pytest.fail('Must not mix releases'))
+    result=forecast_products.load_forecast(forecast_products.get_product('solar-wind-speed','public'))
+    assert result.predictions[0].variables['v'].continuous.q50==400
+    assert result.predictions[0].variables['v'].binary[0].probability==.1
+    assert result.cme_speed.points[0].speed_nominal==800
+    assert result.cme_speed.scenario_kind=='conditional_scenarios_not_quantiles'
+    quantiles.drop(columns=['cme_speed_json'],inplace=True)
+    assert forecast_products.load_forecast(forecast_products.get_product('solar-wind-speed','public')).cme_speed is None

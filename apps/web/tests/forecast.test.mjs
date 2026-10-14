@@ -105,3 +105,18 @@ test("heatmap accepts the current API payload without an operator", () => {
     [0, 1, 0],
   ]);
 });
+
+test('CME scenarios align by absolute valid time and preserve missing hours and background quantiles', async () => {
+  const { speedScenarioData } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+  const forecast = { predictions: [
+    { valid_time: '2026-10-14T13:00:00Z', variables: { v: { continuous: { q10: 350, q50: 400, q90: 450 } } } },
+    { valid_time: '2026-10-14T14:00:00Z', variables: { v: { continuous: { q10: 350, q50: 400, q90: 450 } } } },
+  ], cme_speed: { state: 'available', events: [{ event_id: 'cme' }], points: [{ valid_time: '2026-10-14T15:00:00+02:00', speed_nominal: 800,
+    speed_early: 600, speed_late: 400, scenario_lower: 400, scenario_upper: 1000 }] } };
+  const rows = speedScenarioData(forecast);
+  assert.equal(rows[0].median, 400);
+  assert.equal(rows[0].cmeNominal, 800);
+  assert.deepEqual(rows[0].cmeRange, [400, 1000]);
+  assert.equal(rows[1].cmeNominal, null);
+  assert.equal(speedScenarioData({ ...forecast, cme_speed: { ...forecast.cme_speed, state: 'unavailable' } })[0].cmeNominal, null);
+});

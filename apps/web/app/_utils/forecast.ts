@@ -40,6 +40,18 @@ export function quantileData(forecast: Forecast, key: string) {
   });
 }
 
+export function speedScenarioData(forecast: Forecast) {
+  const scenario = forecast.cme_speed;
+  const points = new Map((scenario?.state === 'unavailable' || !scenario?.events.length ? [] : scenario.points)
+    .map(point => [Date.parse(point.valid_time), point]));
+  return quantileData(forecast, 'v').map(row => {
+    const point = points.get(Date.parse(row.time));
+    return { ...row, cmeNominal: point?.speed_nominal ?? null,
+      cmeEarly: point?.speed_early ?? null, cmeLate: point?.speed_late ?? null,
+      cmeRange: point ? [point.scenario_lower, point.scenario_upper] as [number, number] : null };
+  });
+}
+
 export function probabilityData(
   forecast: Forecast,
   key: string,

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight, ChevronDown, Clock3, Crosshair, RefreshCw } from 'lucide-react';
 import type { Forecast, ForecastPoint } from '../_utils/api';
-import { formatForecastTime, formatProbability, forecastWindow, probabilityData, quantileData } from '../_utils/forecast';
+import { formatForecastTime, formatProbability, forecastWindow, probabilityData, quantileData, speedScenarioData } from '../_utils/forecast';
 import { productApiPath, type ProductConfig } from '../_config/products';
 import HeatMap from './HeatMap';
 import WindChart from './WindChart';
@@ -37,6 +37,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
   const lastPoint = view?.predictions.at(-1);
   const actualValue = (time: string) => demo && (demo.showFuture || observationKnownAt(time, variable.key) <= demo.now)
     ? demo.bundle.observations.find(item => Date.parse(item.time) === Date.parse(time))?.values[variable.key] : null;
+  const cmePoint = variable.key === 'v' && !!view?.cme_speed?.events.length && view.cme_speed.state !== 'unavailable' ? view?.cme_speed?.points.find(item => Date.parse(item.valid_time) === Date.parse(point?.valid_time ?? '')) : undefined;
   const actual = point ? actualValue(point.valid_time) : null;
   return <section aria-label={`${product.title} forecast workspace`}>
     <div className={styles.boardHeading}>
@@ -66,17 +67,18 @@ export default function ForecastBoard({ product, resource, overview = false }: {
         {!forecast && (demo ? <p className={styles.notice} role="status">{error ?? 'No demo release is available at this time.'}</p> : <ResourceState error={error} retry={retry} label={`${product.title.toLowerCase()} forecast`} />)}
         {forecast && !forecast.available_variables.includes(variable.key) && <p className={styles.notice} role="status">{variable.label} is not available in this release.</p>}
         {view && <>
-          {(variable.quantile || demo) && <WindChart title={variable.label} unit={variable.unit} data={demo ? comparisonRows(view, demo.bundle.observations, variable.key, demo.now, demo.showFuture) : quantileData(view, variable.key)} comparison={!!demo} now={demo?.now} eventTime={demo ? Date.parse(demo.bundle.event.starts_at) : undefined} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
-          {variable.thresholds.length > 0 && <HeatMap title={`${variable.label} threshold probability`} yLabels={variable.thresholds.map(item => item.label)}
+          {(variable.quantile || demo) && <WindChart title={variable.label} unit={variable.unit} data={demo ? comparisonRows(view, demo.bundle.observations, variable.key, demo.now, demo.showFuture) : variable.key === 'v' ? speedScenarioData(view) : quantileData(view, variable.key)} comparison={!!demo} now={demo?.now} eventTime={demo ? Date.parse(demo.bundle.event.starts_at) : undefined} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
+          {!demo && variable.key === 'v' && <p className={styles.notice}>{!view.cme_speed || view.cme_speed.state === 'unavailable' ? 'CME speed outlook unavailable for this release.' : view.cme_speed.state === 'partial' ? 'Some CME arrivals have no supported speed estimate.' : `${view.cme_speed.events.length} CME impact scenarios in this release.`} <Link href="/products/solar-events">Solar events</Link></p>}
+          {variable.thresholds.length > 0 && <HeatMap title={`${variable.label}${variable.key === 'v' && view.cme_speed ? ' background' : ''} threshold probability`} yLabels={variable.thresholds.map(item => item.label)}
             data={probabilityData(view, variable.key, variable.thresholds.map(item => item.value))} times={view.predictions.map(item => item.valid_time)} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
           <details className={styles.dataTable}>
             <summary>Hourly forecast values <span>{view.predictions.length} forecast times · UTC</span></summary>
             <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Hourly forecast values, scroll horizontally">
               <table><caption>{variable.label} · {variable.unit}. Probabilities refer to meeting or exceeding a threshold.</caption>
-                <thead><tr><th>Valid time · UTC</th><th>Lead</th>{variable.quantile && <><th>q10</th><th>q50</th><th>q90</th></>}{demo && <th>Observed</th>}{variable.thresholds.map(item => <th key={item.value}>{item.label}</th>)}</tr></thead>
+                <thead><tr><th>Valid time · UTC</th><th>Lead</th>{variable.quantile && <><th>q10</th><th>q50</th><th>q90</th></>}{variable.key === 'v' && view.cme_speed && <th>CME impact</th>}{demo && <th>Observed</th>}{variable.thresholds.map(item => <th key={item.value}>{item.label}</th>)}</tr></thead>
                 <tbody>{view.predictions.map(item => <tr key={item.valid_time} data-selected={point?.valid_time === item.valid_time}>
                   <th scope="row"><button aria-label={`Inspect forecast at ${formatForecastTime(item.valid_time)}`} onClick={() => selectTime(item.valid_time)}>{item.valid_time.slice(0, 16).replace('T', ' ')}</button></th>
-                  <td>+{item.lead_hours}h</td>{variable.quantile && <>{(['q10', 'q50', 'q90'] as const).map(q => <td key={q}>{forecastNumber(item.variables[variable.key]?.continuous?.[q])}</td>)}</>}{demo && <td>{forecastNumber(actualValue(item.valid_time))}</td>}
+                  <td>+{item.lead_hours}h</td>{variable.quantile && <>{(['q10', 'q50', 'q90'] as const).map(q => <td key={q}>{forecastNumber(item.variables[variable.key]?.continuous?.[q])}</td>)}</>}{variable.key === 'v' && view.cme_speed && <td>{forecastNumber(view.cme_speed.points.find(p => Date.parse(p.valid_time) === Date.parse(item.valid_time))?.speed_nominal)}</td>}{demo && <td>{forecastNumber(actualValue(item.valid_time))}</td>}
                   {variable.thresholds.map(threshold => <td key={threshold.value}>{formatProbability(probability(item, variable.key, threshold.value))}</td>)}
                 </tr>)}</tbody>
               </table>
@@ -96,14 +98,15 @@ export default function ForecastBoard({ product, resource, overview = false }: {
             {view?.predictions.map(item => <option key={item.valid_time} value={item.valid_time}>+{item.lead_hours}h · {item.valid_time.slice(5, 16).replace('T', ' ')}</option>)}
           </select>
           <div className={styles.inspectorReading}>
-            <span>{variable.quantile ? 'MEDIAN · q50' : primaryThreshold?.label ?? variable.label}</span>
+            <span>{variable.quantile ? (variable.key === 'v' && view?.cme_speed ? 'BACKGROUND · q50' : 'MEDIAN · q50') : primaryThreshold?.label ?? variable.label}</span>
             <p>{variable.quantile ? forecastNumber(values?.continuous?.q50) : formatProbability(primaryThreshold ? probability(point, variable.key, primaryThreshold.value) : null)} <small>{variable.quantile ? variable.unit : ''}</small></p>
             <span>{point ? `Lead +${point.lead_hours} hours` : 'Awaiting forecast'}</span>
           </div>
           {point && !values && <p className={styles.notice}>No values for {variable.label} at this forecast time.</p>}
           {demo && point && <dl className={styles.facts}><div><dt>Actual outcome</dt><dd>{demo.showFuture || observationKnownAt(point.valid_time, variable.key) <= demo.now ? forecastNumber(actual) : 'Hidden'} {variable.unit}</dd></div>{variable.quantile && <div><dt>q50 − observed</dt><dd>{forecastNumber(actual != null && values?.continuous ? values.continuous.q50 - actual : null)} {variable.unit}</dd></div>}</dl>}
           {variable.quantile && <div className={styles.quantileValues}><div><span>q10</span><strong>{forecastNumber(values?.continuous?.q10)}</strong></div><div><span>q90</span><strong>{forecastNumber(values?.continuous?.q90)}</strong></div></div>}
-          {variable.thresholds.length > 0 && <div className={styles.thresholdValues}><h3>Threshold probabilities</h3>{variable.thresholds.map(threshold => {
+          {cmePoint && <dl className={styles.facts}><div><dt>Expected CME impact</dt><dd>{forecastNumber(cmePoint.speed_nominal)} km/s</dd></div><div><dt>Early / late arrival</dt><dd>{forecastNumber(cmePoint.speed_early)} / {forecastNumber(cmePoint.speed_late)} km/s</dd></div><div><dt>Possible scenario range</dt><dd>{forecastNumber(cmePoint.scenario_lower)}–{forecastNumber(cmePoint.scenario_upper)} km/s</dd></div></dl>}
+          {variable.thresholds.length > 0 && <div className={styles.thresholdValues}><h3>{variable.key === 'v' && view?.cme_speed ? 'Background threshold probabilities' : 'Threshold probabilities'}</h3>{variable.thresholds.map(threshold => {
             const value = probability(point, variable.key, threshold.value);
             return <div key={threshold.value}><p><span>{threshold.label}</span><strong>{formatProbability(value)}</strong></p><div className={styles.probabilityTrack} aria-hidden="true"><span style={{ width: `${value == null ? 0 : value * 100}%` }} /></div></div>;
           })}</div>}

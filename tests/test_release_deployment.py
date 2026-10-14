@@ -52,7 +52,8 @@ def source(tmp_path):
              'configs/project.yaml': 'config'}
     files.update({f'.deploy/{name}.Dockerfile': 'FROM scratch' for name in release.IMAGES})
     tracked_repo(tmp_path, files)
-    tracked_repo(tmp_path / 'packages/forecast-core', {'src/forecast_core/api.py': 'private'})
+    tracked_repo(tmp_path / 'packages/forecast-core', {'src/forecast_core/api.py': 'private',
+        'src/forecast_core/solar_events/bundled_models/argus-cme-speed-v2.joblib': 'private artifact'})
     tracked_repo(tmp_path / 'packages/intelligence-core', {'src/intelligence_core/api.py': 'private intelligence'})
     return tmp_path
 
@@ -67,6 +68,7 @@ def changed_components(before, after):
     ('docs/example.md', set()), ('apps/web/app/page.tsx', {'frontend'}),
     ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'proswin', 'intelligence'}),
     ('packages/forecast-core/src/forecast_core/api.py', {'prophet'}),
+    ('packages/forecast-core/src/forecast_core/solar_events/bundled_models/argus-cme-speed-v2.joblib', {'prophet'}),
     ('packages/intelligence-core/src/intelligence_core/api.py', {'intelligence'}),
     ('apps/prophet/src/argus_prophet/worker.py', {'prophet', 'proswin'}), ('configs/project.yaml', set()),
 ])
@@ -82,6 +84,24 @@ def test_deleted_sources_and_explicit_rebuild_are_not_missed(source):
     (source / 'apps/web/app/page.tsx').unlink()
     assert changed_components(before, release.plan(source)) == {'frontend'}
     assert changed_components(before, release.plan(source, rebuild='operator-request')) == set(release.IMAGES)
+
+
+@pytest.mark.parametrize('failure', [None, 'corrupt', 'missing'])
+def test_deploy_requires_the_CME_artifact_pinned_by_registry(source, failure):
+    import hashlib
+    import yaml
+    artifact = source / 'packages/forecast-core/src/forecast_core/solar_events/bundled_models/argus-cme-speed-v2.joblib'
+    identity = {'model': 'argus-cme-speed-v2', 'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest()}
+    (source / 'configs/models_registry.yaml').write_text(yaml.safe_dump({'models': {'solar_event_speed': identity}}))
+    if failure == 'corrupt':
+        artifact.write_bytes(b'wrong model')
+    elif failure == 'missing':
+        artifact.unlink()
+    if failure:
+        with pytest.raises(ValueError, match='Bundled CME model'):
+            release.plan(source)
+    else:
+        assert release.plan(source)['cme_speed_model'] == identity
 
 
 def test_migrations_are_fingerprinted_separately(source):

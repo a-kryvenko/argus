@@ -23,6 +23,7 @@ from app.schemas.metrics import (
 from common.config import get_config
 from app.services.forecast_errors import ArtifactNotReadyError
 from app.services.forecasts_client import read_frames
+from common.schemas.solar_wind_events import CMESpeedOutlook
 
 
 @dataclass(frozen=True)
@@ -199,6 +200,16 @@ def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
         ))
 
     available = list(dict.fromkeys(variable.name for variable, _ in rows_by_source))
+    cme_speed = None
+    if product.target == 'solar-wind-speed':
+        for variable, frame in frames:
+            if variable.registry_name == 'plasma_speed_quantile' and 'cme_speed_json' in frame:
+                payloads = frame.cme_speed_json.dropna()
+                payloads = payloads[payloads.astype(str).str.len() > 0]
+                if len(payloads) == 1:
+                    cme_speed = CMESpeedOutlook.model_validate_json(payloads.iloc[0])
+                    times = {point.valid_time for point in predictions}
+                    cme_speed.points = [point for point in cme_speed.points if point.valid_time in times]
     return Forecast(
         target=product.target,
         issue_time=issue_time,
@@ -206,6 +217,7 @@ def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
         available_variables=available,
         predictions=predictions,
         meta=product_metadata(product, available) if meta else None,
+        cme_speed=cme_speed,
     )
 
 

@@ -91,6 +91,9 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
             result.model_info.update(service.last_status)
         if product == 'atmospheric-density':
             result.model_info.update(service.model_info)
+        if product == 'solar-wind-speed' and result.name == 'plasma_speed_quantile':
+            from argus_prophet.services.solar_event_speed import attach_speed_outlook
+            attach_speed_outlook(request, result)
         artifact = serialize(result)
         if len(artifact.content) > 32 * 1024 * 1024:
             raise ValueError('Forecast artifact exceeds 32 MiB')

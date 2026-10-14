@@ -30,7 +30,10 @@ def load_inputs(as_of: datetime | None = None, *, prepare_proswin=False, include
         from argus_prophet.services.source_features import enrich_inputs
         inputs = enrich_inputs(inputs, client, url, token)
         if include_events:
-            inputs.solar_wind_events = read_event_inputs(client, url, token, as_of)
+            try:
+                inputs.solar_wind_events = read_event_inputs(client, url, token, as_of)
+            except (httpx.HTTPError, ValueError, RuntimeError):
+                logging.getLogger(__name__).exception('Event inputs unavailable; retaining background forecast')
             # Current event release is CME-only; no optional HSS image enrichment.
     from argus_prophet.services.proswin_cache import read_predictions
     inputs.proswin_predictions = read_predictions(inputs.as_of)

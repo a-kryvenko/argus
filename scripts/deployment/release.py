@@ -46,7 +46,26 @@ def digest(root, prefixes, *, private=False):
     return result.hexdigest()
 
 
+def cme_model_identity(root):
+    """A configured CME model must ship with the private backend before deploy."""
+    import yaml
+    registry = root / 'configs/models_registry.yaml'
+    if not registry.is_file():
+        return None
+    entry = (yaml.safe_load(registry.read_text()) or {}).get('models', {}).get('solar_event_speed')
+    if not entry:
+        return None
+    model, expected = entry.get('model', ''), entry.get('sha256', '')
+    if not re.fullmatch(r'[a-zA-Z0-9_-]+', model) or not re.fullmatch(r'[0-9a-f]{64}', expected):
+        raise ValueError('Invalid CME model registry identity')
+    artifact = root / 'packages/forecast-core/src/forecast_core/solar_events/bundled_models' / (model + '.joblib')
+    if not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != expected:
+        raise ValueError('Bundled CME model is missing or differs from the registry SHA256')
+    return {'model': model, 'sha256': expected}
+
+
 def plan(root, *, rebuild=''):
+    cme_model = cme_model_identity(root)
     private = root / 'packages/forecast-core'
     private_sha = subprocess.check_output(['git', '-C', str(private), 'rev-parse', 'HEAD'], text=True).strip()
     private_hash = digest(private, ['.'], private=True)
@@ -55,7 +74,7 @@ def plan(root, *, rebuild=''):
     intelligence_core_hash = digest(intelligence_core, ['.'], private=True)
     result = {'version': 1, 'commit': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(),
               'private_commit': private_sha, 'intelligence_core_commit': intelligence_core_sha, 'components': {}, 'migrations': {},
-              'config_hash': digest(root, ['configs'])}
+              'config_hash': digest(root, ['configs']), 'cme_speed_model': cme_model}
     for name, prefixes in INPUTS.items():
         source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'])
         backend_hash = private_hash if name == 'prophet' else intelligence_core_hash if name == 'intelligence' else ''

@@ -199,10 +199,11 @@ def test_changed_model_fingerprint_disables_only_speed(tmp_path):
     from argus_prophet.services.solar_event_speed import calculate_speed
     models=tmp_path/'data/models';models.mkdir(parents=True)
     (models/'cme.joblib').write_bytes(b'not a valid model')
-    inputs=ForecastInputs(as_of=NOW,read_at=NOW,observations=Observation(points=[]),solar_wind_events=source())
+    inputs=ForecastInputs(as_of=NOW,read_at=NOW,observations=Observation(points=[]),solar_wind_events=source(poll('WSAEnlilSimulations', [])))
     result=calculate_speed(CalculationRequest('solar-wind-events',inputs,tmp_path,
         {'solar_event_speed':{'model':'cme','sha256':'a'*64}}),[])
     assert result['state']=='unavailable'
+    assert result['reason']=='ValueError'
 
 
 def test_CME_only_release_excludes_DBEM_and_verifies_ensemble_count():
@@ -233,3 +234,49 @@ def test_CME_only_release_excludes_DBEM_and_verifies_ensemble_count():
     with pytest.raises(ValidationError, match='does not match'):
         ForecastArtifact(**payload)
 
+
+
+def test_main_speed_scenario_reuses_baseline_and_bundled_model(tmp_path, monkeypatch):
+    import pandas as pd
+    from common.schemas.forecast_inputs import SpeedObservation, DensityObservation
+    from forecast.api import ForecastResult
+    from argus_prophet.services import solar_event_speed
+    from argus_prophet.services.generation import models
+    from argus_prophet.services.generation.calculation import serialize
+    import csv
+    import io
+    src=source(poll('CME',[dict(activityID='cme1',startTime=(NOW-timedelta(hours=4)).isoformat(),
+        cmeAnalyses=[dict(speed=900,isMostAccurate=True)])]),
+        poll('WSAEnlilSimulations',[simulation(arrival=(NOW+timedelta(hours=12)).isoformat())]))
+    inputs=ForecastInputs(as_of=NOW,read_at=NOW,observations=Observation(points=[]),solar_wind_events=src,
+        speed_observations=[SpeedObservation(issue_time=NOW.replace(minute=0)-timedelta(hours=h),v=400) for h in range(1,30)],
+        density_observations=[DensityObservation(issue_time=NOW.replace(minute=0)-timedelta(hours=h),n=5) for h in range(1,30)])
+    issue=NOW.replace(minute=0)
+    frame=pd.DataFrame(dict(issue_time=issue,valid_time=pd.date_range(issue+timedelta(hours=1),periods=24,freq='h'),
+        lead_hours=range(1,25),v_q10=350.,v_q50=400.,v_q90=450.))
+    original=frame.copy()
+    baseline=ForecastResult('plasma_speed_quantile',frame,{'model':'same-release-background','sha256':'b'*64})
+    registry={'solar_event_speed':{'model':'argus-cme-speed-v2',
+        'sha256':'9eee53f8996b044f95d523ac79fc8ca6508a7c6d29ede2fe8d9b923526b48379'}}
+    request=CalculationRequest('solar-wind-speed',inputs,tmp_path,registry)
+    monkeypatch.setattr(models,'load_model',lambda *a,**kw:pytest.fail('Background must not be recalculated'))
+    solar_event_speed.attach_speed_outlook(request,baseline)
+    pd.testing.assert_frame_equal(frame[original.columns],original)
+    artifact=serialize(baseline)
+    ForecastArtifact(name=artifact.name,csv_text=artifact.content.decode(),sha256=hashlib.sha256(artifact.content).hexdigest(),
+        row_count=artifact.row_count,columns=artifact.columns,model_info=artifact.model_info)
+    rows=list(csv.DictReader(io.StringIO(artifact.content.decode())))
+    outlook=json.loads(rows[0]['cme_speed_json'])
+    assert outlook['state']=='available' and len(outlook['events'])==1
+    assert outlook['background_model']['model']=='same-release-background'
+    assert len(outlook['points'])==24 and all(p['speed_background']==400 for p in outlook['points'])
+    assert max(p['speed_nominal'] for p in outlook['points'])>400
+    assert all(not row['cme_speed_json'] for row in rows[1:])
+    # A scenario from another baseline must never be accepted into this release.
+    outlook['points'][0]['speed_background']=399
+    rows[0]['cme_speed_json']=json.dumps(outlook)
+    stream=io.StringIO(); writer=csv.DictWriter(stream,fieldnames=artifact.columns);writer.writeheader();writer.writerows(rows)
+    corrupted=stream.getvalue()
+    with pytest.raises(ValueError,match='this release'):
+        ForecastArtifact(name=artifact.name,csv_text=corrupted,sha256=hashlib.sha256(corrupted.encode()).hexdigest(),
+            row_count=artifact.row_count,columns=artifact.columns,model_info=artifact.model_info)

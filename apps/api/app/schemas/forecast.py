@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.metadata import metadata_field
+from common.schemas.solar_wind_events import CMESpeedOutlook
 
 LEAD_HOURS_DESCRIPTION = (
     "Number of hours between forecast issuance (issue_time) and the time "
@@ -61,6 +62,7 @@ class Forecast(BaseModel):
     available_variables: list[str] = Field(description="Variable names available for this forecast issuance. A particular prediction may contain only a subset.", examples=[["v"]])
     predictions: list[ForecastPoint] = Field(description="Forecast points, each with its own valid_time and lead_hours.")
     meta: ForecastMetadata | None = metadata_field()
+    cme_speed: CMESpeedOutlook | None = Field(default=None, description='CME-conditioned speed scenarios from this release; separate from background quantiles and threshold probabilities.')
 
     model_config = ConfigDict(json_schema_extra={"examples": [{
         "target": "solar-wind-speed",

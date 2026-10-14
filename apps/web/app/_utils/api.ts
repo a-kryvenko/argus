@@ -48,6 +48,14 @@ export type Forecast = {
   available_variables: string[];
   predictions: ForecastPoint[];
   meta?: { variables: Record<string, { unit: string }> };
+  cme_speed?: {
+    state: 'available' | 'partial' | 'unavailable';
+    as_of?: string | null;
+    scenario_kind: 'conditional_scenarios_not_quantiles';
+    events: { event_id: string; peak_speed: number; arrival_at: string }[];
+    points: { valid_time: string; speed_background: number; speed_nominal: number;
+      speed_early: number; speed_late: number; scenario_lower: number; scenario_upper: number }[];
+  } | null;
 };
 
 export type ReliabilityPoint = {

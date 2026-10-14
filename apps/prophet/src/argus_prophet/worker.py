@@ -98,7 +98,8 @@ class Dispatcher:
             run = ProductRun.begin(task.product, 'scheduled', self.runtime, self.config,
                                    writer=self.connection, scheduled_slot=slot, details=self.details)
             loader = partial(load_event_inputs, include_speed=True) if task.product == 'solar-wind-events' else partial(
-                load_inputs, prepare_proswin=task.product in {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'})
+                load_inputs, prepare_proswin=task.product in {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'},
+                include_events=task.product == 'solar-wind-speed')
             inputs = self.submit(loader)
             self.active[task.product] = Active(run, inputs)
         if not self.active:

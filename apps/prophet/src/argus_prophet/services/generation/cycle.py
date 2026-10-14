@@ -65,7 +65,7 @@ def generate_products(products, *, writer) -> None:
     options = {}
     if {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'}.intersection(products):
         options['prepare_proswin'] = True
-    if 'solar-wind-events' in products and loader is load_inputs:
+    if {'solar-wind-events', 'solar-wind-speed'}.intersection(products) and loader is load_inputs:
         options['include_events'] = True
     service = ForecastGenerationService(
         input_loader=partial(loader, **options) if options else loader,

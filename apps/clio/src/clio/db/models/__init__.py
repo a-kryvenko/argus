@@ -5,5 +5,6 @@ from clio.db.models.scheduled_job import ScheduledJob
 from clio.db.models.gong_snapshot import GONGSnapshot
 from clio.db.models.goes_snapshot import GOESSnapshot
 from clio.db.models.donki_poll import DonkiPoll
+from clio.db.models.enlil_profile import EnlilProfileReceipt
 
-__all__ = ["Measurement", "NormalizedObservation", "ObservationSourceStatus", "ScheduledJob", "GONGSnapshot", "GOESSnapshot"]
+__all__ = ["Measurement", "NormalizedObservation", "ObservationSourceStatus", "ScheduledJob", "GONGSnapshot", "GOESSnapshot", "DonkiPoll", "EnlilProfileReceipt"]

@@ -19,6 +19,7 @@ def main(argv=None):
         'metrics', nargs='*', help='Configured observations; sdo selects AIA/HMI images (default: all)')
     commands.add_parser('normalize')
     commands.add_parser('collect-events', help='Collect and version DONKI CME/ENLIL/HSS/IPS responses')
+    commands.add_parser('collect-enlil', help='Collect and version compact NOAA ENLIL L1 profiles')
     backfill = commands.add_parser('backfill')
     backfill.add_argument('--from', dest='start', type=boundary)
     backfill.add_argument('--to', dest='end', type=boundary)
@@ -74,7 +75,7 @@ def execute(args, remainder):
     else:
         from clio.scheduling.jobs import execute as locked
         name = args.command
-        job = {'backfill': 'refresh', 'collect': 'live', 'normalize': 'refresh', 'collect-events': 'events'}.get(name)
+        job = {'backfill': 'refresh', 'collect': 'live', 'normalize': 'refresh', 'collect-events': 'events', 'collect-enlil': 'enlil-profiles'}.get(name)
         if name in ('backfill', 'collect') and args.metrics and all(m == 'sdo' or OBSERVATIONS[m].kind == 'file' for m in args.metrics):
             job = 'files-backfill' if name == 'backfill' else 'files-live'
         if job:

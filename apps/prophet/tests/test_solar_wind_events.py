@@ -9,8 +9,8 @@ import pytest
 from common.schemas.forecast_inputs import ForecastInputs
 from common.schemas.forecast_release import ForecastArtifact, ForecastRelease
 from common.schemas.observation import Observation
-from common.schemas.solar_wind_events import EventInputs, L1Sample, SourcePoll
-from argus_prophet.services.events import external_events, forecast, l1_detections
+from common.schemas.solar_wind_events import EventInputs, L1Sample, SourcePoll, SolarWindEvent
+from argus_prophet.services.events import forecast, l1_detections
 from argus_prophet.services.generation.calculation import CalculationRequest, calculate_product
 
 NOW = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
@@ -29,61 +29,17 @@ def simulation(ids=('cme1',), arrival='2026-10-14T12:00Z', completed='2026-10-13
 
 
 def source(*polls, samples=()):
-    return EventInputs(as_of=NOW, read_at=NOW, polls=list(polls), l1_samples=list(samples))
-
-
-def test_external_prediction_has_no_invented_probabilities_or_quantiles():
-    result = external_events(source(poll('WSAEnlilSimulations', [simulation()])))
-    assert len(result) == 1
-    event = result[0]
-    assert event.event_id == 'cme1' and event.status == 'predicted_hit'
-    assert event.arrival_target == 'Earth' and event.glancing_blow
-    assert 'probability' not in event.model_dump() and 'arrival_q10' not in event.model_dump()
-
-
-def test_latest_simulation_can_retract_hit_and_multiple_cmes_stay_a_group():
-    rows = [simulation(), simulation(arrival=None, completed='2026-10-13T11:00Z', link='run2')]
-    result = external_events(source(poll('WSAEnlilSimulations', rows)))
-    assert len(result) == 1 and result[0].status == 'no_predicted_hit'
-    combined = external_events(source(poll('WSAEnlilSimulations', [simulation(('cme1', 'cme2'))])))
-    assert len(combined) == 1 and combined[0].source_ids == ['cme1', 'cme2']
-
-
-def test_nested_simulations_restore_missing_standalone_ids_without_order_dependency():
-    nested = simulation()
-    nested.pop('cmeInputs')
-    nested['cmeIDs'] = ['cme1']
-    cme = dict(activityID='cme1', startTime='2026-10-12T00:00Z',
-               cmeAnalyses=[dict(enlilList=[nested])])
-    result = external_events(source(poll('WSAEnlilSimulations', [simulation(ids=())]), poll('CME', [cme])))
-    assert len(result) == 1 and result[0].kind == 'cme' and result[0].event_id == 'cme1'
-    unknown = external_events(source(poll('WSAEnlilSimulations', [simulation(ids=())])))
-    assert unknown[0].kind == 'solar_wind_disturbance'
-
-
-@pytest.mark.parametrize('change', ['receipt', 'completion', 'submission', 'invalid_arrival'])
-def test_future_or_invalid_information_is_not_used(change):
-    row = simulation()
-    received = NOW
-    if change == 'receipt':
-        received += timedelta(minutes=1)
-    if change == 'completion':
-        row['modelCompletionTime'] = '2026-10-13T13:00Z'
-    if change == 'submission':
-        row['submissionTime'] = '2026-10-13T13:00Z'
-    if change == 'invalid_arrival':
-        row['estimatedShockArrivalTime'] = 'invalid'
-    assert external_events(source(poll('WSAEnlilSimulations', [row], received))) == []
-
-
-def test_hss_and_ips_are_observations_only_and_other_targets_are_excluded():
-    hss = dict(hssID='hss1', eventTime='2026-10-13T01:00Z', instruments=[{'displayName': 'ACE: SWEPAM'}])
-    ips = dict(activityID='ips1', eventTime='2026-10-13T01:00Z', location='STEREO A')
-    result = external_events(source(poll('HSS', [hss]), poll('IPS', [ips])))
-    assert len(result) == 1 and result[0].kind == 'hss' and result[0].status == 'observed'
-    assert result[0].arrival_at is None
-    hss['eventTime'] = '2026-10-14T01:00Z'
-    assert external_events(source(poll('HSS', [hss]))) == []
+    # Prophet receives normalized events from Clio, independently of raw provider parsing.
+    events = []
+    for p in polls:
+        if p.endpoint == 'WSAEnlilSimulations':
+            for row in p.records:
+                events.append(SolarWindEvent(event_id='cme1', kind='cme', status='predicted_hit',
+                    source='DONKI/WSA-ENLIL', source_ids=['cme1'], available_at=p.received_at,
+                    model_completed_at=datetime.fromisoformat(row['modelCompletionTime'].replace('Z', '+00:00')),
+                    arrival_at=datetime.fromisoformat(row['estimatedShockArrivalTime'].replace('Z', '+00:00')),
+                    arrival_target='Earth', observed_at=NOW-timedelta(hours=4), initial_speed_km_s=900))
+    return EventInputs(as_of=NOW, read_at=NOW, polls=list(polls), events=events, l1_samples=list(samples))
 
 
 def samples():
@@ -100,7 +56,7 @@ def samples():
 
 def test_sustained_l1_compression_is_one_unattributed_detection():
     onset, rows = samples()
-    events = external_events(source(poll('WSAEnlilSimulations', [simulation(arrival=onset.isoformat())])))
+    events = source(poll('WSAEnlilSimulations', [simulation(arrival=onset.isoformat())])).events
     found = l1_detections(source(samples=rows), events)
     assert len(found) == 1 and found[0].onset_at == onset
     assert found[0].detected_at == onset+timedelta(minutes=10)
@@ -280,3 +236,18 @@ def test_main_speed_scenario_reuses_baseline_and_bundled_model(tmp_path, monkeyp
     with pytest.raises(ValueError,match='this release'):
         ForecastArtifact(name=artifact.name,csv_text=corrupted,sha256=hashlib.sha256(corrupted.encode()).hexdigest(),
             row_count=artifact.row_count,columns=artifact.columns,model_info=artifact.model_info)
+
+
+def test_old_clio_snapshot_preserves_background_and_marks_cme_unavailable(tmp_path):
+    import pandas as pd
+    from forecast.api import ForecastResult
+    from argus_prophet.services.solar_event_speed import attach_speed_outlook
+    src = source(poll('CME', []))
+    src.events = None  # Legacy Clio contract, before normalized events were supplied.
+    inputs = ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[]), solar_wind_events=src)
+    frame = pd.DataFrame(dict(valid_time=[NOW+timedelta(hours=1)], v_q50=[400.]))
+    result = ForecastResult('plasma_speed_quantile', frame, {})
+    attach_speed_outlook(CalculationRequest('solar-wind-speed', inputs, tmp_path, {}), result)
+    assert result.frame.v_q50.tolist() == [400.]
+    outlook = json.loads(result.frame.cme_speed_json.iloc[0])
+    assert outlook['state'] == 'unavailable' and 'Normalized' in outlook['reason']

@@ -53,8 +53,12 @@ def attach_speed_outlook(request, result):
     if inputs.solar_wind_events is None:
         output=dict(model_version='cme-speed-v2',state='unavailable',reason='Event inputs unavailable')
     else:
-        report=forecast_solar_wind_events(inputs,include_hss=False,include_dbem=False)
-        output=calculate_speed(request,report.events,baseline=result)
+        try:
+            report=forecast_solar_wind_events(inputs,include_hss=False,include_dbem=False)
+            output=calculate_speed(request,report.events,baseline=result)
+        except ValueError:
+            logger.exception('Normalized event inputs unavailable; retaining background speed')
+            output=dict(model_version='cme-speed-v2',state='unavailable',reason='Normalized event inputs unavailable')
     outlook=CMESpeedOutlook.model_validate(output)
     result.frame['cme_speed_json']=''
     result.frame.loc[result.frame.index[0],'cme_speed_json']=outlook.model_dump_json()

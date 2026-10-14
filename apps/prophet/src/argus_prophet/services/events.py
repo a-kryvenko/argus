@@ -1,6 +1,5 @@
 """Compatibility boundary; implementation lives in private forecast-core."""
 from forecast_core.api import (
-    external_solar_wind_events as external_events,
     detect_l1_compressions as l1_detections,
     forecast_solar_wind_events as forecast,
 )

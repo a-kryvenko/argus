@@ -49,6 +49,8 @@ def tasks_for(config, heartbeats, abort):
     if config.solar_wind_events.enabled:
         tasks.append(Task('events', lambda: jobs.execute('events', lambda: invoke('collect-events')),
                           config.solar_wind_events.every_seconds, background=True))
+        tasks.append(Task('enlil-profiles', lambda: jobs.execute('enlil-profiles', lambda: invoke('collect-enlil')),
+                          config.solar_wind_events.every_seconds, background=True))
     if config.sdo_images.enabled:
         for mode in ('live', 'warmup', 'cleanup'):
             tasks.append(Task(

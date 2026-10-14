@@ -16,12 +16,12 @@ def test_donki_versions_are_causal_and_empty_responses_replace_old_events(databa
     from clio.db.session import get_session_factory, dispose_engine
     from clio.routers.solar_wind_events import load_event_inputs
     now = datetime.now(UTC)
-    raw = b'[{"activityID":"cme1"}]'
+    raw = b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'
 
     async def check():
         try:
             async with get_session_factory()() as session:
-                for minute, payload, error in ((0, [{'activityID': 'cme1'}], None),
+                for minute, payload, error in ((0, [{'activityID': 'cme1', 'startTime': '2026-01-01T00:00Z'}], None),
                                                (1, [], None), (2, None, 'Timeout')):
                     content = raw if payload else b'[]'
                     session.add(DonkiPoll(endpoint='CME', received_at=now+timedelta(minutes=minute),
@@ -34,12 +34,50 @@ def test_donki_versions_are_causal_and_empty_responses_replace_old_events(databa
             async with get_session_factory()() as session:
                 assert not (await load_event_inputs(session, now-timedelta(seconds=1), now)).polls
                 first = await load_event_inputs(session, now, now)
-                assert first.polls[0].records == [{'activityID': 'cme1'}]
+                assert first.polls[0].records == [{'activityID': 'cme1', 'startTime': '2026-01-01T00:00Z'}]
+                assert first.events[0].event_id == 'cme1'
                 second = await load_event_inputs(session, now+timedelta(minutes=1), now)
-                assert second.polls[0].records == []
+                assert second.polls[0].records == [] and second.events == []
                 third = await load_event_inputs(session, now+timedelta(minutes=2), now)
                 assert third.polls[0].poll_id == second.polls[0].poll_id
                 assert third.latest_attempts['CME']['error'] == 'Timeout'
+        finally:
+            await dispose_engine()
+    asyncio.run(check())
+
+
+def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypatch):
+    _, _, environment = database
+    migrate(environment)
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    from clio.db.models.enlil_profile import EnlilProfileReceipt
+    from clio.db.session import get_session_factory, dispose_engine
+    from clio.routers.solar_wind_events import load_event_inputs
+    now = datetime.now(UTC).replace(microsecond=0)
+
+    async def check():
+        try:
+            async with get_session_factory()() as session:
+                for minute, speed in ((0, 500), (2, 900)):
+                    session.add(EnlilProfileReceipt(received_at=now+timedelta(minutes=minute),
+                        source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/run/evo.l1.nc', source_key='run/evo.l1.nc',
+                        source_modified_at=now-timedelta(minutes=1), model_created_at=now-timedelta(hours=1),
+                        sha256=str(minute)*64, payload=dict(model_version='2.9', target='L1', density_kind='proton_equivalent',
+                            points=[dict(valid_time=(now+timedelta(hours=1)).isoformat(), speed_km_s=speed, density_cm3=5)])))
+                session.add(EnlilProfileReceipt(received_at=now+timedelta(minutes=3),
+                    source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/', error='Timeout'))
+                await session.commit()
+            async with get_session_factory()() as session:
+                assert not (await load_event_inputs(session, now-timedelta(seconds=1), now)).enlil_profiles
+                first = await load_event_inputs(session, now, now)
+                assert first.events == []
+                assert first.enlil_profiles[0].points[0].speed_km_s == 500
+                assert first.enlil_profile_status['state'] == 'available'
+                latest = await load_event_inputs(session, now+timedelta(minutes=3), now)
+                assert latest.enlil_profiles[0].points[0].speed_km_s == 900
+                assert latest.enlil_profile_status['latest_attempt']['error'] == 'Timeout'
+                assert latest.enlil_profile_status['linked_to_donki'] is False
         finally:
             await dispose_engine()
     asyncio.run(check())

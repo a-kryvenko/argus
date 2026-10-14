@@ -8,9 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from clio.db import get_db_session
+from clio.normalization.solar_wind_events import normalize_events
 from clio.db.models import Measurement
 from clio.db.models.donki_poll import DonkiPoll
-from common.schemas.solar_wind_events import EventInputs, HourlyWindSpeed, L1Sample, SourcePoll
+from clio.db.models.enlil_profile import EnlilProfileReceipt
+from common.schemas.solar_wind_events import EnlilProfile, EventInputs, HourlyWindSpeed, L1Sample, SourcePoll
 
 router = APIRouter(prefix='/internal/v1/observations/solar-wind-events', tags=['observations'])
 
@@ -68,7 +70,7 @@ async def load_event_inputs(session, as_of, now):
     if len(rows) > 25000:
         raise HTTPException(503, 'L1 input range exceeds supported size')
     speed_hourly = await hourly_speeds(session, as_of)
-    return EventInputs(as_of=as_of, read_at=now,
+    result = EventInputs(as_of=as_of, read_at=now,
         speed_hourly=speed_hourly,
         polls=[SourcePoll(endpoint=p.endpoint, poll_id=p.id, received_at=p.received_at,
                           sha256=p.sha256, request_start=p.request_start, request_end=p.request_end,
@@ -78,6 +80,27 @@ async def load_event_inputs(session, as_of, now):
             available_at=max(p.observed_at, p.received_at, p.interval_end or p.observed_at),
             metric=p.metric, value=p.value, quality=p.quality, spacecraft=p.spacecraft)
             for p in rows if p.interval_end is None or p.interval_end <= as_of])
+
+    result.events = normalize_events(result)
+    profile = (await session.execute(select(EnlilProfileReceipt).options(undefer(EnlilProfileReceipt.payload))
+        .where(EnlilProfileReceipt.received_at <= as_of, EnlilProfileReceipt.error.is_(None),
+               EnlilProfileReceipt.model_created_at <= as_of, EnlilProfileReceipt.source_modified_at <= as_of)
+        .order_by(EnlilProfileReceipt.model_created_at.desc(), EnlilProfileReceipt.received_at.desc(),
+                  EnlilProfileReceipt.id.desc()).limit(1))).scalars().first()
+    attempt = (await session.execute(select(EnlilProfileReceipt.received_at, EnlilProfileReceipt.error)
+        .where(EnlilProfileReceipt.received_at <= as_of)
+        .order_by(EnlilProfileReceipt.received_at.desc(), EnlilProfileReceipt.id.desc()).limit(1))).first()
+    if profile:
+        result.enlil_profiles = [EnlilProfile(receipt_id=profile.id, source_key=profile.source_key,
+            source_url=profile.source_url, sha256=profile.sha256, received_at=profile.received_at,
+            source_modified_at=profile.source_modified_at, model_created_at=profile.model_created_at,
+            **profile.payload)]
+    future = profile and any(p.valid_time > as_of for p in result.enlil_profiles[0].points)
+    result.enlil_profile_status = dict(state='available' if future else 'stale' if profile else 'unavailable',
+        model_created_at=profile.model_created_at.isoformat() if profile else None,
+        latest_attempt=dict(received_at=attempt.received_at.isoformat(), error=attempt.error) if attempt else None,
+        provider='NOAA/SWPC ENLIL', linked_to_donki=False)
+    return result
 
 
 @router.get('/inputs', response_model=EventInputs)

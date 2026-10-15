@@ -13,8 +13,8 @@ from argus_prophet.services.runs import RunRecorder
 from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
 
 
-@pytest.mark.parametrize('speed_available', [True, False])
-def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, speed_available):
+@pytest.mark.parametrize(('speed_available', 'speed_integrated'), [(True, None), (True, 650), (False, None)])
+def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, speed_available, speed_integrated):
     import csv
     import io
     import json
@@ -43,6 +43,8 @@ def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, speed_
     speed = dict(model_version='cme-speed-v2', state='available', model_sha256='a'*64,
         points=[dict(valid_time=arrival, speed_background=400, speed_nominal=800,
             speed_early=600, speed_late=400, scenario_lower=400, scenario_upper=1000)])
+    if speed_integrated is not None:
+        speed['points'][0]['speed_integrated'] = speed_integrated
 
     def speed_calculator(events):
         assert len(events) == 1 and events[0].arrival_at == arrival
@@ -67,7 +69,8 @@ def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, speed_
     assert report.cme_speed.state == ('available' if speed_available else 'unavailable')
     if speed_available:
         assert report.cme_speed.model_dump(mode='json')['points'] == [
-            {**speed['points'][0], 'valid_time': arrival.isoformat().replace('+00:00', 'Z')}]
+            {**speed['points'][0], 'valid_time': arrival.isoformat().replace('+00:00', 'Z'),
+             'speed_integrated': speed_integrated}]
         assert report.cme_speed.model_sha256 == speed['model_sha256']
         assert report.cme_speed.scenario_kind == 'conditional_scenarios_not_quantiles'
     else:

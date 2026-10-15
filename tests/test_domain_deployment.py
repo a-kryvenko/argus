@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
     domains = {'api': ['api'], 'clio': ['clio', 'clio-worker'],
-               'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence']}
+               'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
     for domain, names in domains.items():
         for name in [*names, domain + '-migrate']:
             service = services[name]
@@ -54,8 +54,11 @@ def test_intelligence_credentials_and_networks_are_scoped():
     assert 'profiles' not in runtime
     assert runtime['command'] == ['intelligence', 'worker']
     assert runtime['networks'] == ['backend', 'forecasts']
-    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN'}
-    assert not any(key in runtime for key in ('volumes', 'ports', 'env_file'))
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'ARGUS_WORKDIR', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'}
+    assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
+    assert runtime['environment']['INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'] == '${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}'
+    assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
+    assert not any(key in runtime for key in ('ports', 'env_file'))
     assert services['intelligence-migrate']['profiles'] == ['maintenance']
     assert set(services['intelligence-migrate']['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
     for name, service in services.items():
@@ -63,12 +66,15 @@ def test_intelligence_credentials_and_networks_are_scoped():
             assert not any(key.startswith('INTELLIGENCE_DB_') for key in service.get('environment', {})), name
 
 
-def test_impact_service_is_internal_and_has_no_database_credentials():
+def test_impact_service_is_internal_and_has_scoped_database_credentials():
     services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
     runtime = services['intelligence-api']
     assert runtime['command'] == ['intelligence', 'serve']
     assert 'ports' not in runtime
-    assert set(runtime['networks']) == {'forecasts', 'impacts'}
-    assert not any('_DB_' in key for key in runtime['environment'])
+    assert set(runtime['networks']) == {'backend', 'forecasts', 'impacts'}
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'ARGUS_WORKDIR', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'INTELLIGENCE_SERVICE_TOKEN'}
+    assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
+    assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
+    assert 'env_file' not in runtime
     assert services['api']['environment']['INTELLIGENCE_URL'] == 'http://intelligence-api:8000'
     assert runtime['environment']['INTELLIGENCE_SERVICE_TOKEN'] == services['api']['environment']['INTELLIGENCE_SERVICE_TOKEN']

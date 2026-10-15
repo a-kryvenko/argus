@@ -97,12 +97,34 @@ class HSSForecast(BaseModel):
         return self
 
 
+class ArrivalSourceReceipt(BaseModel):
+    poll_id: UUID
+    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
+    received_at: AwareDatetime
+
+
+class EnlilArrivalInput(BaseModel):
+    """External model output supplied by Clio, before Prophet's forecast policy."""
+    model_config = ConfigDict(extra='forbid')
+    simulation_id: str
+    cme_ids: list[str] = Field(default_factory=list)
+    available_at: AwareDatetime
+    model_completed_at: AwareDatetime
+    earth_arrival_at: AwareDatetime | None = None
+    source_url: str | None = None
+    duration_hours: FiniteFloat | None = Field(default=None, gt=0)
+    glancing_blow: bool | None = None
+    minor_impact: bool | None = None
+    receipts: list[ArrivalSourceReceipt] = Field(default_factory=list)
+    invalid_reason: str | None = None
+
+
 class SolarWindEvent(BaseModel):
     model_config = ConfigDict(extra='forbid')
     event_id: str
     kind: Literal['cme', 'hss', 'interplanetary_shock', 'solar_wind_disturbance']
     status: Literal['detected', 'predicted_hit', 'no_predicted_hit', 'prediction_elapsed', 'observed']
-    source: Literal['DONKI', 'DONKI/WSA-ENLIL']
+    source: Literal['DONKI', 'DONKI/WSA-ENLIL', 'ARGUS']
     source_ids: list[str] = Field(default_factory=list)
     source_url: str | None = None
     available_at: AwareDatetime
@@ -115,6 +137,19 @@ class SolarWindEvent(BaseModel):
     minor_impact: bool | None = None
     simulation_id: str | None = None
     initial_speed_km_s: FiniteFloat | None = Field(default=None, gt=0)
+    arrival_model: str | None = None
+    arrival_method: str | None = None
+    arrival_receipts: list[ArrivalSourceReceipt] = Field(default_factory=list)
+    arrival_window_start: AwareDatetime | None = None
+    arrival_window_end: AwareDatetime | None = None
+
+    @model_validator(mode='after')
+    def ordered_arrival_window(self):
+        if self.arrival_window_start is not None or self.arrival_window_end is not None:
+            if (self.arrival_at is None or self.arrival_window_start is None or self.arrival_window_end is None
+                    or not self.arrival_window_start <= self.arrival_at <= self.arrival_window_end):
+                raise ValueError('Invalid CME arrival window')
+        return self
 
 
 class EnlilProfilePoint(BaseModel):
@@ -146,11 +181,13 @@ class EnlilProfile(BaseModel):
 
 
 class EventInputs(BaseModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
     as_of: AwareDatetime
     read_at: AwareDatetime
     polls: list[SourcePoll] = Field(default_factory=list)
     events: list[SolarWindEvent] | None = None
+    # None identifies legacy snapshots; [] means the new Clio contract has no predictions.
+    enlil_arrivals: list[EnlilArrivalInput] | None = None
     enlil_profiles: list[EnlilProfile] = Field(default_factory=list)
     enlil_profile_status: dict = Field(default_factory=lambda: {'state': 'unavailable'})
     latest_attempts: dict[str, dict] = Field(default_factory=dict)
@@ -238,17 +275,21 @@ class CMESpeedPoint(BaseModel):
     speed_late: FiniteFloat = Field(ge=0)
     scenario_lower: FiniteFloat = Field(ge=0)
     scenario_upper: FiniteFloat = Field(ge=0)
+    speed_integrated: FiniteFloat | None = Field(default=None, ge=0)
 
     @model_validator(mode='after')
     def ordered_scenarios(self):
         values=(self.speed_nominal,self.speed_early,self.speed_late)
         if not self.scenario_lower <= min(values) <= max(values) <= self.scenario_upper:
             raise ValueError('Speed scenarios must lie inside the envelope')
+        if self.speed_integrated is not None and not self.speed_background <= self.speed_integrated <= self.speed_nominal:
+            raise ValueError('Integrated speed must lie between background and nominal scenario')
         return self
 
 
 class CMESpeedOutlook(BaseModel):
     model_version: str
+    integrated_into_speed: bool = False
     as_of: AwareDatetime | None = None
     state: Literal['available', 'partial', 'unavailable']
     conditional_on_impact: Literal[True] = True

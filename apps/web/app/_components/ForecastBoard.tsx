@@ -67,9 +67,9 @@ export default function ForecastBoard({ product, resource, overview = false }: {
         {!forecast && (demo ? <p className={styles.notice} role="status">{error ?? 'No demo release is available at this time.'}</p> : <ResourceState error={error} retry={retry} label={`${product.title.toLowerCase()} forecast`} />)}
         {forecast && !forecast.available_variables.includes(variable.key) && <p className={styles.notice} role="status">{variable.label} is not available in this release.</p>}
         {view && <>
-          {(variable.quantile || demo) && <WindChart title={variable.label} unit={variable.unit} data={demo ? comparisonRows(view, demo.bundle.observations, variable.key, demo.now, demo.showFuture) : variable.key === 'v' ? speedScenarioData(view) : quantileData(view, variable.key)} comparison={!!demo} now={demo?.now} eventTime={demo ? Date.parse(demo.bundle.event.starts_at) : undefined} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
+          {(variable.quantile || demo) && <WindChart title={variable.label} unit={variable.unit} data={demo ? comparisonRows(view, demo.bundle.observations, variable.key, demo.now, demo.showFuture) : variable.key === 'v' ? speedScenarioData(view) : quantileData(view, variable.key)} comparison={!!demo} integrated={variable.key === 'v' && !!view.cme_speed?.integrated_into_speed} now={demo?.now} eventTime={demo ? Date.parse(demo.bundle.event.starts_at) : undefined} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
           {!demo && variable.key === 'v' && <p className={styles.notice}>{!view.cme_speed || view.cme_speed.state === 'unavailable' ? 'CME speed outlook unavailable for this release.' : view.cme_speed.state === 'partial' ? 'Some CME arrivals have no supported speed estimate.' : `${view.cme_speed.events.length} CME impact scenarios in this release.`} <Link href="/products/solar-events">Solar events</Link></p>}
-          {variable.thresholds.length > 0 && <HeatMap title={`${variable.label}${variable.key === 'v' && view.cme_speed ? ' background' : ''} threshold probability`} yLabels={variable.thresholds.map(item => item.label)}
+          {variable.thresholds.length > 0 && <HeatMap title={`${variable.label}${variable.key === 'v' && view.cme_speed && !view.cme_speed.integrated_into_speed ? ' background' : ''} threshold probability`} yLabels={variable.thresholds.map(item => item.label)}
             data={probabilityData(view, variable.key, variable.thresholds.map(item => item.value))} times={view.predictions.map(item => item.valid_time)} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
           <details className={styles.dataTable}>
             <summary>Hourly forecast values <span>{view.predictions.length} forecast times · UTC</span></summary>
@@ -98,7 +98,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
             {view?.predictions.map(item => <option key={item.valid_time} value={item.valid_time}>+{item.lead_hours}h · {item.valid_time.slice(5, 16).replace('T', ' ')}</option>)}
           </select>
           <div className={styles.inspectorReading}>
-            <span>{variable.quantile ? (variable.key === 'v' && view?.cme_speed ? 'BACKGROUND · q50' : 'MEDIAN · q50') : primaryThreshold?.label ?? variable.label}</span>
+            <span>{variable.quantile ? (variable.key === 'v' && view?.cme_speed && !view.cme_speed.integrated_into_speed ? 'BACKGROUND · q50' : 'MEDIAN · q50') : primaryThreshold?.label ?? variable.label}</span>
             <p>{variable.quantile ? forecastNumber(values?.continuous?.q50) : formatProbability(primaryThreshold ? probability(point, variable.key, primaryThreshold.value) : null)} <small>{variable.quantile ? variable.unit : ''}</small></p>
             <span>{point ? `Lead +${point.lead_hours} hours` : 'Awaiting forecast'}</span>
           </div>
@@ -106,7 +106,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
           {demo && point && <dl className={styles.facts}><div><dt>Actual outcome</dt><dd>{demo.showFuture || observationKnownAt(point.valid_time, variable.key) <= demo.now ? forecastNumber(actual) : 'Hidden'} {variable.unit}</dd></div>{variable.quantile && <div><dt>q50 − observed</dt><dd>{forecastNumber(actual != null && values?.continuous ? values.continuous.q50 - actual : null)} {variable.unit}</dd></div>}</dl>}
           {variable.quantile && <div className={styles.quantileValues}><div><span>q10</span><strong>{forecastNumber(values?.continuous?.q10)}</strong></div><div><span>q90</span><strong>{forecastNumber(values?.continuous?.q90)}</strong></div></div>}
           {cmePoint && <dl className={styles.facts}><div><dt>Expected CME impact</dt><dd>{forecastNumber(cmePoint.speed_nominal)} km/s</dd></div><div><dt>Early / late arrival</dt><dd>{forecastNumber(cmePoint.speed_early)} / {forecastNumber(cmePoint.speed_late)} km/s</dd></div><div><dt>Possible scenario range</dt><dd>{forecastNumber(cmePoint.scenario_lower)}–{forecastNumber(cmePoint.scenario_upper)} km/s</dd></div></dl>}
-          {variable.thresholds.length > 0 && <div className={styles.thresholdValues}><h3>{variable.key === 'v' && view?.cme_speed ? 'Background threshold probabilities' : 'Threshold probabilities'}</h3>{variable.thresholds.map(threshold => {
+          {variable.thresholds.length > 0 && <div className={styles.thresholdValues}><h3>{variable.key === 'v' && view?.cme_speed && !view.cme_speed.integrated_into_speed ? 'Background threshold probabilities' : 'Threshold probabilities'}</h3>{variable.thresholds.map(threshold => {
             const value = probability(point, variable.key, threshold.value);
             return <div key={threshold.value}><p><span>{threshold.label}</span><strong>{formatProbability(value)}</strong></p><div className={styles.probabilityTrack} aria-hidden="true"><span style={{ width: `${value == null ? 0 : value * 100}%` }} /></div></div>;
           })}</div>}

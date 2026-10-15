@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
 from clio.db import get_db_session
-from clio.normalization.solar_wind_events import normalize_events
+from clio.normalization.solar_wind_events import normalize_event_inputs
 from clio.db.models import Measurement
 from clio.db.models.donki_poll import DonkiPoll
 from clio.db.models.enlil_profile import EnlilProfileReceipt
@@ -70,7 +70,7 @@ async def load_event_inputs(session, as_of, now):
     if len(rows) > 25000:
         raise HTTPException(503, 'L1 input range exceeds supported size')
     speed_hourly = await hourly_speeds(session, as_of)
-    result = EventInputs(as_of=as_of, read_at=now,
+    result = EventInputs(schema_version=2, as_of=as_of, read_at=now,
         speed_hourly=speed_hourly,
         polls=[SourcePoll(endpoint=p.endpoint, poll_id=p.id, received_at=p.received_at,
                           sha256=p.sha256, request_start=p.request_start, request_end=p.request_end,
@@ -81,7 +81,7 @@ async def load_event_inputs(session, as_of, now):
             metric=p.metric, value=p.value, quality=p.quality, spacecraft=p.spacecraft)
             for p in rows if p.interval_end is None or p.interval_end <= as_of])
 
-    result.events = normalize_events(result)
+    result.events, result.enlil_arrivals = normalize_event_inputs(result)
     profile = (await session.execute(select(EnlilProfileReceipt).options(undefer(EnlilProfileReceipt.payload))
         .where(EnlilProfileReceipt.received_at <= as_of, EnlilProfileReceipt.error.is_(None),
                EnlilProfileReceipt.model_created_at <= as_of, EnlilProfileReceipt.source_modified_at <= as_of)

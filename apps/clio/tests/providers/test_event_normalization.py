@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from common.schemas.solar_wind_events import EventInputs, SourcePoll
-from clio.normalization.solar_wind_events import normalize_events as external_events
+from clio.normalization.solar_wind_events import normalize_events as external_events, normalize_event_inputs
 
 NOW = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
 
@@ -27,21 +27,23 @@ def source(*polls, samples=()):
     return EventInputs(as_of=NOW, read_at=NOW, polls=list(polls), l1_samples=list(samples))
 
 
-def test_external_prediction_has_no_invented_probabilities_or_quantiles():
-    result = external_events(source(poll('WSAEnlilSimulations', [simulation()])))
-    assert len(result) == 1
-    event = result[0]
-    assert event.event_id == 'cme1' and event.status == 'predicted_hit'
-    assert event.arrival_target == 'Earth' and event.glancing_blow
-    assert 'probability' not in event.model_dump() and 'arrival_q10' not in event.model_dump()
+def test_external_predictions_are_inputs_without_forecast_status_or_quantiles():
+    observations, predictions = normalize_event_inputs(source(poll('WSAEnlilSimulations', [simulation()])))
+    assert observations == [] and len(predictions) == 1
+    prediction = predictions[0]
+    assert prediction.cme_ids == ['cme1'] and prediction.glancing_blow
+    assert prediction.earth_arrival_at == datetime(2026, 10, 14, 12, tzinfo=UTC)
+    assert not {'status', 'probability', 'arrival_q10'}.intersection(prediction.model_dump())
+    assert len(prediction.receipts) == 1 and prediction.receipts[0].sha256
 
 
-def test_latest_simulation_can_retract_hit_and_multiple_cmes_stay_a_group():
+def test_alternatives_and_retractions_are_retained_for_prophet_selection():
     rows = [simulation(), simulation(arrival=None, completed='2026-10-13T11:00Z', link='run2')]
-    result = external_events(source(poll('WSAEnlilSimulations', rows)))
-    assert len(result) == 1 and result[0].status == 'no_predicted_hit'
-    combined = external_events(source(poll('WSAEnlilSimulations', [simulation(('cme1', 'cme2'))])))
-    assert len(combined) == 1 and combined[0].source_ids == ['cme1', 'cme2']
+    observations, predictions = normalize_event_inputs(source(poll('WSAEnlilSimulations', rows)))
+    assert observations == [] and len(predictions) == 2
+    assert predictions[1].simulation_id == 'run2' and predictions[1].earth_arrival_at is None
+    _, combined = normalize_event_inputs(source(poll('WSAEnlilSimulations', [simulation(('cme1', 'cme2'))])))
+    assert combined[0].cme_ids == ['cme1', 'cme2']
 
 
 def test_nested_simulations_restore_missing_standalone_ids_without_order_dependency():
@@ -50,10 +52,11 @@ def test_nested_simulations_restore_missing_standalone_ids_without_order_depende
     nested['cmeIDs'] = ['cme1']
     cme = dict(activityID='cme1', startTime='2026-10-12T00:00Z',
                cmeAnalyses=[dict(enlilList=[nested])])
-    result = external_events(source(poll('WSAEnlilSimulations', [simulation(ids=())]), poll('CME', [cme])))
-    assert len(result) == 1 and result[0].kind == 'cme' and result[0].event_id == 'cme1'
-    unknown = external_events(source(poll('WSAEnlilSimulations', [simulation(ids=())])))
-    assert unknown[0].kind == 'solar_wind_disturbance'
+    observations, predictions = normalize_event_inputs(source(poll('WSAEnlilSimulations', [simulation(ids=())]), poll('CME', [cme])))
+    assert len(observations) == 1 and observations[0].status == 'detected'
+    assert predictions[0].cme_ids == ['cme1'] and len(predictions[0].receipts) == 2
+    _, unknown = normalize_event_inputs(source(poll('WSAEnlilSimulations', [simulation(ids=())])))
+    assert unknown[0].cme_ids == []
 
 
 @pytest.mark.parametrize('change', ['receipt', 'completion', 'submission', 'invalid_arrival'])
@@ -68,7 +71,12 @@ def test_future_or_invalid_information_is_not_used(change):
         row['submissionTime'] = '2026-10-13T13:00Z'
     if change == 'invalid_arrival':
         row['estimatedShockArrivalTime'] = 'invalid'
-    assert external_events(source(poll('WSAEnlilSimulations', [row], received))) == []
+    observations, predictions = normalize_event_inputs(source(poll('WSAEnlilSimulations', [row], received)))
+    assert observations == []
+    if change == 'invalid_arrival':
+        assert len(predictions) == 1 and predictions[0].invalid_reason == 'invalid_arrival_time'
+    else:
+        assert predictions == []
 
 
 def test_hss_and_ips_are_observations_only_and_other_targets_are_excluded():
@@ -86,14 +94,19 @@ def test_initial_speed_uses_causal_analysis_and_merged_receipt_time():
     cme = dict(activityID='cme1', startTime='2026-10-12T00:00Z', cmeAnalyses=[
         dict(speed=800, isMostAccurate=False), dict(speed=900, isMostAccurate=True),
         dict(speed=1900, isMostAccurate=True, submissionTime='2026-10-14T00:00Z')])
-    event = external_events(source(poll('CME', [cme]), poll('WSAEnlilSimulations', [simulation()], received)))[0]
-    assert event.initial_speed_km_s == 900 and event.simulation_id == 'run1'
-    assert event.available_at == NOW
+    observations, predictions = normalize_event_inputs(source(poll('CME', [cme]), poll('WSAEnlilSimulations', [simulation()], received)))
+    assert observations[0].initial_speed_km_s == 900 and observations[0].available_at == NOW
+    assert predictions[0].simulation_id == 'run1' and predictions[0].available_at == received
 
 
 def test_latest_full_poll_wins_independently_of_input_order():
     old = poll('WSAEnlilSimulations', [simulation()], NOW-timedelta(minutes=1))
     replacement = poll('WSAEnlilSimulations', [], NOW)
-    assert external_events(source(replacement, old)) == []
+    assert normalize_event_inputs(source(replacement, old)) == ([], [])
 
 
+
+
+def test_clio_does_not_apply_prophet_forecast_horizon():
+    _, predictions = normalize_event_inputs(source(poll('WSAEnlilSimulations', [simulation(arrival='2026-11-01T00:00Z')])))
+    assert len(predictions) == 1

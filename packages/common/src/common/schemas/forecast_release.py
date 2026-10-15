@@ -56,6 +56,7 @@ class ForecastArtifact(BaseModel):
         count = 0
         cme_speed = None
         speed_background = {}
+        integrated_speed = {}
         for row in reader:
             if None in row or None in row.values():
                 raise ValueError('Malformed CSV row')
@@ -69,7 +70,9 @@ class ForecastArtifact(BaseModel):
             if current.tzinfo is None or valid.tzinfo is None or lead < 0:
                 raise ValueError('Artifact times must be timezone-aware with nonnegative leads')
             if self.name == 'plasma_speed_quantile':
-                speed_background[valid] = float(row['v_q50'])
+                speed_background[valid] = float(row.get('v_background_q50', row['v_q50']))
+                if 'v_background_q50' in row:
+                    integrated_speed[valid] = float(row['v_q50'])
                 if row.get('cme_speed_json'):
                     from common.schemas.solar_wind_events import CMESpeedOutlook
                     if cme_speed is not None:
@@ -93,11 +96,16 @@ class ForecastArtifact(BaseModel):
         if self.name == 'solar_wind_events' and count != 1:
             raise ValueError('Expected one event report per artifact')
         if cme_speed is not None:
+            if cme_speed.integrated_into_speed and len(integrated_speed) != count:
+                raise ValueError('Integrated speed artifact must retain its background')
             for point in cme_speed.points:
                 reference = speed_background.get(point.valid_time)
                 if (point.valid_time <= issue or reference is None or
                     not math.isclose(point.speed_background, reference, abs_tol=1e-8, rel_tol=1e-10)):
                     raise ValueError('CME scenario must use this release time grid and speed background')
+                if point.valid_time in integrated_speed and (point.speed_integrated is None or
+                    not math.isclose(point.speed_integrated, integrated_speed[point.valid_time], abs_tol=1e-8, rel_tol=1e-10)):
+                    raise ValueError('Weighted CME scenario must match the published speed')
         return issue
 
     @model_validator(mode='after')

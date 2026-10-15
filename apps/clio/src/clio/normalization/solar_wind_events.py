@@ -1,9 +1,8 @@
 """Normalize versioned external DONKI/ENLIL data; no Argus forecasting."""
-import hashlib
 import math
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-from common.schemas.solar_wind_events import SolarWindEvent
+from common.schemas.solar_wind_events import SolarWindEvent, EnlilArrivalInput, ArrivalSourceReceipt
 
 
 def timestamp(value):
@@ -34,13 +33,14 @@ def simulation_key(row):
     return row.get('link') or row.get('simulationID')
 
 
-def normalize_events(inputs):
+def normalize_event_inputs(inputs):
     cutoff = inputs.as_of
     polls = {}
     for poll in sorted(inputs.polls, key=lambda p: (p.received_at, str(p.poll_id))):
         if poll.received_at <= cutoff:
             polls[poll.endpoint] = poll
-    events, simulations, speeds = {}, {}, {}
+    events, simulations = {}, {}
+    receipts = {}
     for endpoint, poll in sorted(polls.items()):
         for row in poll.records:
             if not published(row, cutoff):
@@ -55,13 +55,14 @@ def normalize_events(inputs):
                 analyses = [a for a in row.get('cmeAnalyses') or [] if published(a, cutoff) and positive(a.get('speed')) is not None]
                 if analyses:
                     best = max(analyses, key=lambda a: (bool(a.get('isMostAccurate')), timestamp(a.get('submissionTime')) or datetime(1970, 1, 1, tzinfo=UTC)))
-                    speeds[event_id] = positive(best['speed'])
+                    events[event_id].initial_speed_km_s = positive(best['speed'])
                 for analysis in row.get('cmeAnalyses') or []:
                     if not published(analysis, cutoff):
                         continue
                     for simulation in analysis.get('enlilList') or []:
                         key = simulation_key(simulation)
                         if key:
+                            receipts.setdefault(key, {})[poll.poll_id] = ArrivalSourceReceipt(poll_id=poll.poll_id, sha256=poll.sha256, received_at=poll.received_at)
                             old = simulations.get(key)
                             ids = set((old[0].get('cmeIDs') or []) if old else [])
                             ids.update(simulation.get('cmeIDs') or [event_id])
@@ -69,6 +70,7 @@ def normalize_events(inputs):
             elif endpoint == 'WSAEnlilSimulations':
                 for_simulation = simulation_key(row)
                 if for_simulation:
+                    receipts.setdefault(for_simulation, {})[poll.poll_id] = ArrivalSourceReceipt(poll_id=poll.poll_id, sha256=poll.sha256, received_at=poll.received_at)
                     old = simulations.get(for_simulation)
                     ids = [c['CMEID'] for c in row.get('cmeInputs') or [] if c.get('CMEID')]
                     ids = ids or (old[0].get('cmeIDs', []) if old else [])
@@ -90,39 +92,27 @@ def normalize_events(inputs):
                     source='DONKI', source_ids=linked, source_url=row.get('link'),
                     available_at=poll.received_at, observed_at=onset)
 
-    # Multiple simulations of the same input CME group are alternatives, not independent votes.
-    # Select the latest model completion even when it retracts a previously predicted hit.
-    latest = {}
-    for key, (row, received) in simulations.items():
+    # Retain external alternatives and retractions. Prophet selects the forecast version.
+    predictions = []
+    for key, (row, received) in sorted(simulations.items()):
         completed = timestamp(row.get('modelCompletionTime'))
         if completed is None or completed > cutoff:
             continue
-        ids = tuple(sorted(set(row.get('cmeIDs') or [])))
-        group = ids or (key,)
-        if group not in latest or (completed, key) > (latest[group][0], latest[group][1]):
-            latest[group] = (completed, key, row, received, ids)
-    for completed, key, row, received, ids in latest.values():
         arrival = timestamp(row.get('estimatedShockArrivalTime'))
-        if row.get('estimatedShockArrivalTime') is not None and arrival is None:
-            continue  # Malformed prediction must not be interpreted as a miss.
-        if arrival is not None and arrival < completed:
-            continue
-        if arrival is not None and arrival > cutoff + timedelta(hours=168):
-            continue
-        event_id = ids[0] if len(ids) == 1 else 'enlil:' + hashlib.sha256('|'.join(ids or (key,)).encode()).hexdigest()[:20]
-        if event_id in events:
-            received = max(received, events[event_id].available_at)
-        events[event_id] = SolarWindEvent(event_id=event_id,
-            kind='cme' if ids else 'solar_wind_disturbance',
-            status=('no_predicted_hit' if arrival is None else
-                    'predicted_hit' if arrival >= cutoff else 'prediction_elapsed'),
-            source='DONKI/WSA-ENLIL', source_ids=list(ids), source_url=row.get('link'),
-            observed_at=events[event_id].observed_at if event_id in events else None,
-            available_at=received, model_completed_at=completed,
-            initial_speed_km_s=speeds.get(event_id), simulation_id=key,
-            arrival_at=arrival, arrival_target='Earth' if arrival else None,
+        invalid = ('invalid_arrival_time' if row.get('estimatedShockArrivalTime') is not None and arrival is None
+                   else 'arrival_precedes_completion' if arrival is not None and arrival < completed else None)
+        predictions.append(EnlilArrivalInput(simulation_id=key,
+            cme_ids=sorted(set(row.get('cmeIDs') or [])),
+            available_at=max(received, completed), model_completed_at=completed,
+            earth_arrival_at=arrival, source_url=row.get('link'),
             duration_hours=positive(row.get('estimatedDuration')),
-            glancing_blow=row.get('isEarthGB'), minor_impact=row.get('isEarthMinorImpact'))
-    return sorted(events.values(), key=lambda e: (e.arrival_at or e.observed_at or cutoff, e.event_id))
+            glancing_blow=row.get('isEarthGB'), minor_impact=row.get('isEarthMinorImpact'),
+            invalid_reason=invalid,
+            receipts=sorted(receipts[key].values(), key=lambda r: (r.received_at, str(r.poll_id)))))
+    observations = sorted(events.values(), key=lambda e: (e.observed_at or cutoff, e.event_id))
+    return observations, predictions
 
 
+def normalize_events(inputs):
+    """Catalog observations only; arrival forecasts belong to Prophet."""
+    return normalize_event_inputs(inputs)[0]

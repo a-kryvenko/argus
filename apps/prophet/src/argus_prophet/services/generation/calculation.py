@@ -37,13 +37,14 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
     if request.product == 'solar-wind-events':
         from argus_prophet.services.events import calculate
         from argus_prophet.services.solar_event_speed import calculate_speed
-        return calculate(request.inputs, speed_calculator=lambda events: calculate_speed(request, events))
+        return calculate(request.inputs, registry=request.registry,
+                         speed_calculator=lambda events: calculate_speed(request, events))
     from forecast.api import calculate_snapshot
     from argus_prophet.services.generation.models import load_model
     product, inputs = request.product, request.inputs
     workdir, registry = request.workdir, request.registry
     issue_time = inputs.as_of.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-    artifacts = []
+    results, services = {}, {}
     for model in PRODUCTS[product].models:
         if model.bundled:
             service, metadata = load_model(model.service_class(), workdir=workdir, registry=registry)
@@ -91,9 +92,14 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
             result.model_info.update(service.last_status)
         if product == 'atmospheric-density':
             result.model_info.update(service.model_info)
-        if product == 'solar-wind-speed' and result.name == 'plasma_speed_quantile':
-            from argus_prophet.services.solar_event_speed import attach_speed_outlook
-            attach_speed_outlook(request, result)
+        results[result.name] = result
+        services[result.name] = service
+    if product == 'solar-wind-speed':
+        from argus_prophet.services.solar_event_speed import attach_speed_outlook, integrate_speed_forecast
+        outlook = attach_speed_outlook(request, results['plasma_speed_quantile'])
+        integrate_speed_forecast(request, results, services, outlook)
+    artifacts = []
+    for result in results.values():
         artifact = serialize(result)
         if len(artifact.content) > 32 * 1024 * 1024:
             raise ValueError('Forecast artifact exceeds 32 MiB')

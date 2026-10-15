@@ -7,6 +7,8 @@ Collects, archives and serves observations. No model features or calibration.
 - **Input:** External observations, solar images and event catalogs.
 - **Output:** Stored observations, checksum-verified originals and collection status over HTTP to Prophet and API.
 
+Event inputs contain catalog observations and external ENLIL predictions with receipt hashes. Prophet owns arrival forecasting and version selection.
+
 [DATA_FLOWS.md](DATA_FLOWS.md).
 
 ## Observations

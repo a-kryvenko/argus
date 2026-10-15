@@ -23,6 +23,7 @@ Publishes forecasts from saved Clio inputs. Worker calculates; HTTP serves store
 | `atmospheric-density` | Density grid; JB2008 model background |
 
 Generation requires private `forecast-core` and configured models.
+`cme_arrival.model` selects the shared arrival adapter for event and speed forecasts. `argus-cme-arrival-enlil-v1` passes through ENLIL arrival times; it is not a locally trained arrival model. Clio supplies external predictions; Prophet selects versions and forms forecast statuses.
 `solar-radiation` has a read contract but no supported generator.
 [Registry](../../configs/models_registry.yaml) · [Schedules](../../configs/project.yaml).
 

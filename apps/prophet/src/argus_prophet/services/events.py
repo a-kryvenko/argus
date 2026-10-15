@@ -1,15 +1,15 @@
 """Compatibility boundary; implementation lives in private forecast-core."""
 from forecast_core.api import (
     detect_l1_compressions as l1_detections,
-    forecast_solar_wind_events as forecast,
 )
+from argus_prophet.services.cme_arrival import forecast_events as forecast
 
-def calculate(inputs, *, speed_calculator=None):
+def calculate(inputs, *, speed_calculator=None, registry=None):
     """Serialize the private forecast using the standard Prophet release ledger."""
     import pandas as pd
     from common.schemas.solar_wind_events import CMESpeedOutlook
     from argus_prophet.services.generation.calculation import Artifact
-    report = forecast(inputs, include_hss=False, include_dbem=False)
+    report = forecast(inputs, registry=registry, include_hss=False, include_dbem=False)
     report.model_version = 'solar-wind-events-v4'
     if speed_calculator is not None:
         report.cme_speed = CMESpeedOutlook.model_validate(speed_calculator(report.events))
@@ -28,5 +28,6 @@ def calculate(inputs, *, speed_calculator=None):
     return [Artifact('solar_wind_events', frame.to_csv(index=False).encode(),
         {'model': report.model_version, 'registry_name': 'solar_wind_events', 'experimental': True,
          'input_cutoff': inputs.as_of.isoformat(), 'source_status': report.source_status,
+         'cme_arrival': report.source_status['CME_arrival'],
          'cme_speed': {'state': report.cme_speed.state, 'model_sha256': report.cme_speed.model_sha256}},
         1, list(frame.columns))]

@@ -18,8 +18,9 @@ def test_input_reads_gate_receipts_keep_native_samples_and_latest_complete_feeds
     result = lambda rows: Mock(scalars=lambda: Mock(all=lambda: rows))
     session = AsyncMock()
     session.execute.side_effect = [result([poll]), Mock(all=lambda: [SimpleNamespace(
-        endpoint='CME', received_at=NOW, error=None)]), result([sample]), Mock(mappings=lambda: Mock(all=lambda: []))]
+        endpoint='CME', received_at=NOW, error=None)]), result([sample]), Mock(mappings=lambda: Mock(all=lambda: [])), Mock(scalars=lambda: Mock(first=lambda: None)), Mock(first=lambda: None)]
     inputs = asyncio.run(load_event_inputs(session, NOW, NOW))
+    assert inputs.schema_version == 2 and inputs.enlil_arrivals == [] and inputs.events == []
     assert inputs.polls[0].records == [] and inputs.l1_samples[0].value == 500
     queries = [c.args[0].compile(dialect=postgresql.dialect()) for c in session.execute.call_args_list]
     assert 'DISTINCT ON (clio.donki_poll.endpoint)' in str(queries[0])

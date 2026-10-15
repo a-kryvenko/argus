@@ -6,8 +6,8 @@ import styles from './forecast.module.css';
 type CMEValues = { cmeNominal?: number | null; cmeEarly?: number | null; cmeLate?: number | null; cmeRange?: [number, number] | null };
 type QuantileRow = ReturnType<typeof quantileData>[number] & CMEValues & { timestamp: number; band: [number, number] | null; observed?: number | null; actual?: number | null };
 
-export default function WindChart({ data, title = 'Solar wind speed', unit = 'km/s', selectedTime, onSelectTime, now, eventTime, comparison = false, scenarios = false }: {
-  data: Array<ReturnType<typeof quantileData>[number] & CMEValues & { observed?: number | null; actual?: number | null }>; now?: number; eventTime?: number; comparison?: boolean; scenarios?: boolean; title?: string; unit?: string; selectedTime?: string; onSelectTime?: (time: string) => void;
+export default function WindChart({ data, title = 'Solar wind speed', unit = 'km/s', selectedTime, onSelectTime, now, eventTime, comparison = false, scenarios = false, integrated = false }: {
+  data: Array<ReturnType<typeof quantileData>[number] & CMEValues & { observed?: number | null; actual?: number | null }>; now?: number; eventTime?: number; comparison?: boolean; scenarios?: boolean; integrated?: boolean; title?: string; unit?: string; selectedTime?: string; onSelectTime?: (time: string) => void;
 }) {
   const number = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: scenarios ? 0 : 3 });
   const rows: QuantileRow[] = data.map(row => ({ ...row, timestamp: Date.parse(row.time),
@@ -17,7 +17,7 @@ export default function WindChart({ data, title = 'Solar wind speed', unit = 'km
   const available = rows.some(row => row.median != null || row.observed != null || row.actual != null);
   return <section className={styles.chart} aria-label={`${title} ${scenarios ? 'CME scenario forecast' : comparison ? "forecast and observations" : "quantile forecast"}`}>
     <div className={styles.chartHeading}><h3>{title}<small>{unit}</small></h3><span className={styles.chartTag}>{hasCME ? 'BACKGROUND + CME' : scenarios ? 'CME SCENARIOS' : comparison ? "FORECAST / OBSERVED" : "QUANTILES"}</span></div>
-    <div className={styles.chartLegend}>{scenarios && <span><i className={styles.lineSwatch} />Background</span>}{hasQuantiles && <><span><i className={styles.lineSwatch} />{hasCME ? 'Background · q50' : 'Median · q50'}</span><span><i className={styles.bandSwatch} />q10–q90 interval</span></>}<span>UTC</span>{comparison && <><span style={{ color: "#73c9b0" }}>━ Observed history</span><span style={{ color: "#f1c777" }}>┄ Actual outcome</span></>}</div>
+    <div className={styles.chartLegend}>{scenarios && <span><i className={styles.lineSwatch} />Background</span>}{hasQuantiles && <><span><i className={styles.lineSwatch} />{hasCME && !integrated ? 'Background · q50' : 'Median · q50'}</span><span><i className={styles.bandSwatch} />q10–q90 interval</span></>}<span>UTC</span>{comparison && <><span style={{ color: "#73c9b0" }}>━ Observed history</span><span style={{ color: "#f1c777" }}>┄ Actual outcome</span></>}</div>
     {hasCME && <div className={styles.chartLegend}><span style={{ color: '#f1c777' }}>━ Expected CME impact</span><span style={{ color: '#73c9b0' }}>┄ Early arrival</span><span style={{ color: '#bf9bf1' }}>┄ Late arrival</span><span>Shading: possible CME scenarios</span></div>}
     {available ? <div className={styles.quantilePlot}>
       <ResponsiveContainer width="100%" height="100%">
@@ -54,6 +54,6 @@ export default function WindChart({ data, title = 'Solar wind speed', unit = 'km
       </ResponsiveContainer>
     </div> : <p className={styles.emptyChart} role="status">{scenarios ? 'The speed forecast is currently unavailable. Arrival predictions remain listed below.' : 'No quantile forecast available in this horizon.'}</p>}
     {!scenarios && <p className={styles.chartNote}>{hasQuantiles ? "Shaded interval: 10th–90th percentiles, not a guaranteed range. Click a time to inspect; missing values remain gaps." : "Observed values in physical units. Missing observations remain gaps; probabilities are shown separately when available."}</p>}
-    {hasCME && <p className={styles.chartNote}>CME curves assume the ENLIL-predicted impact reaches Earth. Their envelope shows possible scenarios, not quantiles or impact probabilities.{!scenarios && ' q50 and threshold probabilities describe the background forecast.'}</p>}
+    {hasCME && <p className={styles.chartNote}>CME curves assume the ENLIL-predicted impact reaches Earth. Their envelope shows possible scenarios, not quantiles or impact probabilities.{!scenarios && (integrated ? ' The main forecast includes the arrival-window correction; its uncertainty is conditional on the predicted impact.' : ' q50 and threshold probabilities describe the background forecast.')}</p>}
   </section>;
 }

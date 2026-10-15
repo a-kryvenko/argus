@@ -11,6 +11,11 @@ sys.path.insert(0, str(ROOT / 'scripts/deployment'))
 import rolling
 
 
+def seed_state(root):
+    rolling.write_json(root / '.rolling-state.json', {'active': {
+        service: {'slot': 'blue', 'spec': {}} for service in rolling.HTTP}})
+
+
 def harness(tmp_path):
     deployment = rolling.Deployment.__new__(rolling.Deployment)
     deployment.root = tmp_path
@@ -138,6 +143,7 @@ def test_operator_commands_select_active_slot_without_rewriting_command_argument
     (root / 'scripts/run').write_bytes((ROOT / 'scripts/run').read_bytes())
     (root / '.argus-mode').write_text('prod\n')
     (root / '.rolling-compose.json').write_text('{}')
+    (root / '.release-compose.json').write_text('{}')
     (root / '.rolling-state.json').write_text(json.dumps({'active': {'api': {'slot': 'green'}}}))
     docker = tools / 'docker'
     docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
@@ -156,7 +162,7 @@ def test_new_migrations_require_exact_approval_before_mutation(tmp_path, monkeyp
     fingerprints['clio'] = 'new'
     (bundle / 'fingerprints.tsv').write_text(''.join(f'{k} {v}\n' for k, v in fingerprints.items()))
     (bundle / 'release.json').write_text('{}')
-    (tmp_path / '.rolling-state.json').write_text('{"active":{}}')
+    seed_state(tmp_path)
     config = {'services': {'api': {'environment': {'DEPLOY_SMOKE_USERNAME': 'test', 'DEPLOY_SMOKE_PASSWORD': 'password'}}}}
     config['services'].update({domain + '-migrate': {} for domain in ('api', 'clio', 'prophet', 'intelligence')})
     monkeypatch.setattr(rolling.Deployment, 'capture', staticmethod(lambda *args: json.dumps(config)))
@@ -215,22 +221,6 @@ def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path):
         deployment.snapshot()
 
 
-def test_initial_transition_restores_legacy_service_on_routed_failure(tmp_path):
-    deployment = harness(tmp_path)
-    deployment.state['active']['clio']['slot'] = None
-    original = deployment.smoke
-    def smoke(service, slot, routed=False):
-        original(service, slot, routed)
-        if routed:
-            raise RuntimeError('injected transition failure')
-    deployment.smoke = smoke
-    with pytest.raises(RuntimeError, match='injected'):
-        deployment.replace('clio')
-    assert deployment.state['active']['clio']['slot'] is None
-    assert ('stop', 'clio-blue') in deployment.calls
-    assert json.loads(deployment.runtime.read_text())['services']['clio']['image'].endswith(':old')
-
-
 def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tmp_path):
     deployment = harness(tmp_path)
     for service in rolling.HTTP:
@@ -262,7 +252,8 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
     deployment.run = lambda *args, **kwargs: deployment.calls.append(args)
     deployment.apply()
     assert (tmp_path / '.release.json').read_text() == json.dumps(deployment.manifest)
-    assert (tmp_path / '.release-images.env').read_text() == 'pinned-images'
+    assert not (tmp_path / '.release-images.env').exists()
+    assert not (tmp_path / 'docker-compose.yml').exists()
     assert (tmp_path / '.release-fingerprints.tsv').read_text() == (deployment.bundle / 'fingerprints.tsv').read_text()
     starts = [call for call in deployment.calls if call[0] == 'up']
     assert all('--no-deps' in call for call in starts)
@@ -292,6 +283,7 @@ def test_real_compose_export_preserves_maintenance_services(tmp_path):
     for domain in ('api', 'clio', 'prophet', 'intelligence'):
         services[domain + '-migrate'] = {'image': 'busybox', 'profiles': ['maintenance'], 'command': ['true']}
     (bundle / 'docker-compose.yml').write_text(json.dumps({'services': services}))
+    seed_state(tmp_path)
     deployment = rolling.Deployment(tmp_path, bundle)
     assert set(deployment.desired['services']) == set(services)
     normalized = tmp_path / 'normalized.json'
@@ -301,3 +293,115 @@ def test_real_compose_export_preserves_maintenance_services(tmp_path):
     maintenance = subprocess.check_output(['docker', 'compose', '--profile', 'maintenance', '-f', str(normalized),
                                          'config', '--services'], text=True)
     assert set(maintenance.splitlines()) == set(services)
+
+
+def test_backup_retention_counts_old_sql_and_compressed_archives_together(tmp_path):
+    deployment = harness(tmp_path)
+    directory = tmp_path / 'backups'
+    directory.mkdir()
+    files = [directory / f'pre-migration-202610{day:02d}T000000.sql{suffix}'
+             for day, suffix in [(1, ''), (2, '.gz'), (3, ''), (4, '.gz'), (5, '.gz')]]
+    protected = [directory / 'manual.sql', directory / 'pre-migration-20261006T000000.sql.gz.partial']
+    for path in files + protected:
+        path.write_text('backup')
+    (directory / 'pre-migration-20261007T000000.sql').mkdir()
+    deployment.migrations = []
+    deployment.cleanup_backups()
+    assert all(path.exists() for path in files + protected)
+    deployment.migrations = ['api']
+    deployment.cleanup_backups()
+    assert all(not path.exists() for path in files[:2])
+    assert all(path.exists() for path in files[2:] + protected)
+    assert (directory / 'pre-migration-20261007T000000.sql').is_dir()
+
+
+def test_missing_state_aborts_shell_deployment_before_any_work(tmp_path):
+    import subprocess
+    result = subprocess.run(['bash', str(ROOT / 'scripts/deployment/deploy.sh'), str(tmp_path)],
+                            capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'Missing .rolling-state.json' in result.stderr
+    assert not (tmp_path / '.deployment.lock').exists()
+
+
+@pytest.mark.parametrize('incomplete', [True, False])
+def test_python_entrypoint_requires_existing_complete_state(tmp_path, monkeypatch, incomplete):
+    monkeypatch.setattr(rolling.Deployment, 'capture', staticmethod(lambda *args, **kwargs: pytest.fail('Docker must not run')))
+    if incomplete:
+        rolling.write_json(tmp_path / '.rolling-state.json', {'active': {'clio': {'slot': None, 'spec': {}}}})
+    with pytest.raises(RuntimeError, match='[Mm]issing|[Ii]ncomplete'):
+        rolling.Deployment(tmp_path, tmp_path)
+
+
+@pytest.mark.parametrize('failure', [None, 'backup', 'migration'])
+def test_backup_precedes_worker_drain_and_failure_preserves_or_resumes_workers(tmp_path, monkeypatch, failure):
+    deployment = harness(tmp_path)
+    deployment.base = ['docker', 'compose']
+    deployment.migrations = ['clio']
+    def backup(*args):
+        deployment.calls.append(('backup',))
+        if failure == 'backup':
+            raise RuntimeError('injected backup failure')
+    monkeypatch.setattr(rolling, 'create_backup', backup)
+    original = deployment.compose
+    def compose(*args, **kwargs):
+        original(*args, **kwargs)
+        if args[0] == 'run' and failure == 'migration':
+            raise RuntimeError('injected migration failure')
+    deployment.compose = compose
+    if failure:
+        with pytest.raises(RuntimeError, match='injected'):
+            deployment.backup_and_migrate()
+    else:
+        deployment.backup_and_migrate()
+    assert deployment.calls[0] == ('backup',)
+    if failure == 'backup':
+        assert deployment.calls == [('backup',)]
+    else:
+        assert deployment.calls[1] == ('stop', 'clio-worker')
+        assert deployment.calls[2] == ('run', '--rm', '--no-deps', 'clio-migrate')
+    if failure == 'migration':
+        assert deployment.calls[-1] == ('start', 'clio-worker')
+    if failure:
+        assert not deployment.state.get('drained_workers')
+
+
+@pytest.mark.parametrize('failure', [False, True])
+def test_backup_archive_is_verified_and_failed_dumps_remain_partial(tmp_path, failure):
+    from backup import create_backup
+    command = [sys.executable, '-c', 'import sys; print("database dump"); sys.exit(' + str(int(failure)) + ')']
+    if failure:
+        with pytest.raises(RuntimeError, match='Database dump failed'):
+            create_backup(command, tmp_path)
+        assert list(tmp_path.glob('*.partial'))
+        assert not list(tmp_path.glob('*.sql.gz'))
+    else:
+        import gzip
+        path = create_backup(command, tmp_path)
+        assert gzip.decompress(path.read_bytes()) == b'database dump\n'
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert not list(tmp_path.glob('*.partial'))
+
+
+@pytest.mark.parametrize('manifest', [{}, {'artifacts': None}, {'artifacts': {'id': 'invalid'}}])
+def test_release_without_immutable_artifacts_cannot_use_old_data(tmp_path, manifest):
+    deployment = harness(tmp_path)
+    deployment.manifest = manifest
+    with pytest.raises(RuntimeError, match='immutable artifact identity'):
+        deployment.snapshot()
+    assert not (tmp_path / 'releases').exists()
+
+
+@pytest.mark.parametrize('missing', ['.rolling-state.json', '.rolling-compose.json', '.release-compose.json'])
+def test_production_cli_never_falls_back_to_old_files(tmp_path, missing):
+    import subprocess
+    root = tmp_path / 'host'
+    (root / 'scripts').mkdir(parents=True)
+    (root / 'scripts/run').write_bytes((ROOT / 'scripts/run').read_bytes())
+    (root / '.argus-mode').write_text('prod\n')
+    for name in ('docker-compose.yml', '.release-images.env', '.rolling-state.json', '.rolling-compose.json', '.release-compose.json'):
+        if name != missing:
+            (root / name).write_text('{}')
+    result = subprocess.run(['bash', str(root / 'scripts/run'), 'compose', 'ps'], capture_output=True, text=True)
+    assert result.returncode == 2
+    assert f'Missing production deployment file: {missing}' in result.stderr

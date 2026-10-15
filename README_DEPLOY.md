@@ -78,9 +78,8 @@ Browser tests use `.next/playwright`; failures save screenshots.
 `PLAYWRIGHT_SCREENSHOTS=1` also saves successful review screenshots.
 Optional nginx checks require Docker and `TEST_NGINX_IMAGE=nginx:stable-alpine`.
 
-A `v*` tag deploys pinned images. The first deployment uses the existing maintenance
-flow, then installs stable HTTP routers. Later releases replace changed HTTP
-services individually: readiness, smoke checks, graceful routing switch, request
+A `v*` tag deploys pinned images. Releases require existing `.rolling-state.json`
+and replace changed HTTP services individually: readiness, smoke checks, graceful routing switch, request
 drain, old-container stop. Workers remain single-instance and update separately.
 
 Smoke checks cover HTML/static assets, login/logout, observations, forecasts and
@@ -96,7 +95,9 @@ with fast compression and progress every 15s. Migrations use a 5s lock timeout a
 Current migration histories remain intact.
 
 Failed backups remain `.partial`; failed deployments do not rotate backups.
+Retain three pre-migration backups; prune unused images older than 72 hours.
 Operator env/models/data remain separate; do not override generated image references.
+Production CLI requires `.rolling-state.json`, `.rolling-compose.json` and `.release-compose.json`.
 `./argus` defaults to dev; production sets `.argus-mode` to `prod`.
 
 ## Maintenance and recovery

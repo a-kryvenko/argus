@@ -1,6 +1,5 @@
 """Release planning and host orchestration tests; never contact Docker or production."""
 import importlib.util
-import gzip
 import json
 from pathlib import Path
 import subprocess
@@ -119,7 +118,8 @@ def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domai
     (root / '.argus-mode').write_text('prod\n')
     wrapper = root / 'scripts/run'
     wrapper.write_bytes((ROOT / 'scripts/run').read_bytes())
-    (root / '.release-images.env').write_text('images')
+    for name in ('.rolling-state.json', '.rolling-compose.json', '.release-compose.json'):
+        (root / name).write_text('{}')
     fake_bin = tmp_path / 'tools'
     fake_bin.mkdir()
     docker = fake_bin / 'docker'
@@ -131,7 +131,8 @@ def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domai
                             check=True, capture_output=True, text=True)
     args = result.stdout.splitlines()
     assert args[args.index('--project-directory') + 1] == str(root)
-    assert str(root / '.release-images.env') in args
+    assert str(root / '.release-compose.json') in args
+    assert str(root / '.release-images.env') not in args
     assert args[-7:] == ['run', '--rm', '--no-deps', domain, domain, command, 'solar-wind-speed']
 
 
@@ -154,134 +155,6 @@ def test_every_docker_copy_source_participates_in_image_identity():
 
 
 
-@pytest.mark.parametrize('migration,failure', [(None, None), ('clio', None), ('clio', 'migration'),
-                                              ('clio', 'backup'), ('intelligence', None)])
-@pytest.mark.parametrize('legacy_clio', [False, True])
-@pytest.mark.parametrize('database_current', [False, True])
-def test_shell_deployment_and_success_checkpoint(tmp_path, migration, failure, legacy_clio, database_current):
-    import os
-    import shutil
-    fail = failure is not None and not database_current
-    root, bundle, bin_dir = [tmp_path / name for name in ('host', 'bundle', 'tools')]
-    for directory in (root, bundle, bin_dir):
-        directory.mkdir()
-    backup_dir = root / 'backups'
-    backup_dir.mkdir()
-    old_backups = []
-    for day in range(1, 10):
-        path = backup_dir / f'pre-migration-202601{day:02d}T000000.sql'
-        path.write_text(f'old dump {day}')
-        old_backups.append(path)
-    (backup_dir / 'manual.sql').write_text('manual backup')
-    (backup_dir / 'pre-migration-20260110T000000.sql.gz.partial').write_text('incomplete')
-    (backup_dir / 'database-transfer').mkdir()
-    (backup_dir / 'database-transfer' / 'database.sql').write_text('transfer backup')
-    shutil.copy2(ROOT / 'scripts/deployment/deploy-legacy.sh', bundle / 'deploy.sh')
-    for name in ('backup.py', 'migration_status.py'):
-        shutil.copy2(ROOT / 'scripts/deployment' / name, bundle / name)
-    shutil.copy2(ROOT / 'argus', bundle / 'argus')
-    (bundle / 'scripts').mkdir()
-    for name in ('run', 'logs'):
-        shutil.copy2(ROOT / 'scripts' / name, bundle / 'scripts' / name)
-    for name in ('configs', 'nginx', 'alloy'):
-        (bundle / name).mkdir()
-    fingerprints = 'intelligence same\napi same\nclio same\nprophet same\nconfigs same\nnginx same\nalloy same\n'
-    (root / '.release-fingerprints.tsv').write_text(fingerprints)
-    (bundle / 'fingerprints.tsv').write_text(fingerprints.replace(f'{migration} same', f'{migration} changed') if migration else fingerprints)
-    for name in ('images.env', 'docker-compose.yml', 'release.json'):
-        (bundle / name).write_text('{}')
-    log = tmp_path / 'calls'
-    docker = bin_dir / 'docker'
-    docker.write_text('''#!/usr/bin/env bash
-printf '%s\\n' "$*" >> "$CALL_LOG"
-if [[ "$*" == *'config --services' ]]; then printf '%s\\n' $INSTALLED_SERVICES; fi
-if [[ "$*" == *'.venv/bin/python - '* ]]; then printf '%s\\n' "$MIGRATION_STATUS"; fi
-if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; then exit 1; fi
-if [[ "$*" == *'pg_dumpall'* ]]; then
-    printf '%s\\n' 'database dump'
-    if [[ "$FAIL_BACKUP" == 1 ]]; then exit 1; fi
-fi
-''')
-    docker.chmod(0o755)
-    rsync = bin_dir / 'rsync'
-    rsync.write_text('#!/bin/sh\nexit 0\n')
-    rsync.chmod(0o755)
-    result = subprocess.run(['bash', str(bundle / 'deploy.sh'), str(root)],
-                            env={**os.environ, 'PATH': str(bin_dir) + ':' + os.environ['PATH'],
-                                 'CALL_LOG': str(log), 'FAIL_MIGRATION': str(int(failure == 'migration')),
-                                 'FAIL_BACKUP': str(int(failure == 'backup')),
-                                 'MIGRATION_STATUS': 'current' if database_current else 'pending',
-                                 'INSTALLED_SERVICES': 'api clio prophet prophet-api intelligence ' + (
-                                     'solar-wind geomagnetic clio-refresh clio-aggregate' if legacy_clio else 'clio-worker')},
-                            capture_output=True, text=True)
-    assert (result.returncode != 0) == fail, result.stderr
-    calls = log.read_text().splitlines()
-    prune = calls.index('image prune -a -f --filter until=168h')
-    pull = next(i for i, call in enumerate(calls) if 'pull --policy missing' in call)
-    assert prune < pull
-    assert not any('--force-recreate' in call or 'db-bootstrap' in call or '-provision' in call for call in calls)
-    if migration and not database_current:
-        backup = next(i for i, call in enumerate(calls) if 'pg_dumpall' in call)
-        if failure == 'backup':
-            assert not any(' stop ' in call or 'run --rm --no-deps clio-migrate' in call for call in calls)
-        else:
-            stop = next(i for i, call in enumerate(calls) if ' stop ' in call)
-            assert backup < stop
-            migrate = next(i for i, call in enumerate(calls) if f'run --rm --no-deps {migration}-migrate' in call)
-            assert backup < migrate
-        assert '--dbname=' not in calls[backup]  # Back up all domain databases and owners.
-        new_backups = [p for p in backup_dir.glob('pre-migration-*.sql.gz') if not p.name.startswith('pre-migration-202601')]
-        assert len(new_backups) == (0 if failure == 'backup' else 1)
-        if new_backups:
-            assert new_backups[0].stat().st_mode & 0o777 == 0o600
-            assert gzip.decompress(new_backups[0].read_bytes()) == b'database dump\n'
-        expected = ['intelligence'] if migration == 'intelligence' else ['clio']
-        if migration == 'clio' and not legacy_clio:
-            expected.append('clio-worker')
-        if legacy_clio:
-            expected.extend(['solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'])
-        if failure != 'backup':
-            assert calls[stop].endswith('stop ' + ' '.join(expected))
-    else:
-        assert not any('pg_dumpall' in call or 'run --rm --no-deps clio-migrate' in call
-                       or 'run --rm --no-deps intelligence-migrate' in call for call in calls)
-        assert any(' stop ' in call for call in calls) == legacy_clio
-    retired = 'solar-wind geomagnetic clio-refresh clio-aggregate'
-    if legacy_clio and not (failure == 'backup' and not database_current):
-        drain = next(i for i, call in enumerate(calls) if ' stop ' in call)
-        remove = next(i for i, call in enumerate(calls) if call.endswith('rm -f ' + retired))
-        assert drain < remove
-        if not fail:
-            start = next(i for i, call in enumerate(calls) if 'up -d --wait --wait-timeout' in call)
-            assert remove < start
-    else:
-        assert not any(' rm ' in call for call in calls)
-    assert (root / '.release-fingerprints.tsv').read_text() == (fingerprints if fail else (bundle / 'fingerprints.tsv').read_text())
-    assert not fail or not any('nginx -s reload' in call for call in calls)
-    assert (backup_dir / 'manual.sql').read_text() == 'manual backup'
-    assert (backup_dir / 'pre-migration-20260110T000000.sql.gz.partial').read_text() == 'incomplete'
-    assert (backup_dir / 'database-transfer' / 'database.sql').read_text() == 'transfer backup'
-    if migration and not database_current and not fail:
-        assert not list(backup_dir.glob('pre-migration-*.sql'))
-        assert len(list(backup_dir.glob('pre-migration-*.sql.gz'))) == 7
-        for index, path in enumerate(old_backups):
-            compressed = path.with_suffix('.sql.gz')
-            assert compressed.exists() == (index >= 3)
-            if compressed.exists():
-                assert gzip.decompress(compressed.read_bytes()).decode() == f'old dump {index + 1}'
-    else:
-        assert all(path.exists() for path in old_backups)
-    if failure == 'backup' and not database_current:
-        assert len(list(backup_dir.glob('*.partial'))) == 2
-        assert not (root / '.argus-mode').exists()
-        return
-    assert (root / '.argus-mode').read_text() == 'prod\n'
-    assert (root / 'argus').read_bytes() == (ROOT / 'argus').read_bytes()
-    assert (root / 'bin/argus').resolve() == root / 'argus'
-    assert (root / 'scripts/run').is_file()
-    assert (root / 'scripts/logs').is_file()
-
-
 def test_plan_pins_both_private_repositories(source):
     plan = release.plan(source)
     for package, key in [('forecast-core', 'private_commit'), ('intelligence-core', 'intelligence_core_commit')]:
@@ -294,6 +167,7 @@ def test_bundle_includes_only_shared_command_scripts(tmp_path):
     plan_path.write_text(json.dumps({'components': {}, 'migrations': {}, 'config_hash': 'test'}))
     destination = tmp_path / 'release'
     release.bundle(ROOT, plan_path, tmp_path, destination)
+    assert not (destination / 'deploy-legacy.sh').exists()
     assert {p.name for p in (destination / 'scripts').iterdir()} == {'run', 'logs'}
     for name in ('run', 'logs'):
         assert (destination / 'scripts' / name).read_bytes() == (ROOT / 'scripts' / name).read_bytes()

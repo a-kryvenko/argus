@@ -37,7 +37,7 @@ def identity(value):
 
 
 def slot_name(service, entry):
-    return service + '-' + entry['slot'] if entry['slot'] else service
+    return service + '-' + entry['slot']
 
 
 def router(service, spec, root):
@@ -52,8 +52,7 @@ def runtime_config(desired, state, root, pending=None):
     config = copy.deepcopy(desired)
     for service, entry in state['active'].items():
         config['services'].pop(service, None)
-        if entry['slot']:
-            config['services'][service] = router(service, entry['spec'], root)
+        config['services'][service] = router(service, entry['spec'], root)
         for item in (entry, entry.get('previous')):
             if item:
                 config['services'][slot_name(service, item)] = item['spec']
@@ -92,6 +91,17 @@ class Deployment:
     def __init__(self, root, bundle):
         self.root, self.bundle = root, bundle
         self.state_path = root / '.rolling-state.json'
+        if not self.state_path.is_file():
+            raise RuntimeError('Missing .rolling-state.json; restore deployment state before applying a release')
+        try:
+            self.state = json.loads(self.state_path.read_text())
+        except ValueError:
+            raise RuntimeError('Invalid rolling deployment state') from None
+        if (not isinstance(self.state, dict) or not isinstance(self.state.get('active'), dict)
+                or set(self.state['active']) != set(HTTP)
+                or any(not isinstance(entry, dict) or entry.get('slot') not in ('blue', 'green')
+                       or not isinstance(entry.get('spec'), dict) for entry in self.state['active'].values())):
+            raise RuntimeError('Incomplete rolling deployment state; restore state before applying a release')
         self.runtime = root / '.rolling-compose.json'
         self.base = ['docker', 'compose', '--project-directory', str(root),
                      '--env-file', str(root / '.env'), '--env-file', str(root / '.env.local')]
@@ -112,7 +122,6 @@ class Deployment:
         self.migrations = [domain for domain in ('api', 'clio', 'prophet', 'intelligence')
                            if self.fingerprints[domain] != self.previous_fingerprints.get(domain)]
         self.approvals = self.manifest.get('online_migrations') or {}
-        self.state = json.loads(self.state_path.read_text()) if self.state_path.exists() else None
 
     @staticmethod
     def capture(*args, **kwargs):
@@ -191,23 +200,26 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         previous = self.state['active'][service]
         print(f'[deploy] Restoring {service} to its last checkpoint', flush=True)
         self.install_runtime(pending)
-        if previous['slot']:
-            old = slot_name(service, previous)
-            self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', old)
-            self.route(service, old)
-            workers = self.reload(service)
-            self.drain_router(service, workers)
-        else:
-            # Initial transition may already have replaced the legacy container with a router.
-            self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', service)
+        old = slot_name(service, previous)
+        self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', old)
+        self.route(service, old)
+        workers = self.reload(service)
+        self.drain_router(service, workers)
         self.compose('stop', slot_name(service, candidate))
         self.state.pop('pending')
         self.save()
         self.install_runtime()
 
-        self.smoke(service, slot_name(service, previous), routed=bool(previous['slot']))
+        self.smoke(service, slot_name(service, previous), routed=True)
 
     def snapshot(self):
+        artifacts = self.manifest.get('artifacts')
+        if (not isinstance(artifacts, dict) or not isinstance(artifacts.get('id'), str)
+                or len(artifacts['id']) != 64 or any(c not in '0123456789abcdef' for c in artifacts['id'])):
+            raise RuntimeError('Release must contain a valid immutable artifact identity')
+        artifact_root = self.root / 'artifacts' / artifacts['id']
+        if artifact_digest(artifact_root) != artifacts['id']:
+            raise RuntimeError('Release artifacts are missing or corrupt')
         # Create writable bind sources before Docker can create them as root.
         (self.root / 'data/next-static').mkdir(parents=True, exist_ok=True)
         destination = self.root / 'releases' / self.fingerprints['configs']
@@ -216,20 +228,6 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             temporary = destination / 'configs.next'
             shutil.copytree(self.bundle / 'configs', temporary, dirs_exist_ok=True)
             temporary.replace(destination / 'configs')
-        artifacts = self.manifest.get('artifacts')
-        if artifacts and (not isinstance(artifacts.get('id'), str) or len(artifacts['id']) != 64
-                          or any(c not in '0123456789abcdef' for c in artifacts['id'])):
-            raise RuntimeError('Invalid artifact identity')
-        artifact_root = self.root / 'artifacts' / artifacts['id'] if artifacts else self.root / 'data'
-        if artifacts and artifact_digest(artifact_root) != artifacts['id']:
-            raise RuntimeError('Release artifacts are missing or corrupt')
-        if not artifacts:
-            # Freeze pre-transition models/metrics; later releases upload content-addressed bundles.
-            artifact_root = self.root / 'releases' / 'legacy-artifacts'
-            for directory in ('models', 'metrics'):
-                target = artifact_root / directory
-                if not target.exists():
-                    shutil.copytree(self.root / 'data' / directory, target)
         for service in self.desired['services'].values():
             for volume in service.get('volumes', []):
                 if volume.get('type') != 'bind':
@@ -246,7 +244,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         # CLI one-off commands use the same versioned configuration as workers.
         write_json(self.root / '.release-compose.json', self.desired)
         demo = self.root / 'data/demo/current.json'
-        if artifacts and not demo.exists():
+        if not demo.exists():
             demo.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(artifact_root / 'demo/current.json', demo)
 
@@ -291,6 +289,14 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.migrations = pending
         print(f'[deploy] Pending database upgrades: {", ".join(pending) or "none"}', flush=True)
 
+    def cleanup_backups(self):
+        if not self.migrations:
+            return
+        backups = sorted({path for pattern in ('pre-migration-*.sql', 'pre-migration-*.sql.gz')
+                          for path in (self.root / 'backups').glob(pattern) if path.is_file()}, reverse=True)
+        for backup in backups[3:]:
+            backup.unlink()
+
     def check_memory(self, service):
         available = next(int(line.split()[1]) // 1024 for line in Path('/proc/meminfo').read_text().splitlines()
                          if line.startswith('MemAvailable:'))
@@ -306,7 +312,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         for network in spec.get('networks', {}).values():
             if network:
                 network.pop('aliases', None)
-        if previous['slot'] and previous['spec'] == spec:
+        if previous['spec'] == spec:
             return
         self.check_memory(service)
         candidate = {'slot': 'green' if previous['slot'] == 'blue' else 'blue', 'spec': spec}
@@ -324,20 +330,13 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             if service == 'frontend':
                 self.publish_static(name)
             self.route(service, name)
-            if previous['slot']:
-                workers = self.reload(service)
-            else:
-                config = runtime_config(self.desired, self.state, self.root, pending)
-                config['services'][service] = router(service, spec, self.root)
-                write_json(self.runtime, config)
-                self.compose('up', '-d', '--no-deps', service)
+            workers = self.reload(service)
             self.smoke(service, name, routed=True)
             # QUIT makes old nginx workers finish existing requests. Do not stop the
             # old app until those workers have exited; a timeout rolls routing back.
-            if previous['slot']:
-                self.drain_router(service, workers)
-                self.compose('stop', slot_name(service, previous))
-            self.state['active'][service] = {**candidate, 'previous': {k: previous[k] for k in ('slot', 'spec')} if previous['slot'] else None}
+            self.drain_router(service, workers)
+            self.compose('stop', slot_name(service, previous))
+            self.state['active'][service] = {**candidate, 'previous': {k: previous[k] for k in ('slot', 'spec')}}
             self.state.pop('pending')
             self.save()
             self.install_runtime()
@@ -364,11 +363,6 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
 
     def apply(self):
         self.snapshot()
-        if self.state is None:
-            installed = json.loads(self.capture(*self.base, '--env-file', str(self.root / '.release-images.env'),
-                '--profile', '*', '-f', str(self.root / 'docker-compose.yml'), 'config', '--format', 'json'))
-            self.state = {'active': {service: {'slot': None, 'spec': installed['services'][service]} for service in HTTP}}
-            self.save()
         self.recover()
         self.resume_workers()
         self.install_runtime()
@@ -383,7 +377,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.state.pop('drained_workers', None)
         self.save()
         # The generated HTTP template must not overwrite the live proxy configuration.
-        for directory in ('configs', 'nginx', 'alloy'):
+        for directory in ('nginx', 'alloy'):
             self.run('rsync', '-a', '--delete', '--inplace', str(self.bundle / directory) + '/', str(self.root / directory) + '/')
         if self.fingerprints['nginx'] != self.previous_fingerprints.get('nginx'):
             # envsubst is normally startup-only; render updated templates before graceful reload.
@@ -395,21 +389,16 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         for name in ('run', 'logs'):
             shutil.copy2(self.bundle / 'scripts' / name, self.root / 'scripts' / name)
         shutil.copy2(self.bundle / 'argus', self.root / 'argus')
-        shutil.copy2(self.bundle / 'docker-compose.yml', self.root / 'docker-compose.yml')
-        shutil.copyfile(self.bundle / 'images.env', self.root / '.release-images.env')
         for name in ('fingerprints.tsv', 'release.json'):
             destination = self.root / ('.release-fingerprints.tsv' if name == 'fingerprints.tsv' else '.release.json')
             temporary = destination.with_name(destination.name + '.next')
             shutil.copyfile(self.bundle / name, temporary)
             temporary.replace(destination)
-        backups = sorted((self.root / 'backups').glob('pre-migration-*.sql.gz'), reverse=True)
-        if self.migrations:
-            for backup in backups[7:]:
-                backup.unlink()
+        self.cleanup_backups()
         print('[deploy] Release applied successfully', flush=True)
         # Stopped previous slots protect their images from pruning.
         try:
-            self.run('docker', 'image', 'prune', '-a', '-f', '--filter', 'until=168h')
+            self.run('docker', 'image', 'prune', '-a', '-f', '--filter', 'until=72h')
         except subprocess.CalledProcessError:
             print('[deploy] Warning: image cleanup failed', file=sys.stderr)
 
@@ -422,8 +411,6 @@ if __name__ == '__main__':
         deployment = Deployment(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
         if len(sys.argv) == 3:
             deployment.apply()
-        elif deployment.state is None:
-            deployment.snapshot()
     except (RuntimeError, subprocess.CalledProcessError) as error:
         if deployment is not None:
             deployment.resume_workers()

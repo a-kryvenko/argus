@@ -22,6 +22,11 @@ def cli(tmp_path, request):
     wrapper.chmod(0o755)
     for name in ('.env', '.env.local', '.release-images.env'):
         (root / name).write_text('# fixture\n')
+    if request.param == 'production':
+        for name in ('.rolling-compose.json', '.release-compose.json'):
+            (root / name).write_text('{}')
+        (root / '.rolling-state.json').write_text(json.dumps({'active': {
+            service: {'slot': 'blue'} for service in ('api', 'clio', 'prophet-api', 'intelligence-api', 'frontend')}}))
     bindir = tmp_path / 'tools'
     bindir.mkdir()
     log = tmp_path / 'calls.jsonl'
@@ -56,7 +61,9 @@ def test_domain_arguments_and_environment_files(cli):
     assert args[:1] == ['compose']
     assert args[args.index('--project-directory') + 1] == str(root)
     assert args[args.index('run'):args.index('run') + 4] == ['run', '--rm', '--no-deps', 'intelligence']
-    assert (str(root / '.release-images.env') in args) == (mode == 'production')
+    assert str(root / '.release-images.env') not in args
+    expected = '.release-compose.json' if mode == 'production' else 'docker-compose.yml'
+    assert args[args.index('-f') + 1] == str(root / expected)
 
 
 @pytest.mark.parametrize('apply', [False, True])
@@ -118,11 +125,12 @@ def test_production_maintenance_excludes_deployment_and_other_commands(cli):
 
 
 def test_compose_arguments_are_forwarded_without_running_app(cli):
-    _, root, run = cli
+    mode, root, run = cli
     result, calls = run('compose', 'up', '-d', '--wait', 'postgres', 'redis')
     assert result.returncode == 0, result.stderr
     assert len(calls) == 1
-    assert calls[0]['args'][-6:] == [str(root / 'docker-compose.yml'), 'up', '-d', '--wait', 'postgres', 'redis']
+    expected = '.rolling-compose.json' if mode == 'production' else 'docker-compose.yml'
+    assert calls[0]['args'][-6:] == [str(root / expected), 'up', '-d', '--wait', 'postgres', 'redis']
 
 
 @pytest.mark.parametrize('args', [('db', 'migrate'), ('prophet', 'generate', 'dst'), ('api', 'user', '--help')])

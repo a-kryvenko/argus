@@ -10,19 +10,18 @@ for file in "$root/.env" "$root/.env.local"; do
     if [[ "$mode" == prod || -f "$file" ]]; then compose+=(--env-file "$file"); fi
 done
 if [[ "$mode" == prod ]]; then
-    [[ ! -f "$root/.release-images.env" ]] || compose+=(--env-file "$root/.release-images.env")
+    for file in .rolling-state.json .rolling-compose.json .release-compose.json; do
+        [[ -f "$root/$file" ]] || { echo "Missing production deployment file: $file" >&2; exit 2; }
+    done
+    compose_file="$root/.rolling-compose.json"
+    template_file="$root/.release-compose.json"
 else
     export LOCAL_UID="${LOCAL_UID:-$(id -u)}" LOCAL_GID="${LOCAL_GID:-$(id -g)}"
+    compose_file="$root/docker-compose.yml"
+    template_file="$compose_file"
 fi
-compose_file="$root/docker-compose.yml"
-if [[ "$mode" == prod && -f "$root/.rolling-compose.json" ]]; then
-    compose_file="$root/.rolling-compose.json"
-fi
+templates=("${compose[@]}" -f "$template_file")
 compose+=(-f "$compose_file")
-templates=("${compose[@]}")
-if [[ "$mode" == prod && -f "$root/.release-compose.json" ]]; then
-    templates=("${compose[@]:0:${#compose[@]}-2}" -f "$root/.release-compose.json")
-fi
 usage() {
     echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
 }
@@ -110,7 +109,7 @@ case "${1:-}" in
         ;;
     compose)
         shift
-        if [[ "$mode" == prod && -f "$root/.rolling-state.json" ]]; then
+        if [[ "$mode" == prod ]]; then
             case "${1:-}" in
                 exec|logs|run|restart|start|stop|kill|pause|unpause|top|rm|ps|up)
                     mapfile -d '' -t mapped < <(python3 - "$root/.rolling-state.json" "$@" <<'PY'

@@ -1,20 +1,52 @@
 # Argus Sunwatch
 
-[Space-weather observations, forecasts and satellite density-risk advisories](https://argussun.com/).
+[Argus Sunwatch](https://argussun.com/) is a space-weather monitoring and
+forecasting platform. Bring together live observations, forecast, impact intelligence for LEO satelites.
 
-| Service | Responsibility |
-| --- | --- |
-| [Clio](apps/clio/README.md) | Collect and archive observations |
-| [Prophet](apps/prophet/README.md) | Publish forecasts and density backgrounds |
-| [Intelligence](apps/intelligence/README.md) | Assess density exposure on supplied ephemerides |
-| [API](apps/api/README.md) / [Web](apps/web/README.md) | Client access and dashboard |
+## Observations sources
 
-Clio → Prophet → Intelligence exchange data over HTTP and own separate databases.
-Scientific backends live in private `forecast-core` and `intelligence-core` repositories.
+| Source | Observations used by Argus |
+|---|---|
+| **NOAA SWPC** | Live solar-wind speed, proton density and temperature, and IMF components from the real-time solar-wind feeds; estimated Kp, Ap derived from Kp, Kyoto Dst distributed by SWPC, and F10.7 radio flux. |
+| **NASA OMNIWeb / OMNI 2** | Historical hourly solar-wind plasma, magnetic-field and geomagnetic data for backfilling and model evaluation. |
+| **ACE/SWEPAM via NASA SPDF; SOHO/CELIAS Proton Monitor** | Additional historical plasma sources, aggregated to hourly values when filling gaps. |
+| **GFZ** | Historical F10.7 radio flux. |
+| **SDO via Stanford JSOC** | Numerical near-real-time FITS: AIA 94, 131, 171, 193, 211, 304, 335 and 1600 Å, plus HMI line-of-sight magnetograms. PROSWIN uses the original AIA 171/211 Å pair. |
+| **NSO GONG** | Solar magnetograms from the SWPC live feed and NSO archive, used to derive magnetic-field features for southward IMF forecasting. |
+| **NOAA GOES** | Live EUV and X-ray background measurements from SWPC, with historical files from the NOAA archive. These support calibrated estimates of S10, M10 and Y10; those estimates are derived indices, not direct observations of the indices. |
+| **SILSO** | Monthly sunspot numbers used as additional PROSWIN inputs. |
 
-- [Setup and deployment](README_DEPLOY.md) · [Commands](docs/commands.md)
-- [Architecture](docs/architecture.md) · [Dataflow diagrams](docs/architecture/README.md)
-- [Observation requirements](docs/observation-requirements.md)
-- [Forecast accuracy](docs/accuracy/README.md) · [Solar events](docs/solar-wind-events.md)
-- [Density advisories](docs/density-advisory.md) · [Historical demo](docs/demo-mode.md)
-- [User help](https://argussun.com/help) · [API reference](https://argussun.com/api/v1/docs)
+Clio collects and stores the configured observation feeds. The PROSWIN process
+also maintains its own SILSO snapshot. Source priority, collection intervals and
+backfill windows are defined in [the project configuration](configs/project.yaml).
+
+## Forecasting
+
+The configured forecasting pipeline uses the following models:
+
+| Forecast | Model and inputs | Published output |
+|---|---|---|
+| **CME** | **ENLIL** | Coronal Mass Ejection forecast |
+| **Solar-wind speed (`v`)** | **DLinear + PROSWIN**: hourly speed history combined with the official PROSWIN fold-1 model using AIA 171/211 Å images and physical features. Blend weights depend on lead time and were fitted on 2025 data. | Central speed forecast, q10/q90 intervals and speed-threshold probabilities. Missing PROSWIN predictions fall back to DLinear. |
+| **Proton density (`n`)** | **DLinear + LightGBM**, using hourly n/v history and the native PROSWIN **speed forecast** as an additional input. | q10/q50/q90 density forecast.
+| **Proton temperature (`T`)** | **LightGBM** with hourly T/n/v history and the PROSWIN speed forecast as an input (`argus-plasma-temperature-proswin-v1`). | Hourly q10/q50/q90 in K over +1…+96 h; without PROSWIN uses T/n/v history, then T-only if n/v is unavailable. |
+| **Kp** | Calibrated classification models using solar-wind and geomagnetic history (`argus-kp-t-v2`). | Probabilities of exceeding Kp thresholds. |
+| **Ap and Dst** | **LightGBM quantile regression**, using observation-history features (`argus-ap-q-v2`, `argus-dst-q-v2`). | q10/q50/q90 forecasts. |
+| **Total IMF (`Bt`)** | **LightGBM classifiers with logistic probability calibration**, using hourly IMF/plasma history (`argus-bt-t-v3`). | Probabilities of Bt ≥ 5, 10 and 15 nT over +1…+24 hours. |
+| **Southward IMF (`Bs`)** | Calibrated classification models using observation history and GONG magnetic features (`argus-bs-t-v2`). | Threshold probabilities for `Bs = max(−Bz, 0)`, rather than a signed Bz point forecast. |
+| **Thermospheric density** | **JB2008**, driven by F10.7, calibrated S10/M10/Y10 and the geomagnetic temperature correction. Current operation holds observed drivers constant over the forecast horizon. | Atmospheric-density grids by time, altitude and location. |
+
+## Explore the project
+
+- [Open Argus Sunwatch](https://argussun.com/)
+- [Usage help](https://argussun.com/help)
+- [API documentation](https://argussun.com/api/v1/docs)
+- [Development, configuration and deployment](README_DEPLOY.md)
+- [Architecture and data flow diagrams](docs/architecture/README.md)
+- [Forecast verification, model evaluation and MLflow](docs/forecast-workflows.md)
+- [Forecast accuracy report](docs/accuracy/README.md)
+- [Historical demo: event replay and dataset generation](docs/demo-mode.md)
+
+---
+
+> Argus Sunwatch is an independently designed and developed project. I am responsible for the system architecture, scientific data pipelines, forecasting methodology and experiments, backend services, APIs, infrastructure, deployment, and web application.

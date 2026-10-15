@@ -13,9 +13,6 @@ prophet:
     enabled: true
     every_hours: 6
     days: 7
-  inputs:
-    hmf:
-      max_gong_age_hours: 3
 
 # Numeric and file observations use these sources, schedules and backfill depths.
 # Native RTSW remains a separate product; AIA uses file adapters.

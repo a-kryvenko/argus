@@ -34,20 +34,20 @@ models:
     metrics: data/metrics/geomagnetic/kp_proba
 
   ap_quantile:
-    model: argus-ap-q-v2
-    metrics: data/metrics/geomagnetic/ap_quantile
+    model: argus-ap-revalidated-2026-v1
+    metrics: data/metrics/geomagnetic/ap_revalidated_2026_v1
 
   dst_quantile:
-    model: argus-dst-q-v2
-    metrics: data/metrics/geomagnetic/dst_quantile
+    model: argus-dst-revalidated-2026-v1
+    metrics: data/metrics/geomagnetic/dst_revalidated_2026_v1
 
   hmf_total_threshold:
-    model: argus-bt-t-v3
-    metrics: data/metrics/hmf/total_proba_v3
+    model: argus-bt-revalidated-2026-v2
+    metrics: data/metrics/hmf/bt_revalidated_2026_v2
   
   hmf_southward_threshold:
-    model: argus-bs-t-v2
-    metrics: data/metrics/hmf/southward_proba
+    model: argus-bs-revalidated-2026-v2
+    metrics: data/metrics/hmf/bs_revalidated_2026_v2
 
   f10_7_quantile:
     model: argus-f10_7-q-v1

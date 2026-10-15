@@ -16,6 +16,8 @@ _buffer = {}
 
 
 def record(route, method, status, duration_ms, *, user_agent=''):
+    if route in {'/health/live', '/health/ready'}:
+        return
     # Own health probes are operational checks, not API usage. Keep ordinary
     # /ping calls and other routes visible even when they use the same agent.
     if route == '/ping' and method == 'GET' and user_agent == 'Argus-Monitor/1':

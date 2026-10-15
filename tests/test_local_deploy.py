@@ -61,11 +61,15 @@ def test_invalid_arguments_fail_before_checks(tmp_path, args):
 
 @pytest.mark.parametrize('bump,tag', [(None, None), ('patch', 'v1.2.4'),
                                      ('minor', 'v1.3.0'), ('major', 'v2.0.0')])
-def test_commit_and_release_modes(tmp_path, bump, tag):
+@pytest.mark.parametrize('dirty_submodule_only', [False, True])
+def test_commit_and_release_modes(tmp_path, bump, tag, dirty_submodule_only):
     shutil.copy2(ROOT / 'deploy.sh', tmp_path / 'deploy.sh')
     binaries = tmp_path / 'bin'
     binaries.mkdir()
     (tmp_path / 'scripts').mkdir()
+    (tmp_path / 'scripts/deployment').mkdir()
+    shutil.copy2(ROOT / 'scripts/deployment/release.py', tmp_path / 'scripts/deployment/release.py')
+    (tmp_path / '.deploy').mkdir()
     log = tmp_path / 'commands'
     stub = f'#!{sys.executable}\n' + '''import os
 from pathlib import Path
@@ -77,6 +81,8 @@ if command == 'git tag --sort=-v:refname':
     print('v1.2.3')
 if 'status --porcelain' in command:
     print(' M example')
+if 'diff --cached --quiet' in command:
+    raise SystemExit(0 if sys.argv[2] == 'notebooks' and os.getenv('DIRTY_SUBMODULE_ONLY') == '1' else 1)
 '''
     for file in [*(binaries / name for name in ('pnpm', 'git', 'rsync')),
                  tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
@@ -85,19 +91,22 @@ if 'status --porcelain' in command:
     args = ([bump] if bump else []) + ['-m', 'Release message']
     result = subprocess.run(['bash', str(tmp_path / 'deploy.sh'), *args],
                             env={**os.environ, 'PATH': str(binaries) + os.pathsep + os.environ['PATH'],
-                                 'CHECK_LOG': str(log)}, capture_output=True, text=True)
+                                 'CHECK_LOG': str(log), 'DIRTY_SUBMODULE_ONLY': str(int(dirty_submodule_only))},
+                            capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     commands = log.read_text().splitlines()
     assert commands[:len(CHECKS)] == CHECKS
     for repo in ('notebooks', 'packages/forecast-core', 'packages/intelligence-core', '.'):
-        assert f'git -C {repo} commit -m Release message' in commands
+        assert (f'git -C {repo} commit -m Release message' in commands) == (repo != 'notebooks' or not dirty_submodule_only)
         assert f'git -C {repo} push origin HEAD' in commands
     uploads = [command for command in commands if command.startswith('rsync ')]
     if tag:
+        import json
+        artifact_id = json.loads((tmp_path / '.deploy/artifacts.json').read_text())['id']
         assert len(uploads) == 3
         assert uploads[-1] == (
-            'rsync -avzh --rsync-path=mkdir -p /var/www/data/demo && rsync '
-            'data/demo/current.json argus:/var/www/data/demo/current.json')
+            f'rsync -avzh --rsync-path=mkdir -p /var/www/artifacts/{artifact_id}/demo && rsync '
+            f'data/demo/current.json argus:/var/www/artifacts/{artifact_id}/demo/current.json')
         assert commands[-2:] == [f'git tag -a {tag} -m Release message', f'git push origin {tag}']
     else:
         assert not uploads

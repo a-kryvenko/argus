@@ -28,6 +28,20 @@ IGNORED = {'.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.ne
            '.turbo', 'dist', 'build', 'coverage', 'test-results', 'playwright-report'}
 
 
+def artifact_digest(root):
+    result = hashlib.sha256()
+    for directory in ('models', 'metrics', 'demo'):
+        paths = [root / directory / 'current.json'] if directory == 'demo' else sorted((root / directory).rglob('*'))
+        for path in paths:
+            if path.is_file():
+                result.update(path.relative_to(root).as_posix().encode() + b'\0')
+                with path.open('rb') as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                        result.update(chunk)
+                result.update(b'\0')
+    return result.hexdigest()
+
+
 def digest(root, prefixes, *, private=False):
     paths = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z', '--', *prefixes]).decode().split('\0')
     result = hashlib.sha256()
@@ -81,6 +95,9 @@ def plan(root, *, rebuild=''):
         identity = hashlib.sha256((source + backend_hash + rebuild).encode()).hexdigest()
         result['components'][name] = {'repository': 'ghcr.io/a-kryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
     result['migrations'] = {name: digest(root, paths) for name, paths in MIGRATIONS.items()}
+    for filename, key in [('artifacts.json', 'artifacts'), ('online-migrations.json', 'online_migrations')]:
+        path = root / '.deploy' / filename
+        result[key] = json.loads(path.read_text()) if path.exists() else None
     return result
 
 
@@ -99,6 +116,8 @@ def bundle(root, plan_path, images_path, destination):
         shutil.copytree(root / '.deploy' / name, destination / name, dirs_exist_ok=True)
     shutil.copytree(root / 'configs', destination / 'configs', dirs_exist_ok=True)
     shutil.copy2(root / 'scripts/deployment/deploy.sh', destination / 'deploy.sh')
+    for name in ('deploy-legacy.sh', 'rolling.py', 'smoke.py', 'release.py'):
+        shutil.copy2(root / 'scripts/deployment' / name, destination / name)
     shutil.copy2(root / 'argus', destination / 'argus')
     (destination / 'scripts').mkdir(exist_ok=True)
     for name in ('run', 'logs'):
@@ -120,9 +139,15 @@ if __name__ == '__main__':
     assemble.add_argument('--plan', type=Path, required=True)
     assemble.add_argument('--images', type=Path, required=True)
     assemble.add_argument('--output', type=Path, required=True)
+    artifacts = commands.add_parser('artifacts')
+    artifacts.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     if args.command == 'plan':
         args.output.write_text(json.dumps(plan(root, rebuild=args.rebuild), indent=2) + '\n')
-    else:
+    elif args.command == 'bundle':
         bundle(root, args.plan, args.images, args.output)
+    else:
+        artifact_id = artifact_digest(root / 'data')
+        args.output.write_text(json.dumps({'id': artifact_id}) + '\n')
+        print(artifact_id)

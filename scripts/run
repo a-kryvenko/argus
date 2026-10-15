@@ -14,7 +14,15 @@ if [[ "$mode" == prod ]]; then
 else
     export LOCAL_UID="${LOCAL_UID:-$(id -u)}" LOCAL_GID="${LOCAL_GID:-$(id -g)}"
 fi
-compose+=(-f "$root/docker-compose.yml")
+compose_file="$root/docker-compose.yml"
+if [[ "$mode" == prod && -f "$root/.rolling-compose.json" ]]; then
+    compose_file="$root/.rolling-compose.json"
+fi
+compose+=(-f "$compose_file")
+templates=("${compose[@]}")
+if [[ "$mode" == prod && -f "$root/.release-compose.json" ]]; then
+    templates=("${compose[@]:0:${#compose[@]}-2}" -f "$root/.release-compose.json")
+fi
 usage() {
     echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
 }
@@ -48,9 +56,9 @@ migrate() {
     shift
     [[ "$mode" != prod ]] || target+="-migrate"
     if [[ "$domain" == api ]]; then
-        "${compose[@]}" run --rm --no-deps "$target" .venv/bin/alembic "$@"
+        "${templates[@]}" run --rm --no-deps "$target" .venv/bin/alembic "$@"
     else
-        "${compose[@]}" run --rm --no-deps "$target" "$domain" migrate "$@"
+        "${templates[@]}" run --rm --no-deps "$target" "$domain" migrate "$@"
     fi
 }
 case "${1:-}" in
@@ -61,7 +69,7 @@ case "${1:-}" in
             provision)
                 shift
                 lock x
-                exec "${compose[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/db/provision.py "$@"
+                exec "${templates[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/db/provision.py "$@"
                 ;;
             migrate)
                 shift
@@ -86,7 +94,7 @@ case "${1:-}" in
                 user)
                     shift
                     lock s
-                    exec "${compose[@]}" run --rm --no-deps api .venv/bin/python -m app.commands.manage_user "$@"
+                    exec "${templates[@]}" run --rm --no-deps api .venv/bin/python -m app.commands.manage_user "$@"
                     ;;
                 serve)
                     [[ "$mode" == dev ]] || { usage >&2; exit 2; }
@@ -97,11 +105,54 @@ case "${1:-}" in
             esac
         else
             lock s
-            exec "${compose[@]}" run --rm --no-deps "$domain" "$domain" "$@"
+            exec "${templates[@]}" run --rm --no-deps "$domain" "$domain" "$@"
         fi
         ;;
     compose)
         shift
+        if [[ "$mode" == prod && -f "$root/.rolling-state.json" ]]; then
+            case "${1:-}" in
+                exec|logs|run|restart|start|stop|kill|pause|unpause|top|rm|ps|up)
+                    mapfile -d '' -t mapped < <(python3 - "$root/.rolling-state.json" "$@" <<'PY'
+import json, sys
+state = json.load(open(sys.argv[1]))['active']
+arguments = sys.argv[2:]
+command = arguments[0]
+value_options = {'--index', '--user', '-u', '--workdir', '-w', '--env', '-e', '--name',
+                 '--publish', '-p', '--entrypoint', '--label', '-l', '--tail', '--since',
+                 '--until', '--timeout', '--wait-timeout', '--scale', '--exit-code-from',
+                 '--attach', '--no-attach', '--pull', '--format'}
+if command in {'up', 'stop', 'restart'}:
+    value_options.add('-t')
+positions, skip = [], False
+for index, value in enumerate(arguments[1:], 1):
+    if skip:
+        skip = False
+        continue
+    if value in value_options:
+        skip = True
+        continue
+    if value.startswith('-'):
+        continue
+    positions.append(index)
+    if command in {'run', 'exec'}:
+        break
+if command == 'up' and not positions:
+    print('Production up requires explicit services; use the release deployment for upgrades.', file=sys.stderr)
+    raise SystemExit(2)
+for index in positions:
+    entry = state.get(arguments[index])
+    if entry and entry['slot']:
+        arguments[index] += '-' + entry['slot']
+for value in arguments:
+    sys.stdout.buffer.write(value.encode() + b'\0')
+PY
+                    )
+                    ((${#mapped[@]})) || exit 2
+                    set -- "${mapped[@]}"
+                    ;;
+            esac
+        fi
         exec "${compose[@]}" "$@"
         ;;
     *) usage >&2; exit 2 ;;

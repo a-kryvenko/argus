@@ -47,14 +47,15 @@ Prophet demo caches use `data/demo`; legacy `data/raw` needs an explicit one-off
 
 ## Production setup
 
-Server: Bash, Docker Compose v2, rsync, flock; operator env files in `/var/www`.
+Server: Bash, Python 3.10+, Docker Compose v2, rsync, flock; operator env files in `/var/www`.
 Compose must support `pull --policy missing` and `up --wait`.
 
 - Configure distinct DB owners, three service tokens, HTTPS dashboard origin and secure cookies.
 - Preserve existing PostgreSQL credentials/volumes. Provisioning creates missing owners/databases; it does not rotate passwords.
-- Configure SSH/private-checkout secrets from [deploy.yml](.github/workflows/deploy.yml), plus `GHCR_USERNAME` and `GHCR_READ_TOKEN` (`read:packages`, access to all five images).
+- Configure SSH/private-checkout secrets from [deploy.yml](.github/workflows/deploy.yml), plus `GHCR_USERNAME` and `GHCR_READ_TOKEN` (`read:packages`, access to all six images).
 - Install release files, start PostgreSQL/Redis, provision and migrate before starting applications. Normal releases do not provision.
-- Upload configured model artifacts and static metrics separately. A missing/corrupt model bundle is a deployment error.
+- Create a smoke account with `/var/www/argus api user create deploy-smoke` (no groups). Set `DEPLOY_SMOKE_USERNAME` and `DEPLOY_SMOKE_PASSWORD` in `.env.local`.
+- `DEPLOY_MIN_AVAILABLE_MIB` defaults to 1024; each HTTP replacement requires this much available host RAM.
 
 Keep API internal. Login limits: nginx 10 immediate attempts/IP, then one per
 10 seconds; API 10 attempts/username per 15 minutes. nginx trusts client IPs only
@@ -77,12 +78,21 @@ Browser tests use `.next/playwright`; failures save screenshots.
 `PLAYWRIGHT_SCREENSHOTS=1` also saves successful review screenshots.
 Optional nginx checks require Docker and `TEST_NGINX_IMAGE=nginx:stable-alpine`.
 
-A `v*` tag builds/reuses images and deploys their pinned digests:
+A `v*` tag deploys pinned images. The first deployment uses the existing maintenance
+flow, then installs stable HTTP routers. Later releases replace changed HTTP
+services individually: readiness, smoke checks, graceful routing switch, request
+drain, old-container stop. Workers remain single-instance and update separately.
 
-1. Lock deployment, validate config, prune unreferenced images older than seven days.
-2. Stop affected writers; back up PostgreSQL under `/var/www/backups/` before migrations.
-3. Install files, migrate, reconcile services and reload nginx.
-4. Record fingerprints; after a successful backup/deployment, retain seven timestamped dumps.
+Smoke checks cover HTML/static assets, login/logout, observations, forecasts and
+Intelligence reads. No inference runs. Models/metrics use verified artifact bundles;
+configs are versioned. Demo data remains worker-owned; old frontend assets are retained.
+
+New migrations require their exact release-plan fingerprint in
+`.deploy/online-migrations.json`, e.g. `{"clio":"<sha256>"}`. Approve only changes
+compatible with both application versions. Migrations use a 5s lock timeout and
+5min statement timeout. Deployment backs up PostgreSQL, drains affected workers,
+then migrates while HTTP stays online.
+Current migration histories remain intact.
 
 Failed backups remain `.partial`; failed deployments do not rotate backups.
 Operator env/models/data remain separate; do not override generated image references.
@@ -93,8 +103,10 @@ Operator env/models/data remain separate; do not override generated image refere
 Use `/var/www/argus` in production. Manual schema commands lock operations but do
 not stop writers or back up DBs; do both first. Credential changes require container recreation.
 
-After a failed deployment, fix the failing phase and rerun the same release;
-writers may remain stopped. DB rollback is manual. Full-instance restore affects
-every domain and must match images, models and subsequent writes.
+Failed HTTP replacements restore the previous route; completed replacements remain
+active. Rerun the same release to recover an interrupted switch and finish deployment.
+Use `argus` for production commands/logs; it selects active HTTP slots. Bare
+`docker compose up` bypasses this state. DB rollback is manual. Preserve `releases/`,
+`artifacts/`, `.rolling-*` and stopped previous slots for recovery.
 
 [Commands](docs/commands.md) · [Architecture](docs/architecture.md)

@@ -49,4 +49,11 @@ def ready():
         from intelligence_core.api import assess_density, describe_mode, summarize_monitor, prioritize_monitors, prepare_operator_chart, evaluate_drag_events, assess_density_exposure, summarize_density_advisory, evaluate_advisory_events, reuse_density_advisory
     except ImportError:
         raise HTTPException(503, 'Impact backend is not installed') from None
+    try:
+        from argus_intelligence.db import connect
+        with connect() as conn:
+            conn.execute('SET statement_timeout=3000')
+            conn.execute('SELECT id FROM intelligence.drag_profile LIMIT 1')
+    except Exception:
+        raise HTTPException(503, 'Impact storage is not ready') from None
     return {'service': 'intelligence', 'status': 'ok', 'density_readiness': 'checked_per_request'}

@@ -18,6 +18,9 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 
 FROM base AS builder
 
+ARG DEPLOYMENT_VERSION
+ENV NEXT_DEPLOYMENT_ID=${DEPLOYMENT_VERSION}
+
 RUN mkdir -p /var/www
 WORKDIR /var/www
 

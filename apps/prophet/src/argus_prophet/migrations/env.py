@@ -30,7 +30,7 @@ if context.is_offline_mode():
         context.run_migrations()
 else:
     engine = create_engine(get_database_url(), poolclass=pool.NullPool,
-                           connect_args={'options': '-csearch_path=prophet,pg_catalog,pg_temp'})
+                           connect_args={'options': '-csearch_path=prophet,pg_catalog,pg_temp -clock_timeout=5000 -cstatement_timeout=300000'})
     with engine.connect() as connection:
         if connection.scalar(text("SELECT to_regclass('public.alembic_version')")):
             raise RuntimeError('Legacy public schema detected; restore the domain into its own database first')

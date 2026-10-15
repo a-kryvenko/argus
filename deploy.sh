@@ -121,7 +121,11 @@ commit_and_push_if_needed() {
 
   if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
     git -C "$repo_dir" add -A
-    git -C "$repo_dir" commit -m "$msg"
+    if git -C "$repo_dir" diff --cached --quiet; then
+      echo "Nothing staged to commit in $repo_dir"
+    else
+      git -C "$repo_dir" commit -m "$msg"
+    fi
   else
     echo "Nothing to commit in $repo_dir"
   fi
@@ -131,10 +135,13 @@ commit_and_push_if_needed() {
 
 if [[ -n "$BUMP" ]]; then
   echo "Syncing models, metrics and demo..."
-  rsync -avzh data/models/ argus:/var/www/data/models
-  rsync -avzh data/metrics/ argus:/var/www/data/metrics
-  rsync -avzh --rsync-path="mkdir -p /var/www/data/demo && rsync" \
-    data/demo/current.json argus:/var/www/data/demo/current.json
+  ARTIFACT_ID=$(python3 scripts/deployment/release.py artifacts --output .deploy/artifacts.json)
+  for directory in models metrics; do
+    rsync -avzh --rsync-path="mkdir -p /var/www/artifacts/$ARTIFACT_ID/$directory && rsync" \
+      "data/$directory/" "argus:/var/www/artifacts/$ARTIFACT_ID/$directory/"
+  done
+  rsync -avzh --rsync-path="mkdir -p /var/www/artifacts/$ARTIFACT_ID/demo && rsync" \
+    data/demo/current.json "argus:/var/www/artifacts/$ARTIFACT_ID/demo/current.json"
 fi
 
 commit_and_push_if_needed "notebooks" "$MESSAGE"

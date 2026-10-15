@@ -141,6 +141,9 @@ services:
       MONITORING_TRAFFIC_LOG: /var/log/nginx/traffic.jsonl
       MONITORING_HOST_PROC: /host/proc
       MONITORING_DISK_PATH: /var/log/nginx
+      DEPLOY_SMOKE_USERNAME: ${DEPLOY_SMOKE_USERNAME:-}
+      DEPLOY_SMOKE_PASSWORD: ${DEPLOY_SMOKE_PASSWORD:-}
+      DEPLOY_MIN_AVAILABLE_MIB: ${DEPLOY_MIN_AVAILABLE_MIB:-1024}
     expose:
       - "8000"
     volumes:
@@ -163,6 +166,15 @@ services:
       observations:
       forecasts:
       impacts:
+
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+    stop_grace_period: 60s
 
   clio:
     <<: *clio-runtime
@@ -339,6 +351,14 @@ services:
       - api
     networks:
       application:
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+    stop_grace_period: 60s
 
   postgres:
     image: postgres:17-alpine
@@ -384,6 +404,7 @@ services:
       - ./log/nginx:/var/www/log
       - ./nginx/default.conf:/etc/nginx/includes/default.conf
       - ./nginx/templates/http.conf.template:/etc/nginx/templates/website.conf.template
+      - ./data/next-static:/var/www/next-static:ro
     environment:
       - HOSTNAME=${APP_NAME}
       - APP_NAME=${APP_NAME}

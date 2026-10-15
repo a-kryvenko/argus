@@ -3,6 +3,13 @@ import pytest
 from app.services import api_statistics
 
 
+@pytest.mark.parametrize('route', ['/health/live', '/health/ready'])
+def test_health_checks_do_not_enter_usage_statistics(monkeypatch, route):
+    monkeypatch.setattr(api_statistics, '_buffer', {})
+    api_statistics.record(route, 'GET', 200, 12)
+    assert api_statistics._buffer == {}
+
+
 @pytest.mark.parametrize('status', [200, 500])
 def test_own_ping_probes_do_not_enter_usage_statistics(monkeypatch, status):
     monkeypatch.setattr(api_statistics, '_buffer', {})

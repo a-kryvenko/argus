@@ -175,7 +175,7 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, failure, l
     (backup_dir / 'pre-migration-20260110T000000.sql.gz.partial').write_text('incomplete')
     (backup_dir / 'database-transfer').mkdir()
     (backup_dir / 'database-transfer' / 'database.sql').write_text('transfer backup')
-    shutil.copy2(ROOT / 'scripts/deployment/deploy.sh', bundle / 'deploy.sh')
+    shutil.copy2(ROOT / 'scripts/deployment/deploy-legacy.sh', bundle / 'deploy.sh')
     shutil.copy2(ROOT / 'argus', bundle / 'argus')
     (bundle / 'scripts').mkdir()
     for name in ('run', 'logs'):

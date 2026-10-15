@@ -89,9 +89,10 @@ configs are versioned. Demo data remains worker-owned; old frontend assets are r
 
 New migrations require their exact release-plan fingerprint in
 `.deploy/online-migrations.json`, e.g. `{"clio":"<sha256>"}`. Approve only changes
-compatible with both application versions. Migrations use a 5s lock timeout and
-5min statement timeout. Deployment backs up PostgreSQL, drains affected workers,
-then migrates while HTTP stays online.
+compatible with both application versions. Actual DB revisions are checked before
+backup; changed files alone do not trigger one. Backups run before stopping services,
+with fast compression and progress every 15s. Migrations use a 5s lock timeout and
+5min statement timeout; affected workers drain while HTTP stays online.
 Current migration histories remain intact.
 
 Failed backups remain `.partial`; failed deployments do not rotate backups.

@@ -116,7 +116,7 @@ def bundle(root, plan_path, images_path, destination):
         shutil.copytree(root / '.deploy' / name, destination / name, dirs_exist_ok=True)
     shutil.copytree(root / 'configs', destination / 'configs', dirs_exist_ok=True)
     shutil.copy2(root / 'scripts/deployment/deploy.sh', destination / 'deploy.sh')
-    for name in ('deploy-legacy.sh', 'rolling.py', 'smoke.py', 'release.py'):
+    for name in ('deploy-legacy.sh', 'rolling.py', 'smoke.py', 'release.py', 'migration_status.py', 'backup.py'):
         shutil.copy2(root / 'scripts/deployment' / name, destination / name)
     shutil.copy2(root / 'argus', destination / 'argus')
     (destination / 'scripts').mkdir(exist_ok=True)

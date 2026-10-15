@@ -158,12 +158,29 @@ def test_new_migrations_require_exact_approval_before_mutation(tmp_path, monkeyp
     (bundle / 'release.json').write_text('{}')
     (tmp_path / '.rolling-state.json').write_text('{"active":{}}')
     config = {'services': {'api': {'environment': {'DEPLOY_SMOKE_USERNAME': 'test', 'DEPLOY_SMOKE_PASSWORD': 'password'}}}}
+    config['services'].update({domain + '-migrate': {} for domain in ('api', 'clio', 'prophet', 'intelligence')})
     monkeypatch.setattr(rolling.Deployment, 'capture', staticmethod(lambda *args: json.dumps(config)))
+    deployment = rolling.Deployment(tmp_path, bundle)
+    deployment.compose = lambda *args, **kwargs: 'pending'
+    (bundle / 'migration_status.py').write_text('status probe')
     with pytest.raises(RuntimeError, match='must be approved'):
-        rolling.Deployment(tmp_path, bundle)
+        deployment.check_pending_migrations()
     (bundle / 'release.json').write_text(json.dumps({'online_migrations': {'clio': 'new'}}))
     deployment = rolling.Deployment(tmp_path, bundle)
+    deployment.compose = lambda *args, **kwargs: 'pending'
+    deployment.check_pending_migrations()
     assert deployment.migrations == ['clio']
+
+
+def test_changed_migration_files_without_database_upgrade_skip_backup(tmp_path):
+    deployment = harness(tmp_path)
+    deployment.migrations = ['clio']
+    deployment.approvals = {}
+    deployment.compose = lambda *args, **kwargs: 'current'
+    deployment.check_pending_migrations()
+    assert deployment.migrations == []
+    deployment.backup_and_migrate()
+    assert not (tmp_path / 'backups').exists()
 
 
 def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path):
@@ -254,3 +271,33 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
     deployment.calls.clear()
     deployment.apply()
     assert not any(call[0] == 'smoke' for call in deployment.calls)
+
+
+def test_real_compose_export_preserves_maintenance_services(tmp_path):
+    import shutil
+    import subprocess
+    if not shutil.which('docker'):
+        pytest.skip('Docker Compose is required for config normalization')
+    subprocess.run(['docker', 'compose', 'version'], check=True, capture_output=True)
+    bundle = tmp_path / 'bundle'
+    bundle.mkdir()
+    for name in ('.env', '.env.local'):
+        (tmp_path / name).touch()
+    (bundle / 'images.env').touch()
+    fingerprints = {key: 'same' for key in ('api', 'clio', 'prophet', 'intelligence', 'configs', 'nginx', 'alloy')}
+    (bundle / 'fingerprints.tsv').write_text(''.join(f'{key} {value}\n' for key, value in fingerprints.items()))
+    (tmp_path / '.release-fingerprints.tsv').write_text((bundle / 'fingerprints.tsv').read_text())
+    (bundle / 'release.json').write_text('{}')
+    services = {'api': {'image': 'busybox', 'environment': {'DEPLOY_SMOKE_USERNAME': 'test', 'DEPLOY_SMOKE_PASSWORD': 'test'}}}
+    for domain in ('api', 'clio', 'prophet', 'intelligence'):
+        services[domain + '-migrate'] = {'image': 'busybox', 'profiles': ['maintenance'], 'command': ['true']}
+    (bundle / 'docker-compose.yml').write_text(json.dumps({'services': services}))
+    deployment = rolling.Deployment(tmp_path, bundle)
+    assert set(deployment.desired['services']) == set(services)
+    normalized = tmp_path / 'normalized.json'
+    rolling.write_json(normalized, deployment.desired)
+    normal = subprocess.check_output(['docker', 'compose', '-f', str(normalized), 'config', '--services'], text=True)
+    assert normal.splitlines() == ['api']
+    maintenance = subprocess.check_output(['docker', 'compose', '--profile', 'maintenance', '-f', str(normalized),
+                                         'config', '--services'], text=True)
+    assert set(maintenance.splitlines()) == set(services)

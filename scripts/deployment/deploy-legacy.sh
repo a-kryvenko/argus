@@ -40,37 +40,13 @@ changed() {
     [[ "$previous" != "$(awk -v key="$1" '$1 == key {print $2}' "$bundle/fingerprints.tsv")" ]]
 }
 migrations=()
-stop=()
 for domain in api clio prophet intelligence; do
-    if changed "$domain"; then
-        migrations+=("$domain-migrate")
-        case "$domain" in
-            intelligence) stop+=(intelligence intelligence-api) ;;
-            api) stop+=(api) ;;
-            clio) stop+=(clio clio-worker) ;;
-            prophet) stop+=(prophet prophet-api) ;;
-        esac
-    fi
+    if changed "$domain"; then migrations+=("$domain-migrate"); fi
 done
-if changed configs; then
-    stop+=(api clio clio-worker prophet prophet-api intelligence-api)
-fi
-# Drain and remove the four old Clio containers before starting the unified
-# worker, even when this release has no database/config changes.
 retired=()
 for service in solar-wind geomagnetic clio-refresh clio-aggregate; do
-    if has_installed_service "$service"; then
-        retired+=("$service")
-        stop+=("$service")
-    fi
+    if has_installed_service "$service"; then retired+=("$service"); fi
 done
-existing_stop=()
-for service in "${stop[@]}"; do
-    if has_installed_service "$service"; then
-        existing_stop+=("$service")
-    fi
-done
-printf 'Migrations: %s\n' "${migrations[*]:-none}"
 phase image-cleanup
 # Run under the deployment lock, before pulling candidate images. Keep the
 # recent rollback window and every image referenced by a container (even stopped).
@@ -82,26 +58,42 @@ phase download-images
 if ((${#migrations[@]})); then
     "${candidate[@]}" pull --policy missing "${migrations[@]}"
 fi
-phase drain-writers
-if ((${#existing_stop[@]})); then
-    "${installed[@]}" stop "${existing_stop[@]}"
-fi
-if ((${#retired[@]})); then
-    "${installed[@]}" rm -f "${retired[@]}"
-fi
+phase check-database-revisions
+pending=()
+stop=()
+for migration in "${migrations[@]}"; do
+    domain="${migration%-migrate}"
+    status="$("${candidate[@]}" run --rm --no-deps -T "$migration" .venv/bin/python - "$domain" < "$bundle/migration_status.py")"
+    case "$status" in
+        current) echo "[deploy] $domain: database already at image head" ;;
+        pending)
+            pending+=("$migration")
+            case "$domain" in
+                intelligence) stop+=(intelligence intelligence-api) ;;
+                api) stop+=(api) ;;
+                clio) stop+=(clio clio-worker) ;;
+                prophet) stop+=(prophet prophet-api) ;;
+            esac
+            ;;
+        *) echo "Invalid migration status for $domain" >&2; exit 1 ;;
+    esac
+done
+migrations=("${pending[@]}")
+printf 'Pending migrations: %s\n' "${migrations[*]:-none}"
 if ((${#migrations[@]})); then
     phase database-backup
-    umask 077
-    mkdir -p "$root/backups"
-    backup="$root/backups/pre-migration-$(date -u +%Y%m%dT%H%M%S).sql.gz"
-    # pipefail prevents a failed/truncated dump from becoming a completed backup.
-    # Leave failures as .partial for inspection; never include them in retention.
-    "${installed[@]}" exec -T postgres sh -c \
-        'pg_dumpall --username="$POSTGRES_USER"' \
-        | gzip -c > "$backup.partial"
-    gzip -t "$backup.partial"
-    mv "$backup.partial" "$backup"
+    python3 "$bundle/backup.py" "$root/backups" -- "${installed[@]}" exec -T postgres sh -c \
+        'pg_dumpall --username="$POSTGRES_USER"'
 fi
+if changed configs; then stop+=(api clio clio-worker prophet prophet-api intelligence-api); fi
+stop+=("${retired[@]}")
+existing_stop=()
+for service in "${stop[@]}"; do
+    if has_installed_service "$service"; then existing_stop+=("$service"); fi
+done
+phase drain-writers
+if ((${#existing_stop[@]})); then "${installed[@]}" stop "${existing_stop[@]}"; fi
+if ((${#retired[@]})); then "${installed[@]}" rm -f "${retired[@]}"; fi
 phase install-configuration
 # These directories are repository-owned; data, models and operator env files are separate.
 for directory in configs nginx alloy; do

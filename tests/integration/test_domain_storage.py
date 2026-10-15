@@ -1,5 +1,7 @@
 """Cross-service database provisioning, migrations and ownership."""
 import os
+from pathlib import Path
+import subprocess
 
 from domain_storage import database, migrate, provisioning, runtime
 
@@ -7,10 +9,27 @@ import psycopg
 import pytest
 from sqlalchemy.engine import make_url
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def migration_status(domain, environment):
+    return subprocess.run([str(ROOT / 'apps' / domain / '.venv/bin/python'),
+                           str(ROOT / 'scripts/deployment/migration_status.py'), domain],
+                          cwd=ROOT / 'apps' / domain, env={**environment, 'PYTHONPATH': ''},
+                          capture_output=True, text=True)
+
 
 def test_fresh_databases_repeat_migrations_and_reject_foreign_connections(database):
     dsns, urls, environment = database
+    for domain in provisioning.DOMAINS:
+        status = migration_status(domain, environment)
+        assert status.returncode == 0, status.stderr
+        assert status.stdout.strip() == 'pending'
     migrate(environment)
+    for domain in provisioning.DOMAINS:
+        status = migration_status(domain, environment)
+        assert status.returncode == 0, status.stderr
+        assert status.stdout.strip() == 'current'
     provisioning.provision(os.environ['TEST_DATABASE_ADMIN_DSN'], urls, apply=True)
     migrate(environment)
     for domain in provisioning.DOMAINS:
@@ -19,6 +38,10 @@ def test_fresh_databases_repeat_migrations_and_reject_foreign_connections(databa
             # The one service owner can also perform its migrations.
             conn.execute(f'CREATE TABLE {domain}.owner_test(id int)')
             conn.execute(f'DROP TABLE {domain}.owner_test')
+            conn.execute(f"UPDATE {domain}.alembic_version SET version_num='unknown_revision'")
+        status = migration_status(domain, environment)
+        assert status.returncode != 0
+        assert 'Could not compare database revisions' in status.stderr
         for other in provisioning.DOMAINS:
             if other == domain:
                 continue

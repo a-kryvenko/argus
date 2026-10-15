@@ -157,10 +157,11 @@ def test_every_docker_copy_source_participates_in_image_identity():
 @pytest.mark.parametrize('migration,failure', [(None, None), ('clio', None), ('clio', 'migration'),
                                               ('clio', 'backup'), ('intelligence', None)])
 @pytest.mark.parametrize('legacy_clio', [False, True])
-def test_shell_deployment_and_success_checkpoint(tmp_path, migration, failure, legacy_clio):
+@pytest.mark.parametrize('database_current', [False, True])
+def test_shell_deployment_and_success_checkpoint(tmp_path, migration, failure, legacy_clio, database_current):
     import os
     import shutil
-    fail = failure is not None
+    fail = failure is not None and not database_current
     root, bundle, bin_dir = [tmp_path / name for name in ('host', 'bundle', 'tools')]
     for directory in (root, bundle, bin_dir):
         directory.mkdir()
@@ -176,6 +177,8 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, failure, l
     (backup_dir / 'database-transfer').mkdir()
     (backup_dir / 'database-transfer' / 'database.sql').write_text('transfer backup')
     shutil.copy2(ROOT / 'scripts/deployment/deploy-legacy.sh', bundle / 'deploy.sh')
+    for name in ('backup.py', 'migration_status.py'):
+        shutil.copy2(ROOT / 'scripts/deployment' / name, bundle / name)
     shutil.copy2(ROOT / 'argus', bundle / 'argus')
     (bundle / 'scripts').mkdir()
     for name in ('run', 'logs'):
@@ -192,6 +195,7 @@ def test_shell_deployment_and_success_checkpoint(tmp_path, migration, failure, l
     docker.write_text('''#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$CALL_LOG"
 if [[ "$*" == *'config --services' ]]; then printf '%s\\n' $INSTALLED_SERVICES; fi
+if [[ "$*" == *'.venv/bin/python - '* ]]; then printf '%s\\n' "$MIGRATION_STATUS"; fi
 if [[ "$FAIL_MIGRATION" == 1 && "$*" == *'run --rm --no-deps clio-migrate'* ]]; then exit 1; fi
 if [[ "$*" == *'pg_dumpall'* ]]; then
     printf '%s\\n' 'database dump'
@@ -206,6 +210,7 @@ fi
                             env={**os.environ, 'PATH': str(bin_dir) + ':' + os.environ['PATH'],
                                  'CALL_LOG': str(log), 'FAIL_MIGRATION': str(int(failure == 'migration')),
                                  'FAIL_BACKUP': str(int(failure == 'backup')),
+                                 'MIGRATION_STATUS': 'current' if database_current else 'pending',
                                  'INSTALLED_SERVICES': 'api clio prophet prophet-api intelligence ' + (
                                      'solar-wind geomagnetic clio-refresh clio-aggregate' if legacy_clio else 'clio-worker')},
                             capture_output=True, text=True)
@@ -214,14 +219,14 @@ fi
     prune = calls.index('image prune -a -f --filter until=168h')
     pull = next(i for i, call in enumerate(calls) if 'pull --policy missing' in call)
     assert prune < pull
-    assert not any('python' in call or '--force-recreate' in call or 'db-bootstrap' in call or '-provision' in call for call in calls)
-    if migration:
-        stop = next(i for i, call in enumerate(calls) if ' stop ' in call)
+    assert not any('--force-recreate' in call or 'db-bootstrap' in call or '-provision' in call for call in calls)
+    if migration and not database_current:
         backup = next(i for i, call in enumerate(calls) if 'pg_dumpall' in call)
-        assert stop < backup
         if failure == 'backup':
-            assert not any('run --rm --no-deps' in call for call in calls)
+            assert not any(' stop ' in call or 'run --rm --no-deps clio-migrate' in call for call in calls)
         else:
+            stop = next(i for i, call in enumerate(calls) if ' stop ' in call)
+            assert backup < stop
             migrate = next(i for i, call in enumerate(calls) if f'run --rm --no-deps {migration}-migrate' in call)
             assert backup < migrate
         assert '--dbname=' not in calls[backup]  # Back up all domain databases and owners.
@@ -235,12 +240,14 @@ fi
             expected.append('clio-worker')
         if legacy_clio:
             expected.extend(['solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'])
-        assert calls[stop].endswith('stop ' + ' '.join(expected))
+        if failure != 'backup':
+            assert calls[stop].endswith('stop ' + ' '.join(expected))
     else:
-        assert not any('pg_dumpall' in call or '-migrate' in call for call in calls)
+        assert not any('pg_dumpall' in call or 'run --rm --no-deps clio-migrate' in call
+                       or 'run --rm --no-deps intelligence-migrate' in call for call in calls)
         assert any(' stop ' in call for call in calls) == legacy_clio
     retired = 'solar-wind geomagnetic clio-refresh clio-aggregate'
-    if legacy_clio:
+    if legacy_clio and not (failure == 'backup' and not database_current):
         drain = next(i for i, call in enumerate(calls) if ' stop ' in call)
         remove = next(i for i, call in enumerate(calls) if call.endswith('rm -f ' + retired))
         assert drain < remove
@@ -254,7 +261,7 @@ fi
     assert (backup_dir / 'manual.sql').read_text() == 'manual backup'
     assert (backup_dir / 'pre-migration-20260110T000000.sql.gz.partial').read_text() == 'incomplete'
     assert (backup_dir / 'database-transfer' / 'database.sql').read_text() == 'transfer backup'
-    if migration and not fail:
+    if migration and not database_current and not fail:
         assert not list(backup_dir.glob('pre-migration-*.sql'))
         assert len(list(backup_dir.glob('pre-migration-*.sql.gz'))) == 7
         for index, path in enumerate(old_backups):
@@ -264,7 +271,7 @@ fi
                 assert gzip.decompress(compressed.read_bytes()).decode() == f'old dump {index + 1}'
     else:
         assert all(path.exists() for path in old_backups)
-    if failure == 'backup':
+    if failure == 'backup' and not database_current:
         assert len(list(backup_dir.glob('*.partial'))) == 2
         assert not (root / '.argus-mode').exists()
         return

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Sequential HTTP replacement with durable per-service routing checkpoints."""
 import copy
-import gzip
 import hashlib
 import json
 import os
@@ -11,6 +10,7 @@ import subprocess
 import sys
 import time
 from release import artifact_digest
+from backup import create_backup
 
 HTTP = {'clio': 8000, 'prophet-api': 8000, 'intelligence-api': 8000, 'api': 8000, 'frontend': 3000}
 WORKERS = ['clio-worker', 'prophet', 'intelligence', 'proswin']
@@ -96,7 +96,10 @@ class Deployment:
         self.base = ['docker', 'compose', '--project-directory', str(root),
                      '--env-file', str(root / '.env'), '--env-file', str(root / '.env.local')]
         self.desired = json.loads(self.capture(*self.base, '--env-file', str(bundle / 'images.env'),
-                                               '-f', str(bundle / 'docker-compose.yml'), 'config', '--format', 'json'))
+                                               '--profile', '*', '-f', str(bundle / 'docker-compose.yml'), 'config', '--format', 'json'))
+        required = {domain + '-migrate' for domain in ('api', 'clio', 'prophet', 'intelligence')}
+        if not required <= self.desired['services'].keys():
+            raise RuntimeError('Release configuration is missing maintenance services')
         environment = self.desired['services']['api']['environment']
         self.credentials = {key: environment.pop(key, '').replace('$$', '$') for key in ('DEPLOY_SMOKE_USERNAME', 'DEPLOY_SMOKE_PASSWORD')}
         self.minimum_available = int(environment.pop('DEPLOY_MIN_AVAILABLE_MIB', '1024'))
@@ -108,16 +111,12 @@ class Deployment:
         self.previous_fingerprints = dict(line.split() for line in previous.read_text().splitlines()) if previous.exists() else {}
         self.migrations = [domain for domain in ('api', 'clio', 'prophet', 'intelligence')
                            if self.fingerprints[domain] != self.previous_fingerprints.get(domain)]
-        approvals = self.manifest.get('online_migrations') or {}
-        if self.state_path.exists():
-            for domain in self.migrations:
-                if approvals.get(domain) != self.fingerprints[domain]:
-                    raise RuntimeError(f'{domain}: migration fingerprint must be approved in .deploy/online-migrations.json')
+        self.approvals = self.manifest.get('online_migrations') or {}
         self.state = json.loads(self.state_path.read_text()) if self.state_path.exists() else None
 
     @staticmethod
-    def capture(*args):
-        return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+    def capture(*args, **kwargs):
+        return subprocess.run(args, check=True, capture_output=True, text=True, **kwargs).stdout
 
     @staticmethod
     def run(*args, **kwargs):
@@ -126,7 +125,7 @@ class Deployment:
     def compose(self, *args, capture=False, **kwargs):
         command = self.base + ['-f', str(self.runtime)] + list(args)
         if capture:
-            return self.capture(*command)
+            return self.capture(*command, **kwargs)
         self.run(*command, **kwargs)
 
     def save(self):
@@ -254,18 +253,8 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
     def backup_and_migrate(self):
         if not self.migrations:
             return
-        backup_dir = self.root / 'backups'
-        backup_dir.mkdir(exist_ok=True)
-        path = backup_dir / time.strftime('pre-migration-%Y%m%dT%H%M%S.sql.gz', time.gmtime())
-        partial = path.with_name(path.name + '.partial')
-        with open(partial, 'wb', opener=lambda name, flags: os.open(name, flags, 0o600)) as output:
-            process = subprocess.Popen(self.base + ['-f', str(self.runtime), 'exec', '-T', 'postgres',
-                'sh', '-c', 'pg_dumpall --username="$POSTGRES_USER"'], stdout=subprocess.PIPE)
-            with gzip.GzipFile(fileobj=output, mode='wb') as compressed:
-                shutil.copyfileobj(process.stdout, compressed)
-            if process.wait():
-                raise RuntimeError('Database backup failed')
-        partial.replace(path)
+        create_backup(self.base + ['-f', str(self.runtime), 'exec', '-T', 'postgres',
+            'sh', '-c', 'pg_dumpall --username="$POSTGRES_USER"'], self.root / 'backups')
         # Readers and request writers remain online only for explicitly approved migrations.
         workers = {'api': [], 'clio': ['clio-worker'], 'prophet': ['prophet'], 'intelligence': ['intelligence']}
         for domain in self.migrations:
@@ -284,6 +273,23 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             self.compose('start', *self.state['drained_workers'])
             self.state.pop('drained_workers')
             self.save()
+
+    def check_pending_migrations(self):
+        if not self.migrations:
+            return
+        source = (self.bundle / 'migration_status.py').read_text()
+        pending = []
+        for domain in self.migrations:
+            status = self.compose('run', '--rm', '--no-deps', '-T', domain + '-migrate',
+                                  '.venv/bin/python', '-', domain, capture=True, input=source).strip()
+            if status not in ('current', 'pending'):
+                raise RuntimeError(f'{domain}: invalid migration status')
+            if status == 'pending':
+                if self.approvals.get(domain) != self.fingerprints[domain]:
+                    raise RuntimeError(f'{domain}: migration fingerprint must be approved in .deploy/online-migrations.json')
+                pending.append(domain)
+        self.migrations = pending
+        print(f'[deploy] Pending database upgrades: {", ".join(pending) or "none"}', flush=True)
 
     def check_memory(self, service):
         available = next(int(line.split()[1]) // 1024 for line in Path('/proc/meminfo').read_text().splitlines()
@@ -360,7 +366,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.snapshot()
         if self.state is None:
             installed = json.loads(self.capture(*self.base, '--env-file', str(self.root / '.release-images.env'),
-                '-f', str(self.root / 'docker-compose.yml'), 'config', '--format', 'json'))
+                '--profile', '*', '-f', str(self.root / 'docker-compose.yml'), 'config', '--format', 'json'))
             self.state = {'active': {service: {'slot': None, 'spec': installed['services'][service]} for service in HTTP}}
             self.save()
         self.recover()
@@ -368,6 +374,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.install_runtime()
         # Download before starting a second HTTP instance; retain stopped rollback slots.
         self.compose('pull', '--policy', 'missing', *[s for s in self.desired['services'] if s not in HTTP])
+        self.check_pending_migrations()
         self.compose('up', '-d', '--no-deps', '--wait', 'postgres', 'redis')
         self.backup_and_migrate()
         for service in HTTP:

@@ -1,5 +1,5 @@
-import LeoDragView from "../../_components/LeoDragView";
+import LeoRiskView from "../../_components/LeoRiskView";
 
 export default function LeoDragPage() {
-  return <LeoDragView />;
+  return <LeoRiskView />;
 }

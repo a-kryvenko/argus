@@ -1,0 +1,1 @@
+The README and any documentation should be extremely concise. Write only what is necessary for use and support. Remove repetitions, obvious explanations, introductions and conclusions. Do not turn the documentation into a report on the work done. Add details only upon direct request.

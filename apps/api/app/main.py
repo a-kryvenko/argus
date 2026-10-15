@@ -17,6 +17,8 @@ from app.db.session import dispose_engine
 from app.routers.forecasts import router as forecasts_router
 from app.routers.atmospheric_density import router as atmospheric_density_router
 from app.routers.leo_drag import router as leo_drag_router
+from app.routers.drag_monitor import router as drag_monitor_router
+from app.routers.density_advisory import router as density_advisory_router
 from app.routers.healthcheck import router as healthcheck_router
 from app.routers.public.observations import router as observations_router
 from app.routers.public.solar_wind import router as solar_wind_router
@@ -94,6 +96,8 @@ app.add_middleware(
 )
 
 app.include_router(dashboard_router, include_in_schema=False)
+app.include_router(drag_monitor_router, include_in_schema=False)
+app.include_router(density_advisory_router, include_in_schema=False)
 app.include_router(healthcheck_router)
 
 app.include_router(atmospheric_density_router)

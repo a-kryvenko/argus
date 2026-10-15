@@ -113,11 +113,6 @@ class LeoDragAssessment(DragModel):
                 or last.estimated_altitude_loss_m != self.estimated_altitude_loss_m
                 or self.estimated_altitude_loss_m > 1000):
             raise ValueError('Inconsistent cumulative loss')
-        thresholds = self.inputs.thresholds
-        expected = 'not_assessed'
-        if thresholds is not None:
-            expected = ('high' if self.estimated_altitude_loss_m >= thresholds.high_altitude_loss_m else
-                        'elevated' if self.estimated_altitude_loss_m >= thresholds.elevated_altitude_loss_m else 'low')
-        if self.drag_risk != expected:
-            raise ValueError('Risk does not match the supplied thresholds')
+        # Risk policy belongs to intelligence-core. Public DTOs validate the
+        # transport shape and series integrity without recomputing the decision.
         return self

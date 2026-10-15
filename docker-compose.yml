@@ -57,7 +57,7 @@ services:
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
     volumes: &clio-volumes
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/observations:/var/www/data/observations
       - ./apps/clio/src:/var/www/apps/clio/src
       - ./packages/common/src:/var/www/packages/common/src
     command: [".venv/bin/uvicorn", "clio.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
@@ -110,7 +110,9 @@ services:
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
     volumes: &prophet-volumes
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/models:/var/www/data/models:ro
+      - ./data/prophet:/var/www/data/prophet
+      - ./data/demo:/var/www/data/demo
       - ./apps/prophet/src:/var/www/apps/prophet/src
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/forecast/src:/var/www/packages/forecast/src
@@ -118,8 +120,10 @@ services:
     command: ["prophet", "worker"]
     stop_grace_period: 10m
     depends_on:
-      clio:
+      postgres:
         condition: service_healthy
+      clio:
+        condition: service_started
 
   proswin:
     build:
@@ -141,13 +145,14 @@ services:
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:-}
     volumes:
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/models:/var/www/data/models:ro
+      - ./data/prophet:/var/www/data/prophet
       - ./apps/prophet/src:/var/www/apps/prophet/src
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/forecast/src:/var/www/packages/forecast/src
     depends_on:
       clio:
-        condition: service_healthy
+        condition: service_started
 
   prophet-api:
     build: *prophet-build
@@ -162,7 +167,12 @@ services:
       PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
       PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-    volumes: *prophet-volumes
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./apps/prophet/src:/var/www/apps/prophet/src
+      - ./packages/common/src:/var/www/packages/common/src
+      - ./packages/forecast/src:/var/www/packages/forecast/src
+      - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
     command: [".venv/bin/uvicorn", "argus_prophet.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
     depends_on:
       postgres:
@@ -192,9 +202,9 @@ services:
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
       ARGUS_WORKDIR: /var/www
+      INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR: ${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}
     volumes:
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
       - ./apps/intelligence/src:/var/www/apps/intelligence/src
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/intelligence-core/src:/var/www/packages/intelligence-core/src
@@ -204,7 +214,7 @@ services:
       postgres:
         condition: service_healthy
       prophet-api:
-        condition: service_healthy
+        condition: service_started
 
   intelligence-api:
     build:
@@ -215,18 +225,25 @@ services:
     user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
     command: ["intelligence", "serve"]
     environment:
+      INTELLIGENCE_DB_HOST: postgres
+      INTELLIGENCE_DB_PORT: '5432'
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
       ARGUS_WORKDIR: /var/www
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
     volumes:
       - ./configs:/var/www/configs:ro
       - ./apps/intelligence/src:/var/www/apps/intelligence/src
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/intelligence-core/src:/var/www/packages/intelligence-core/src
     depends_on:
-      prophet-api:
+      postgres:
         condition: service_healthy
+      prophet-api:
+        condition: service_started
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
       interval: 10s
@@ -251,7 +268,7 @@ services:
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
       INTELLIGENCE_URL: http://intelligence-api:8000
-      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
       OBSERVATIONS_URL: http://clio:8000
@@ -261,7 +278,8 @@ services:
       MONITORING_REDIS_URL: redis://redis:6379/0
     volumes: &api-volumes
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/metrics:/var/www/data/metrics:ro
+      - ./data/demo:/var/www/data/demo:ro
       - ./apps/api/app:/var/www/apps/api/app
       - ./apps/api/alembic:/var/www/apps/api/alembic
       - ./apps/api/alembic.ini:/var/www/apps/api/alembic.ini:ro
@@ -273,7 +291,7 @@ services:
       redis:
         condition: service_healthy
       prophet-api:
-        condition: service_healthy
+        condition: service_started
     command: [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "app", "--reload-dir", "/var/www/packages"]
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ping', timeout=5)"]

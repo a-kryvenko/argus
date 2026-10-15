@@ -32,11 +32,16 @@ def imports(path):
             yield from (alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             yield node.module
+        elif isinstance(node, ast.Call) and node.args:
+            dynamic = (isinstance(node.func, ast.Name) and node.func.id == '__import__') or (
+                isinstance(node.func, ast.Attribute) and node.func.attr == 'import_module')
+            if dynamic and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                yield node.args[0].value
 
 
 def test_package_dependency_direction():
     forbidden = {
-        'common': {'app', 'clio', 'forecast', 'forecast_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_prophet', 'argus_intelligence'},
+        'common': {'app', 'clio', 'forecast', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_prophet', 'argus_intelligence'},
         'forecast': {'app', 'clio', 'forecast_core', 'intelligence_core', 'fastapi', 'sqlalchemy', 'psycopg', 'argus_prophet', 'argus_intelligence'},
     }
     violations = []
@@ -61,13 +66,14 @@ def dependency_names(config):
     ('apps/api', {'common'}, {'common'}),
     ('apps/clio', {'common'}, {'common'}),
     ('apps/intelligence', {'common', 'intelligence-core'}, {'common', 'intelligence-core'}),
+    ('packages/intelligence-core', {'common'}, {'common'}),
     ('apps/prophet', {'common', 'forecast', 'forecast-core'},
      {'common', 'forecast', 'forecast-core'}),
     ('packages/forecast-core', {'common', 'forecast'}, {'forecast'}),
 ])
 def test_declared_package_boundaries(path, allowed, required):
     manifest = ROOT / path / 'pyproject.toml'
-    if not manifest.exists() and path == 'packages/forecast-core':
+    if not manifest.exists() and path in {'packages/forecast-core', 'packages/intelligence-core'}:
         pytest.skip('Private checkout is not required for public CI')
     names = dependency_names(tomllib.loads(manifest.read_text()))
     internal = {'common', 'clio', 'forecast', 'forecast-core', 'intelligence-core',
@@ -132,11 +138,12 @@ def test_clio_has_no_forecast_packages_and_prophet_requests_models():
 
 
 @pytest.mark.parametrize('root,blocked,private_surface', [
-    ('apps/api/app', {'forecast', 'clio', 'forecast_core', 'argus_prophet', 'argus_intelligence'}, {'intelligence_core.api'}),
+    ('apps/api/app', {'forecast', 'clio', 'forecast_core', 'intelligence_core', 'argus_prophet', 'argus_intelligence'}, set()),
     ('apps/clio/src', {'app', 'argus_prophet', 'argus_intelligence', 'intelligence_core', 'forecast', 'forecast_core'}, set()),
     ('apps/prophet/src', {'app', 'clio', 'argus_intelligence', 'intelligence_core'}, {'forecast_core.api'}),
     ('apps/intelligence/src', {'app', 'clio', 'argus_prophet', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
-    ('packages/forecast-core/src', {'clio', 'argus_prophet', 'argus_intelligence', 'app'}, None),
+    ('packages/forecast-core/src', {'intelligence_core', 'clio', 'argus_prophet', 'argus_intelligence', 'app'}, None),
+    ('packages/intelligence-core/src', {'clio', 'argus_prophet', 'argus_intelligence', 'app', 'forecast_core'}, None),
 ])
 def test_service_import_boundaries(root, blocked, private_surface):
     for path in (ROOT / root).rglob('*.py'):
@@ -174,3 +181,79 @@ def test_research_namespaces_are_only_private_launchers():
             tree = ast.parse(path.read_text())
             assert not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
                            for node in ast.walk(tree)), f'Implementation in research launcher: {path}'
+
+
+def test_intelligence_runtime_is_infrastructure_only():
+    """Public infrastructure may transport model output but cannot derive it."""
+    derived_fields = {'estimated_altitude_loss_m', 'delta_v_loss_m_s', 'mean_density_kg_m3',
+                      'mean_drag_accel_m_s2', 'mean_along_track_deceleration_m_s2',
+                      'elevated_altitude_loss_m', 'high_altitude_loss_m'}
+    for path in (ROOT / 'apps/intelligence/src').rglob('*.py'):
+        assert not {'math', 'numpy', 'scipy'} & {module.split('.')[0] for module in imports(path)}, path
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            assert not (isinstance(node, ast.Attribute) and node.attr in derived_fields), (
+                path, 'Derived impact fields belong to intelligence-core', node.attr)
+    schema = ROOT / 'packages/common/src/common/schemas/leo_drag.py'
+    for node in ast.walk(ast.parse(schema.read_text())):
+        if isinstance(node, ast.FunctionDef) and node.name == 'consistent_series':
+            assert not any(isinstance(child, ast.Attribute) and child.attr in {'thresholds', 'drag_risk'}
+                           for child in ast.walk(node)), schema
+
+
+def test_intelligence_audit_scripts_are_private_launchers():
+    for name in ('drag_physics_audit.py', 'drag_density_transfer.py', 'drag_flight_audit.py'):
+        path = ROOT / 'scripts/testing' / name
+        tree = ast.parse(path.read_text())
+        assert not any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                       for node in ast.walk(tree)), path
+        assert set(imports(path)) <= {'pathlib', 'runpy'}, path
+    assert not (ROOT / 'apps/intelligence/tests/test_drag_physics_audit.py').exists()
+
+
+@pytest.mark.parametrize('filename', ['docker-compose.yml', '.deploy/docker-compose.yml'])
+def test_runtime_storage_credentials_and_startup_boundaries(filename):
+    services = yaml.safe_load((ROOT / filename).read_text())['services']
+    owners = {'clio': 'CLIO', 'clio-worker': 'CLIO', 'prophet': 'PROPHET',
+              'prophet-api': 'PROPHET', 'intelligence': 'INTELLIGENCE',
+              'intelligence-api': 'INTELLIGENCE', 'api': 'API'}
+    allowed_data = {
+        'clio': {'observations': False}, 'clio-worker': {'observations': False},
+        'prophet': {'models': True, 'prophet': False, 'demo': False},
+        'proswin': {'models': True, 'prophet': False},
+        'prophet-api': {}, 'intelligence': {}, 'intelligence-api': {},
+        'api': {'metrics': True, 'demo': True},
+    }
+    for name, allowed in allowed_data.items():
+        service = services[name]
+        actual = {}
+        for mount in service.get('volumes', []):
+            parts = mount.split(':')
+            target = parts[1]
+            assert target != '/var/www/data', (filename, name, mount)
+            if target.startswith('/var/www/data/'):
+                actual[target.removeprefix('/var/www/data/')] = len(parts) == 3 and parts[2] == 'ro'
+        assert actual == allowed, (filename, name, actual)
+        for dependency, settings in service.get('depends_on', {}).items():
+            if dependency not in {'postgres', 'redis'}:
+                assert settings['condition'] == 'service_started', (filename, name, dependency)
+        if name in owners:
+            environment = service['environment']
+            db_keys = {key for key in environment if '_DB_' in key}
+            assert db_keys and all(key.startswith(owners[name] + '_DB_') for key in db_keys)
+            assert not {'DB_USER', 'DB_PASSWORD'} & environment.keys()
+            assert service['depends_on']['postgres']['condition'] == 'service_healthy'
+    for name in ('api', 'intelligence-api'):
+        assert services[name]['environment']['INTELLIGENCE_SERVICE_TOKEN'] == (
+            '${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}')
+
+
+@pytest.mark.parametrize('application,blocked', [
+    ('clio', {'forecast', 'forecast-core', 'intelligence-core'}),
+    ('prophet', {'intelligence-core', 'clio', 'argus-clio'}),
+    ('intelligence', {'forecast', 'forecast-core', 'clio', 'argus-clio'}),
+    ('api', {'forecast', 'forecast-core', 'intelligence-core', 'clio', 'argus-clio'}),
+])
+def test_service_lockfiles_exclude_foreign_backends(application, blocked):
+    lock = tomllib.loads((ROOT / 'apps' / application / 'uv.lock').read_text())
+    assert not blocked & {package['name'] for package in lock['package']}

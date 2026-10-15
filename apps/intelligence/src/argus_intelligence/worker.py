@@ -1,5 +1,6 @@
 """Poll published releases; transactionally commit the stub result and attempt."""
 import json
+import os
 import signal
 import threading
 from uuid import uuid4
@@ -82,6 +83,21 @@ def worker(product='solar-wind-speed', *, interval=60, stop=None):
             except Exception:
                 outcome = {'status': 'error', 'product': product, 'error': 'Processing failed; retry scheduled'}
             print(json.dumps(outcome), flush=True)
+            if os.getenv('INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR','false').lower() in ('true','1'):
+                try:
+                    from argus_intelligence.monitor import refresh_profiles
+                    monitoring = refresh_profiles(stop=stop)
+                    if monitoring['profiles']:
+                        print(json.dumps({'drag_monitor': monitoring}), flush=True)
+                except Exception:
+                    print(json.dumps({'drag_monitor': {'error': 'Monitoring unavailable; retry scheduled'}}), flush=True)
+            try:
+                from argus_intelligence.density_monitor import refresh_profiles as refresh_density
+                screening = refresh_density(stop=stop)
+                if screening['profiles']:
+                    print(json.dumps({'density_advisory': screening}), flush=True)
+            except Exception:
+                print(json.dumps({'density_advisory': {'error': 'Monitoring unavailable; retry scheduled'}}), flush=True)
             stop.wait(interval)
     finally:
         for sig, handler in previous.items():

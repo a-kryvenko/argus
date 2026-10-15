@@ -10,5 +10,3 @@
 - [Required observations](../observation-requirements.md)
 - [JB2008 / DTM2020 accuracy](ATMOSPHERIC.md)
 - [Historical snapshot — October 7, 2026](snapshots/2026-10-07.md) — predates the current protocol
-
-This directory contains validation methodology and published accuracy results.

@@ -23,9 +23,9 @@ graph TB
 
       10["Prophet worker<br/>[Container: Python / scheduler]<br/>Input snapshots, product<br />calculations, publication and<br />verification"]
       style 10 fill:#eff6ff,stroke:#a7acb2,color:#172554
-      11["Intelligence HTTP<br/>[Container: Python / HTTP]<br/>On-demand LEO drag assessment<br />using intelligence-core"]
+      11["Intelligence HTTP<br/>[Container: Python / HTTP]<br/>Spacecraft, density<br />advisories and journal using<br />intelligence-core"]
       style 11 fill:#eff6ff,stroke:#a7acb2,color:#172554
-      12["Intelligence worker<br/>[Container: Python / scheduler]<br/>Release integration stub;<br />does not calculate drag<br />assessments"]
+      12["Intelligence worker<br/>[Container: Python / scheduler]<br/>Scheduled density advisories<br />and release integration"]
       style 12 fill:#eff6ff,stroke:#a7acb2,color:#172554
       13[("API database<br/>[Container: PostgreSQL / argus_api]<br/>Sessions and usage statistics")]
       style 13 fill:#dbeafe,stroke:#99a3b1,color:#172554
@@ -33,9 +33,9 @@ graph TB
       style 14 fill:#dbeafe,stroke:#99a3b1,color:#172554
       15[("Prophet database<br/>[Container: PostgreSQL / argus_prophet]<br/>Snapshots, forecasts,<br />releases and verification<br />records")]
       style 15 fill:#dbeafe,stroke:#99a3b1,color:#172554
-      16[("Intelligence database<br/>[Container: PostgreSQL / argus_intelligence]<br/>Worker attempts and<br />integration stub results")]
+      16[("Intelligence database<br/>[Container: PostgreSQL / argus_intelligence]<br/>Spacecraft, assessments,<br />retained forecast inputs and<br />events")]
       style 16 fill:#dbeafe,stroke:#99a3b1,color:#172554
-      17["Original file archive<br/>[Container: Shared disk]<br/>AIA, HMI and new GONG<br />originals; owned by Clio"]
+      17["Original file archive<br/>[Container: Clio-owned disk]<br/>AIA, HMI and new GONG<br />originals; owned by Clio"]
       style 17 fill:#fef3c7,stroke:#b1aa8b,color:#172554
       18["Model artifacts<br/>[Container: Files]<br/>Configured inference bundles;<br />deployed explicitly"]
       style 18 fill:#fef3c7,stroke:#b1aa8b,color:#172554
@@ -58,7 +58,7 @@ graph TB
     5-. "Reads observations, forecasts<br />and assessments<br/>[HTTP]" .->6
     6-. "Reads observations<br/>[HTTP]" .->7
     6-. "Reads forecasts and<br />verification summaries<br/>[HTTP]" .->9
-    6-. "Requests drag assessment<br/>[HTTP]" .->11
+    6-. "Reads spacecraft and<br />advisories; requests<br />assessment<br/>[HTTP]" .->11
     6-. "Reads and writes sessions and<br />usage<br/>[SQL]" .->13
     6-. "Reads historical evaluation<br />metrics<br/>" .->19
     8-. "Fetches observations and<br />original files<br/>[HTTP]" .->3
@@ -70,9 +70,10 @@ graph TB
     10-. "Loads configured model<br />bundles<br/>" .->18
     10-. "Stores snapshots, releases<br />and verification<br/>[SQL]" .->15
     9-. "Reads stored releases and<br />verification<br/>[SQL]" .->15
-    11-. "Reads density release<br/>[HTTP]" .->9
-    12-. "Polls solar-wind-speed<br />releases<br/>[HTTP]" .->9
-    12-. "Writes attempts and stub<br />results<br/>[SQL]" .->16
+    11-. "Reads published density and<br />CME releases<br/>[HTTP]" .->9
+    11-. "Stores and reads spacecraft,<br />assessments, inputs and<br />events<br/>[SQL]" .->16
+    12-. "Polls published forecast<br />releases<br/>[HTTP]" .->9
+    12-. "Stores assessments, inputs<br />and events<br/>[SQL]" .->16
 
   end
 ```

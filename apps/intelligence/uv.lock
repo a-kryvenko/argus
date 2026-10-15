@@ -332,12 +332,14 @@ name = "intelligence-core"
 version = "0.1.0"
 source = { editable = "../../packages/intelligence-core" }
 dependencies = [
+    { name = "common" },
     { name = "numpy" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "common", editable = "../../packages/common" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pydantic", specifier = ">=2.7" },
 ]

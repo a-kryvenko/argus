@@ -69,8 +69,9 @@ DTM2020 does not require S10/M10/Y10, GOES, Dst or DTC.
 0–48 hours; forecast ap is not enabled. DTM2020 additionally needs its native
 runtime, coefficients and suitable license. Density releases expire after 6 hours.
 
-**LEO calculation inputs:** UTC, orbit altitude/inclination, mass, effective area
-and drag coefficient. The current interface assumes a circular orbit.
+**Density advisory inputs:** timestamped geocentric ephemerides and a selected
+reference. The experimental loss calculator additionally needs circular-orbit
+altitude/inclination, mass, effective area and drag coefficient.
 
 ## Observations for accuracy checks
 

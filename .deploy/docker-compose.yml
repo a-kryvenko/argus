@@ -15,7 +15,7 @@ x-clio-runtime: &clio-runtime
     SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
   volumes:
     - ./configs:/var/www/configs:ro
-    - ./data:/var/www/data
+    - ./data/observations:/var/www/data/observations
   depends_on:
     postgres:
       condition: service_healthy
@@ -30,6 +30,8 @@ services:
     stop_grace_period: 2m
     command: ["intelligence", "worker"]
     environment:
+      ARGUS_WORKDIR: /var/www
+      INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR: ${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}
       INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
       INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
       INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
@@ -37,11 +39,13 @@ services:
       INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+    volumes:
+      - ./configs:/var/www/configs:ro
     depends_on:
       postgres:
         condition: service_healthy
       prophet-api:
-        condition: service_healthy
+        condition: service_started
     networks: [backend, forecasts]
 
   proswin:
@@ -57,10 +61,11 @@ services:
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
     volumes:
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/models:/var/www/data/models:ro
+      - ./data/prophet:/var/www/data/prophet
     depends_on:
       clio:
-        condition: service_healthy
+        condition: service_started
     networks: [observations]
 
   intelligence-api:
@@ -69,16 +74,23 @@ services:
     init: true
     command: ["intelligence", "serve"]
     environment:
+      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
+      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
+      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
+      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
       ARGUS_WORKDIR: /var/www
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
     volumes:
       - ./configs:/var/www/configs:ro
     depends_on:
-      prophet-api:
+      postgres:
         condition: service_healthy
-    networks: [forecasts, impacts]
+      prophet-api:
+        condition: service_started
+    networks: [backend, forecasts, impacts]
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
       interval: 30s
@@ -115,7 +127,7 @@ services:
       API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
       INTELLIGENCE_URL: http://intelligence-api:8000
-      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:-${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
       FORECASTS_URL: http://prophet-api:8000
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
       OBSERVATIONS_URL: http://clio:8000
@@ -133,7 +145,8 @@ services:
       - "8000"
     volumes:
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/metrics:/var/www/data/metrics:ro
+      - ./data/demo:/var/www/data/demo:ro
       - ./log/api:/var/www/log
       - ./log/nginx:/var/log/nginx:ro
       - /proc:/host/proc:ro
@@ -143,7 +156,7 @@ services:
       redis:
         condition: service_healthy
       prophet-api:
-        condition: service_healthy
+        condition: service_started
     networks:
       application:
       backend:
@@ -269,10 +282,14 @@ services:
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
     volumes:
       - ./configs:/var/www/configs:ro
-      - ./data:/var/www/data
+      - ./data/models:/var/www/data/models:ro
+      - ./data/prophet:/var/www/data/prophet
+      - ./data/demo:/var/www/data/demo
     depends_on:
-      clio:
+      postgres:
         condition: service_healthy
+      clio:
+        condition: service_started
     networks:
       backend:
       observations:

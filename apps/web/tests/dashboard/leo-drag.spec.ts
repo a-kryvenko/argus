@@ -17,6 +17,10 @@ const result = {
 };
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/api/v1/dashboard/density-advisory', route => route.fulfill({ json: { success: true, data: [], error: null } }));
+  await page.route('**/api/v1/dashboard/density-advisory/events?*', route => route.fulfill({ json: { success: true, data: { items: [], total: 0 }, error: null } }));
+  await page.route('**/api/v1/dashboard/drag-monitor/events?*', route => route.fulfill({ json: { success: true, data: { items: [], total: 0, unacknowledged: 0 }, error: null } }));
+  await page.route("**/api/v1/dashboard/drag-monitor", route => route.fulfill({ json: { success: true, data: [], error: null } }));
   await page.route("**/api/v1/dashboard/me", route => route.fulfill({ json: {
     success: true, data: { id: 2, username: "member", active: true, groups: [], permissions: [] }, error: null,
   } }));
@@ -32,6 +36,7 @@ test("member can calculate, inspect results and retry after unavailable data", a
       : { status: 503, json: { success: false, data: null, error: { message: "Not ready" } } });
   });
   await page.goto("/dashboard/risk/leo");
+  await page.getByRole('button', { name: 'Scenario calculator' }).click();
   await expect(page.getByRole("heading", { name: "LEO drag assessment" })).toBeVisible();
   await expect(page.locator('a[href="/dashboard/risk/leo"]')).toHaveAttribute("aria-current", "page");
   expect(calls).toBe(0);
@@ -62,6 +67,7 @@ test("validates positive area and supports a mobile 48-hour request", async ({ p
     await route.fulfill({ status: 422, json: { success: false, data: null, error: { message: "Outside grid" } } });
   });
   await page.goto("/dashboard/risk/leo");
+  await page.getByRole('button', { name: 'Scenario calculator' }).click();
   await page.getByLabel("Effective area (m²)").fill("0");
   await page.getByRole("button", { name: "Calculate drag" }).click();
   await expect(page.locator('.dashboard [role="alert"]')).toContainText("greater than zero");

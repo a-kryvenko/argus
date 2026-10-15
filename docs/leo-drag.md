@@ -1,131 +1,62 @@
-# LEO drag assessment
+# Experimental LEO drag
 
-See [observation requirements](observation-requirements.md) for model inputs,
-JB2008/DTM2020 history and freshness requirements, and density/orbit validation data.
+Primary workflow: [density advisories on supplied ephemerides](density-advisory.md).
+The dashboard's scenario calculator and saved loss monitor are experimental;
+flight-loss accuracy remains unvalidated.
 
-## Dashboard panel
+## Calculator
 
-`/dashboard/risk/leo` renders the standalone `LeoDragView` with orbit/spacecraft
-inputs, 24/48-hour calculations, summary metrics, an altitude-loss chart and an
-expandable hourly table. It uses the public assessment endpoint below. Access
-currently follows the dashboard session; no additional permission is required.
-Risk policy is deferred: the panel sends no thresholds and displays physical
-estimates without assigning risk categories. Returned input parameters and UTC
-source timestamps accompany each result so editing the form does not change the
-meaning of the previous calculation.
+`POST /api/v1/public/risks/leo-drag` (direct Uvicorn: omit `/api/v1`).
 
-## API
-
-`POST /api/v1/public/risks/leo-drag` estimates atmospheric drag for a circular
-orbit between 200 and 800 km. The API calls the internal Intelligence HTTP
-service; Intelligence reads the latest published atmospheric-density release
-from Prophet and calls the private `intelligence-core` backend. No collection,
-forecast generation, database writes or orbit catalog lookup occurs on request.
-
-Example (when accessing Uvicorn directly, omit the `/api/v1` proxy prefix):
-
-```bash
-curl -X POST http://localhost:8000/public/risks/leo-drag \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "altitude_km": 400,
-    "inclination_deg": 51.6,
-    "mass_kg": 100,
-    "effective_area_m2": 1,
-    "drag_coefficient": 2.2,
-    "horizon_hours": 24,
-    "thresholds": {
-      "elevated_altitude_loss_m": 100,
-      "high_altitude_loss_m": 500
-    }
-  }'
+```json
+{
+  "altitude_km": 400,
+  "inclination_deg": 51.6,
+  "mass_kg": 100,
+  "effective_area_m2": 1,
+  "drag_coefficient": 2.2,
+  "horizon_hours": 24
+}
 ```
 
-The example spacecraft parameters and thresholds are illustrative, not default
-operational limits. Supply the effective area for the intended attitude and an
-appropriate drag coefficient. Unknown request fields are rejected: eccentricity,
-TLE and attitude profiles are not supported in this version.
+Supply actual spacecraft parameters. Optional `thresholds` compares cumulative
+loss against user limits; without them `drag_risk` is `not_assessed`.
+Response: density, drag acceleration/impulse, estimated altitude loss, hourly
+predictions, echoed inputs, source and assumptions. `?meta=true` adds model metadata.
 
-The successful response uses the standard `{success, data, error}` envelope.
-`data` contains:
+Limits: circular orbit, 200–800 km, 24/48 hours **from release issue time**,
+constant area/Cd, fixed altitude and longitude-mean density. No maneuvers, winds or
+orbit propagation. Estimates above 1,000 m are rejected as outside model scope.
+Density spread and user-limit categories are not calibrated risk probabilities.
+422: invalid/out-of-domain inputs; 503: unavailable, invalid or stale forecast/backend.
 
-| Field | Meaning |
+## Saved loss monitor
+
+Session-owned routes under `/api/v1/dashboard/drag-monitor`; writes require Origin.
+Maximum 100 profiles/account and five constant-area/Cd modes/profile.
+
+| Method / suffix | Result |
 | --- | --- |
-| `mean_density_kg_m3` | Density averaged over orbital phase and the requested time interval |
-| `mean_drag_accel_m_s2` | Mean magnitude of acceleration due to drag |
-| `delta_v_loss_m_s` | Accumulated along-track drag impulse per unit mass; not the difference between initial and final orbital speed |
-| `estimated_altitude_loss_m` | Positive first-order loss of circular-orbit altitude |
-| `drag_risk` | `low`, `elevated`, `high`, or `not_assessed` |
-| `predictions` | Hourly orbit means and cumulative losses, including zero loss at lead 0 |
-| `inputs`, `source`, `assumptions` | Echoed parameters, release ID, source timestamps, driver mode, interpolation flag and model limitations |
+| `GET /`, `POST /` | List/create profiles |
+| `PUT /{id}?revision=N` | Replace profile; 409 on revision conflict |
+| `POST /{id}/assess` | Calculate/reuse current assessment |
+| `GET /{id}/history?limit=20` | Saved runs; maximum 50 |
+| `GET /{id}/runs/{run_id}` | Exact immutable snapshot |
+| `GET /{id}/chart?run_id=UUID` | Prepared chart; latest run by default |
+| `GET /events?page=1&unacknowledged=false` | Journal; optional `profile_id` |
+| `POST /events/{event_id}/ack` | Idempotent review acknowledgment |
 
-Responses are compact by default. `POST /public/risks/leo-drag?meta=true` adds
-`data.meta.model` and `data.meta.source` with the density model (`model`), history
-start, background method, interpolated daily dates and DTC method. The main data
-are identical in both modes. `source.background_interpolated` always identifies
-gap-filled backgrounds. The dashboard requests metadata to display the density
-model; risk reasons, thresholds and assumptions never depend on this parameter.
+The active mode determines attention. Missing/stale results and changed profiles
+remain `not_assessed`. Crossings identify hourly samples, not precise event times.
+Comparisons require matching profile inputs/revision and density model.
+Runs and journal commit atomically; acknowledgment does not change risk status.
+No external notifications or automatic history retention.
 
-Thresholds refer to the **total loss over the selected horizon**, not a daily
-rate. Equality counts as a threshold crossing. Without thresholds the response
-still includes physical estimates, with `drag_risk: not_assessed`. Categories
-are comparisons against user limits, not calibrated probabilities. Spatial
-longitude percentiles are not used as confidence intervals.
+## Operation
 
-The horizon is 24 or 48 hours **from the density release issue time**, explicitly
-returned as `start_time`; it does not start at request time. `computed_at` and
-`end_time` are also returned. Drivers are held at observed values: this is a
-persistence scenario, not a prediction of future storms. Source observation and
-DTC timestamps remain visible even when older than the release.
+Loss monitoring is off by default; enable worker polling with
+`INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR=true`.
+Scientific calculations, policy and validation tools belong to private
+`intelligence-core`; public services handle transport and storage.
 
-The service assumes a spherical Earth, a circular orbit, a co-rotating atmosphere
-without winds, constant area and coefficient, and longitude-averaged density.
-There is no station keeping or orbit propagation. A fixed-altitude approximation
-is rejected above 1000 m estimated loss; this is a conservative scope restriction,
-not a validated error bound. Model details and numerical tests live in the private
-backend repository.
-
-Errors:
-
-- `422`: invalid parameters/thresholds, orbit outside the supplied grid, or decay
-  above the fixed-orbit approximation's limit.
-- `503`: missing configuration/backend, unreachable service, missing, malformed,
-  incomplete, future-dated or stale density release. Freshness uses
-  `models.atmospheric_density.max_age_hours` (default 6 hours).
-
-## Running
-
-Both Compose files include `intelligence-api`, using the same image as the
-existing Intelligence worker. `intelligence serve` starts the internal HTTP
-service on port 8000. API needs `INTELLIGENCE_URL`; API and the internal service
-share `INTELLIGENCE_SERVICE_TOKEN`. Compose defaults that token to the existing
-`FORECASTS_SERVICE_TOKEN` for compatibility; set a separate token to isolate the
-two HTTP boundaries. Intelligence also needs `FORECASTS_URL`,
-`FORECASTS_SERVICE_TOKEN` and access to project configs. The impact HTTP service
-needs no database credentials.
-
-After updating the private backend and public application code locally:
-
-```bash
-./argus compose up -d --build intelligence-api api
-```
-
-`/health/ready` checks local configuration and backend availability; density
-readiness is checked per assessment. The existing worker still records forecast
-integration results; it does not precompute satellite assessments.
-
-Production requires publishing the corresponding private `intelligence-core`
-commit before building the Intelligence image. Public source alone does not
-contain the numerical implementation.
-
-
-Density releases may come from JB2008 or DTM2020 Operational. The source model is
-reported in `meta.source.model` with `meta=true`; the selected release determines
-which model was used. DTM uses fixed observed F10.7/ap-derived drivers across the
-horizon. Its `geomagnetic_method` is `ap_to_kp_lag3h_mean24h_v1` and
-`geomagnetic_observed_at` identifies the latest ap bin start. Legacy DTC fields
-are null for DTM. Longitude density spread is not a calibrated risk interval.
-
-DTM support is implemented but the registry remains on JB2008 pending a suitable
-CNES license and runtime provisioning. Native model files are supplied separately,
-not distributed in the public image. Forecast ap is not enabled.
+[Service setup](../apps/intelligence/README.md) · [Commands](commands.md) · [Density accuracy](accuracy/ATMOSPHERIC.md)

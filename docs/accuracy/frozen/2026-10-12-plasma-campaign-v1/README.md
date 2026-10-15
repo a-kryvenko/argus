@@ -31,7 +31,7 @@ Archives are revised; historical receipt times are not established. Density/temp
 The published PROSWIN cutoff is June 2024. Reconstructed fold 01 matches 58,810 training samples, but scaler statistics differ (maximum mean difference 0.007788; scale 0.010713). Exact upstream provenance is unresolved, so full-chain compliance is not claimed.
 
 Artifacts: `data/revalidation/frozen/2026-10-12-plasma-campaign-v1/`.
-[Methodology](../../METHODOLOGY.md) · [Notebook](../../../../notebooks/revalidation/06_plasma_revalidation.ipynb).
+[Methodology](../../METHODOLOGY.md) · [Notebook](../../../../notebooks/solar-wind/revalidation/06_plasma_revalidation.ipynb).
 
 ## MLflow tests
 

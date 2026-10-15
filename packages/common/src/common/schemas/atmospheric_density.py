@@ -12,6 +12,16 @@ class DensityCell(BaseModel):
     rho_kg_m3: float = Field(gt=0)
     rho_lon_p10_kg_m3: float = Field(gt=0)
     rho_lon_p90_kg_m3: float = Field(gt=0)
+    rho_reference_kg_m3: float | None = Field(default=None, gt=0)
+
+
+class DensityBackground(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+    method: Literal['jb2008_fixed_ap4_v1']
+    geomagnetic_ap: Literal[4.0] = 4.0
+    dtc_kelvin: float = Field(ge=0)
+    spatial_support: Literal['longitude_mean'] = 'longitude_mean'
+    solar_drivers: Literal['same_as_forecast'] = 'same_as_forecast'
 
 
 class DensityPoint(BaseModel):
@@ -36,6 +46,7 @@ class DensityForecast(BaseModel):
     geomagnetic_method: Literal["causal_dst_ap_v1", "ap_to_kp_lag3h_mean24h_v1"] | None = None
     horizon_hours: int
     predictions: list[DensityPoint]
+    reference: DensityBackground | None = None
 
     @model_validator(mode='after')
     def model_metadata(self):

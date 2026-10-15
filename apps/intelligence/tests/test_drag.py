@@ -42,32 +42,25 @@ def release(monkeypatch):
 def backend(monkeypatch):
     module = ModuleType('intelligence_core.api')
     module.ModelDomainError = type('ModelDomainError', (ValueError,), {})
-    def calculate(**kwargs):
-        return dict(mean_density_kg_m3=1e-12, mean_drag_accel_m_s2=1e-6,
-                    delta_v_loss_m_s=0.1, estimated_altitude_loss_m=100,
-                    predictions=[dict(mean_density_kg_m3=1e-12, mean_drag_accel_m_s2=1e-6,
-                                      mean_along_track_deceleration_m_s2=1e-6,
-                                      delta_v_loss_m_s=i/(len(kwargs['grids'])-1)*0.1, estimated_altitude_loss_m=100*i/(len(kwargs['grids'])-1))
-                                 for i in range(len(kwargs['grids']))])
-    module.calculate_drag = calculate
+    module.result = object()
+    module.calls = []
+    def assess(request, **kwargs):
+        module.calls.append((request, kwargs))
+        return module.result
+    module.assess_density = assess
     monkeypatch.setitem(__import__('sys').modules, 'intelligence_core.api', module)
     return module
 
 
-@pytest.mark.parametrize(('thresholds', 'risk'), [
-    (None, 'not_assessed'),
-    (dict(elevated_altitude_loss_m=101, high_altitude_loss_m=200), 'low'),
-    (dict(elevated_altitude_loss_m=100, high_altitude_loss_m=200), 'elevated'),
-    (dict(elevated_altitude_loss_m=50, high_altitude_loss_m=100), 'high'),
-])
-def test_thresholds_and_provenance(release, backend, thresholds, risk):
-    result = drag.assess_drag(LeoDragRequest(**REQUEST, thresholds=thresholds))
-    assert result.drag_risk == risk
-    assert result.start_time == release.issue_time.iloc[0]
-    assert result.end_time - result.start_time == timedelta(hours=24)
-    assert result.source.observed_at == release.observed_at.iloc[0]
-    assert len(result.predictions) == 25
-    assert 'p_elevated_drag' not in result.model_dump()
+def test_validated_release_and_request_are_delegated(release, backend):
+    request = LeoDragRequest(**REQUEST)
+    assert drag.assess_drag(request) is backend.result
+    supplied_request, arguments = backend.calls[0]
+    assert supplied_request == request
+    assert arguments['density'].issue_time == release.issue_time.iloc[0]
+    assert arguments['density'].observed_at == release.observed_at.iloc[0]
+    assert arguments['release_id'] is not None
+    assert arguments['computed_at'] >= arguments['density'].issue_time
 
 
 @pytest.mark.parametrize('failure', ['stale', 'future', 'wrong-mode', 'partial', 'hole', 'negative', 'duplicate', 'time'])
@@ -100,7 +93,7 @@ def test_auth_and_domain_errors(release, backend, monkeypatch):
                            headers={'Authorization': 'Bearer wrong'}).status_code == 401
         def fail(**kwargs):
             raise backend.ModelDomainError('Outside grid')
-        monkeypatch.setattr(backend, 'calculate_drag', fail)
+        monkeypatch.setattr(backend, 'assess_density', lambda *args, **kwargs: fail(**kwargs))
         assert client.post('/internal/v1/risks/leo-drag', json=REQUEST,
                            headers={'Authorization': 'Bearer impact-token'}).status_code == 422
         monkeypatch.delenv('INTELLIGENCE_SERVICE_TOKEN')
@@ -125,8 +118,9 @@ def test_dtm_provenance_reaches_drag_assessment(release, backend):
     release['geomagnetic_observed_at'] = release.issue_time-pd.Timedelta(hours=3)
     release['dtc_method'] = None
     release['dtc_observed_at'] = None
-    result = drag.assess_drag(LeoDragRequest(**REQUEST))
-    assert result.source.density_model == 'DTM2020'
-    assert result.source.geomagnetic_method == 'ap_to_kp_lag3h_mean24h_v1'
-    assert result.source.dtc_method is None
-    assert result.source.dtc_observed_at is None
+    drag.assess_drag(LeoDragRequest(**REQUEST))
+    density = backend.calls[0][1]['density']
+    assert density.model == 'DTM2020'
+    assert density.geomagnetic_method == 'ap_to_kp_lag3h_mean24h_v1'
+    assert density.dtc_method is None
+    assert density.dtc_observed_at is None

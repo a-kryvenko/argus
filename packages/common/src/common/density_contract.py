@@ -2,7 +2,7 @@
 import json
 from datetime import UTC, datetime
 import pandas as pd
-from common.schemas.atmospheric_density import DensityCell, DensityForecast, DensityPoint
+from common.schemas.atmospheric_density import DensityCell, DensityForecast, DensityPoint, DensityBackground
 
 
 def parse_density_frame(frame, *, max_age_hours=6, now=None) -> DensityForecast:
@@ -20,7 +20,7 @@ def parse_density_frame(frame, *, max_age_hours=6, now=None) -> DensityForecast:
         magnetic_time, magnetic_method = 'geomagnetic_observed_at', 'geomagnetic_method'
     else:
         magnetic_time, magnetic_method = 'dtc_observed_at', 'dtc_method'
-    required = {"issue_time", "observed_at", "valid_time", "lead_hours", "driver_mode", "background_method", magnetic_method, "history_start", magnetic_time, *DensityCell.model_fields}
+    required = {"issue_time", "observed_at", "valid_time", "lead_hours", "driver_mode", "background_method", magnetic_method, "history_start", magnetic_time, *(name for name,field in DensityCell.model_fields.items() if field.is_required())}
     if frame.empty or not required.issubset(frame.columns):
         raise ValueError("Incomplete density artifact")
     for column in ("issue_time", "observed_at", "valid_time", "history_start", magnetic_time):
@@ -55,6 +55,16 @@ def parse_density_frame(frame, *, max_age_hours=6, now=None) -> DensityForecast:
         raise ValueError("Inconsistent lead times")
     if frame.duplicated(["lead_hours", "altitude_km", "latitude_deg"]).any():
         raise ValueError("Duplicate grid cells")
+    reference = None
+    reference_columns = {'rho_reference_kg_m3', 'reference_method', 'reference_ap', 'reference_dtc_kelvin'}
+    if reference_columns & set(frame.columns)=={'rho_reference_kg_m3'} and frame.rho_reference_kg_m3.isna().all():
+        frame=frame.drop(columns=['rho_reference_kg_m3'])
+    if reference_columns & set(frame.columns):
+        if not reference_columns.issubset(frame.columns) or model != 'JB2008':
+            raise ValueError('Incomplete or unsupported density reference')
+        if frame[list(reference_columns)].isna().any().any() or any(frame[c].nunique()!=1 for c in reference_columns-{'rho_reference_kg_m3'}):
+            raise ValueError('Missing or inconsistent density reference')
+        reference = DensityBackground(method=frame.reference_method.iloc[0],geomagnetic_ap=frame.reference_ap.iloc[0],dtc_kelvin=frame.reference_dtc_kelvin.iloc[0])
     predictions = [DensityPoint(
         valid_time=group.valid_time.iloc[0], lead_hours=lead,
         cells=[DensityCell(**row) for row in group.to_dict("records")],
@@ -68,7 +78,7 @@ def parse_density_frame(frame, *, max_age_hours=6, now=None) -> DensityForecast:
            for point in predictions):
         raise ValueError("Incomplete grid")
     return DensityForecast(model=model, issue_time=issue, observed_at=observed, horizon_hours=48,
-                           predictions=predictions,
+                           predictions=predictions, reference=reference,
                            history_start=frame.history_start.iloc[0],
                            dtc_observed_at=frame[magnetic_time].iloc[0] if model == "JB2008" else None,
                            geomagnetic_observed_at=frame[magnetic_time].iloc[0],

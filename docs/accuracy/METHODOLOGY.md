@@ -1,6 +1,6 @@
 # Validation methodology
 
-[Protocol: argus-revalidation-2026-v1](../../scripts/revalidation/protocol.json). Applies to every registry model, JB2008 and DTM2020.
+[Protocol: argus-revalidation-2026-v1](../../notebooks/workflows/revalidation/protocol.json). Applies to every registry model, JB2008 and DTM2020.
 
 | Period | Use |
 | --- | --- |
@@ -31,7 +31,7 @@ Evaluate all horizons on identical model/baseline rows, without duplicating nati
 ## Results
 
 - Data/models: `data/revalidation/<protocol>/<model>/`; immutable bundles: `data/revalidation/frozen/<run>/`. Corrections require a new version and reason.
-- Public accuracy results: `docs/accuracy/`, Markdown only. Training logs, development audits and experiment reports stay under `data/revalidation/internal-reports/` or `data/mnt/revalidation/`, not public docs. Notebooks: `notebooks/revalidation/`; display saved results by default.
+- Public accuracy results: `docs/accuracy/`, Markdown only. Training logs, development audits and experiment reports stay under `data/revalidation/internal-reports/` or `data/mnt/revalidation/`, not public docs. Notebooks: `notebooks/solar-wind/revalidation/`; display saved results by default.
 - [Local MLflow](http://127.0.0.1:5000): experiment `argus-revalidation-2026-v1`; save run IDs, parameters, split boundaries, hashes, per-horizon metrics and artifacts. Re-export must not rerun training or testing.
 
 Current test cutoff: **2026-10-10 00:00 UTC**, limited by source coverage. Prior 2026 exposure makes this a retrospective test, not a blind holdout. Pending/blocked models are incomplete; production promotion is separate.

@@ -6,6 +6,8 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from common.schemas.leo_drag import LeoDragAssessment, LeoDragRequest
 from argus_intelligence.drag import assess_drag, DragDomainError, DragNotReadyError
+from argus_intelligence.monitor_routes import router as monitor_router
+from argus_intelligence.density_routes import router as density_router
 
 app = FastAPI(title='Intelligence impact service', version='1')
 security = HTTPBearer(auto_error=False)
@@ -17,6 +19,10 @@ def require_service_token(credentials: HTTPAuthorizationCredentials | None = Dep
         raise HTTPException(503, 'Impact service is not configured')
     if credentials is None or not secrets.compare_digest(credentials.credentials.encode(), expected.encode()):
         raise HTTPException(401, 'Invalid service credentials')
+
+
+app.include_router(monitor_router, dependencies=[Depends(require_service_token)])
+app.include_router(density_router, dependencies=[Depends(require_service_token)])
 
 
 @app.post('/internal/v1/risks/leo-drag', response_model=LeoDragAssessment,
@@ -40,7 +46,7 @@ def ready():
     if not all(os.getenv(key) for key in ('INTELLIGENCE_SERVICE_TOKEN', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN')):
         raise HTTPException(503, 'Impact service is not configured')
     try:
-        from intelligence_core.api import calculate_drag
+        from intelligence_core.api import assess_density, describe_mode, summarize_monitor, prioritize_monitors, prepare_operator_chart, evaluate_drag_events, assess_density_exposure, summarize_density_advisory, evaluate_advisory_events, reuse_density_advisory
     except ImportError:
         raise HTTPException(503, 'Impact backend is not installed') from None
     return {'service': 'intelligence', 'status': 'ok', 'density_readiness': 'checked_per_request'}

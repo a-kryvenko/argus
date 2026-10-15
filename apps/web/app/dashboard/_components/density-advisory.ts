@@ -1,0 +1,22 @@
+export type Attention = 'not_assessed' | 'within_reference' | 'watch' | 'review' | 'high';
+export type Status = 'current' | 'partial' | 'unavailable' | 'stale' | 'trajectory_expired' | 'profile_changed' | 'paused';
+export type TrajectoryPoint = { time: string; altitude_km: number; latitude_deg: number; longitude_deg: number; reference_density_kg_m3?: number | null };
+export type Trajectory = { source: string; generated_at: string; valid_until: string; coordinates: 'geocentric_spherical'; points: TrajectoryPoint[] };
+export type Reference = { label: string; source: string; prepared_at: string; kind?: 'operator_reference' | 'model_geomagnetic_reference'; spatial_support?: 'longitude_mean'; method?: string | null };
+export type DensityProfileInput = { name: string; trajectory: Trajectory; reference: Reference | null; reference_mode?: 'auto' | 'prophet_background' | 'operator_reference'; policy: { review_ratio: number; high_ratio: number; max_sample_gap_minutes: number }; enabled: boolean };
+export type DensityProfile = DensityProfileInput & { id: string; revision: number; updated_at: string };
+export type Reason = { code: string; message: string; source_id: string | null };
+export type Sample = TrajectoryPoint & { density_kg_m3: number | null; ratio: number | null; attention: Attention; reasons: Reason[] };
+export type Interval = { start: string; end: string; attention: Attention; peak_ratio: number | null; peak_density_kg_m3: number | null; sample_count: number; reasons: Reason[]; sampled_duration_minutes?: number; peak_location?: { time: string; altitude_km: number; latitude_deg: number; longitude_deg: number } | null };
+export type DensityRun = { id: string; profile_id: string; profile_revision: number; profile_snapshot: DensityProfileInput; assessment: {
+  computed_at: string; attention: Attention; data_status: Status; samples: Sample[]; intervals: Interval[]; limitations: string[];
+  source: { density_release_id: string | null; density_issue_time: string | null; density_observed_at: string | null; density_model: string | null;
+    cme_release_id: string | null; cme_issue_time: string | null; cme_status: 'current' | 'stale' | 'unavailable';
+    trajectory_source: string; trajectory_generated_at: string; reference: Reference | null };
+} };
+export type DensityRunSummary = { id: string; profile_revision: number; computed_at: string };
+export type DensityItem = { profile: Pick<DensityProfile, 'id' | 'name' | 'revision' | 'updated_at' | 'enabled'>; latest: DensityRunSummary | null; attention: Attention; data_status: Status; cme_status: 'current' | 'stale' | 'unavailable' };
+export type DensityEvent = { id: string; profile_id: string; run_id: string; detected_at: string; kind: string; attention: Attention; message: string; acknowledged_at: string | null };
+export type DensityEventPage = { items: DensityEvent[]; total: number };
+export const attentionLabel: Record<Attention, string> = { not_assessed: 'Not assessed', within_reference: 'Below configured ratios', watch: 'CME watch', review: 'Review density exposure', high: 'High density ratio' };
+export const statusLabel: Record<Status, string> = { current: 'Current density coverage', partial: 'Incomplete anomaly coverage', unavailable: 'Density unavailable', stale: 'Stale density', trajectory_expired: 'Trajectory expired', profile_changed: 'Trajectory/profile changed', paused: 'Paused' };

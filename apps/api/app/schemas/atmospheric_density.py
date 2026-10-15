@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
-from common.schemas.atmospheric_density import DensityForecast as InternalDensityForecast, DensityPoint
+from common.schemas.atmospheric_density import DensityForecast as InternalDensityForecast, DensityPoint, DensityBackground
 from app.schemas.metadata import metadata_field
 
 
@@ -26,6 +26,7 @@ class DensityForecast(BaseModel):
     background_interpolated: bool = Field(description='True when background drivers include gap-filled daily values. Details are available with meta=true.')
     horizon_hours: int
     predictions: list[DensityPoint]
+    reference: DensityBackground | None = None
     meta: DensityMetadata | None = metadata_field()
 
     @classmethod

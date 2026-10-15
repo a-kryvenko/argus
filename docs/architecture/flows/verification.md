@@ -22,5 +22,5 @@ flowchart TD
     http --> api["Public API and Web<br/>Operational accuracy"]
 ```
 
-See the [verification protocol](../../forecast-workflows.md) and the
+See the [verification commands](../../commands.md#prophet) and the
 [architecture overview](../README.md).

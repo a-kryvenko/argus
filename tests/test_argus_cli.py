@@ -51,6 +51,20 @@ if os.getenv('FAIL_CLIO') and any('clio' in arg for arg in sys.argv[1:]):
     return request.param, root, run
 
 
+def test_direct_demo_rebuild_runs_research_python_only_in_development(cli):
+    mode, root, run = cli
+    # Even an installed research interpreter must never run on production.
+    python = root / 'notebooks/.venv/bin/python'
+    python.parent.mkdir(parents=True)
+    python.write_text('#!/bin/sh\nexit 99\n')
+    python.chmod(0o755)
+    result, calls = run('demo')
+    assert result.returncode == (2 if mode == 'production' else 99)
+    if mode == 'production':
+        assert 'disabled in production' in result.stderr
+    assert not calls
+
+
 def test_domain_arguments_and_environment_files(cli):
     mode, root, run = cli
     result, calls = run('intelligence', 'check', 'dst', '--release-id', 'value with spaces')

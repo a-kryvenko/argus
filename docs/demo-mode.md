@@ -16,7 +16,8 @@ Supports `january-2026`; cache overrides: `./argus demo --help`.
 Update model hashes and cutoff evidence in `configs/demo/january-2026.json` after model changes.
 
 Publishes `data/demo/current.json` after all stages pass; failures preserve the
-previous dataset. Run artifacts: `data/demo/runs/`. Deployment uploads the ready bundle.
+previous dataset. Run artifacts: `data/demo/runs/`. Each release atomically updates
+production from the uploaded bundle; demo rebuilding is disabled in production.
 
 Retrospective archives use assumed availability; this previously inspected event
 is not a blind holdout. Training/calibration must end before T−96.

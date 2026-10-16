@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from release import artifact_digest
 from backup import create_backup
@@ -244,9 +245,27 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         # CLI one-off commands use the same versioned configuration as workers.
         write_json(self.root / '.release-compose.json', self.desired)
         demo = self.root / 'data/demo/current.json'
-        if not demo.exists():
-            demo.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(artifact_root / 'demo/current.json', demo)
+        demo.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=demo.parent, delete=False) as output:
+            temporary = Path(output.name)
+            try:
+                with (artifact_root / 'demo/current.json').open('rb') as source:
+                    shutil.copyfileobj(source, output)
+                os.fchmod(output.fileno(), 0o644)
+                output.flush()
+                os.fsync(output.fileno())
+            except BaseException:
+                temporary.unlink(missing_ok=True)
+                raise
+        try:
+            temporary.replace(demo)
+        finally:
+            temporary.unlink(missing_ok=True)
+        directory = os.open(demo.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
 
     def backup_and_migrate(self):
         if not self.migrations:

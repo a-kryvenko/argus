@@ -75,11 +75,13 @@ def test_logs_routes_to_environment(entry):
 
 
 @pytest.mark.parametrize('args', [(), ('january-2026',), ('--refresh-data',)])
-def test_demo_is_one_command_in_both_environments(entry, args):
-    _, run = entry
+def test_demo_rebuild_is_dev_only(entry, args):
+    mode, run = entry
     result, calls = run('demo', *args)
-    assert result.returncode == 0, result.stderr
-    assert calls == [['demo', *args]]
+    assert result.returncode == (0 if mode == 'dev' else 2), result.stderr
+    assert calls == ([['demo', *args]] if mode == 'dev' else [])
+    if mode == 'prod':
+        assert 'disabled in production' in result.stderr
 
 
 @pytest.mark.parametrize('service', ['prophet', 'intelligence'])

@@ -189,7 +189,8 @@ def test_changed_migration_files_without_database_upgrade_skip_backup(tmp_path):
     assert not (tmp_path / 'backups').exists()
 
 
-def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path):
+@pytest.mark.parametrize('existing_demo', [False, True])
+def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path, monkeypatch, existing_demo):
     deployment = harness(tmp_path)
     deployment.fingerprints = {'configs': 'config-hash'}
     deployment.bundle = tmp_path / 'bundle'
@@ -200,7 +201,8 @@ def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path):
     for name in ('models', 'metrics', 'demo'):
         (artifacts / name).mkdir(parents=True)
     (artifacts / 'models/model.bin').write_bytes(b'model')
-    (artifacts / 'demo/current.json').write_text('{}')
+    new_demo = '{"version":"new","density_scenario":{}}'
+    (artifacts / 'demo/current.json').write_text(new_demo)
     from release import artifact_digest
     digest = artifact_digest(artifacts)
     target = tmp_path / 'artifacts' / digest
@@ -210,15 +212,33 @@ def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path):
     deployment.desired['services']['clio']['volumes'] = [
         {'type': 'bind', 'source': str(tmp_path / name), 'target': '/var/www/' + name}
         for name in ('configs', 'data/models', 'data/metrics')]
+    current = tmp_path / 'data/demo/current.json'
+    if existing_demo:
+        current.parent.mkdir(parents=True)
+        current.write_text('{"version":"old"}')
+    old_content = current.read_bytes() if existing_demo else None
+
+    def interrupted_copy(source, output):
+        output.write(b'{"partial":')
+        raise OSError('interrupted demo upload')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(rolling.shutil, 'copyfileobj', interrupted_copy)
+        with pytest.raises(OSError, match='interrupted demo upload'):
+            deployment.snapshot()
+    assert (current.read_bytes() if current.exists() else None) == old_content
+    assert set(current.parent.iterdir()) == ({current} if existing_demo else set())
     deployment.snapshot()
     mounts = deployment.desired['services']['clio']['volumes']
     assert mounts[0]['source'] == str(tmp_path / 'releases/config-hash/configs')
     assert mounts[1]['source'] == str(target / 'models')
     assert mounts[2]['source'] == str(target / 'metrics')
-    assert (tmp_path / 'data/demo/current.json').read_text() == '{}'
+    assert current.read_text() == new_demo
+    assert current.stat().st_mode & 0o777 == 0o644
     (target / 'models/model.bin').write_bytes(b'corrupt')
     with pytest.raises(RuntimeError, match='missing or corrupt'):
         deployment.snapshot()
+    assert current.read_text() == new_demo
 
 
 def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tmp_path):

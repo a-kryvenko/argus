@@ -2,15 +2,16 @@
 # Shared command adapter for dev and production.
 set -euo pipefail
 root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
+mode=dev
+[[ ! -f "$root/.argus-mode" ]] || read -r mode < "$root/.argus-mode"
+case "$mode" in dev|prod) ;; *) echo 'Invalid .argus-mode: expected dev or prod' >&2; exit 2 ;; esac
 if [[ "${1:-}" == demo ]]; then
+    [[ "$mode" == dev ]] || { echo 'Demo rebuild is disabled in production; deploy a locally generated bundle.' >&2; exit 2; }
     shift
     demo_python="$root/notebooks/.venv/bin/python"
     [[ -x "$demo_python" ]] || { echo 'Demo rebuild requires the private notebooks checkout and its Python environment.' >&2; exit 2; }
     exec "$demo_python" "$root/scripts/demo/rebuild.py" "$@"
 fi
-mode=dev
-[[ ! -f "$root/.argus-mode" ]] || read -r mode < "$root/.argus-mode"
-case "$mode" in dev|prod) ;; *) echo 'Invalid .argus-mode: expected dev or prod' >&2; exit 2 ;; esac
 compose=(docker compose --project-directory "$root")
 for file in "$root/.env" "$root/.env.local"; do
     if [[ "$mode" == prod || -f "$file" ]]; then compose+=(--env-file "$file"); fi

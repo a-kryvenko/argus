@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('demo replays forecasts, preserves time between sections and exits to the matching product', async ({ page }) => {
+test('demo replays forecasts and preserves time between products', async ({ page }) => {
   const requests: string[] = [];
   page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.url()); });
   await page.goto('/demo?offset=-48');
@@ -8,7 +8,7 @@ test('demo replays forecasts, preserves time between sections and exits to the m
   await expect(page.getByText('T−48 h · Until event', { exact: true })).toBeVisible();
   await expect(page.getByText('17 Jan 2026, 19:38 UTC · Simulated now')).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Show actual future values' })).toBeChecked();
-  await page.getByRole('slider', { name: 'Hours before event' }).fill('-24');
+  await page.getByRole('slider', { name: 'Hours relative to event' }).fill('-24');
   await expect(page).toHaveURL(/offset=-24$/);
   await expect(page.getByText('T−24 h · Until event', { exact: true })).toBeVisible();
   await page.getByRole('navigation', { name: 'Demo forecast products' }).getByRole('link', { name: 'Solar Wind Plasma Density' }).click();
@@ -19,10 +19,20 @@ test('demo replays forecasts, preserves time between sections and exits to the m
   await page.getByRole('button', { name: 'T0', exact: true }).click();
   await expect(page.getByText('T0 · Event begins', { exact: true })).toBeVisible();
   await expect(page.getByText('19 Jan 2026, 19:38 UTC · Simulated now')).toBeVisible();
+  expect(requests).toEqual([]);
+});
+
+test('demo observations preserve the replay clock without operational requests', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.url()); });
+  await page.goto('/demo/products/solar-wind-density?offset=0');
   await page.getByRole('link', { name: 'Live observations', exact: true }).click();
   await expect(page).toHaveURL('/demo/live?offset=0');
   await expect(page.getByRole('heading', { name: 'Historical observations' })).toBeVisible();
   expect(requests).toEqual([]);
+});
+
+test('demo exits to the matching product', async ({ page }) => {
   await page.goto('/demo/products/solar-wind-density?offset=-24');
   await expect(page.getByRole('link', { name: 'Exit demo' })).toHaveAttribute('href', '/products/solar-wind-density');
   await page.route('**/api/v1/public/forecasts/solar-wind-density', route => route.fulfill({
@@ -37,7 +47,7 @@ test('panel remains visible without covering content on mobile and keyboard chan
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/demo?offset=-96');
   const panel = page.getByRole('region', { name: 'Demo time controls' });
-  const slider = page.getByRole('slider', { name: 'Hours before event' });
+  const slider = page.getByRole('slider', { name: 'Hours relative to event' });
   await expect(slider).toBeEnabled();
   await slider.focus();
   await page.keyboard.press('ArrowRight');
@@ -62,19 +72,19 @@ test('invalid offsets recover safely, unavailable products do not show a differe
   await expect(page.getByRole('region', { name: 'Demo time controls' })).toHaveCount(0);
 });
 
-test('playback stops at T0 and can restart from the beginning', async ({ page }) => {
-  await page.goto('/demo?offset=-1');
+test('playback stops at T+72 and can restart from the beginning', async ({ page }) => {
+  await page.goto('/demo?offset=71');
   await page.getByRole('button', { name: 'Play replay' }).click();
-  await expect(page.getByRole('slider')).toHaveValue('0');
+  await expect(page.getByRole('slider')).toHaveValue('72');
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
-  await expect(page.getByText('T0 · Event begins', { exact: true })).toBeVisible();
+  await expect(page.getByText('T+72 h · Since event', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Play replay' }).click();
   await expect(page.getByRole('slider')).toHaveValue('-96');
   await page.getByRole('button', { name: 'Pause replay' }).click();
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
 });
 
-test('other products replay probabilities, signed indices and partial model availability', async ({ page }) => {
+test('demo catalog links geomagnetic forecasts and replays probabilities', async ({ page }) => {
   const operationalRequests: string[] = [];
   page.on('request', request => { if (request.url().includes('/api/v1/')) operationalRequests.push(request.url()); });
   await page.goto('/demo/products?offset=-48');
@@ -84,20 +94,25 @@ test('other products replay probabilities, signed indices and partial model avai
   await expect(page.getByText('Median · q50', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'AP Ap Index' }).click();
   await expect(page.getByRole('region', { name: 'Ap Index forecast and observations' })).toBeVisible();
-  await page.goto('/demo/products/dst?offset=-48');
-  await expect(page.getByRole('region', { name: 'Dst Index forecast and observations' })).toBeVisible();
-  await expect(page.getByText('-45', { exact: false }).first()).toBeVisible();
-  await page.goto('/demo/products/hmf?offset=-48');
-  await expect(page.getByRole('region', { name: 'Total HMF forecast and observations' })).toBeVisible();
-  await page.getByRole('button', { name: 'BS Southward Bz' }).click();
-  await expect(page.getByText('Southward Bz is not available in this release.')).toBeVisible();
-  await page.goto('/demo/products/solar-radiation?offset=-48');
-  await expect(page.getByRole('region', { name: 'F10.7 forecast and observations' })).toBeVisible();
-  await page.getByRole('button', { name: 'S10 S10' }).click();
-  await expect(page.getByText('S10 is not available in this release.')).toBeVisible();
   expect(operationalRequests).toEqual([]);
 });
 
+for (const product of [
+  { slug: 'dst', chart: 'Dst Index', value: '-45' },
+  { slug: 'hmf', chart: 'Total HMF', tab: 'BS Southward Bz', missing: 'Southward Bz' },
+  { slug: 'solar-radiation', chart: 'F10.7', tab: 'S10 S10', missing: 'S10' },
+]) test(`demo ${product.slug} preserves signed values and partial model availability`, async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.url()); });
+  await page.goto(`/demo/products/${product.slug}?offset=-48`);
+  await expect(page.getByRole('region', { name: `${product.chart} forecast and observations` })).toBeVisible();
+  if (product.value) await expect(page.getByText(product.value, { exact: false }).first()).toBeVisible();
+  if (product.tab) {
+    await page.getByRole('button', { name: product.tab }).click();
+    await expect(page.getByText(`${product.missing} is not available in this release.`)).toBeVisible();
+  }
+  expect(requests).toEqual([]);
+});
 
 test('demo controls wait for hydration before accepting replay input', async ({ page }) => {
   let releaseScripts!: () => void;
@@ -107,7 +122,7 @@ test('demo controls wait for hydration before accepting replay input', async ({ 
     await route.continue();
   });
   await page.goto('/demo?offset=-96', { waitUntil: 'commit' });
-  const slider = page.getByRole('slider', { name: 'Hours before event' });
+  const slider = page.getByRole('slider', { name: 'Hours relative to event' });
   try {
     await expect(slider).toBeVisible();
     await expect(slider).toBeDisabled();
@@ -122,4 +137,51 @@ test('demo controls wait for hydration before accepting replay input', async ({ 
   await expect(slider).toHaveValue('-95');
   await expect(page).toHaveURL(/offset=-95$/);
   await expect(page.getByText('T−95 h · Until event', { exact: true })).toBeVisible();
+});
+
+test('LEO scenario switches chains, hides future outcomes and preserves the replay clock', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.url()); });
+  await page.goto('/demo?offset=-48');
+  await page.getByRole('link', { name: 'Explore LEO density scenario →' }).click();
+  await expect(page).toHaveURL('/demo/leo?offset=-48');
+  await expect(page.getByRole('heading', { name: 'LEO density scenario' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Density attention' })).toHaveText('Below review threshold');
+  await page.getByLabel('Geomagnetic drivers').selectOption('forecast');
+  await expect(page.getByRole('status', { name: 'Density attention' })).toHaveText('Review');
+  await page.getByLabel('Atmosphere model').selectOption('dtm2020');
+  await expect(page.getByRole('status', { name: 'Density attention' })).toHaveText('High');
+  await expect(page.getByRole('region', { name: 'Atmospheric density forecast and observations' })).toBeVisible();
+  await expect(page.getByText('Full replay evaluation · Includes future outcomes and later issues')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Show actual future values' }).uncheck();
+  await expect(page.getByText('Full replay evaluation · Includes future outcomes and later issues')).toHaveCount(0);
+  await expect(page.getByText(/Gold: actual future \(hidden\)/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Exit demo' })).toHaveAttribute('href', '/dashboard/risk/leo');
+  expect(requests).toEqual([]);
+});
+
+test('LEO missing issue remains unavailable and mobile content does not overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/demo/leo?offset=-95');
+  await page.getByLabel('Atmosphere model').selectOption('dtm2020');
+  await page.getByLabel('Geomagnetic drivers').selectOption('forecast');
+  await expect(page.getByRole('status', { name: 'Density attention' })).toHaveText('No release for this hour');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('historical ENLIL arrivals appear only after publication and revisions follow the clock', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/v1/')) requests.push(request.url()); });
+  await page.goto('/demo/products/solar-wind-speed?offset=-22');
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Solar events · CME' }).click();
+  await expect(page).toHaveURL('/demo/products/solar-events?offset=-22');
+  await expect(page.getByText('CME synthetic', { exact: true })).toHaveCount(0);
+  await page.getByRole('slider').fill('-21');
+  await expect(page.getByText('CME synthetic', { exact: true })).toBeVisible();
+  await expect(page.getByText('20 Jan 2026, 02:18 UTC', { exact: true })).toBeVisible();
+  await page.getByRole('slider').fill('-11');
+  await expect(page.getByText('20 Jan 2026, 01:07 UTC', { exact: true })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'LEO density scenario' }).click();
+  await expect(page.getByRole('region', { name: 'Historical CME arrival context' })).toBeVisible();
+  expect(requests).toEqual([]);
 });

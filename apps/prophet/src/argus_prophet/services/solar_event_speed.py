@@ -77,7 +77,7 @@ def integrate_speed_forecast(request, results, services, outlook):
     policy = request.registry.get('solar_event_speed', {}).get('integration', {})
     if not policy.get('enabled', False):
         return
-    if policy.get('version') != 'cme-arrival-window-v1':
+    if policy.get('version') != 'cme-arrival-window-v2':
         raise ValueError('Unsupported CME speed integration policy')
     quantiles = results['plasma_speed_quantile']
     probabilities = results['plasma_speed_threshold']
@@ -111,7 +111,7 @@ def integrate_speed_forecast(request, results, services, outlook):
     q['v_background_q50'] = background
     outlook.integrated_into_speed = True
     q.loc[q.index[0], 'cme_speed_json'] = outlook.model_dump_json()
-    integration = dict(version='cme-arrival-window-v1', peak_weight=1., window_width_multiplier=1.,
+    integration = dict(version='cme-arrival-window-v2', peak_weight=1., window_width_multiplier=1.,
         late_extension_hours=12., corrected_hours=int(active.sum()), source_state=outlook.state,
         cme_model_sha256=outlook.model_sha256,
         uncertainty='Conditional translation of background residuals; CME timing/amplitude uncertainty is not calibrated')
@@ -123,6 +123,6 @@ def integrate_speed_forecast(request, results, services, outlook):
             cme_model_sha256=request.registry['solar_event_speed']['sha256'],
             integration_version=integration['version'], peak_weight=1., late_extension_hours=12.)
         result.model_info.update(background_model=dict(result.model_info), cme_integration=integration,
-            model=result.model_info['model']+'+cme-window-v1',
+            model=result.model_info['model']+'+cme-window-v2',
             sha256=hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
             uncertainty=integration['uncertainty'])

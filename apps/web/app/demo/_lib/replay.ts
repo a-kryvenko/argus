@@ -1,6 +1,12 @@
 import type { Forecast } from '../../_utils/api';
+import type { DensityScenario } from './density';
 
 export type DemoObservation = { time: string; values: Record<string, number | null> };
+export type DemoEventReport = {
+  issue_time: string;
+  events: Array<{ event_id: string; status: string; available_at: string; arrival_at: string | null }>;
+  cme_speed?: Forecast['cme_speed'];
+};
 export type DemoBundle = {
   schema_version: 1;
   version: string;
@@ -11,11 +17,14 @@ export type DemoBundle = {
   models: Record<string, { sha256: string; training_end: string; training_evidence: string }>;
   observations: DemoObservation[];
   releases: Record<string, Forecast[]>;
+  density_scenario?: DensityScenario;
+  density_scenario_available?: boolean;
+  event_releases?: DemoEventReport[];
 };
 
 export function parseOffset(value: string | null): number {
   if (value === null || !/^-?\d+$/.test(value)) return -96;
-  return Math.min(0, Math.max(-96, Number(value)));
+  return Math.min(72, Math.max(-96, Number(value)));
 }
 
 export function replayTime(bundle: DemoBundle, offset: number): number {
@@ -23,7 +32,7 @@ export function replayTime(bundle: DemoBundle, offset: number): number {
 }
 
 export function countdown(offset: number): string {
-  return offset === 0 ? 'T0 · Event begins' : `T−${Math.abs(offset)} h · Until event`;
+  return offset === 0 ? 'T0 · Event begins' : offset < 0 ? `T−${Math.abs(offset)} h · Until event` : `T+${offset} h · Since event`;
 }
 
 export function demoHref(path: string, offset: number): string {
@@ -34,6 +43,11 @@ export function selectRelease(bundle: DemoBundle, target: string, now: number): 
   // An absent hourly release is a gap, never a live or a future forecast.
   const issue = Math.floor(now / 3600000) * 3600000;
   return bundle.releases[target]?.find(release => Date.parse(release.issue_time) === issue) ?? null;
+}
+
+export function selectEventRelease(bundle: DemoBundle, now: number): DemoEventReport | null {
+  const issue = Math.floor(now / 3600000) * 3600000;
+  return bundle.event_releases?.find(release => Date.parse(release.issue_time) === issue) ?? null;
 }
 
 export function observationKnownAt(time: string, variable: string): number {
@@ -47,7 +61,8 @@ export function comparisonRows(forecast: Forecast | null, observations: DemoObse
   const predictions = forecast?.predictions.filter(point => horizon == null || point.lead_hours <= horizon) ?? [];
   const end = predictions.length ? Math.max(...predictions.map(point => Date.parse(point.valid_time))) : now;
   const rows = new Map<number, { time: string; low: number | null; median: number | null; high: number | null;
-    observed: number | null; actual: number | null }>();
+    observed: number | null; actual: number | null; cmeNominal?: number; cmeEarly?: number; cmeLate?: number;
+    cmeRange?: [number, number] }>();
   for (const point of observations) {
     const time = Date.parse(point.time);
     if (time < now - 24 * 3600000 || time > end) continue;
@@ -60,6 +75,13 @@ export function comparisonRows(forecast: Forecast | null, observations: DemoObse
     const values = point.variables[variable]?.continuous;
     rows.set(time, { time: point.valid_time, observed: null, actual: null, ...rows.get(time),
       low: values?.q10 ?? null, median: values?.q50 ?? null, high: values?.q90 ?? null });
+  }
+  if (variable === 'v' && forecast?.cme_speed?.events.length && forecast.cme_speed.state !== 'unavailable') {
+    for (const point of forecast.cme_speed.points) {
+      const row = rows.get(Date.parse(point.valid_time));
+      if (row) Object.assign(row, { cmeNominal: point.speed_nominal, cmeEarly: point.speed_early,
+        cmeLate: point.speed_late, cmeRange: [point.scenario_lower, point.scenario_upper] });
+    }
   }
   // Keep the simulated clock in the plotted domain even when observations are missing.
   if (!rows.has(now)) rows.set(now, { time: new Date(now).toISOString(), low: null, median: null, high: null, observed: null, actual: null });

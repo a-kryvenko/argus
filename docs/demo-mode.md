@@ -1,38 +1,30 @@
 # Historical demo
 
-Route: `/demo`. Hourly replay T−96…T0, where T0 is the
+`/demo`: hourly replay T−96…T+72 around the
 [G4 onset, January 19, 2026, 19:38 UTC](https://swpc-drupal.woc.noaa.gov/news/g4-severe-geomagnetic-storm-levels-reached-19-jan-2026).
-
-## Build or update
-
-Requires Docker Compose, installed Prophet models and scenario-pinned caches.
+`/demo/products/solar-events`: archived ENLIL arrivals and CME speed scenarios.
+`/demo/leo`: JB2008/DTM2020 with fixed or forecast geomagnetic drivers, +1…+48 h.
 
 ```bash
-./argus demo                  # Cached archives
-./argus demo --refresh-data   # Redownload and rebuild
-./argus demo january-2026     # Named scenario
+./argus demo
+./argus demo --refresh-data   # Refresh OMNI only
 ```
 
-Scenarios: `configs/demo/{name}.json`; update hashes/cutoff evidence after model changes.
-Build publishes 97 issues/product atomically to `data/demo/current.json`; failures
-preserve the previous bundle. Release deployment uploads the ready bundle, not
-archives. Reload `/demo` after updating. No automatic rebuild or operational scoring.
+Requires the research checkout, `notebooks/.venv`, both private cores, installed
+models, a licensed local DTM2020 build and pinned OMNI/GOES/GRACE-C/PROSWIN caches.
+Supports `january-2026`; cache overrides: `./argus demo --help`.
+Update model hashes and cutoff evidence in `configs/demo/january-2026.json` after model changes.
 
-| Product | Output | Horizon |
-| --- | --- | --- |
-| Speed | Quantiles and probabilities | 96 h |
-| Density | Quantiles | 96 h |
-| Kp/Ap | Probabilities/quantiles | 48 h |
-| Dst | Quantiles | 48 h |
-| Bt | Probabilities | 24 h |
-| F10.7 | Quantiles | 48 h |
+Publishes `data/demo/current.json` after all stages pass; failures preserve the
+previous dataset. Run artifacts: `data/demo/runs/`. Deployment uploads the ready bundle.
 
-## Limits
+Retrospective archives use assumed availability; this previously inspected event
+is not a blind holdout. Training/calibration must end before T−96.
+LEO thresholds: 2×/4× the observed median over 72 h before replay; research rules,
+not spacecraft safety limits.
 
-Revised OMNI2 archives do not reproduce real-time delays. Only completed intervals
-feed forecasts; training/calibration must end before T−96. Legacy Kp/Ap/Dst/F10.7
-cutoffs depend on recipes/MLflow, not embedded dates.
-
-Speed/density need the pinned `data/demo/january-2026/proswin-science-hourly.json`
-from author-preprocessed images, with per-lead fallback. Bs lacks historical GONG;
-S10/M10/Y10 lack installed models.
+ENLIL uses the pinned `enlil-notifications.json` in the January demo cache.
+Availability follows notification publication, not recorded Argus receipts;
+ambiguous multi-CME notifications are excluded. CME context remains separate from density.
+CME speed correction v2 uses a triangular peak increment: zero at early arrival,
+full at expected arrival, zero at late arrival +12 h; existing background rise is deducted.

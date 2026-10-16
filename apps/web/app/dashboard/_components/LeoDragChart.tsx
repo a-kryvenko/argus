@@ -1,11 +1,11 @@
 "use client";
-import ReactECharts from "echarts-for-react";
+import EChart from "../../_components/EChart";
 import type { DragPoint } from "./leo-drag";
 
 export default function LeoDragChart({ rows }: { rows: DragPoint[] }) {
   return (
     <div role="img" aria-label="Cumulative altitude loss over time. Exact values are available in the hourly estimates table.">
-      <ReactECharts style={{ height: 280, width: "100%" }} option={{
+      <EChart style={{ height: 280, width: "100%" }} option={{
         animation: false,
         color: ["#79b9e6"],
         grid: { left: 65, right: 20, top: 35, bottom: 45 },

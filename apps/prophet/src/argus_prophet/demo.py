@@ -10,15 +10,17 @@ import argparse
 import hashlib
 import json
 import math
-import os
-import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from common.publication import atomic_publish
+
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 HOUR = timedelta(hours=1)
+REPLAY_START_HOURS = -96
+REPLAY_END_HOURS = 72
 # Demo products are isolated from the operational visibility/access policy.
 VARIABLES = {
     'solar-wind-speed': [('plasma_speed_quantile', 'v', True, []),
@@ -73,6 +75,14 @@ class ProswinArchive(BaseModel):
     description: str = Field(min_length=1)
 
 
+class EventArchive(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    path: str
+    sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+    arrival_model: str
+    speed_model: ModelEvidence
+
+
 class Manifest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     event: Event
@@ -81,6 +91,7 @@ class Manifest(BaseModel):
     products: list[str] = Field(min_length=1)
     models: dict[str, ModelEvidence]
     proswin_archive: ProswinArchive | None = None
+    event_archive: EventArchive | None = None
 
     @field_validator('products')
     @classmethod
@@ -92,7 +103,7 @@ class Manifest(BaseModel):
 
 def issue_times(event):
     anchor = event.starts_at.replace(minute=0, second=0, microsecond=0)
-    return [anchor + offset * HOUR for offset in range(-96, 1)]
+    return [anchor + offset * HOUR for offset in range(REPLAY_START_HOURS, REPLAY_END_HOURS + 1)]
 
 
 def validate_evidence(manifest):
@@ -102,6 +113,45 @@ def validate_evidence(manifest):
     for name, evidence in manifest.models.items():
         if evidence.training_end >= issue_times(manifest.event)[0]:
             raise ValueError(f'{name}: training/calibration overlaps the replay window')
+    if manifest.event_archive:
+        if manifest.event_archive.speed_model.training_end >= issue_times(manifest.event)[0]:
+            raise ValueError('CME speed training/calibration overlaps replay')
+        if not {'plasma_speed_quantile', 'plasma_speed_threshold'} <= manifest.models.keys():
+            raise ValueError('CME integration requires both speed models')
+
+
+def event_archive(manifest, workdir):
+    spec = manifest.event_archive
+    content = (workdir / spec.path).read_bytes()
+    if hashlib.sha256(content).hexdigest() != spec.sha256:
+        raise ValueError('ENLIL demo archive checksum mismatch')
+    archive = json.loads(content)
+    times = issue_times(manifest.event)
+    if (archive.get('availability_basis') != 'provider_notification_publication_not_recorded_receipt'
+            or datetime.fromisoformat(archive['coverage_start'].replace('Z', '+00:00')) > times[0]
+            or datetime.fromisoformat(archive['coverage_end'].replace('Z', '+00:00')) < times[-1]):
+        raise ValueError('ENLIL archive availability/coverage mismatch')
+    return archive
+
+
+def event_snapshot(archive, issue):
+    from common.schemas.solar_wind_events import EventInputs, SolarWindEvent, EnlilArrivalInput
+    events, arrivals = {}, []
+    for row in archive['records']:
+        available = datetime.fromisoformat(row['available_at'])
+        completed = datetime.fromisoformat(row['model_completed_at'])
+        observed = datetime.fromisoformat(row['observed_at'])
+        if max(available, completed, observed) > issue:
+            continue
+        event = SolarWindEvent(event_id=row['event_id'], kind='cme', status='detected', source='DONKI',
+            source_ids=[row['event_id']], available_at=available, observed_at=observed,
+            initial_speed_km_s=row['initial_speed_km_s'], source_url=row['source_url'])
+        old = events.get(event.event_id)
+        if old is None or event.available_at >= old.available_at: events[event.event_id] = event
+        arrivals.append(EnlilArrivalInput(**{k: row[k] for k in ('simulation_id', 'available_at',
+            'model_completed_at', 'earth_arrival_at', 'duration_hours', 'glancing_blow', 'minor_impact', 'source_url')},
+            cme_ids=[row['event_id']]))
+    return EventInputs(schema_version=2, as_of=issue, read_at=issue, events=list(events.values()), enlil_arrivals=arrivals)
 
 
 def validate_inputs(inputs, issue):
@@ -139,7 +189,9 @@ def validate_inputs(inputs, issue):
 
 def calculate_demo_snapshot(service, inputs, issue, metadata):
     from forecast.api import calculate_snapshot, ForecastResult
-    if service.registry_name != 'hmf_total_threshold':
+    if service.registry_name not in ('hmf_total_threshold', 'hmf_southward_threshold'):
+        return calculate_snapshot(service, inputs, issue_time=issue, model_info=metadata)
+    if service.registry_name == 'hmf_southward_threshold' and service.models_bundle.get('format') != 'argus-imf-revalidated-v1':
         return calculate_snapshot(service, inputs, issue_time=issue, model_info=metadata)
     # The trained feature definition also accepts OMNI. Do not label Earth-shifted
     # archive values as native L1 measurements just to pass the live adapter.
@@ -155,13 +207,15 @@ def calculate_demo_snapshot(service, inputs, issue, metadata):
     if any(not frame[key].notna().any() for key in ('bx', 'by', 'bz', 'v', 'n', 't')):
         raise ValueError('Insufficient historical IMF observations')
     features, _ = build_imf_features(frame)
-    rows = pd.concat([features.loc[[issue]]] * 24, ignore_index=True)
-    rows['lead_hours'] = np.arange(1, 25)
+    horizon = service.models_bundle['lead_hours']
+    variable = 'bt' if service.registry_name == 'hmf_total_threshold' else 'bs'
+    rows = pd.concat([features.loc[[issue]]] * horizon, ignore_index=True)
+    rows['lead_hours'] = np.arange(1, horizon + 1)
     probabilities = service.predict_features(rows[service.models_bundle['columns']])
     result = pd.DataFrame({'issue_time': issue, 'lead_hours': rows.lead_hours})
     result['valid_time'] = issue + pd.to_timedelta(rows.lead_hours, unit='h')
     for index, threshold in enumerate((5, 10, 15)):
-        result[f'p_bt_ge_{threshold}'] = probabilities[:, index]
+        result[f'p_{variable}_ge_{threshold}'] = probabilities[:, index]
     return ForecastResult(service.registry_name, result, metadata)
 
 
@@ -241,30 +295,6 @@ def observation_grid(rows, manifest, releases):
     return result
 
 
-def atomic_publish(bundle, output):
-    content = json.dumps(bundle, allow_nan=False, separators=(',', ':')).encode()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    # A fully written immutable version is retained before the live pointer is replaced.
-    version = output.parent / f"{bundle['version']}.json"
-    if version.exists():
-        raise ValueError('Demo version already exists')
-    with tempfile.NamedTemporaryFile(dir=output.parent, delete=False) as stream:
-        temporary = Path(stream.name)
-        try:
-            stream.write(content)
-            stream.flush()
-            os.fchmod(stream.fileno(), 0o644)
-            os.fsync(stream.fileno())
-        except BaseException:
-            temporary.unlink(missing_ok=True)
-            raise
-    try:
-        os.link(temporary, version)
-        os.replace(temporary, output)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
 def build(manifest, observations, output, snapshots=None):
     from common.config import get_config
     from common.schemas.forecast_inputs import ForecastInputs
@@ -273,6 +303,18 @@ def build(manifest, observations, output, snapshots=None):
 
     validate_evidence(manifest)
     config = get_config()
+    if manifest.event_archive:
+        from forecast_core.api import cme_speed_model_bytes
+        spec = manifest.event_archive
+        registry = config.models_registry['models']
+        entry = registry['solar_event_speed']
+        path = config.workdir / 'data/models' / (entry['model'] + '.joblib')
+        content = path.read_bytes() if path.is_file() else cme_speed_model_bytes(entry['model'])
+        if (hashlib.sha256(content).hexdigest() != spec.speed_model.sha256
+                or entry['sha256'] != spec.speed_model.sha256
+                or registry['cme_arrival']['model'] != spec.arrival_model):
+            raise ValueError('CME model changed; update demo evidence')
+        event_archive(manifest, config.workdir)
     policy = load_config()
     services = {}
     for product in manifest.products:
@@ -287,6 +329,7 @@ def build(manifest, observations, output, snapshots=None):
                     service._density.allowed_model_versions = (manifest.proswin_archive.model_version,)
             services[model.artifact] = (service, metadata)
     releases = {product: [] for product in manifest.products}
+    event_releases = []
     evidence = []
     for index, issue in enumerate(issue_times(manifest.event)):
         if snapshots is not None:
@@ -298,23 +341,34 @@ def build(manifest, observations, output, snapshots=None):
             inputs.observations.points = [row for row in inputs.observations.points if row.issue_time < issue]
             inputs.speed_observations = [row for row in inputs.speed_observations if row.issue_time < issue]
             inputs.density_observations = [row for row in inputs.density_observations if row.issue_time < issue]
-        if 'hmf_total_threshold' not in manifest.models:
+        if not {'hmf_total_threshold', 'hmf_southward_threshold'} & manifest.models.keys():
             inputs.solar_wind_hourly = None
         validate_inputs(inputs, issue)
+        report = None
+        if manifest.event_archive:
+            from argus_prophet.services.cme_arrival import forecast_events
+            report = forecast_events(inputs, registry=config.models_registry['models'], include_hss=False, include_dbem=False)
+            report.model_version = 'solar-wind-events-v4'
+            report.source_status['WSAEnlilSimulations'] = dict(state='retrospective',
+                availability_basis='provider_notification_publication_not_recorded_receipt',
+                scope='single_CME_notifications')
         evidence.append({'issue_time': issue.isoformat(), 'sha256': hashlib.sha256(inputs.model_dump_json().encode()).hexdigest(),
                          'aia_frames': len(inputs.aia_frames), 'proswin_records': len(inputs.proswin_predictions),
                          'models': {}})
         for product in manifest.products:
-            # GONG policy applies to southward IMF, not to the independent Bt model.
-            if product != 'hmf' or 'hmf_southward_threshold' in manifest.models:
+            # Only legacy Bs requires GONG; revalidated Bt/Bs use hourly history.
+            if product != 'hmf' or ('hmf_southward_threshold' in manifest.models and
+                    services['hmf_southward_threshold'][0].models_bundle.get('format') != 'argus-imf-revalidated-v1'):
                 policy.inputs.get(product, InputPolicy()).validate_inputs(inputs)
             frames = {}
+            results = {}
             for model in selected_models(manifest, product):
                 service, metadata = services[model.artifact]
                 result = calculate_demo_snapshot(service, inputs, issue, metadata)
                 if result.name != model.artifact:
                     raise ValueError('Unexpected model output')
                 frames[result.name] = result.frame
+                results[result.name] = result
                 if getattr(service, 'uses_density_blend', False):
                     count = service._density.last_status['candidate_leads']
                     evidence[-1]['models'][model.artifact] = {'candidate_leads': count,
@@ -327,13 +381,32 @@ def build(manifest, observations, output, snapshots=None):
                     count = int(sum(math.isfinite(v) for v in values[:96]))
                     evidence[-1]['models'][model.artifact] = {'candidate_leads': count, 'fallback_leads': 96-count,
                         'version': VERSION, 'knots': KNOTS, 'weights': WEIGHTS}
-            releases[product].append(forecast_payload(product, frames, issue))
-        print(f'Demo {index + 1}/97: {issue.isoformat()}', flush=True)
+            outlook = None
+            if product == 'solar-wind-speed' and report is not None:
+                from argus_prophet.services.generation.calculation import CalculationRequest
+                from argus_prophet.services.solar_event_speed import calculate_speed, integrate_speed_forecast
+                from common.schemas.solar_wind_events import CMESpeedOutlook
+                request = CalculationRequest(product, inputs, config.workdir, config.models_registry['models'])
+                outlook = CMESpeedOutlook.model_validate(calculate_speed(request, report.events,
+                    baseline=results['plasma_speed_quantile']))
+                integrate_speed_forecast(request, results, {k: v[0] for k, v in services.items()}, outlook)
+                frames = {name: result.frame for name, result in results.items()}
+                report.cme_speed = outlook
+                evidence[-1]['models']['cme_integration'] = results['plasma_speed_quantile'].model_info.get('cme_integration', {})
+            payload = forecast_payload(product, frames, issue)
+            if outlook is not None: payload['cme_speed'] = outlook.model_dump(mode='json')
+            releases[product].append(payload)
+        if report is not None:
+            report.limitations.extend(['Historical notification publication substitutes for unknown Argus receipt times.',
+                'Only unambiguously attributed single-CME notifications are included; missing context is not absence of incoming CME.'])
+            event_releases.append(report.model_dump(mode='json'))
+        print(f'Demo {index + 1}/{len(issue_times(manifest.event))}: {issue.isoformat()}', flush=True)
     observations = observation_grid(observations, manifest, releases)
     generated = datetime.now(UTC)
     bundle = {'schema_version': 1, 'version': generated.strftime('%Y%m%dT%H%M%S%fZ'),
               'generated_at': generated.isoformat(), **manifest.model_dump(mode='json', exclude={'products'}),
               'observations': observations, 'releases': releases, 'inputs': evidence}
+    if manifest.event_archive: bundle['event_releases'] = event_releases
     atomic_publish(bundle, output)
     return bundle
 

@@ -1,0 +1,16 @@
+.root { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 20px; color: #b6c5d2; }
+.root > * { min-width: 0; }
+.root h2 { color: #e6edf3; font-size: 18px; margin: 0 0 10px; }
+.root p { margin: 8px 0; line-height: 1.6; }
+.controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+.controls label { display: grid; gap: 6px; }
+.controls select { background: #17212b; border: 1px solid #3c4b59; color: #e6edf3; border-radius: 4px; padding: 8px 12px; }
+.controls strong { padding: 8px 0; color: #f1c777; }
+.chart, .results { border: 1px solid #2a3643; padding: 16px; min-width: 0; }
+.plot { height: 340px; }
+.scroll { overflow-x: auto; }
+.root table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.root th, .root td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #2a3643; white-space: nowrap; }
+.root th { color: #e6edf3; }
+.root summary { cursor: pointer; color: #e6edf3; }
+@media (max-width: 760px) { .plot { height: 260px; } .chart { padding: 10px; } }

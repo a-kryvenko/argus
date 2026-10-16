@@ -6,7 +6,7 @@
     "description": "The severe G4 phase first reached at 19:38 UTC on 19 January, as reported by NOAA SWPC. T0 marks this onset, not the storm peak."
   },
   "observation_source": "NASA SPDF hourly OMNI2 archive at Earth. Missing target values retained; Kp/Ap are archived three-hour indices, F10.7 is daily. Bt is the magnitude of the hourly mean GSM vector, matching model training. Retrospective revised observations, not original real-time L1 receipts.",
-  "input_source": "NASA OMNI2 closed hours strictly before each issue. Current DLinear+PROSWIN speed and DLinear+PROSWIN-speed-assisted LightGBM density models. PROSWIN uses the full author-preprocessed hourly archive, not NRT images; assumed image-slot+1hour availability, with per-lead fallback. Archived observation timestamps label hour starts, matching the existing demo raw-history contract; revised data and assumed image times are not historical live receipts. Kp/Ap enter after three-hour bins close, F10.7 after day end. IMF uses the OMNI training feature definition. Southward IMF/GONG and S10/M10/Y10 forecasts remain unavailable.",
+  "input_source": "NASA OMNI2 closed hours strictly before each issue. Current DLinear+PROSWIN speed and DLinear+PROSWIN-speed-assisted LightGBM density models. PROSWIN uses the full author-preprocessed hourly archive, not NRT images; assumed image-slot+1hour availability, with per-lead fallback. Archived observation timestamps label hour starts, matching the existing demo raw-history contract; revised data and assumed image times are not historical live receipts. Kp/Ap enter after three-hour bins close, F10.7 after day end. IMF uses the OMNI training feature definition. Current revalidated Bt/Bs use hourly history without GONG. S10/M10/Y10 forecasts remain unavailable. January 2026 was previously inspected; this replay is a development case, not an untouched holdout.",
   "products": [
     "solar-wind-speed",
     "solar-wind-density",
@@ -32,19 +32,19 @@
       "training_evidence": "argus-plasma-density-proswin-blend-v1.json: matching model SHA; hourly heads trained2011-2024, mixture weights and NRT residual intervals fitted on2025. No2026 fitting."
     },
     "kp_threshold": {
-      "sha256": "130065c1610147769049a0a3ca3b579ca2ff348de9fed61a03822ea90dbd50e5",
-      "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "notebooks/9_train_kp.ipynb specifies training/calibration on 2010_2024; MLflow experiments 21\u201323: less_hour_buckets_2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+      "sha256": "2e266257238389f5812f0515d8520a74c3812f241a228fb6f15be7acb33c22c8",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "argus-kp-revalidated-2026-v1: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-10-revalidation-v1/kp_threshold/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
     },
     "ap_quantile": {
-      "sha256": "16772e151739da1e3bdc9fc7fdeffe7c8b98e2c1ae4b06704af8eb4d610f2efc",
-      "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "notebooks/4_train_ap_quantiles.ipynb specifies training/calibration on 2010_2024; MLflow run a6d85d0d70e34448a3e36d79ea497e32: 2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+      "sha256": "972c7106e9a6548e5c3bf32b2ec9c464e2caf8614fb41591b701a035df16b7d7",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "argus-ap-revalidated-2026-v1: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-10-revalidation-v1/ap_quantile/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
     },
     "dst_quantile": {
-      "sha256": "f37c2649b99d75245c52a2259eccb34ef25e04eb5136c8497b4df2bf1368dd2e",
-      "training_end": "2025-01-01T00:00:00Z",
-      "training_evidence": "notebooks/4_train_dst_quantiles.ipynb specifies training/calibration on 2010_2024; MLflow run 5147888f5a024e71955000de466de6f0: 2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
+      "sha256": "aeb1803ab9ad05ff6b666fd60895010714dfb8819c3ca3e518dca76b1e6bf0ad",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "argus-dst-revalidated-2026-v1: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-10-revalidation-v1/dst_quantile/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
     },
     "f10_7_quantile": {
       "sha256": "3d8cc81f7cf0d46d12a551d8f7985c62651db72e8c1ec8ca96ba2718f7780d71",
@@ -52,9 +52,14 @@
       "training_evidence": "notebooks/4_train_f10_7_quantiles.ipynb specifies training/calibration on 2010_2024; MLflow experiment 25: 2010_2024. Legacy artifact has no embedded training dates; cutoff is based on recipe/run records, and its current hash is pinned here."
     },
     "hmf_total_threshold": {
-      "sha256": "559dd85281f09245a7339861953976cd7f9040957d6dbc1a3fe52b2fee4f032c",
+      "sha256": "d4af912daf2f19dde9b42ad90971e74c2a9833a4535ab780137727e8b0b1f07e",
       "training_end": "2026-01-01T00:00:00Z",
-      "training_evidence": "data/models/argus-bt-t-v3.json: matching SHA256; training 2020\u20132024, calibration 2025."
+      "training_evidence": "argus-bt-revalidated-2026-v2: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-15-imf-v2/bt/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
+    },
+    "hmf_southward_threshold": {
+      "sha256": "33e36d944fa4b95a61fb8da6f540bdeb57611d5a6de1a738cab0821950f41a40",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "argus-bs-revalidated-2026-v2: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-15-imf-v2/bs/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
     }
   },
   "proswin_archive": {
@@ -62,5 +67,15 @@
     "sha256": "b62a4e10fb5dc451f550ac74a0b526a1af9f408b16524123388a7eccc17a0d9a",
     "model_version": "proswin-fold1-science-v1",
     "description": "Official fold1 hourly speed forecasts from author-preprocessed AIA171/211 images, not NRT preprocessing. Assumed availability image_slot+1hour, not observed historical publication latency. Missing/unavailable slots retain DLinear."
+  },
+  "event_archive": {
+    "path": "data/demo/january-2026/enlil-notifications.json",
+    "sha256": "808cae1a9efcf14f5754faaf15740d126c95c1185871a5b91de48518798f2b55",
+    "arrival_model": "argus-cme-arrival-enlil-v1",
+    "speed_model": {
+      "sha256": "9eee53f8996b044f95d523ac79fc8ca6508a7c6d29ede2fe8d9b923526b48379",
+      "training_end": "2026-01-01T00:00:00Z",
+      "training_evidence": "argus-cme-speed-v2: train through 2024; select/calibrate 2025; no 2026 fitting."
+    }
   }
 }

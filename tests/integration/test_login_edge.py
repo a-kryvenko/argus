@@ -127,3 +127,21 @@ def test_trusted_proxy_uses_actual_client_after_attacker_supplied_chain(edge):
         # The edge appends the actual source after any caller-provided values.
         status, _, _ = edge(client=f'203.0.113.{i+1}, 198.51.100.4')
         assert status == (200 if i < 10 else 429)
+
+
+@pytest.mark.parametrize('path', [
+    '/_next/static/chunks/app/demo/%5B%5B...path%5D%5D/page-test.js?dpl=src-test',
+    '/_next/static/chunks/app/demo/[[...path]]/page-test.js',
+    '/demo?offset=72',
+])
+def test_catch_all_chunks_and_demo_are_not_blocked(edge, path):
+    assert edge(path, method='GET')[0] == 200
+
+
+@pytest.mark.parametrize('path', [
+    '/assets/../private', '/assets/..', '/assets/..?download=1',
+    '/assets/%2e%2e/private', '/assets/.%2e/private',
+    '/assets%2f%2e%2e%2fprivate',
+])
+def test_parent_directory_segments_remain_blocked(edge, path):
+    assert edge(path, method='GET')[0] == 403

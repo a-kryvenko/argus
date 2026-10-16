@@ -71,6 +71,26 @@ test('forecast overview links summary, horizon, quantile interval and time inspe
   expect(errors).toEqual([]);
 });
 
+test('probability charts survive repeated variable and horizon changes', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => {
+    if (message.text().includes('has been disposed')) errors.push(message.text());
+  });
+  await mockForecasts(page);
+  await page.goto('/products/geomagnetic-activity');
+  const heatmap = page.getByRole('region', { name: 'Kp Index threshold probability', exact: true });
+  await expect(heatmap.locator('canvas').first()).toBeVisible();
+  for (let i = 0; i < 3; i++) {
+    await page.getByRole('button', { name: 'AP Ap Index' }).click();
+    await page.getByRole('button', { name: 'First 24 hours' }).click();
+    await page.getByRole('button', { name: 'KP Kp Index' }).click();
+    await page.getByRole('button', { name: 'Full forecast' }).click();
+    await expect(heatmap.locator('canvas').first()).toBeVisible();
+  }
+  expect(errors).toEqual([]);
+});
+
 test('catalog lists all product definitions and uses the forecast workspace shell', async ({ page }) => {
   await page.goto('/products');
   await expect(page.getByRole('heading', { name: 'Forecast products', exact: true })).toBeVisible();

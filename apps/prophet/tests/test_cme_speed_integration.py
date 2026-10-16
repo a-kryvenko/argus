@@ -27,10 +27,11 @@ def setup():
     bundle = dict(format='dlinear_aia_ridge_v1', thresholds=[450, 500, 600],
                   uncertainty=[dict(lo=1, hi=4, dlinear=samples)])
     services = {'plasma_speed_threshold': SimpleNamespace(models_bundle=bundle)}
-    registry = dict(solar_event_speed=dict(sha256='c'*64, integration=dict(enabled=True, version='cme-arrival-window-v1')),
+    registry = dict(solar_event_speed=dict(sha256='c'*64, integration=dict(enabled=True, version='cme-arrival-window-v2')),
                     plasma_speed_quantile=dict(model='base'), plasma_speed_threshold=dict(model='base'))
     outlook = CMESpeedOutlook(model_version='cme-speed-v2', state='available', model_sha256='c'*64,
-        points=[dict(valid_time=t, speed_background=400, speed_nominal=600, speed_early=400,
+        # Before nominal arrival, the window correction can exceed the nominal profile.
+        points=[dict(valid_time=t, speed_background=400, speed_nominal=400, speed_early=400,
                      speed_late=400, scenario_lower=400, scenario_upper=650,
                      speed_integrated=500 if j == 1 else 400) for j,t in enumerate(clock)])
     return SimpleNamespace(registry=registry), results, services, outlook
@@ -48,6 +49,8 @@ def test_point_intervals_probabilities_and_serialized_contract_change_together()
     pd.testing.assert_frame_equal(p.drop(index=1), before_p.drop(index=1))
     assert json.loads(q.cme_speed_json.iloc[0])['integrated_into_speed']
     for result in results.values():
+        assert result.model_info['cme_integration']['version'] == 'cme-arrival-window-v2'
+        assert result.model_info['model'].endswith('+cme-window-v2')
         artifact = serialize(result)
         ForecastArtifact(name=artifact.name, csv_text=artifact.content.decode(),
             sha256=__import__('hashlib').sha256(artifact.content).hexdigest(),

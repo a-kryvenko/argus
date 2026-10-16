@@ -10,12 +10,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-from argus_prophet.demo import Manifest, issue_times
+from argus_prophet.demo import Manifest, issue_times, event_archive, event_snapshot
 from common.data.omni import parse_annual
 
 
 def prepare(manifest_path, archives, destination):
     manifest = Manifest.model_validate_json(manifest_path.read_text())
+    from common.config import get_config
+    events = event_archive(manifest, get_config().workdir) if manifest.event_archive else None
     frames, sources = [], []
     proswin = []
     if manifest.proswin_archive:
@@ -60,13 +62,15 @@ def prepare(manifest_path, archives, destination):
                        if row.image_slot <= issue and row.available_at <= issue and
                        (row.source_cutoff is None or row.source_cutoff <= issue) and
                        issue < row.valid_time <= issue+timedelta(hours=96)]}
+        if events is not None:
+            payload['solar_wind_events'] = event_snapshot(events, issue).model_dump(mode='json')
         for variable, key in [('v', 'speed_observations'), ('n', 'density_observations')]:
             rows = frame[['issue_time', variable]].dropna()
             payload[key] = [{'issue_time': row.issue_time.isoformat(), variable: float(getattr(row, variable))}
                             for row in rows.itertuples()]
         if set(manifest.products) - {'solar-wind-speed', 'solar-wind-density'}:
             payload['observations']['points'] = normalized_points(frame, issue)
-        if 'hmf_total_threshold' in manifest.models:
+        if {'hmf_total_threshold', 'hmf_southward_threshold'} & manifest.models.keys():
             imf = frame.loc[frame.issue_time >= issue - timedelta(hours=168)]
             payload['solar_wind_hourly'] = {'schema': 'omni-hourly-v1', 'rows': [
                 {'time': row.issue_time.isoformat(), **{key: None if pd.isna(getattr(row, key)) else float(getattr(row, key))
@@ -81,7 +85,7 @@ def prepare(manifest_path, archives, destination):
         for row in selected.itertuples()]
     (destination / 'observations.json').write_text(json.dumps(observations, allow_nan=False))
     (destination / 'sources.json').write_text(json.dumps(sources, indent=2))
-    print(f'Prepared 97 input snapshots and {len(observations)} observation hours in {destination}')
+    print(f'Prepared {len(issue_times(manifest.event))} input snapshots and {len(observations)} observation hours in {destination}')
 
 
 def normalized_points(frame, issue):

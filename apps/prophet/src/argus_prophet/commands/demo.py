@@ -9,11 +9,14 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 
-def archive(year, config, folder, refresh=False):
+def archive(year, config, folder, refresh=False, *, source_root=None):
     from common.data.omni import parse_annual
     destination = folder / f'omni2_{year}.dat'
     candidates = [destination, config.data_root / 'raw/omni_hourly' / destination.name,
+                  config.data_root / 'mnt/raw/omni_hourly' / destination.name,
                   config.data_root / 'demo/january-2026' / destination.name]
+    if source_root is not None:
+        candidates = [Path(source_root) / 'omni_hourly' / destination.name]
     if not refresh:
         for candidate in candidates:
             if candidate.is_file():
@@ -43,7 +46,7 @@ def archive(year, config, folder, refresh=False):
     return destination
 
 
-def run(args):
+def run(args, *, output=None, archive_paths=None, raw_root=None):
     # Set these before loading numerical runtimes, including PyTorch/LightGBM.
     os.environ.setdefault('OMP_NUM_THREADS', '1')
     os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
@@ -67,18 +70,24 @@ def run(args):
             raise ValueError(f'{name}: model missing or changed; update its training evidence before rebuilding demo')
     root = config.data_root / 'demo'
     root.mkdir(parents=True, exist_ok=True)
-    with (root / '.build.lock').open('a') as lock:
+    output = root / 'current.json' if output is None else Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with (output.parent / '.build.lock').open('a') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError('Another demo build is running; current demo remains available') from None
         try:
             years = [manifest.event.starts_at.year - 1, manifest.event.starts_at.year]
-            archives = [archive(year, config, root / 'archives', args.refresh_data) for year in years]
+            archive_options = {} if raw_root is None else {'source_root': raw_root}
+            archives = [archive(year, config, root / 'archives', args.refresh_data, **archive_options) for year in years]
+            if archive_paths is not None:
+                archive_paths.extend(archives)
             inputs = root / args.scenario / 'runs' / datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')
             prepare(path, archives, inputs)
             bundle = build(manifest, json.loads((inputs / 'observations.json').read_text()),
-                           root / 'current.json', inputs / 'snapshots')
-            print(f"Demo ready: /demo · {len(bundle['releases'])} products · version {bundle['version']}", flush=True)
+                           output, inputs / 'snapshots')
+            status = 'Demo ready' if output == root / 'current.json' else 'Demo forecasts staged'
+            print(f"{status}: {len(bundle['releases'])} products · version {bundle['version']}", flush=True)
         except Exception as exc:
             raise ValueError(f'Demo build failed; previous published dataset preserved. {exc}') from exc

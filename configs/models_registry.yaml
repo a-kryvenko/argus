@@ -7,7 +7,7 @@ models:
     sha256: 9eee53f8996b044f95d523ac79fc8ca6508a7c6d29ede2fe8d9b923526b48379
     integration:
       enabled: true
-      version: cme-arrival-window-v1
+      version: cme-arrival-window-v2
 
   plasma_speed_dlinear:
     model: argus-plasma-speed-dlinear-v1

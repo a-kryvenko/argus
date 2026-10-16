@@ -79,7 +79,7 @@ def test_demo_is_one_command_in_both_environments(entry, args):
     _, run = entry
     result, calls = run('demo', *args)
     assert result.returncode == 0, result.stderr
-    assert calls == [['prophet', 'demo', *args]]
+    assert calls == [['demo', *args]]
 
 
 @pytest.mark.parametrize('service', ['prophet', 'intelligence'])

@@ -1,5 +1,5 @@
 'use client';
-import ReactECharts from 'echarts-for-react';
+import EChart from '../../_components/EChart';
 import type { EChartsOption, LineSeriesOption } from 'echarts';
 import { number, utc } from './leo-drag';
 import type { OperatorChart } from './drag-monitor';
@@ -57,6 +57,6 @@ export default function DragOperatorChart({ chart, showPrevious }: { chart: Oper
     series,
   };
   return <div className="min-w-0 overflow-hidden" role="img" aria-label="Cumulative altitude loss for attitude modes, operator limits and current time. Exact values are available in chart data.">
-    <ReactECharts style={{ height: 360, width: '100%' }} option={option} notMerge />
+    <EChart style={{ height: 360, width: '100%' }} option={option} notMerge />
   </div>;
 }

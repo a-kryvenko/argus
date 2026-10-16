@@ -33,7 +33,11 @@ export default function WorkspaceShell({ children, section, contentId = 'forecas
   const now = demo?.now ?? clock;
   const hrefFor = (href: string) => demo ? demo.href(href) : href;
   const currentPath = demo ? pathname.replace(/^\/demo/, '') || '/' : pathname;
-  const items = demo ? navigation.filter(item => ['/', '/live', '/products'].includes(item.href)) : navigation;
+  const items = demo ? [
+    ...navigation.filter(item => ['/', '/live', '/products'].includes(item.href)),
+    { href: '/leo', label: 'LEO density scenario', icon: Orbit },
+    { href: '/products/solar-events', label: 'Solar events · CME', icon: Activity },
+  ] : navigation;
   return <div className={styles.workspace} data-demo={!!demo}>
     <a className={styles.skipLink} href={`#${contentId}`}>Skip to {section.toLowerCase()}</a>
     <aside className={styles.sidebar} aria-label="Workspace navigation">

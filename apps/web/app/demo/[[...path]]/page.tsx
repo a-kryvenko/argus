@@ -8,7 +8,7 @@ export const metadata = { title: 'Historical demo', robots: { index: false, foll
 
 export default async function DemoPage({ params }: { params: Promise<{ path?: string[] }> }) {
   const { path = [] } = await params;
-  if (!(path.length === 0 || (path.length === 1 && ['products', 'live'].includes(path[0])) ||
-    (path.length === 2 && path[0] === 'products' && !!productsBySlug[path[1]]))) notFound();
-  return <DemoWorkspace bundle={await readDemoBundle()} sectionPath={`/${path.join('/')}`} />;
+  if (!(path.length === 0 || (path.length === 1 && ['products', 'live', 'leo'].includes(path[0])) ||
+    (path.length === 2 && path[0] === 'products' && (path[1] === 'solar-events' || !!productsBySlug[path[1]])))) notFound();
+  return <DemoWorkspace bundle={await readDemoBundle(path[0] === 'leo')} sectionPath={`/${path.join('/')}`} />;
 }

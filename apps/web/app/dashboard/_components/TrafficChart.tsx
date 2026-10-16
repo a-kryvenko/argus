@@ -1,5 +1,5 @@
 "use client";
-import ReactECharts from "echarts-for-react";
+import EChart from "../../_components/EChart";
 import type { Stats } from "./ApiActivity";
 
 export default function TrafficChart({
@@ -17,7 +17,7 @@ export default function TrafficChart({
         "Hourly API request volume and errors. Exact values are available in the API statistics hourly activity table."
       }
     >
-      <ReactECharts
+      <EChart
         style={{ height: 280, width: "100%" }}
         option={{
           animation: false,

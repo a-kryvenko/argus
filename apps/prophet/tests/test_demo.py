@@ -22,9 +22,10 @@ def manifest():
 def test_event_clock_keeps_minutes_but_issues_are_closed_hour_boundaries():
     spec = manifest()
     times = issue_times(spec.event)
-    assert len(times) == 97
+    assert len(times) == 169
     assert times[0] == datetime(2026, 1, 15, 19, tzinfo=UTC)
-    assert times[-1] == datetime(2026, 1, 19, 19, tzinfo=UTC)
+    assert times[-1] == datetime(2026, 1, 22, 19, tzinfo=UTC)
+    assert all(new - old == HOUR for old, new in zip(times, times[1:]))
     assert spec.event.starts_at.minute == 38
     validate_evidence(spec)
     spec.models['plasma_density_quantile'].training_end = times[0]
@@ -89,7 +90,7 @@ def test_observation_grid_keeps_holes_and_requires_future_coverage():
     releases = {'solar-wind-density': [{'predictions': [{'valid_time': end.isoformat()}]}]}
     rows = [{'time': start.isoformat(), 'values': {'n': 3}}, {'time': end.isoformat(), 'values': {'n': 4}}]
     grid = observation_grid(rows, spec, releases)
-    assert len(grid) == 217
+    assert len(grid) == 289
     assert grid[1]['values']['n'] is None
     with pytest.raises(ValueError, match='cover'):
         observation_grid(rows[:1], spec, releases)
@@ -118,3 +119,41 @@ def test_demo_rejects_unavailable_proswin_and_wrong_horizon():
     with pytest.raises(ValueError, match='PROSWIN'):validate_inputs(inputs, issue)
     inputs.proswin_predictions = [row.model_copy(update={'image_slot': issue-71*HOUR})]
     with pytest.raises(ValueError, match='PROSWIN'):validate_inputs(inputs, issue)
+
+
+def test_enlil_notification_publication_gates_arrival_and_cme_parameters():
+    from argus_prophet.demo import event_snapshot
+    from forecast_core.solar_events.arrival import EnlilArrivalModel
+    def row(publication, completion, arrival, speed, run):
+        return dict(event_id='CME-test', available_at=publication, model_completed_at=completion,
+            observed_at='2026-01-18T18:09:00+00:00', earth_arrival_at=arrival,
+            duration_hours=10., glancing_blow=False, minor_impact=False,
+            initial_speed_km_s=speed, simulation_id=run, source_url='https://example.com')
+    archive = {'records': [
+        row('2026-01-18T21:39:21+00:00','2026-01-18T21:25:51+00:00','2026-01-20T02:18:00+00:00',1431.,'one'),
+        row('2026-01-19T07:24:38+00:00','2026-01-19T06:50:16+00:00','2026-01-20T01:07:00+00:00',1473.,'two'),
+        row('2026-01-19T17:22:57+00:00','2026-01-19T06:06:54+00:00','2026-01-20T01:22:00+00:00',1473.,'older-republished'),
+    ]}
+    model = EnlilArrivalModel()
+    before = event_snapshot(archive, datetime(2026,1,18,21,tzinfo=UTC))
+    assert not model.forecast(before)
+    first = model.forecast(event_snapshot(archive,datetime(2026,1,18,22,tzinfo=UTC)))[0]
+    assert first.arrival_at == datetime(2026,1,20,2,18,tzinfo=UTC)
+    assert first.initial_speed_km_s == 1431.
+    assert first.arrival_receipts == []  # Unknown Argus receipts are never fabricated.
+    later = model.forecast(event_snapshot(archive,datetime(2026,1,19,18,tzinfo=UTC)))[0]
+    assert later.arrival_at == datetime(2026,1,20,1,7,tzinfo=UTC)
+
+
+def test_enlil_archive_rejects_changed_hash_and_short_coverage(tmp_path):
+    from argus_prophet.demo import event_archive, EventArchive
+    spec = manifest()
+    data = {'availability_basis':'provider_notification_publication_not_recorded_receipt',
+            'coverage_start':'2026-01-15T19:00:00Z','coverage_end':'2026-01-22T18:00:00Z','records':[]}
+    path = tmp_path/'events.json'; path.write_text(json.dumps(data))
+    import hashlib
+    spec.event_archive = EventArchive(path='events.json',sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+        arrival_model='argus-cme-arrival-enlil-v1',speed_model=spec.models['plasma_density_quantile'])
+    with pytest.raises(ValueError,match='coverage'): event_archive(spec,tmp_path)
+    path.write_text('{}')
+    with pytest.raises(ValueError,match='checksum'): event_archive(spec,tmp_path)

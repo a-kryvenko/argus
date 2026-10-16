@@ -3,6 +3,10 @@
 [Argus Sunwatch](https://argussun.com/) is a space-weather monitoring and
 forecasting platform. Bring together live observations, forecast, impact intelligence for LEO satelites.
 
+## Demo mode
+
+[Demo](https://argussun.com/demo) mode built around event of **19 January 2026 · G4 geomagnetic storm onset**. Event begins: 19 Jan 2026, 19:38 UTC.
+
 ## Observations sources
 
 | Source | Observations used by Argus |

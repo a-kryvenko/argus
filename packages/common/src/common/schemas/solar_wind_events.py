@@ -282,8 +282,8 @@ class CMESpeedPoint(BaseModel):
         values=(self.speed_nominal,self.speed_early,self.speed_late)
         if not self.scenario_lower <= min(values) <= max(values) <= self.scenario_upper:
             raise ValueError('Speed scenarios must lie inside the envelope')
-        if self.speed_integrated is not None and not self.speed_background <= self.speed_integrated <= self.speed_nominal:
-            raise ValueError('Integrated speed must lie between background and nominal scenario')
+        if self.speed_integrated is not None and self.speed_integrated < self.speed_background:
+            raise ValueError('Integrated speed must not fall below background')
         return self
 
 

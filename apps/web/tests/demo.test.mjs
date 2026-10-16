@@ -4,21 +4,24 @@ import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
 const source = await readFile(new URL('../app/demo/_lib/replay.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { parseOffset, replayTime, countdown, demoHref, selectRelease, comparisonRows, observationKnownAt } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { parseOffset, replayTime, countdown, demoHref, selectRelease, comparisonRows, observationKnownAt, selectEventRelease } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
 
 test('offset is a bounded integer, links retain it and T0 is the precise event time', () => {
   assert.equal(parseOffset(null), -96);
   assert.equal(parseOffset('banana'), -96);
   assert.equal(parseOffset('-12.5'), -96);
   assert.equal(parseOffset('-999'), -96);
-  assert.equal(parseOffset('20'), 0);
+  assert.equal(parseOffset('20'), 20);
+  assert.equal(parseOffset('999'), 72);
   assert.equal(parseOffset('-48'), -48);
   assert.equal(demoHref('/', -48), '/demo?offset=-48');
   assert.equal(demoHref('/products/dst', 0), '/demo/products/dst?offset=0');
   assert.equal(countdown(0), 'T0 · Event begins');
   assert.equal(countdown(-48), 'T−48 h · Until event');
+  assert.equal(countdown(72), 'T+72 h · Since event');
   const bundle = { event: { starts_at: '2026-01-19T19:38:00Z' } };
   assert.equal(new Date(replayTime(bundle, -48)).toISOString(), '2026-01-17T19:38:00.000Z');
+  assert.equal(new Date(replayTime(bundle, 72)).toISOString(), '2026-01-22T19:38:00.000Z');
 });
 
 test('release selection never borrows another hour or operational forecasts', () => {
@@ -54,4 +57,28 @@ test('geomagnetic and daily indices are hidden until their complete intervals cl
   assert.equal(new Date(observationKnownAt(time, 'ap')).toISOString(), '2026-01-19T21:00:00.000Z');
   assert.equal(new Date(observationKnownAt(time, 'f10_7')).toISOString(), '2026-01-20T00:00:00.000Z');
   assert.equal(new Date(observationKnownAt(time, 'dst')).toISOString(), '2026-01-19T20:00:00.000Z');
+});
+
+
+test('CME replay selects the exact historical issue without borrowing future releases', () => {
+  const report = { issue_time: '2026-01-18T22:00:00Z', events: [{ event_id: 'known' }] };
+  const bundle = { event_releases: [report] };
+  assert.equal(selectEventRelease(bundle, Date.parse('2026-01-18T21:38Z')), null);
+  assert.equal(selectEventRelease(bundle, Date.parse('2026-01-18T22:38Z')), report);
+  assert.equal(selectEventRelease(bundle, Date.parse('2026-01-18T23:38Z')), null);
+});
+
+test('CME scenarios remain aligned with translated speed quantiles and hidden outcomes', () => {
+  const now = Date.parse('2026-01-18T22:00Z');
+  const time = '2026-01-18T23:00:00Z';
+  const forecast = { predictions: [{ valid_time: time, lead_hours: 1,
+    variables: { v: { continuous: { q10: 500, q50: 550, q90: 600 } } } }],
+    cme_speed: { state: 'available', events: [{}], points: [{ valid_time: time, speed_nominal: 580,
+      speed_early: 570, speed_late: 560, scenario_lower: 550, scenario_upper: 590 }] } };
+  const rows = comparisonRows(forecast, [{ time, values: { v: 900 } }], 'v', now, false);
+  const row = rows.find(row => row.time === time);
+  assert.equal(row.median, 550);
+  assert.equal(row.cmeNominal, 580);
+  assert.deepEqual(row.cmeRange, [550, 590]);
+  assert.equal(row.actual, null);
 });

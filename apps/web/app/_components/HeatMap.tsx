@@ -1,5 +1,5 @@
 'use client';
-import ReactECharts from 'echarts-for-react';
+import EChart from './EChart';
 import { formatForecastTime } from '../_utils/forecast';
 import styles from './forecast.module.css';
 
@@ -32,7 +32,7 @@ export default function HeatMap({ title, yLabels, data, times, selectedTime, onS
   return <section className={styles.chart} aria-label={title}>
     <div className={styles.chartHeading}><h3>{title}</h3><span className={styles.chartTag}>PROBABILITY</span></div>
     {data.length ? <>
-      <ReactECharts option={option} style={{ height: 42 * yLabels.length + 70, width: '100%' }} notMerge
+      <EChart option={option} style={{ height: 42 * yLabels.length + 70, width: '100%' }} notMerge
         onEvents={{ click: (event: { data?: number[]; componentType?: string }) => {
           if (event.componentType === 'series' && event.data && times[event.data[0]]) onSelectTime?.(times[event.data[0]]);
         } }} />

@@ -16,6 +16,9 @@ down_revision: str | Sequence[str] | None = ${repr(down_revision)}
 branch_labels: str | Sequence[str] | None = ${repr(branch_labels)}
 depends_on: str | Sequence[str] | None = ${repr(depends_on)}
 
+# Set True only after reviewing compatibility with the running application.
+online_compatible = False
+
 
 def upgrade() -> None:
     ${upgrades if upgrades else "pass"}

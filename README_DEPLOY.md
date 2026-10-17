@@ -86,9 +86,9 @@ Smoke checks cover HTML/static assets, login/logout, observations, forecasts and
 Intelligence reads. No inference runs. Models/metrics use verified artifact bundles;
 configs are versioned. Demo data remains worker-owned; old frontend assets are retained.
 
-New migrations require their exact release-plan fingerprint in
-`.deploy/online-migrations.json`, e.g. `{"clio":"<sha256>"}`. Approve only changes
-compatible with both application versions. Actual DB revisions are checked before
+Rolling deployment requires `online_compatible = True` in every pending migration,
+reviewed for compatibility with both application versions. Missing or false declarations
+require a maintenance deployment. Actual DB revisions are checked before
 backup; changed files alone do not trigger one. Backups run before stopping services,
 with fast compression and progress every 15s. Migrations use a 5s lock timeout and
 5min statement timeout; affected workers drain while HTTP stays online.

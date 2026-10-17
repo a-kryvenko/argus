@@ -6,6 +6,8 @@ down_revision = '20261016_density_advisory'
 branch_labels = None
 depends_on = None
 
+online_compatible = True
+
 
 def upgrade():
     op.execute('''CREATE TABLE intelligence.forecast_input (

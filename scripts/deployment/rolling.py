@@ -122,7 +122,6 @@ class Deployment:
         self.previous_fingerprints = dict(line.split() for line in previous.read_text().splitlines()) if previous.exists() else {}
         self.migrations = [domain for domain in ('api', 'clio', 'prophet', 'intelligence')
                            if self.fingerprints[domain] != self.previous_fingerprints.get(domain)]
-        self.approvals = self.manifest.get('online_migrations') or {}
 
     @staticmethod
     def capture(*args, **kwargs):
@@ -272,7 +271,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             return
         create_backup(self.base + ['-f', str(self.runtime), 'exec', '-T', 'postgres',
             'sh', '-c', 'pg_dumpall --username="$POSTGRES_USER"'], self.root / 'backups')
-        # Readers and request writers remain online only for explicitly approved migrations.
+        # Readers and request writers remain online only for compatible migrations.
         workers = {'api': [], 'clio': ['clio-worker'], 'prophet': ['prophet'], 'intelligence': ['intelligence']}
         for domain in self.migrations:
             if workers[domain]:
@@ -298,12 +297,13 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         pending = []
         for domain in self.migrations:
             status = self.compose('run', '--rm', '--no-deps', '-T', domain + '-migrate',
-                                  '.venv/bin/python', '-', domain, capture=True, input=source).strip()
+                                  '.venv/bin/python', '-', domain, '--online', capture=True, input=source).strip()
+            if status.startswith('blocked:'):
+                raise RuntimeError(f'{domain}: migrations require downtime or compatibility review: {status.removeprefix("blocked:")}; '
+                                   'rolling deployment requires online_compatible = True in each pending migration')
             if status not in ('current', 'pending'):
                 raise RuntimeError(f'{domain}: invalid migration status')
             if status == 'pending':
-                if self.approvals.get(domain) != self.fingerprints[domain]:
-                    raise RuntimeError(f'{domain}: migration fingerprint must be approved in .deploy/online-migrations.json')
                 pending.append(domain)
         self.migrations = pending
         print(f'[deploy] Pending database upgrades: {", ".join(pending) or "none"}', flush=True)

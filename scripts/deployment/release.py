@@ -95,9 +95,8 @@ def plan(root, *, rebuild=''):
         identity = hashlib.sha256((source + backend_hash + rebuild).encode()).hexdigest()
         result['components'][name] = {'repository': 'ghcr.io/a-kryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
     result['migrations'] = {name: digest(root, paths) for name, paths in MIGRATIONS.items()}
-    for filename, key in [('artifacts.json', 'artifacts'), ('online-migrations.json', 'online_migrations')]:
-        path = root / '.deploy' / filename
-        result[key] = json.loads(path.read_text()) if path.exists() else None
+    path = root / '.deploy/artifacts.json'
+    result['artifacts'] = json.loads(path.read_text()) if path.exists() else None
     return result
 
 

@@ -6,6 +6,8 @@ down_revision = '20261017_forecast_inputs'
 branch_labels = None
 depends_on = None
 
+online_compatible = True
+
 
 def upgrade():
     op.execute('''UPDATE intelligence.density_profile

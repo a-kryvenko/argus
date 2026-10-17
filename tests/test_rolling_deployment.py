@@ -154,7 +154,8 @@ def test_operator_commands_select_active_slot_without_rewriting_command_argument
     assert str(root / '.rolling-compose.json') in result.stdout
 
 
-def test_new_migrations_require_exact_approval_before_mutation(tmp_path, monkeypatch):
+@pytest.mark.parametrize('status', ['pending', 'blocked:intermediate_revision', 'invalid'])
+def test_pending_migrations_require_compatibility_before_mutation(tmp_path, monkeypatch, status):
     bundle = tmp_path / 'bundle'
     bundle.mkdir()
     fingerprints = {key: 'same' for key in ('api', 'clio', 'prophet', 'intelligence', 'configs', 'nginx', 'alloy')}
@@ -167,21 +168,26 @@ def test_new_migrations_require_exact_approval_before_mutation(tmp_path, monkeyp
     config['services'].update({domain + '-migrate': {} for domain in ('api', 'clio', 'prophet', 'intelligence')})
     monkeypatch.setattr(rolling.Deployment, 'capture', staticmethod(lambda *args: json.dumps(config)))
     deployment = rolling.Deployment(tmp_path, bundle)
-    deployment.compose = lambda *args, **kwargs: 'pending'
+    calls = []
+    def compose(*args, **kwargs):
+        calls.append(args)
+        return status
+    deployment.compose = compose
     (bundle / 'migration_status.py').write_text('status probe')
-    with pytest.raises(RuntimeError, match='must be approved'):
+    if status != 'pending':
+        with pytest.raises(RuntimeError, match='compatibility review|invalid migration status'):
+            deployment.check_pending_migrations()
+    else:
         deployment.check_pending_migrations()
-    (bundle / 'release.json').write_text(json.dumps({'online_migrations': {'clio': 'new'}}))
-    deployment = rolling.Deployment(tmp_path, bundle)
-    deployment.compose = lambda *args, **kwargs: 'pending'
-    deployment.check_pending_migrations()
-    assert deployment.migrations == ['clio']
+        assert deployment.migrations == ['clio']
+    assert len(calls) == 1
+    assert calls[0][-1] == '--online'
+    assert not (tmp_path / 'backups').exists()
 
 
 def test_changed_migration_files_without_database_upgrade_skip_backup(tmp_path):
     deployment = harness(tmp_path)
     deployment.migrations = ['clio']
-    deployment.approvals = {}
     deployment.compose = lambda *args, **kwargs: 'current'
     deployment.check_pending_migrations()
     assert deployment.migrations == []

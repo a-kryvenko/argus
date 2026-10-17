@@ -65,7 +65,7 @@ test('panel remains visible without covering content on mobile and keyboard chan
 
 test('invalid offsets recover safely, unavailable products do not show a different forecast', async ({ page }) => {
   await page.goto('/demo/forecast/dst?offset=oops');
-  await expect(page.getByRole('slider')).toHaveValue('-96');
+  await expect(page.getByRole('slider', { name: 'Hours relative to event' })).toHaveValue('-96');
   await expect(page.getByRole('heading', { name: 'Dst Index', exact: true })).toBeVisible();
   await expect(page.getByText('No demo release is available at this time.')).toBeVisible();
   await page.goto('/demo/not-a-page');
@@ -75,11 +75,11 @@ test('invalid offsets recover safely, unavailable products do not show a differe
 test('playback stops at T+72 and can restart from the beginning', async ({ page }) => {
   await page.goto('/demo?offset=71');
   await page.getByRole('button', { name: 'Play replay' }).click();
-  await expect(page.getByRole('slider')).toHaveValue('72');
+  await expect(page.getByRole('slider', { name: 'Hours relative to event' })).toHaveValue('72');
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
   await expect(page.getByText('T+72 h · Since event', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Play replay' }).click();
-  await expect(page.getByRole('slider')).toHaveValue('-96');
+  await expect(page.getByRole('slider', { name: 'Hours relative to event' })).toHaveValue('-96');
   await page.getByRole('button', { name: 'Pause replay' }).click();
   await expect(page.getByRole('button', { name: 'Play replay' })).toBeVisible();
 });
@@ -176,10 +176,10 @@ test('historical ENLIL arrivals appear only after publication and revisions foll
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Solar events · CME' }).click();
   await expect(page).toHaveURL('/demo/forecast/solar-events?offset=-22');
   await expect(page.getByText('CME synthetic', { exact: true })).toHaveCount(0);
-  await page.getByRole('slider').fill('-21');
+  await page.getByRole('slider', { name: 'Hours relative to event' }).fill('-21');
   await expect(page.getByText('CME synthetic', { exact: true })).toBeVisible();
   await expect(page.getByText('20 Jan 2026, 02:18 UTC', { exact: true })).toBeVisible();
-  await page.getByRole('slider').fill('-11');
+  await page.getByRole('slider', { name: 'Hours relative to event' }).fill('-11');
   await expect(page.getByText('20 Jan 2026, 01:07 UTC', { exact: true })).toBeVisible();
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'LEO density scenario' }).click();
   await expect(page.getByRole('region', { name: 'Historical CME arrival context' })).toBeVisible();

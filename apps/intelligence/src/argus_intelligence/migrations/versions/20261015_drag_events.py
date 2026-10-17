@@ -6,6 +6,8 @@ down_revision = '20261014_drag_monitor'
 branch_labels = None
 depends_on = None
 
+online_compatible = True
+
 
 def upgrade():
     op.execute('''CREATE TABLE intelligence.drag_event_state (

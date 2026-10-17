@@ -80,8 +80,6 @@
 .inspectorToggle { display: none; }
 .inspectorBody { padding: 16px; }
 .inspectorBody > label { display: block; font-size: 10px; color: #a0b0c0; margin-bottom: 7px; }
-.inspectorBody > select { width: 100%; background: #101820; border: 1px solid #384858; padding: 8px 7px; min-height: 36px; color: #c9d7e5; border-radius: 3px; font-family: var(--font-mono); font-size: 11px; }
-.inspectorBody > select:disabled { opacity: .7; }
 .inspectorReading { padding-left: 12px; margin: 22px 0 17px; border-left: 2px solid #79b9e6; }
 .inspectorReading > span:first-child { font-size: 9px; color: #a4bed3; letter-spacing: .04em; }
 .inspectorReading > p { font-family: var(--font-mono); font-size: 36px; letter-spacing: -.06em; line-height: 1.2; margin: 8px 0; }

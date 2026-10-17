@@ -37,7 +37,9 @@ export default function WorkspaceShell({ children, section, contentId = 'forecas
     { href: '/leo', label: 'LEO density scenario', icon: DragRiskIcon },
     { href: '/forecast/solar-events', label: 'Solar events · CME', icon: Activity },
   ] : navigation;
-  return <div className={styles.workspace} data-demo={!!demo}>
+  return <div className={styles.workspace} data-demo={!!demo} onMouseDownCapture={event => {
+    if (event.button === 0 && event.target instanceof Element && event.target.closest('.recharts-wrapper, [data-chart]')) event.preventDefault();
+  }}>
     <a className={styles.skipLink} href={`#${contentId}`}>Skip to {section.toLowerCase()}</a>
     <aside className={styles.sidebar} aria-label="Workspace navigation">
       <Link className={styles.brand} href={hrefFor('/')} aria-label="Argus SunWatch home"><span>ARGUS<small>SUNWATCH</small></span></Link>

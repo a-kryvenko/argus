@@ -74,12 +74,12 @@ test('forecast overview links summary, horizon, quantile interval and time inspe
   await expect(page.getByRole('region', { name: 'Solar Wind Speed threshold probability', exact: true }).locator('canvas').first()).toBeVisible();
   await screenshot(page, 'forecast-overview-desktop');
   await page.getByRole('button', { name: 'First 24 hours', exact: true }).click();
-  await expect(inspector.getByLabel('Forecast time · UTC').locator('option')).toHaveCount(24);
-  await inspector.getByLabel('Forecast time · UTC').selectOption(validTime(12));
+  await expect(inspector.getByLabel('Forecast time · UTC')).toHaveAttribute('max', '23');
+  await inspector.getByLabel('Forecast time · UTC').fill('11');
   await expect(inspector).toContainText('Lead +12 hours');
   await page.locator('summary').filter({ hasText: 'Hourly forecast values' }).click();
   await page.getByRole('button', { name: 'Inspect forecast at 30 Sept 2026, 02:00 UTC' }).click();
-  await expect(inspector.getByLabel('Forecast time · UTC')).toHaveValue(validTime(2));
+  await expect(inspector.getByLabel('Forecast time · UTC')).toHaveValue('1');
   await summary.getByRole('button', { name: 'Show Geomagnetic activity forecast', exact: true }).click();
   await expect(page.getByRole('group', { name: 'Forecast variable' }).getByRole('button', { name: 'AP Ap Index' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Kp Index threshold probability', exact: true }).locator('canvas').first()).toBeVisible();
@@ -114,12 +114,60 @@ test('catalog lists all product definitions and uses the forecast workspace shel
   await screenshot(page, 'forecast-catalog-desktop');
 });
 
+test('forecast range supports keyboard selection and chart clicks do not take focus', async ({ page }) => {
+  await mockForecasts(page);
+  await page.goto('/forecast/solar-wind-speed');
+  const slider = page.getByRole('slider', { name: 'Forecast time · UTC', exact: true });
+  await expect(slider).toHaveAttribute('max', '95');
+  await slider.press('End');
+  await expect(slider).toHaveValue('95');
+  await expect(slider).toHaveAttribute('aria-valuetext', /\+96 hours$/);
+  await slider.press('Home');
+  await slider.press('ArrowRight');
+  await expect(slider).toHaveValue('1');
+  await expect(slider).toHaveAttribute('aria-valuetext', /02:00 UTC · \+2 hours$/);
+  const plot = page.getByRole('region', { name: 'Solar Wind Speed quantile forecast', exact: true });
+  const chart = plot.locator('.recharts-surface');
+  await chart.hover({ position: { x: 200, y: 100 } });
+  await expect(plot.locator('.recharts-tooltip-wrapper')).toBeVisible();
+  await chart.click({ position: { x: 200, y: 100 } });
+  await expect(slider).toBeFocused();
+  await expect(slider).not.toHaveValue('1');
+  const heatmap = page.getByRole('region', { name: 'Solar Wind Speed threshold probability', exact: true }).locator('[data-chart]');
+  await heatmap.click({ position: { x: 200, y: 30 } });
+  await expect(slider).toBeFocused();
+  await chart.focus();
+  await expect(chart).toBeFocused();
+});
+
+test('forecast range follows available times with gaps and disables a single or empty timeline', async ({ page }) => {
+  const forecast = release(products[0]);
+  forecast.predictions = forecast.predictions.filter(point => [1, 5, 12].includes(point.lead_hours));
+  await page.route('**/api/v1/public/forecasts/solar-wind-speed', route => route.fulfill({ json: { success: true, data: forecast, error: null } }));
+  await page.goto('/forecast/solar-wind-speed');
+  const slider = page.getByRole('slider', { name: 'Forecast time · UTC', exact: true });
+  await expect(slider).toHaveAttribute('max', '2');
+  await slider.fill('1');
+  await expect(slider).toHaveAttribute('aria-valuetext', /05:00 UTC · \+5 hours$/);
+  await slider.press('End');
+  await expect(slider).toHaveAttribute('aria-valuetext', /12:00 UTC · \+12 hours$/);
+  forecast.predictions = forecast.predictions.slice(0, 1);
+  await page.reload();
+  await expect(slider).toBeDisabled();
+  await expect(slider).toHaveValue('0');
+  await expect(slider).toHaveAttribute('aria-valuetext', /\+1 hours$/);
+  forecast.predictions = [];
+  await page.reload();
+  await expect(slider).toBeDisabled();
+  await expect(slider).toHaveAttribute('aria-valuetext', 'No forecast times');
+});
+
 test('density preserves unavailable quantiles instead of substituting zero', async ({ page }) => {
   await mockForecasts(page);
   await page.goto('/forecast/solar-wind-density');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await expect(inspector).toContainText('6.25 cm⁻³');
-  await inspector.getByLabel('Forecast time · UTC').selectOption(validTime(2));
+  await inspector.getByLabel('Forecast time · UTC').fill('1');
   await expect(inspector).toContainText('No values for Plasma Density at this forecast time');
   await expect(inspector).toContainText('— cm⁻³');
   await page.locator('summary').filter({ hasText: 'Hourly forecast values' }).click();
@@ -131,14 +179,14 @@ test('HMF retains different variable horizons and resets selected time when filt
   await mockForecasts(page);
   await page.goto('/forecast/hmf');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
-  await inspector.getByLabel('Forecast time · UTC').selectOption(validTime(30));
+  await inspector.getByLabel('Forecast time · UTC').fill('29');
   await expect(inspector).toContainText('No values for Total HMF at this forecast time');
   await page.getByRole('group', { name: 'Forecast variable' }).getByRole('button', { name: 'BS Southward Bz' }).click();
   await expect(inspector).not.toContainText('No values for');
   await expect(inspector).toContainText('Lead +30 hours');
   await page.getByRole('button', { name: 'First 24 hours', exact: true }).click();
-  await expect(inspector.getByLabel('Forecast time · UTC')).toHaveValue(validTime(1));
-  await expect(inspector.getByLabel('Forecast time · UTC').locator('option')).toHaveCount(24);
+  await expect(inspector.getByLabel('Forecast time · UTC')).toHaveValue('0');
+  await expect(inspector.getByLabel('Forecast time · UTC')).toHaveAttribute('max', '23');
 });
 
 test('solar radiation switches all four quantile variables and retains units', async ({ page }) => {
@@ -191,7 +239,7 @@ test('mobile forecast navigation, time inspector and charts fit the screen', asy
   await expect(inspector.getByLabel('Forecast time · UTC')).toBeHidden();
   await inspector.getByRole('button', { name: 'Details', exact: true }).click();
   await expect(inspector.getByLabel('Forecast time · UTC')).toBeVisible();
-  await inspector.getByLabel('Forecast time · UTC').selectOption(validTime(6));
+  await inspector.getByLabel('Forecast time · UTC').fill('5');
   await expect(inspector).toContainText('Lead +6 hours');
   await inspector.getByRole('button', { name: 'Details', exact: true }).click();
   await page.getByText('Resources', { exact: true }).click();

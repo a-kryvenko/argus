@@ -33,5 +33,5 @@ export default function EChart({ option, style, notMerge = false, onEvents }: Pr
       if (!instance.isDisposed()) listeners.forEach(({ event, listener }) => instance.off(event, listener));
     };
   }, [option, notMerge, onEvents]);
-  return <div ref={element} style={{ height: 300, ...style }} />;
+  return <div ref={element} data-chart style={{ height: 300, ...style }} />;
 }

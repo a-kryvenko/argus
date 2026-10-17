@@ -10,6 +10,7 @@ import { productApiPath, type ProductConfig } from '../_config/products';
 import HeatMap from './HeatMap';
 import WindChart from './WindChart';
 import ResourceState from './ResourceState';
+import ForecastTimeSlider from './ForecastTimeSlider';
 import styles from './forecast.module.css';
 
 export type ForecastResource = { data: Forecast | null; error: string | null; retry: () => void };
@@ -89,11 +90,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
           <button className={styles.inspectorToggle} onClick={() => setInspectorOpen(open => !open)} aria-expanded={inspectorOpen} aria-controls={`forecast-inspector-${product.slug}`}>Details<ChevronDown size={14} aria-hidden="true" /></button>
         </div>
         <div className={styles.inspectorBody} id={`forecast-inspector-${product.slug}`}>
-          <label htmlFor={`forecast-time-${product.slug}`}>Forecast time · UTC</label>
-          <select id={`forecast-time-${product.slug}`} value={point?.valid_time ?? ''} disabled={!view?.predictions.length} onChange={event => selectTime(event.target.value)}>
-            {!view?.predictions.length && <option value="">No forecast times</option>}
-            {view?.predictions.map(item => <option key={item.valid_time} value={item.valid_time}>+{item.lead_hours}h · {item.valid_time.slice(5, 16).replace('T', ' ')}</option>)}
-          </select>
+          <ForecastTimeSlider id={`forecast-time-${product.slug}`} predictions={view?.predictions ?? []} time={point?.valid_time} onChange={selectTime} />
           <div className={styles.inspectorReading}>
             <span>{variable.quantile ? (variable.key === 'v' && view?.cme_speed && !view.cme_speed.integrated_into_speed ? 'BACKGROUND · q50' : 'MEDIAN · q50') : primaryThreshold?.label ?? variable.label}</span>
             <p>{variable.quantile ? forecastNumber(values?.continuous?.q50) : formatProbability(primaryThreshold ? probability(point, variable.key, primaryThreshold.value) : null)} <small>{variable.quantile ? variable.unit : ''}</small></p>

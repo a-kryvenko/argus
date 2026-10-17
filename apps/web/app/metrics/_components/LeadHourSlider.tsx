@@ -1,6 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
-import local from './metrics.module.css';
+import styles from '../../_components/range.module.css';
 
 export default function LeadHourSlider({ id, hours, hour, onChange }: {
   id: string; hours: number[]; hour: number; onChange: (hour: number) => void;
@@ -16,13 +16,13 @@ export default function LeadHourSlider({ id, hours, hour, onChange }: {
   const current = hours.includes(preview) ? preview : hour;
   return <>
     <label htmlFor={id}>Evaluation lead hour <output htmlFor={id}>+{current}h</output></label>
-    <input className={local.leadSlider} id={id} type="range" min={0} max={hours.length - 1} step={1}
+    <input className={styles.slider} id={id} type="range" min={0} max={hours.length - 1} step={1}
       value={hours.indexOf(current)} aria-valuetext={`+${current} hours`} disabled={hours.length < 2}
       onChange={event => {
         const next = hours[Number(event.target.value)];
         setPreview(next);
         startTransition(() => onChange(next));
       }} />
-    <div className={local.leadScale} aria-hidden="true"><span>+{hours[0]}h</span><span>+{hours.at(-1)}h</span></div>
+    <div className={styles.scale} aria-hidden="true"><span>+{hours[0]}h</span><span>+{hours.at(-1)}h</span></div>
   </>;
 }

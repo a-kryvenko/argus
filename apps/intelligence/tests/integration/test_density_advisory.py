@@ -48,6 +48,69 @@ def release():
         csv_text=csv, model_info={'name': 'Canned storage fixture'})])
 
 
+def test_all_spacecraft_are_always_monitored_and_migration_resumes_paused_profiles(storage, monkeypatch):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import create_engine
+    from domain_storage import ROOT, load
+
+    paused = monitor.save_profile(1, body().model_copy(update={'enabled': False}))
+    active = monitor.save_profile(1, body())
+    assert paused.enabled is True
+    with monitor.db.connect() as conn:
+        conn.execute("UPDATE intelligence.density_profile SET payload=jsonb_set(payload,'{enabled}','false'::jsonb) WHERE id=%s", (paused.id,))
+    monkeypatch.setattr(monitor, 'retrieve_inputs', lambda: {})
+    assert monitor.refresh_profiles() == {'profiles': 2, 'failed': 0}
+    assert monitor.read_profile(1, paused.id).enabled is True
+    migration = load(ROOT / 'apps/intelligence/src/argus_intelligence/migrations/versions/20261017_density_always_on.py')
+    engine = create_engine(monitor.db.database_url())
+    try:
+        with engine.begin() as connection:
+            monkeypatch.setattr(migration, 'op', Operations(MigrationContext.configure(connection)))
+            migration.upgrade()
+            migration.upgrade()
+    finally:
+        engine.dispose()
+    resumed = monitor.read_profile(1, paused.id)
+    assert resumed.enabled is True and resumed.revision == paused.revision + 1
+    assert monitor.read_profile(1, active.id).revision == active.revision
+    with monitor.db.connect() as conn:
+        row = conn.execute('SELECT payload FROM intelligence.density_profile WHERE id=%s', (paused.id,)).fetchone()
+        assert row['payload']['enabled'] is True
+    assert monitor.refresh_profiles() == {'profiles': 2, 'failed': 0}
+    assert len(monitor.history(1, paused.id)) == 2
+    assert all(item.data_status != 'paused' for item in monitor.list_profiles(1))
+
+
+def test_delete_ownership_revision_running_assessment_and_shared_inputs(storage):
+    profile = monitor.save_profile(1, body())
+    other = monitor.save_profile(2, body())
+    source = release()
+    inputs = {source.product: source}
+    run = monitor.assess_profile(1, profile.id, inputs=inputs)
+    other_run = monitor.assess_profile(2, other.id, inputs=inputs)
+    with pytest.raises(ProfileNotFound):
+        monitor.delete_profile(2, profile.id, revision=profile.revision)
+    with pytest.raises(ProfileConflict):
+        monitor.delete_profile(1, profile.id, revision=profile.revision+1)
+    assert monitor.read_run(1, profile.id, run.id).id == run.id
+    with monitor.db.connect() as conn:
+        conn.execute('SELECT pg_advisory_lock(hashtextextended(%s,1))', (str(profile.id),))
+        with pytest.raises(ProfileConflict):
+            monitor.delete_profile(1, profile.id, revision=profile.revision)
+    assert monitor.delete_profile(1, profile.id, revision=profile.revision) == {'deleted': True}
+    assert monitor.list_profiles(1) == []
+    assert monitor.list_events(1).total == 0
+    for read in (lambda: monitor.read_profile(1, profile.id), lambda: monitor.read_run(1, profile.id, run.id)):
+        with pytest.raises(ProfileNotFound):
+            read()
+    with monitor.db.connect() as conn:
+        assert conn.execute('SELECT count(*) AS n FROM intelligence.density_run_input WHERE run_id=%s', (run.id,)).fetchone()['n'] == 0
+        assert conn.execute('SELECT count(*) AS n FROM intelligence.density_event_state WHERE profile_id=%s', (profile.id,)).fetchone()['n'] == 0
+    assert monitor.read_input(2, other.id, other_run.id, source.product) == source
+    assert monitor.list_events(2).total > 0
+
+
 def test_ownership_revision_deduplication_and_immutable_event_source(storage,monkeypatch):
     p=monitor.save_profile(1,body())
     assert monitor.list_profiles(2)==[]

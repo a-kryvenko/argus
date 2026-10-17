@@ -5,6 +5,33 @@ from argus_intelligence import density_monitor
 from argus_intelligence.main import app
 
 
+def test_delete_uses_authenticated_owner_revision_and_reports_conflicts(monkeypatch):
+    from uuid import uuid4
+    from argus_intelligence.monitor import ProfileConflict, ProfileNotFound
+
+    monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
+    profile_id = uuid4()
+    path = f'/internal/v1/density-advisory/7/{profile_id}'
+    headers = {'Authorization': 'Bearer test-token'}
+    calls = []
+    def remove(owner_id, target, *, revision):
+        calls.append((owner_id, target, revision))
+        return {'deleted': True}
+    monkeypatch.setattr(density_monitor, 'delete_profile', remove)
+    with TestClient(app) as client:
+        assert client.delete(path+'?revision=1').status_code == 401
+        assert client.delete(path, headers=headers).status_code == 422
+        assert client.delete(path+'?revision=0', headers=headers).status_code == 422
+        response = client.delete(path+'?revision=3', headers=headers)
+        assert response.status_code == 200 and response.json() == {'deleted': True}
+        assert calls == [(7, profile_id, 3)]
+        for error, status in [(ProfileNotFound('Spacecraft not found'), 404), (ProfileConflict('Profile changed'), 409)]:
+            def fail(*args, **kwargs):
+                raise error
+            monkeypatch.setattr(density_monitor, 'delete_profile', fail)
+            assert client.delete(path+'?revision=3', headers=headers).status_code == status
+
+
 def test_service_auth_and_sanitized_storage_failure(monkeypatch):
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN','test-token')
     monkeypatch.setattr(density_monitor,'list_profiles',lambda owner: [])

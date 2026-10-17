@@ -35,7 +35,7 @@ export default function Live() {
     statusTone={snapshot.failed || snapshotOld ? 'warning' : 'good'}>
       <main id="live-content" className={styles.page}>
         <div className={styles.pageHeading}>
-          <div><div className={styles.eyebrow}>EARTH–SUN ENVIRONMENT <span>/ 01</span></div><h1>Live observations</h1><p>Solar wind upstream. Geomagnetic response on Earth.</p></div>
+          <div><h1>Live observations</h1><p>Solar wind upstream. Geomagnetic response on Earth.</p></div>
           <div className={styles.snapshotTime}><span>LATEST SNAPSHOT · UTC</span><time dateTime={snapshot.data?.generated_at}>{stamp(snapshot.data?.generated_at)}</time></div>
         </div>
         <ObservationSummary snapshot={snapshot} selected={selected} onSelect={select} />

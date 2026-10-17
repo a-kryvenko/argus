@@ -3,7 +3,7 @@ from uuid import UUID
 from typing import Literal
 import psycopg
 from fastapi import APIRouter, HTTPException, Query
-from common.schemas.density_advisory import AdvisoryProfileInput, AdvisoryProfile, AdvisoryItem, AdvisoryRun, AdvisoryRunSummary, AdvisoryEvent, AdvisoryEventPage
+from common.schemas.density_advisory import AdvisorySpacecraftInput, AdvisoryProfile, AdvisoryItem, AdvisoryRun, AdvisoryRunSummary, AdvisoryEvent, AdvisoryEventPage
 from common.schemas.forecast_release import ForecastRelease
 from argus_intelligence import density_monitor as monitor
 from argus_intelligence.monitor import ProfileConflict, ProfileNotFound
@@ -34,13 +34,18 @@ def profiles(owner_id:int):
 
 
 @router.post('',response_model=AdvisoryProfile,status_code=201)
-def create(owner_id:int,body:AdvisoryProfileInput):
+def create(owner_id:int,body:AdvisorySpacecraftInput):
     return call(monitor.save_profile,owner_id,body)
 
 
 @router.put('/{profile_id}',response_model=AdvisoryProfile)
-def update(owner_id:int,profile_id:UUID,body:AdvisoryProfileInput,revision:int=Query(ge=1)):
+def update(owner_id:int,profile_id:UUID,body:AdvisorySpacecraftInput,revision:int=Query(ge=1)):
     return call(monitor.save_profile,owner_id,body,profile_id=profile_id,revision=revision)
+
+
+@router.delete('/{profile_id}', response_model=dict[str, bool])
+def delete(owner_id:int, profile_id:UUID, revision:int=Query(ge=1)):
+    return call(monitor.delete_profile, owner_id, profile_id, revision=revision)
 
 
 @router.get('/events',response_model=AdvisoryEventPage)

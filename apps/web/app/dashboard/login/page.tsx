@@ -1,8 +1,7 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, ArrowRight, Loader2, LockKeyhole } from "lucide-react";
+import { ArrowRight, Loader2, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,7 +73,6 @@ export default function Login() {
                 </Button>
               </form>
         <p className="mt-6 text-xs leading-relaxed text-muted-foreground">Need an account or a password reset? Contact your administrator.</p>
-        <Link href="/" className="mt-6 flex items-center gap-2 text-xs text-primary"><ArrowLeft className="size-3.5" />Forecast overview</Link>
       </div>
     </main>
   );

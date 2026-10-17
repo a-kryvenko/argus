@@ -45,9 +45,25 @@ async function screenshot(page: Page, name: string) {
 test('metrics catalog uses the workspace and links all six products', async ({ page }) => {
   await page.goto('/metrics');
   await expect(page.getByRole('heading', { name: 'Model performance', exact: true })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Model performance' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Metrics', exact: true })).toHaveAttribute('aria-current', 'page');
   for (const product of products) await expect(page.getByRole('link').filter({ has: page.getByRole('heading', { name: product.title, exact: true }) })).toHaveAttribute('href', `/metrics/${product.slug}`);
   await screenshot(page, 'metrics-catalog-desktop');
+});
+
+test('breadcrumbs follow the page hierarchy and the current page is not a link', async ({ page }) => {
+  await mock(page);
+  await page.goto('/metrics/solar-wind-speed');
+  const trail = page.getByRole('navigation', { name: 'Breadcrumb', exact: true });
+  await expect(trail.getByRole('listitem')).toHaveText(['Argus', 'Metrics', 'Plasma speed']);
+  await expect(trail.getByRole('link', { name: 'Argus', exact: true })).toHaveAttribute('href', '/');
+  await expect(trail.getByRole('link', { name: 'Metrics', exact: true })).toHaveAttribute('href', '/metrics');
+  await expect(trail.locator('[aria-current="page"]')).toHaveText('Plasma speed');
+  await expect(trail.getByRole('link', { name: 'Plasma speed', exact: true })).toHaveCount(0);
+  await trail.getByRole('link', { name: 'Metrics', exact: true }).click();
+  await expect(page).toHaveURL('/metrics');
+  await expect(trail.getByRole('listitem')).toHaveText(['Argus', 'Metrics']);
+  await expect(trail.locator('[aria-current="page"]')).toHaveText('Metrics');
+  await expect(trail.getByRole('link', { name: 'Metrics', exact: true })).toHaveCount(0);
 });
 
 test('continuous and threshold views share selected lead, preserve zero and expose all metrics', async ({ page }) => {
@@ -119,7 +135,7 @@ test('missing variable can switch to available evaluation without inventing metr
 for (const slug of ['solar-radiation', 'solar-wind-density', 'dst']) test(`${slug} renders continuous metrics and correct forecast link`, async ({ page }) => {
   await mock(page); await page.goto(`/metrics/${slug}`);
   await expect(page.getByRole('region', { name: 'MAE by lead hour' }).locator('.recharts-line-curve')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Open forecast', exact: true }).first()).toHaveAttribute('href', `/products/${slug}`);
+  await expect(page.getByRole('link', { name: 'Open forecast', exact: true }).first()).toHaveAttribute('href', `/forecast/${slug}`);
   if (slug === 'solar-radiation') {
     await page.getByRole('button', { name: 'Y10 Y10', exact: true }).click();
     await expect(page.getByRole('complementary', { name: 'Metrics inspector' })).toContainText('Y10');
@@ -137,7 +153,7 @@ test('failed metrics retry and empty response remain explicit', async ({ page })
   await error.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Dst Index metrics are not available' })).toBeVisible();
   state.empty = false;
-  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.reload();
   await expect(page.getByRole('region', { name: 'MAE by lead hour' })).toBeVisible();
 });
 

@@ -1,8 +1,8 @@
+import DragRiskIcon from '@/components/DragRiskIcon';
 import {
   Activity,
   LayoutDashboard,
   UsersRound,
-  Satellite,
 } from "lucide-react";
 export const navigation = [
   {
@@ -27,8 +27,8 @@ export const navigation = [
     items: [
       {
         href: "/dashboard/risk/leo",
-        title: "LEO drag",
-        icon: Satellite,
+        title: "Drag risk",
+        icon: DragRiskIcon,
         permission: null,
       },
     ],

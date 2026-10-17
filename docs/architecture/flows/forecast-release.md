@@ -18,7 +18,7 @@ flowchart TD
     previous --> retry["Retry failed products<br/>Within current schedule slot"]
     publish --> http["Prophet HTTP<br/>Stored releases"]
     previous --> http
-    http --> retained[("Intelligence DB<br/>Exact release copies + supplied ephemerides")]
+    http --> retained[("Intelligence DB<br/>Exact release copies + spacecraft profiles")]
     retained --> risk["Private intelligence-core<br/>Density advisories and explanations"]
     risk --> journal[("Intelligence DB<br/>Immutable assessment and event journal")]
     journal --> api["Public API"]

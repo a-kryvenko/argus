@@ -22,7 +22,7 @@ export default function SolarEvents() {
   }));
   const impacts = data?.events.filter(e => e.source === 'DONKI/WSA-ENLIL' && ['predicted_hit', 'prediction_elapsed'].includes(e.status)) ?? [];
   return <main id="forecast-content" className={styles.page}>
-    <div className={styles.pageHeading}><div><div className={styles.eyebrow}>SOLAR EVENTS · CME</div><h1>Solar events</h1><p>Expected CME arrivals at Earth and the solar-wind speed forecast for those impacts.</p></div><button onClick={retry}>Refresh forecast</button></div>
+    <div className={styles.pageHeading}><div><h1>Solar events</h1><p>Expected CME arrivals at Earth and the solar-wind speed forecast for those impacts.</p></div></div>
     {error && <p role="alert">Forecast unavailable. <button onClick={retry}>Try again</button></p>}
     {!data && !error && <p role="status">Loading the published solar-event forecast…</p>}
     {data && <>
@@ -38,6 +38,6 @@ export default function SolarEvents() {
       </section>
       {points.length > 0 && <details><summary>Hourly speed forecast · km/s</summary><div className={styles.tableScroll}><table><thead><tr><th scope="col">Time · UTC</th><th scope="col">Background</th><th scope="col">Expected impact</th><th scope="col">Early</th><th scope="col">Late</th><th scope="col">Scenario range</th></tr></thead><tbody>{points.map(p => <tr key={p.valid_time}><th scope="row">{formatForecastTime(p.valid_time)}</th><td>{number(p.speed_background)}</td><td>{number(p.speed_nominal)}</td><td>{number(p.speed_early)}</td><td>{number(p.speed_late)}</td><td>{number(p.scenario_lower)}–{number(p.scenario_upper)}</td></tr>)}</tbody></table></div></details>}
     </>}
-    <div className={styles.pageFooter}><Link href="/products">All forecast products</Link><Link href="/products/solar-wind-speed">Background speed forecast</Link></div>
+    <div className={styles.pageFooter}><Link href="/forecast/solar-wind-speed">Background speed forecast</Link></div>
   </main>;
 }

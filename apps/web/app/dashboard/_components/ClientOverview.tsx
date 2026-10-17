@@ -1,13 +1,14 @@
+import DragRiskIcon from '@/components/DragRiskIcon';
 import Link from 'next/link';
-import { ArrowUpRight, Activity, ChartNoAxesCombined, Radio, Satellite } from 'lucide-react';
+import { ArrowUpRight, Activity, ChartNoAxesCombined, Radio } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PageHeading } from './presentation';
 
 const sections = [
   { href: '/live', title: 'Live observations', description: 'Follow solar wind and geomagnetic conditions with shared UTC history controls.', icon: Radio },
-  { href: '/products', title: 'Forecast products', description: 'Explore model outlooks, prediction intervals and threshold probabilities.', icon: Activity },
+  { href: '/forecast', title: 'Forecast', description: 'Explore model outlooks, prediction intervals and threshold probabilities.', icon: Activity },
   { href: '/metrics', title: 'Model performance', description: 'Inspect forecast quality by lead hour and probability calibration.', icon: ChartNoAxesCombined },
-  { href: '/dashboard/risk/leo', title: 'LEO drag assessment', description: 'Estimate atmospheric drag and altitude loss for a circular low Earth orbit.', icon: Satellite },
+  { href: '/dashboard/risk/leo', title: 'Drag risk', description: 'Monitor atmospheric density risk for your spacecraft.', icon: DragRiskIcon },
 ];
 export default function ClientOverview() {
   return <>

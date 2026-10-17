@@ -3,6 +3,13 @@ const nextConfig = {
     output: "standalone",
     distDir: process.env.NEXT_DIST_DIR || ".next",
 
+    async redirects() {
+        return [
+            { source: "/products/:path*", destination: "/forecast/:path*", permanent: true },
+            { source: "/demo/products/:path*", destination: "/demo/forecast/:path*", permanent: true },
+        ];
+    },
+
     async rewrites() {
         if (process.env.NODE_ENV !== "development") {
             return [];

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 const sections = [
   ["start", "Getting started"],
   ["forecasts", "Reading forecasts"],
-  ["products", "Forecast products"],
+  ["products", "Forecast"],
   ["observations", "Live data"],
   ["metrics", "Model performance"],
   ["api", "API & support"],
@@ -23,7 +23,7 @@ export default function Help() {
     <WorkspaceShell section="Help & methodology" contentId="help-content" status="Reference guide">
     <main id="help-content" className={styles.page}>
       <header className={styles.hero}>
-        <p className={styles.eyebrow}>WORKSPACE GUIDE / 06 TOPICS</p>
+
         <h1>Reading charts and data</h1>
         <p className={styles.intro}>
           Chart values, forecast probabilities, observation timestamps and model evaluation metrics.
@@ -45,7 +45,7 @@ export default function Help() {
             <h2>Getting started</h2>
             <ol className={styles.steps}>
               <li><strong>Check current conditions.</strong> Open <Link href="/live">Live</Link> and check the observation timestamp to see how recent the available data is.</li>
-              <li><strong>Choose a forecast.</strong> Browse <Link href="/products">Products</Link> for the quantity you want to follow. Each product has its own charts, units, and API links.</li>
+              <li><strong>Choose a forecast.</strong> Browse <Link href="/forecast">Forecast</Link> for the quantity you want to follow. Each product has its own charts, units, and API links.</li>
               <li><strong>Read the uncertainty.</strong> Inspect the median and quantiles where available, or the probability of crossing a specified threshold.</li>
               <li><strong>Check past performance.</strong> Open <Link href="/metrics">Metrics</Link> for that product and compare results at the lead time you care about.</li>
             </ol>
@@ -75,13 +75,13 @@ export default function Help() {
           </section>
 
           <section id="products" className={styles.section}>
-            <h2>Forecast products</h2>
+            <h2>Forecast</h2>
             <p>Products differ in the quantities and forecast types they provide. Some variables may not yet have a forecast available.</p>
             <div className={styles.cards}>
               {products.map(product => (
                 <article key={product.slug} className={styles.card}>
                   <span className={styles.badge}>{product.visibility === "public" ? "Public API" : "Private API"}</span>
-                  <h3><Link href={`/products/${product.slug}`}>{product.title}</Link></h3>
+                  <h3><Link href={`/forecast/${product.slug}`}>{product.title}</Link></h3>
                   <p>{product.description}</p>
                   <p className={styles.units}>{product.variables.map(variable => `${variable.label}: ${variable.unit}`).join(" · ")}</p>
                 </article>

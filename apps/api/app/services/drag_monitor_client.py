@@ -6,6 +6,11 @@ from fastapi import HTTPException
 from pydantic import TypeAdapter
 
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+SPACECRAFT_VALIDATION_ERROR = 'Invalid spacecraft parameters. Check orbital parameters, optional properties and density ratio thresholds.'
+VALIDATION_MESSAGES = {
+    'High density ratio must exceed review density ratio': 'High density ratio must exceed review density ratio.',
+    'Apoapsis, periapsis and inclination are required': 'Apoapsis, periapsis and inclination are required.',
+}
 
 
 def request(method, owner_id, suffix, response_type, *, body=None, params=None, transport=None, resource='drag-monitor', max_response_bytes=None):
@@ -23,7 +28,12 @@ def request(method, owner_id, suffix, response_type, *, body=None, params=None, 
                     raise HTTPException(response.status_code, 'Spacecraft not found' if response.status_code == 404
                                         else 'Profile changed, paused or assessment running. Reload and try again.')
                 if response.status_code == 422 and resource == 'density-advisory':
-                    raise HTTPException(422, 'Invalid trajectory or reference. Check timestamps, validity and ratio thresholds.')
+                    try:
+                        detail = response.json().get('detail')
+                    except (ValueError, AttributeError):
+                        detail = None
+                    message = VALIDATION_MESSAGES.get(detail, SPACECRAFT_VALIDATION_ERROR) if isinstance(detail, str) else SPACECRAFT_VALIDATION_ERROR
+                    raise HTTPException(422, message)
                 response.raise_for_status()
                 content = bytearray()
                 for chunk in response.iter_bytes():

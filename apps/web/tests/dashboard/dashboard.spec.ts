@@ -332,7 +332,7 @@ test("dashboard styles do not change public typography after client navigation",
       return { fontSize: css.fontSize, color: css.color, margin: css.margin };
     });
   await page.goto("/dashboard");
-  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Forecast overview", exact: true }).click();
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Overview", exact: true }).click();
   await expect(page).toHaveURL(`${baseURL}/`);
   await expect(page.locator(".dashboard")).toHaveCount(0);
   const after = await page
@@ -355,7 +355,7 @@ test("client landing never requests project monitoring", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Your workspace" }),
   ).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'LEO drag assessment', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Drag risk', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Users & access', exact: true })).toHaveCount(0);
   await captureScreenshot(page, { path: '/tmp/argus-member-workspace.png', fullPage: true });
   expect(

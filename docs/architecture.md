@@ -55,7 +55,7 @@ infrastructure are not a hostile-code security boundary.
 
 - **Clio:** improve observation quality and provenance; publish observations and checksum-verified originals.
 - **Prophet:** prepare calibrated features, freeze inputs, calculate and publish each product independently. Failed products retain their previous release. Calculation children never write to DB.
-- **Intelligence:** evaluate supplied trajectories against published density/background and CME releases. All sampling, attention and freshness policy live in the private core.
+- **Intelligence:** evaluate orbital altitude/latitude envelopes against published density/background and CME releases. All sampling, attention and freshness policy live in the private core.
 
 Reads never trigger collection or forecast generation. Add optional fields within
 contract v1; incompatible changes require a new version and migration path.

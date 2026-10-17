@@ -7,7 +7,6 @@ import {
   Cpu,
   Database,
   HardDrive,
-  RefreshCw,
   Server,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +184,6 @@ export default function ProjectOverview() {
   const [project, setProject] = useState<Project | null>(null);
   const [traffic, setTraffic] = useState<Traffic | null>(null);
   const [period, setPeriod] = useState("day");
-  const [version, setVersion] = useState(0);
   const [errors, setErrors] = useState({ project: "", traffic: "" });
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
@@ -218,7 +216,7 @@ export default function ProjectOverview() {
       window.clearInterval(timer);
       window.clearInterval(tick);
     };
-  }, [period, version]);
+  }, [period]);
   const old =
     !project?.checked_at ||
     clock - Date.parse(project.checked_at) > 120000 ||
@@ -241,12 +239,6 @@ export default function ProjectOverview() {
       <PageHeading
         title="Project overview"
         description="Service availability, observation freshness, forecasts and traffic. All times are UTC."
-        action={
-          <Button variant="outline" onClick={() => setVersion((v) => v + 1)}>
-            <RefreshCw className="mr-2 size-4" />
-            Refresh
-          </Button>
-        }
       />
       <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
@@ -576,7 +568,7 @@ export default function ProjectOverview() {
             </Card>
           </section>
           <section className="space-y-3">
-            <h2 className="text-lg font-medium">Prophet · Forecast products</h2>
+            <h2 className="text-lg font-medium">Prophet · Forecast</h2>
             <Card className="overflow-hidden">
               <Table>
                 <TableHeader>

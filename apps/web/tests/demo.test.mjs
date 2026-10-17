@@ -15,7 +15,7 @@ test('offset is a bounded integer, links retain it and T0 is the precise event t
   assert.equal(parseOffset('999'), 72);
   assert.equal(parseOffset('-48'), -48);
   assert.equal(demoHref('/', -48), '/demo?offset=-48');
-  assert.equal(demoHref('/products/dst', 0), '/demo/products/dst?offset=0');
+  assert.equal(demoHref('/forecast/dst', 0), '/demo/forecast/dst?offset=0');
   assert.equal(countdown(0), 'T0 · Event begins');
   assert.equal(countdown(-48), 'T−48 h · Until event');
   assert.equal(countdown(72), 'T+72 h · Since event');

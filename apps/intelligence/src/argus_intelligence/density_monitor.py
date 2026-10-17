@@ -19,7 +19,7 @@ def max_age():
 
 
 def profile_from(row):
-    return AdvisoryProfile(**row['payload'], id=row['id'], revision=row['revision'], updated_at=row['updated_at'])
+    return AdvisoryProfile(**{**row['payload'], 'enabled': True}, id=row['id'], revision=row['revision'], updated_at=row['updated_at'])
 
 
 def read_profile(owner_id,profile_id):
@@ -32,6 +32,7 @@ def read_profile(owner_id,profile_id):
 
 def save_profile(owner_id, body, *, profile_id=None, revision=None):
     from intelligence_core.api import validate_advisory_profile
+    body = body.model_copy(update={'enabled': True})
     validate_advisory_profile(body, now=datetime.now(UTC))
     with db.connect() as conn:
         with conn.transaction():
@@ -55,6 +56,27 @@ def save_profile(owner_id, body, *, profile_id=None, revision=None):
 def latest(conn, profile_id):
     row=conn.execute('SELECT payload FROM intelligence.density_run WHERE profile_id=%s ORDER BY assessed_at DESC,id DESC LIMIT 1',(profile_id,)).fetchone()
     return AdvisoryRun.model_validate(row['payload']) if row else None
+
+
+def delete_profile(owner_id, profile_id, *, revision):
+    with db.connect() as conn:
+        with conn.transaction():
+            row = conn.execute('''SELECT revision FROM intelligence.density_profile
+                WHERE owner_id=%s AND id=%s FOR UPDATE''', (owner_id, profile_id)).fetchone()
+            if row is None:
+                raise ProfileNotFound('Spacecraft not found')
+            if row['revision'] != revision:
+                raise ProfileConflict('Profile changed; reload before deleting')
+            if not conn.execute('SELECT pg_try_advisory_xact_lock(hashtextextended(%s,1)) AS acquired',
+                                (str(profile_id),)).fetchone()['acquired']:
+                raise ProfileConflict('Assessment is running')
+            conn.execute('DELETE FROM intelligence.density_event WHERE profile_id=%s', (profile_id,))
+            conn.execute('DELETE FROM intelligence.density_event_state WHERE profile_id=%s', (profile_id,))
+            conn.execute('''DELETE FROM intelligence.density_run_input WHERE run_id IN
+                (SELECT id FROM intelligence.density_run WHERE profile_id=%s)''', (profile_id,))
+            conn.execute('DELETE FROM intelligence.density_run WHERE profile_id=%s', (profile_id,))
+            conn.execute('DELETE FROM intelligence.density_profile WHERE owner_id=%s AND id=%s', (owner_id, profile_id))
+    return {'deleted': True}
 
 
 def list_profiles(owner_id):
@@ -151,8 +173,6 @@ def assess_profile(owner_id,profile_id,*,inputs=None):
         if row is None:
             raise ProfileNotFound('Spacecraft not found')
         profile=profile_from(row)
-        if not profile.enabled:
-            raise ProfileConflict('Monitoring is paused')
         inputs=retrieve_inputs() if inputs is None else inputs
         previous=latest(conn,profile_id)
         density_id=getattr(inputs.get('atmospheric-density'),'release_id',None)
@@ -202,7 +222,7 @@ def acknowledge(owner_id,event_id):
 
 def refresh_profiles(*,stop=None):
     with db.connect() as conn:
-        rows=conn.execute("SELECT id,owner_id FROM intelligence.density_profile WHERE payload->>'enabled'='true'").fetchall()
+        rows=conn.execute('SELECT id,owner_id FROM intelligence.density_profile').fetchall()
     if not rows:
         return {'profiles':0,'failed':0}
     inputs=retrieve_inputs()

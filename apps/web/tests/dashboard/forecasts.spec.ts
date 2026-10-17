@@ -4,6 +4,21 @@ import { products, type ProductConfig } from '../../app/_config/products';
 import type { Forecast, ForecastPoint } from '../../app/_utils/api';
 
 const issue = '2026-09-30T00:00:00.000Z';
+
+test('old product URLs redirect to forecast and preserve query parameters', async ({ request }) => {
+  for (const [source, destination] of [
+    ['/products', '/forecast'],
+    ['/products/solar-wind-speed', '/forecast/solar-wind-speed'],
+    ['/demo/products', '/demo/forecast'],
+    ['/demo/products/solar-events', '/demo/forecast/solar-events'],
+  ]) {
+    const response = await request.get(`${source}?offset=-24`, { maxRedirects: 0 });
+    expect(response.status()).toBe(308);
+    const location = new URL(response.headers().location, 'http://localhost:3100');
+    expect(location.pathname).toBe(destination);
+    expect(location.search).toBe('?offset=-24');
+  }
+});
 const validTime = (lead: number) => new Date(Date.parse(issue) + lead * 3600000).toISOString();
 function release(product: ProductConfig): Forecast {
   const horizon = product.apiTarget.startsWith('solar-wind') ? 96 : 48;
@@ -48,8 +63,8 @@ test('forecast overview links summary, horizon, quantile interval and time inspe
   await mockForecasts(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Forecast overview', exact: true })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Forecast overview' })).toHaveAttribute('aria-current', 'page');
-  const summary = page.getByRole('region', { name: 'Forecast products summary' });
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
+  const summary = page.getByRole('region', { name: 'Forecast summary' });
   await expect(summary).toContainText('420 km/s');
   await expect(summary).toContainText('6.25 cm⁻³');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
@@ -78,7 +93,7 @@ test('probability charts survive repeated variable and horizon changes', async (
     if (message.text().includes('has been disposed')) errors.push(message.text());
   });
   await mockForecasts(page);
-  await page.goto('/products/geomagnetic-activity');
+  await page.goto('/forecast/geomagnetic-activity');
   const heatmap = page.getByRole('region', { name: 'Kp Index threshold probability', exact: true });
   await expect(heatmap.locator('canvas').first()).toBeVisible();
   for (let i = 0; i < 3; i++) {
@@ -92,16 +107,16 @@ test('probability charts survive repeated variable and horizon changes', async (
 });
 
 test('catalog lists all product definitions and uses the forecast workspace shell', async ({ page }) => {
-  await page.goto('/products');
-  await expect(page.getByRole('heading', { name: 'Forecast products', exact: true })).toBeVisible();
+  await page.goto('/forecast');
+  await expect(page.getByRole('heading', { name: 'Forecast', exact: true })).toBeVisible();
   for (const product of products) await expect(page.getByRole('heading', { name: product.title, exact: true })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Forecast products' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Forecast', exact: true })).toHaveAttribute('aria-current', 'page');
   await screenshot(page, 'forecast-catalog-desktop');
 });
 
 test('density preserves unavailable quantiles instead of substituting zero', async ({ page }) => {
   await mockForecasts(page);
-  await page.goto('/products/solar-wind-density');
+  await page.goto('/forecast/solar-wind-density');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await expect(inspector).toContainText('6.25 cm⁻³');
   await inspector.getByLabel('Forecast time · UTC').selectOption(validTime(2));
@@ -114,7 +129,7 @@ test('density preserves unavailable quantiles instead of substituting zero', asy
 
 test('HMF retains different variable horizons and resets selected time when filtered out', async ({ page }) => {
   await mockForecasts(page);
-  await page.goto('/products/hmf');
+  await page.goto('/forecast/hmf');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await inspector.getByLabel('Forecast time · UTC').selectOption(validTime(30));
   await expect(inspector).toContainText('No values for Total HMF at this forecast time');
@@ -128,7 +143,7 @@ test('HMF retains different variable horizons and resets selected time when filt
 
 test('solar radiation switches all four quantile variables and retains units', async ({ page }) => {
   await mockForecasts(page);
-  await page.goto('/products/solar-radiation');
+  await page.goto('/forecast/solar-radiation');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await expect(inspector).toContainText('155 sfu');
   await page.getByRole('group', { name: 'Forecast variable' }).getByRole('button', { name: 'M10 M10', exact: true }).click();
@@ -139,7 +154,7 @@ test('solar radiation switches all four quantile variables and retains units', a
 
 test('geomagnetic product switches from Kp probabilities to Ap quantiles', async ({ page }) => {
   await mockForecasts(page);
-  await page.goto('/products/geomagnetic-activity');
+  await page.goto('/forecast/geomagnetic-activity');
   await expect(page.getByRole('region', { name: 'Kp Index threshold probability', exact: true })).toBeVisible();
   await page.getByRole('group', { name: 'Forecast variable' }).getByRole('button', { name: 'AP Ap Index' }).click();
   await expect(page.getByRole('region', { name: 'Ap Index quantile forecast', exact: true })).toBeVisible();
@@ -148,7 +163,7 @@ test('geomagnetic product switches from Kp probabilities to Ap quantiles', async
 
 test('Dst shows signed values and the actual release timestamp', async ({ page }) => {
   await mockForecasts(page);
-  await page.goto('/products/dst');
+  await page.goto('/forecast/dst');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await expect(inspector).toContainText('-20 nT');
   await expect(inspector).toContainText('30 Sept 2026, 00:00 UTC');
@@ -158,7 +173,7 @@ test('Dst shows signed values and the actual release timestamp', async ({ page }
 test('failed release read stays explicit and retries without inventing values', async ({ page }) => {
   const state = { failed: true };
   await mockForecasts(page, state);
-  await page.goto('/products/solar-wind-speed');
+  await page.goto('/forecast/solar-wind-speed');
   await expect(page.getByRole('alert').filter({ hasText: 'Could not load data' })).toContainText('Could not load data');
   await expect(page.getByRole('complementary', { name: 'Forecast inspector' })).toContainText('— km/s');
   state.failed = false;
@@ -170,7 +185,7 @@ test('failed release read stays explicit and retries without inventing values', 
 test('mobile forecast navigation, time inspector and charts fit the screen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockForecasts(page);
-  await page.goto('/products/solar-wind-speed');
+  await page.goto('/forecast/solar-wind-speed');
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await expect(inspector.getByLabel('Forecast time · UTC')).toBeEnabled();
   await expect(inspector.getByLabel('Forecast time · UTC')).toBeHidden();

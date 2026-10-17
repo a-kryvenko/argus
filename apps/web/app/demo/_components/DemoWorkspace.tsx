@@ -50,17 +50,17 @@ export default function DemoWorkspace({ bundle, sectionPath }: { bundle: DemoBun
     return () => window.clearTimeout(timer);
   }, [playing, offset, pathname, bundle]);
   const availableProducts = products.filter(product => bundle?.releases[product.slug]?.length);
-  const selectedProduct = sectionPath.startsWith('/products/') ? products.find(product => sectionPath === `/products/${product.slug}`) : availableProducts[0];
-  const catalog = sectionPath === '/products';
+  const selectedProduct = sectionPath.startsWith('/forecast/') ? products.find(product => sectionPath === `/forecast/${product.slug}`) : availableProducts[0];
+  const catalog = sectionPath === '/forecast';
   const observations = sectionPath === '/live';
   const density = sectionPath === '/leo';
-  const solarEvents = sectionPath === '/products/solar-events';
+  const solarEvents = sectionPath === '/forecast/solar-events';
   const eventReport = bundle && now != null ? selectEventRelease(bundle, now) : null;
   const forecast = bundle && now != null && selectedProduct ? selectRelease(bundle, selectedProduct.slug, now) : null;
   const title = solarEvents ? 'Historical solar events · CME' : density ? 'LEO density scenario' : observations ? 'Historical observations' : catalog ? 'Demo forecast products' : sectionPath === '/' ? 'Forecast overview' : selectedProduct?.title ?? 'Forecast unavailable';
   const content = bundle && now != null ? <WorkspaceShell section={title}>
     <main id="forecast-content" className={forecastStyles.page}>
-      <div className={forecastStyles.pageHeading}><div><div className={forecastStyles.eyebrow}>HISTORICAL REPLAY · 2026</div><h1>{title}</h1><p>{bundle.event.description}</p></div></div>
+      <div className={forecastStyles.pageHeading}><div><h1>{title}</h1><p>{bundle.event.description}</p></div></div>
       <details className={styles.details}>
         <summary>About this event and the demo forecasts</summary>
         <p>Event begins: {formatForecastTime(bundle.event.starts_at)}. <a href={bundle.event.source_url} target="_blank" rel="noreferrer">Event source</a></p>
@@ -69,16 +69,16 @@ export default function DemoWorkspace({ bundle, sectionPath }: { bundle: DemoBun
         <p>Dataset {bundle.version} · Generated {formatForecastTime(bundle.generated_at)}. Observations: {bundle.observation_source}.</p>
         {Object.entries(bundle.models).map(([name, model]) => <p key={name}>{name} · SHA256 {model.sha256} · Training ends {formatForecastTime(model.training_end)} · {model.training_evidence}</p>)}
       </details>
-      {bundle.density_scenario_available && <p><Link className={forecastStyles.headingLink} href={href(density ? '/products' : '/leo')}>{density ? 'Forecast products →' : 'Explore LEO density scenario →'}</Link></p>}
+      {bundle.density_scenario_available && <p><Link className={forecastStyles.headingLink} href={href(density ? '/forecast' : '/leo')}>{density ? 'Forecast →' : 'Explore LEO density scenario →'}</Link></p>}
       {solarEvents ? <DemoCME report={eventReport} /> : density ? <>
         <label className={styles.toggle}><input type="checkbox" disabled={!interactive} checked={showFuture} onChange={event => setShowFuture(event.target.checked)} />Show actual future values</label>
         <DensityScenario scenario={bundle.density_scenario ?? null} now={now} eventTime={Date.parse(bundle.event.starts_at)} showFuture={showFuture} interactive={interactive} />
         <DemoCME report={eventReport} compact />
-      </> : catalog ? <div className={forecastStyles.catalogGrid}><Link href={href('/products/solar-events')} className={forecastStyles.productCard}><h2>Solar events · CME</h2><p>Historical ENLIL arrivals and conditional speed scenarios.</p><span>Explore demo forecast →</span></Link>{availableProducts.map(product => <Link key={product.slug} href={href(`/products/${product.slug}`)} className={forecastStyles.productCard}><h2>{product.title}</h2><p>{product.description}</p><span>Explore demo forecast →</span></Link>)}</div> : observations ? <div className={styles.observations}>
+      </> : catalog ? <div className={forecastStyles.catalogGrid}><Link href={href('/forecast/solar-events')} className={forecastStyles.productCard}><h2>Solar events · CME</h2><p>Historical ENLIL arrivals and conditional speed scenarios.</p><span>Explore demo forecast →</span></Link>{availableProducts.map(product => <Link key={product.slug} href={href(`/forecast/${product.slug}`)} className={forecastStyles.productCard}><h2>{product.title}</h2><p>{product.description}</p><span>Explore demo forecast →</span></Link>)}</div> : observations ? <div className={styles.observations}>
         <p>Completed observation hours before the simulated present · Last 24 hours · UTC</p>
         {availableProducts.flatMap(product => product.variables.filter(variable => bundle.releases[product.slug]?.some(release => release.available_variables.includes(variable.key)))).map(variable => <WindChart key={variable.key} title={variable.label} unit={variable.unit} comparison now={now} eventTime={Date.parse(bundle.event.starts_at)} data={comparisonRows(null, bundle.observations, variable.key, now, false)} />)}
       </div> : <>
-        <nav className={forecastStyles.variableTabs} aria-label="Demo forecast products">{availableProducts.map(product => <Link className={forecastStyles.headingLink} key={product.slug} href={href(`/products/${product.slug}`)} aria-current={selectedProduct?.slug === product.slug ? 'page' : undefined}>{product.title}</Link>)}</nav>
+        <nav className={forecastStyles.variableTabs} aria-label="Demo forecast products">{availableProducts.map(product => <Link className={forecastStyles.headingLink} key={product.slug} href={href(`/forecast/${product.slug}`)} aria-current={selectedProduct?.slug === product.slug ? 'page' : undefined}>{product.title}</Link>)}</nav>
         <label className={styles.toggle}><input type="checkbox" disabled={!interactive} checked={showFuture} onChange={event => setShowFuture(event.target.checked)} />Show actual future values</label>
         {selectedProduct && <ForecastBoard key={selectedProduct.slug} product={selectedProduct} resource={{ data: forecast, error: forecast ? null : 'No demo release is available at this time.', retry: () => undefined }} />}
       </>}

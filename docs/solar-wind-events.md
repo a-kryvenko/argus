@@ -1,6 +1,6 @@
 # Solar event forecasts
 
-UI: `/products/solar-events`. API paths below omit the proxy's `/api/v1` prefix.
+UI: `/forecast/solar-events`. API paths below omit the proxy's `/api/v1` prefix.
 
 | Product | Output |
 | --- | --- |

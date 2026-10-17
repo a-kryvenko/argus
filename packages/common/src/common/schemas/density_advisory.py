@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 
 class Contract(BaseModel):
@@ -38,19 +38,46 @@ class DensityReference(Contract):
     method: str | None = None
 
 
-class AdvisoryPolicy(Contract):
+class AdvisoryRatioPolicy(Contract):
     review_ratio: float = Field(default=2, gt=1, le=100)
     high_ratio: float = Field(default=4, gt=1, le=100)
+
+
+class AdvisoryPolicy(AdvisoryRatioPolicy):
     max_sample_gap_minutes: int = Field(default=15, ge=1, le=60)
 
 
 class AdvisoryProfileInput(Contract):
     name: str = Field(min_length=1, max_length=120)
-    trajectory: Trajectory
+    # Nullable for profiles and immutable snapshots saved before spacecraft metadata.
+    apoapsis_km: float | None = Field(default=None, ge=90, le=2500)
+    periapsis_km: float | None = Field(default=None, ge=90, le=2500)
+    inclination_deg: float | None = Field(default=None, ge=0, le=180)
+    weight_kg: float | None = Field(default=None, gt=0)
+    effective_area_m2: float | None = Field(default=None, gt=0)
+    trajectory: Trajectory | None = None
     reference: DensityReference | None = None
     reference_mode: Literal['auto', 'prophet_background', 'operator_reference'] = 'auto'
     policy: AdvisoryPolicy = Field(default_factory=AdvisoryPolicy)
     enabled: bool = True
+
+    @model_validator(mode='after')
+    def validate_apsides(self):
+        if self.apoapsis_km is not None and self.periapsis_km is not None and self.apoapsis_km < self.periapsis_km:
+            raise ValueError('Apoapsis must be greater than or equal to periapsis')
+        return self
+
+
+class AdvisorySpacecraftInput(AdvisoryProfileInput):
+    """Required spacecraft metadata for new profiles and updates."""
+    apoapsis_km: float = Field(ge=90, le=2500)
+    periapsis_km: float = Field(ge=90, le=2500)
+    inclination_deg: float = Field(ge=0, le=180)
+    trajectory: None = None
+    reference: None = None
+    reference_mode: Literal['prophet_background'] = 'prophet_background'
+    policy: AdvisoryRatioPolicy = Field(default_factory=AdvisoryRatioPolicy)
+    enabled: Literal[True] = True
 
 
 class AdvisoryProfile(AdvisoryProfileInput):
@@ -69,7 +96,7 @@ class AdvisorySample(Contract):
     time: AwareDatetime
     altitude_km: float
     latitude_deg: float
-    longitude_deg: float
+    longitude_deg: float | None = None
     density_kg_m3: float | None = None
     reference_density_kg_m3: float | None = None
     ratio: float | None = None
@@ -81,7 +108,7 @@ class AdvisoryLocation(Contract):
     time: AwareDatetime
     altitude_km: float
     latitude_deg: float
-    longitude_deg: float
+    longitude_deg: float | None = None
 
 
 class AdvisoryInterval(Contract):
@@ -97,6 +124,7 @@ class AdvisoryInterval(Contract):
 
 
 class AdvisorySource(Contract):
+    assessment_basis: Literal['supplied_trajectory', 'orbit_envelope'] = 'supplied_trajectory'
     density_release_id: UUID | None = None
     density_issue_time: AwareDatetime | None = None
     density_observed_at: AwareDatetime | None = None
@@ -106,8 +134,8 @@ class AdvisorySource(Contract):
     cme_issue_time: AwareDatetime | None = None
     cme_sha256: str | None = None
     cme_status: Literal['current', 'stale', 'unavailable']
-    trajectory_source: str
-    trajectory_generated_at: AwareDatetime
+    trajectory_source: str | None = None
+    trajectory_generated_at: AwareDatetime | None = None
     reference: DensityReference | None = None
 
 
@@ -135,6 +163,9 @@ class AdvisoryProfileSummary(Contract):
     revision: int
     updated_at: AwareDatetime
     enabled: bool
+    apoapsis_km: float | None = None
+    periapsis_km: float | None = None
+    inclination_deg: float | None = None
 
 
 class AdvisoryRunSummary(Contract):
@@ -149,6 +180,7 @@ class AdvisoryItem(Contract):
     attention: Attention
     data_status: DataStatus
     cme_status: Literal['current', 'stale', 'unavailable']
+    details: list[str] = Field(default_factory=list)
 
 
 class AdvisoryEvent(Contract):

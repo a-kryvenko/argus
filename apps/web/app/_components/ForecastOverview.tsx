@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, Layers3 } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import WorkspaceShell from './WorkspaceShell';
 import ForecastBoard, { forecastNumber, type ForecastResource } from './ForecastBoard';
 import { useResource } from '../_utils/useResource';
@@ -25,10 +25,9 @@ export default function ForecastOverview() {
   const [selected, setSelected] = useState('solar-wind-speed');
   return <WorkspaceShell section="Forecast overview">
     <main id="forecast-content" className={styles.page}>
-      <div className={styles.pageHeading}><div><div className={styles.eyebrow}>EARTH–SUN ENVIRONMENT <span>/ 02</span></div><h1>Forecast overview</h1><p>Published outlooks for solar wind and geomagnetic activity.</p></div>
-        <Link className={styles.headingLink} href="/products"><Layers3 size={14} aria-hidden="true" />All forecast products<ArrowUpRight size={13} aria-hidden="true" /></Link>
+      <div className={styles.pageHeading}><div><h1>Forecast overview</h1><p>Published outlooks for solar wind and geomagnetic activity.</p></div>
       </div>
-      <section className={styles.summary} aria-label="Forecast products summary">
+      <section className={styles.summary} aria-label="Forecast summary">
         <div className={styles.summaryGrid}>{targets.map(target => {
           const { data, error } = resources[target.slug];
           const first = data?.predictions[0];

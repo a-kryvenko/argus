@@ -94,7 +94,7 @@ test('workspace renders compact observations and inspects quality without losing
   await expect(page.getByRole('region', { name: 'Real-time Dst history' })).toContainText('Real-time Dst (nT)');
   await expect(page.locator('.recharts-line-curve').first()).toBeVisible();
   await expect(page.getByRole('group', { name: 'History period' })).toHaveCount(1);
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Live observations' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Observations' })).toHaveAttribute('aria-current', 'page');
   await captureScreenshot(page, { path: 'test-results/live-workspace-desktop.png', fullPage: true });
   await summary.getByRole('button', { name: 'Inspect Real-time Dst' }).click();
   await expect(inspector).toContainText('WDC Kyoto via NOAA SWPC');

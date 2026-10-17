@@ -1,5 +1,5 @@
-import LeoRiskView from "../../_components/LeoRiskView";
+import DensityAdvisoryView from "../../_components/DensityAdvisoryView";
 
 export default function LeoDragPage() {
-  return <LeoRiskView />;
+  return <DensityAdvisoryView />;
 }

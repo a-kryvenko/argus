@@ -1,18 +1,19 @@
 'use client';
+import DragRiskIcon from '@/components/DragRiskIcon';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, BookOpen, ChartNoAxesCombined, ChevronRight, CircleHelp, Clock3, Gauge, LayoutGrid, Menu, LogOut, Orbit, Radio, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Activity, BookOpen, ChartNoAxesCombined, ChevronRight, CircleHelp, LayoutGrid, Menu, LogOut, Radio, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useDemo } from '../demo/_components/DemoContext';
-import { useClock } from '../_utils/useClock';
+import { breadcrumbs } from './breadcrumbs';
 import styles from './workspace.module.css';
 
 const navigation = [
-  { href: '/', label: 'Forecast overview', icon: LayoutGrid },
-  { href: '/live', label: 'Live observations', icon: Radio },
-  { href: '/products', label: 'Forecast products', icon: Activity },
-  { href: '/metrics', label: 'Model performance', icon: ChartNoAxesCombined },
-  { href: '/dashboard/risk/leo', label: 'LEO drag', icon: Orbit },
+  { href: '/', label: 'Overview', icon: LayoutGrid },
+  { href: '/live', label: 'Observations', icon: Radio },
+  { href: '/forecast', label: 'Forecast', icon: Activity },
+  { href: '/metrics', label: 'Metrics', icon: ChartNoAxesCombined },
+  { href: '/dashboard/risk/leo', label: 'Drag risk', icon: DragRiskIcon },
 ];
 
 export type WorkspaceNavigationGroup = { title: string; items: { href: string; title: string; icon: LucideIcon }[] };
@@ -24,24 +25,22 @@ function Account({ account }: { account: WorkspaceAccount }) {
   </details>;
 }
 
-export default function WorkspaceShell({ children, section, contentId = 'forecast-content', status = 'Published model outputs', statusTone = 'neutral', navigationGroups = [], account }: {
+export default function WorkspaceShell({ children, section, contentId = 'forecast-content', navigationGroups = [], account }: {
   children: ReactNode; section: string; contentId?: string; status?: string; statusTone?: 'neutral' | 'good' | 'warning'; navigationGroups?: WorkspaceNavigationGroup[]; account?: WorkspaceAccount;
 }) {
   const pathname = usePathname();
-  const clock = useClock();
   const demo = useDemo();
-  const now = demo?.now ?? clock;
   const hrefFor = (href: string) => demo ? demo.href(href) : href;
   const currentPath = demo ? pathname.replace(/^\/demo/, '') || '/' : pathname;
   const items = demo ? [
-    ...navigation.filter(item => ['/', '/live', '/products'].includes(item.href)),
-    { href: '/leo', label: 'LEO density scenario', icon: Orbit },
-    { href: '/products/solar-events', label: 'Solar events · CME', icon: Activity },
+    ...navigation.filter(item => ['/', '/live', '/forecast'].includes(item.href)),
+    { href: '/leo', label: 'LEO density scenario', icon: DragRiskIcon },
+    { href: '/forecast/solar-events', label: 'Solar events · CME', icon: Activity },
   ] : navigation;
   return <div className={styles.workspace} data-demo={!!demo}>
     <a className={styles.skipLink} href={`#${contentId}`}>Skip to {section.toLowerCase()}</a>
     <aside className={styles.sidebar} aria-label="Workspace navigation">
-      <Link className={styles.brand} href={hrefFor('/')} aria-label="Argus SunWatch home"><Orbit size={28} strokeWidth={1.3} aria-hidden="true" /><span>ARGUS<small>SUNWATCH</small></span></Link>
+      <Link className={styles.brand} href={hrefFor('/')} aria-label="Argus SunWatch home"><span>ARGUS<small>SUNWATCH</small></span></Link>
       <div className={styles.navLabel}>WORKSPACE</div>
       <nav className={styles.navigation} aria-label="Main navigation">
         {items.map(({ href, label, icon: Icon }) => {
@@ -57,26 +56,29 @@ export default function WorkspaceShell({ children, section, contentId = 'forecas
       {!demo && <div className={styles.sidebarBottom}>
         <div className={styles.navLabel}>RESOURCES</div>
         <nav className={styles.navigation} aria-label="Resources">
-          {!account && !demo && <Link href="/dashboard" aria-label="Dashboard" title="Dashboard"><Gauge size={17} strokeWidth={1.5} aria-hidden="true" /><span>Dashboard</span></Link>}
           <Link href="/help" aria-label="Help" title="Help" aria-current={pathname === "/help" ? "page" : undefined}><CircleHelp size={17} strokeWidth={1.5} aria-hidden="true" /><span>Help & methodology</span></Link>
           <a href="/api/v1/docs" aria-label="API documentation" title="API documentation"><BookOpen size={17} strokeWidth={1.5} aria-hidden="true" /><span>API documentation</span></a>
         </nav>
         {account && <Account account={account} />}
-        <div className={styles.sidebarFoot}><ShieldCheck size={14} aria-hidden="true" /><span>SPACE WEATHER<br />ANALYSIS WORKSPACE</span></div>
       </div>}
     </aside>
     <div className={styles.workspaceMain}>
       <header className={styles.commandBar}>
-        <div className={styles.breadcrumb}><span>ARGUS</span><ChevronRight size={12} aria-hidden="true" /><span>Space weather</span><ChevronRight size={12} aria-hidden="true" /><strong>{section}</strong></div>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <ol>{breadcrumbs(currentPath, section).map((item, index) => <li key={index}>
+            {index > 0 && <ChevronRight size={12} aria-hidden="true" />}
+            {item.href ? <Link href={hrefFor(item.href)}>{item.label}</Link> : <span aria-current="page">{item.label}</span>}
+          </li>)}</ol>
+        </nav>
         {!demo && <details key={pathname} className={styles.mobileResources}>
           <summary><Menu size={13} aria-hidden="true" />Resources</summary>
           <nav aria-label="Mobile resources">
             {navigationGroups.map(group => <div key={group.title}><div className={styles.mobileGroupLabel}>{group.title}</div>{group.items.map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? 'page' : undefined}>{item.title}</Link>)}</div>)}
-            {!account && !demo && <Link href="/dashboard">Dashboard</Link>}<Link href="/help" aria-current={pathname === "/help" ? "page" : undefined}>Help & methodology</Link><a href="/api/v1/docs">API documentation</a>
+            <Link href="/help" aria-current={pathname === "/help" ? "page" : undefined}>Help & methodology</Link><a href="/api/v1/docs">API documentation</a>
             {account && <Account account={account} />}
           </nav>
         </details>}
-        <div className={styles.commandStatus}><span className={styles.refreshState} data-tone={statusTone} data-warning={statusTone === 'warning'}><span className={styles.dot} />{demo ? 'Historical demo' : status}</span><span className={styles.utcClock}><Clock3 size={12} aria-hidden="true" />{now ? new Date(now).toISOString().slice(11, 16) : '—'} UTC</span></div>
+        <Link className={styles.dashboardLink} href="/dashboard">Dashboard</Link>
       </header>
       {children}
     </div>

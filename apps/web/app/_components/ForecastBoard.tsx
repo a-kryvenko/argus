@@ -3,7 +3,7 @@ import { useDemo } from '../demo/_components/DemoContext';
 import { comparisonRows, observationKnownAt } from '../demo/_lib/replay';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, ChevronDown, Clock3, Crosshair, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Clock3, Crosshair } from 'lucide-react';
 import type { Forecast, ForecastPoint } from '../_utils/api';
 import { formatForecastTime, formatProbability, forecastWindow, probabilityData, quantileData, speedScenarioData } from '../_utils/forecast';
 import { productApiPath, type ProductConfig } from '../_config/products';
@@ -42,10 +42,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
   return <section aria-label={`${product.title} forecast workspace`}>
     <div className={styles.boardHeading}>
       <div><h2>{overview ? product.title : 'Forecast timeline'}</h2><p>{overview ? product.description : 'Select a variable and forecast time to inspect its values.'}</p></div>
-      <div className={styles.actions}>
-        {overview && <Link href={hrefFor(`/products/${product.slug}`)}>Open product<ArrowUpRight size={13} aria-hidden="true" /></Link>}
-        {!demo && <button onClick={retry} disabled={!forecast && !error} aria-label={`Refresh ${product.title}`}><RefreshCw size={13} aria-hidden="true" />Refresh</button>}
-      </div>
+
     </div>
     <div className={styles.toolbar}>
       <div className={styles.variableTabs} role="group" aria-label="Forecast variable">
@@ -68,7 +65,7 @@ export default function ForecastBoard({ product, resource, overview = false }: {
         {forecast && !forecast.available_variables.includes(variable.key) && <p className={styles.notice} role="status">{variable.label} is not available in this release.</p>}
         {view && <>
           {(variable.quantile || demo) && <WindChart title={variable.label} unit={variable.unit} data={demo ? comparisonRows(view, demo.bundle.observations, variable.key, demo.now, demo.showFuture) : variable.key === 'v' ? speedScenarioData(view) : quantileData(view, variable.key)} comparison={!!demo} integrated={variable.key === 'v' && !!view.cme_speed?.integrated_into_speed} now={demo?.now} eventTime={demo ? Date.parse(demo.bundle.event.starts_at) : undefined} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
-          {variable.key === 'v' && <p className={styles.notice}>{!view.cme_speed || view.cme_speed.state === 'unavailable' ? 'CME speed outlook unavailable for this release.' : view.cme_speed.state === 'partial' ? 'Some CME arrivals have no supported speed estimate.' : `${view.cme_speed.events.length} CME impact scenarios in this release.`} <Link href={hrefFor('/products/solar-events')}>Solar events</Link></p>}
+          {variable.key === 'v' && <p className={styles.notice}>{!view.cme_speed || view.cme_speed.state === 'unavailable' ? 'CME speed outlook unavailable for this release.' : view.cme_speed.state === 'partial' ? 'Some CME arrivals have no supported speed estimate.' : `${view.cme_speed.events.length} CME impact scenarios in this release.`} <Link href={hrefFor('/forecast/solar-events')}>Solar events</Link></p>}
           {variable.thresholds.length > 0 && <HeatMap title={`${variable.label}${variable.key === 'v' && view.cme_speed && !view.cme_speed.integrated_into_speed ? ' background' : ''} threshold probability`} yLabels={variable.thresholds.map(item => item.label)}
             data={probabilityData(view, variable.key, variable.thresholds.map(item => item.value))} times={view.predictions.map(item => item.valid_time)} selectedTime={point?.valid_time} onSelectTime={selectTime} />}
           <details className={styles.dataTable}>

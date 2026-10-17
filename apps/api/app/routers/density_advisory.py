@@ -2,7 +2,7 @@
 from uuid import UUID
 from typing import Literal
 from fastapi import APIRouter, Depends, Query
-from common.schemas.density_advisory import AdvisoryProfileInput, AdvisoryProfile, AdvisoryItem, AdvisoryRun, AdvisoryRunSummary, AdvisoryEvent, AdvisoryEventPage
+from common.schemas.density_advisory import AdvisorySpacecraftInput, AdvisoryProfile, AdvisoryItem, AdvisoryRun, AdvisoryRunSummary, AdvisoryEvent, AdvisoryEventPage
 from common.schemas.forecast_release import ForecastRelease
 from app.dashboard_auth import current_user, check_origin
 from app.db.models.dashboard import User
@@ -22,13 +22,18 @@ def profiles(user:User=Depends(current_user)):
 
 
 @router.post('',dependencies=[Depends(check_origin)],status_code=201)
-def create(body:AdvisoryProfileInput,user:User=Depends(current_user)):
+def create(body:AdvisorySpacecraftInput,user:User=Depends(current_user)):
     return success_response(request('POST',user.id,'',AdvisoryProfile,body=body))
 
 
 @router.put('/{profile_id}',dependencies=[Depends(check_origin)])
-def update(profile_id:UUID,body:AdvisoryProfileInput,revision:int=Query(ge=1),user:User=Depends(current_user)):
+def update(profile_id:UUID,body:AdvisorySpacecraftInput,revision:int=Query(ge=1),user:User=Depends(current_user)):
     return success_response(request('PUT',user.id,f'/{profile_id}',AdvisoryProfile,body=body,params={'revision':revision}))
+
+
+@router.delete('/{profile_id}', dependencies=[Depends(check_origin)])
+def delete(profile_id:UUID, revision:int=Query(ge=1), user:User=Depends(current_user)):
+    return success_response(request('DELETE', user.id, f'/{profile_id}', dict[str, bool], params={'revision': revision}))
 
 
 @router.get('/events')

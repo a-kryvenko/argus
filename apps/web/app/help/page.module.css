@@ -1,6 +1,5 @@
 .page { max-width: 1500px; margin: 0 auto; padding: 27px 26px 22px; line-height: 1.75; }
 .hero { margin-bottom: 26px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
-.eyebrow { color: #91a2b4; font-size: 9px; letter-spacing: .15em; margin-bottom: 7px; }
 .hero h1 { margin: 0 0 8px; font-size: 28px; font-weight: 550; line-height: 1.25; letter-spacing: -.04em; }
 .intro { color: var(--text-muted); font-size: 12px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }

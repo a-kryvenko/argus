@@ -2,7 +2,7 @@
 
 `/demo`: hourly replay T−96…T+72 around the
 [G4 onset, January 19, 2026, 19:38 UTC](https://swpc-drupal.woc.noaa.gov/news/g4-severe-geomagnetic-storm-levels-reached-19-jan-2026).
-`/demo/products/solar-events`: archived ENLIL arrivals and CME speed scenarios.
+`/demo/forecast/solar-events`: archived ENLIL arrivals and CME speed scenarios.
 `/demo/leo`: JB2008/DTM2020 with fixed or forecast geomagnetic drivers, +1…+48 h.
 
 ```bash

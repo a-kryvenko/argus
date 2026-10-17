@@ -6,7 +6,6 @@ import {
   ArrowUpRight,
   Clock3,
   Gauge,
-  RotateCcw,
   ServerCrash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -99,14 +98,6 @@ export default function ApiActivity({
         <option value={168}>7 days</option>
         <option value={720}>30 days</option>
       </select>
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label="Refresh statistics"
-        onClick={() => setVersion((v) => v + 1)}
-      >
-        <RotateCcw className="size-3.5" />
-      </Button>
     </div>
   );
   return (

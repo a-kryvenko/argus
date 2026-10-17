@@ -1,7 +1,7 @@
 # Experimental LEO drag
 
-Primary workflow: [density advisories on supplied ephemerides](density-advisory.md).
-The dashboard's scenario calculator and saved loss monitor are experimental;
+Primary workflow: [density advisories on orbital parameters](density-advisory.md).
+The API-only calculator and saved loss monitor are experimental;
 flight-loss accuracy remains unvalidated.
 
 ## Calculator

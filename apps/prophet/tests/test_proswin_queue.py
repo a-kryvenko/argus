@@ -5,9 +5,9 @@ import sys
 import threading
 import time
 
-from common.schemas.forecast_inputs import ForecastInputs
+from forecast.inputs import ForecastInputs
 from common.schemas.observation import Observation
-from argus_prophet.services import proswin_queue as queue
+from prophet.services.proswin import queue as queue
 
 
 def test_request_reply_accepts_only_completed_job(tmp_path, monkeypatch):
@@ -69,7 +69,7 @@ class Guard:
         if name.split('.')[0] in blocked:
             raise AssertionError(name)
 sys.meta_path.insert(0, Guard())
-from argus_prophet.services.proswin_queue import main
+from prophet.services.proswin.queue import main
 assert callable(main)
 assert not blocked.intersection(sys.modules)
 '''], capture_output=True, text=True)

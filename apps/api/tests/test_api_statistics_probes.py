@@ -1,6 +1,6 @@
 import pytest
 
-from app.services import api_statistics
+from api.services.monitoring import statistics as api_statistics
 
 
 @pytest.mark.parametrize('route', ['/health/live', '/health/ready'])

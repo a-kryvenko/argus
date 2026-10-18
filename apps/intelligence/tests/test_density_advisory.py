@@ -1,13 +1,13 @@
 """Public infrastructure tests use canned backend responses, not physical assertions."""
 import pytest
 from fastapi.testclient import TestClient
-from argus_intelligence import density_monitor
-from argus_intelligence.main import app
+from intelligence import density_monitor
+from intelligence.main import app
 
 
 def test_delete_uses_authenticated_owner_revision_and_reports_conflicts(monkeypatch):
     from uuid import uuid4
-    from argus_intelligence.monitor import ProfileConflict, ProfileNotFound
+    from intelligence.monitor import ProfileConflict, ProfileNotFound
 
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
     profile_id = uuid4()

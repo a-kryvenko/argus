@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import pytest
-from clio.summary import change_one_hour, southward_duration
+from clio.observations.summary import change_one_hour, southward_duration
 
 NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 

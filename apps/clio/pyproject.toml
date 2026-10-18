@@ -1,10 +1,9 @@
 [project]
-name = "argus-clio"
+name = "clio"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "common",
-  "beautifulsoup4>=4.15.0",
   "numpy>=1.26",
   "scipy>=1.14",
   "pandas>=2.2",
@@ -33,7 +32,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-clio = ["migrations/script.py.mako"]
+clio = ["db/migrations/script.py.mako"]
 
 [tool.uv.sources]
 common = { path = "../../packages/common", editable = true }

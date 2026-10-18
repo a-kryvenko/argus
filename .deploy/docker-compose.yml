@@ -50,7 +50,7 @@ services:
 
   proswin:
     image: ${ARGUS_PROSWIN_IMAGE:-ghcr.io/a-kryvenko/argus-proswin:latest}
-    command: ["python", "-m", "argus_prophet.services.proswin_queue"]
+    command: ["python", "-m", "prophet.services.proswin.queue"]
     mem_limit: 1536m
     memswap_limit: 1536m
     restart: unless-stopped
@@ -237,7 +237,7 @@ services:
   api-migrate:
     image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
-    command: [".venv/bin/alembic", "upgrade", "head"]
+    command: ["api", "migrate", "upgrade", "head"]
     environment:
       API_DB_HOST: ${API_DB_HOST:-postgres}
       API_DB_PORT: ${API_DB_PORT:-5432}

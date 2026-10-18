@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from domain_storage import database, migrate
+from tests.support.database import database, migrate
 
 
 @pytest.fixture
@@ -18,7 +18,7 @@ def recorder_database(database, monkeypatch, tmp_path):
 
 @pytest.fixture
 def recorder_setup(recorder_database):
-    from argus_prophet.scheduling.jobs import generation_lock
+    from prophet.scheduling.jobs import generation_lock
     with generation_lock() as writer:
         yield (*recorder_database, writer)
 
@@ -29,10 +29,10 @@ def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00
     for name in names:
         if name == 'solar_wind_events':
             from pathlib import Path
-            from common.schemas.forecast_inputs import ForecastInputs
+            from forecast.inputs import ForecastInputs
             from common.schemas.observation import Observation
             from common.schemas.solar_wind_events import EventInputs
-            from argus_prophet.services.generation.calculation import CalculationRequest, calculate_product
+            from prophet.services.generation.calculation import CalculationRequest, calculate_product
             time = datetime.fromisoformat(issue)
             inputs = ForecastInputs(as_of=time, read_at=time, observations=Observation(points=[]),
                                     solar_wind_events=EventInputs(as_of=time, read_at=time))

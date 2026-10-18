@@ -2,12 +2,12 @@ import json
 import signal
 import threading
 
-from argus_intelligence import worker
+from intelligence import worker
 
 
 def test_worker_retries_and_stops_gracefully(monkeypatch, capsys):
-    from argus_intelligence import monitor
-    from argus_intelligence import density_monitor
+    from intelligence import monitor
+    from intelligence import density_monitor
     monkeypatch.setattr(density_monitor, 'refresh_profiles', lambda **kwargs: {'profiles': 0, 'failed': 0})
     monkeypatch.setattr(monitor, 'refresh_profiles', lambda **kwargs: {'profiles': 0, 'failed': 0})
     class Stop(threading.Event):

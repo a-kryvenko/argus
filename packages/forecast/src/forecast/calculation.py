@@ -4,10 +4,7 @@ from datetime import datetime
 
 import pandas as pd
 from typing import Protocol
-from common.schemas.forecast_inputs import ForecastInputs
-from common.adapters import forecast_to_dataframe
-from common.schemas.observation import Observation
-from forecast.inference.base import DefaultForecastService
+from forecast.inputs import ForecastInputs
 
 
 @dataclass
@@ -28,17 +25,3 @@ def calculate_snapshot(service: SnapshotService, inputs: ForecastInputs, *,
     """Every backend consumes the same saved inputs without storage or configuration."""
     return ForecastResult(service.registry_name,
                           service.forecast_snapshot(inputs, issue_time=issue_time), model_info)
-
-
-def calculate_forecast(service: DefaultForecastService, observations: Observation, *,
-                       issue_time: datetime, model_info: dict,
-                       speed_history: pd.DataFrame | None = None,
-                       density_history: pd.DataFrame | None = None,
-                       aia_features: pd.DataFrame | None = None) -> ForecastResult:
-    extra = {'speed_history': speed_history} if speed_history is not None else {}
-    if density_history is not None:
-        extra['density_history'] = density_history
-    if aia_features is not None:
-        extra['aia_features'] = aia_features
-    forecast = service.forecast(observations, issue_time=issue_time, **extra)
-    return ForecastResult(service.registry_name, forecast_to_dataframe(forecast), model_info)

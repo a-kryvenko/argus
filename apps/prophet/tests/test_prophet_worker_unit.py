@@ -6,10 +6,10 @@ from unittest.mock import Mock
 
 import pytest
 
-from argus_prophet import worker
-from argus_prophet.services.runs import RunRecorder
-from argus_prophet.config import ProductSchedule, ProphetConfig
-from argus_prophet.scheduling.execution import ExecutionControl, ShutdownRequested
+from prophet import worker
+from prophet.services.releases.recording import RunRecorder
+from prophet.config import ProductSchedule, ProphetConfig
+from prophet.scheduling.execution import ExecutionControl, ShutdownRequested
 
 NOW = datetime(2026, 9, 29, 10, 10, tzinfo=UTC)
 

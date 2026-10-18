@@ -31,7 +31,7 @@ Products publish independently; failures retain the previous release.
 Default schedule: hourly at :10 UTC, two concurrent calculations.
 Verification runs every six hours over seven days; atmospheric density is excluded.
 
-Prophet prepares AIA/GONG features and calibrated GOES indices, then freezes the
+Prophet prepares calibrated GOES indices and reads PROSWIN predictions before freezing the
 input snapshot. Derivative cache: `data/prophet/source-cache`
 (`PROPHET_FEATURE_CACHE` override); rebuildable from Clio's 45-day originals.
 

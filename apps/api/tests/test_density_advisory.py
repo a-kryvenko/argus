@@ -4,10 +4,10 @@ import httpx
 import pytest
 from fastapi import FastAPI,HTTPException
 from fastapi.testclient import TestClient
-from app.dashboard_auth import current_user
-from app.db.session import get_db_session
-from app.routers import density_advisory
-from app.services.drag_monitor_client import request
+from api.services.authentication import current_user
+from api.db.session import get_db_session
+from api.routers import density_advisory
+from api.services.intelligence.profiles import request
 
 
 def test_session_ownership_origin_and_exact_source_routes(monkeypatch):

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 
-from domain_storage import database, migrate, provisioning, runtime
+from tests.support.database import database, migrate, provisioning, runtime
 
 import psycopg
 import pytest

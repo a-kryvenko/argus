@@ -1,0 +1,120 @@
+"""Deployment must not hand administrator or migration credentials to runtimes."""
+from pathlib import Path
+import yaml
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
+    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    domains = {'api': ['api'], 'clio': ['clio', 'clio-worker'],
+               'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
+    for domain, names in domains.items():
+        for name in [*names, domain + '-migrate']:
+            service = services[name]
+            assert 'env_file' not in service
+            environment = service['environment']
+            database_keys = {key for key in environment if '_DB_' in key or key.startswith('DB_') or 'DATABASE' in key}
+            expected = {domain.upper() + '_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
+            assert database_keys == expected, name
+            for key in expected:
+                assert environment[key].startswith('${' + key + ':'), name
+            assert all(
+                environment[key] == services[domain + '-migrate']['environment'][key] for key in expected)
+        assert services[domain + '-migrate']['profiles'] == ['maintenance']
+    assert services['db-provision']['profiles'] == ['maintenance']
+    assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
+    assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
+    assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
+    assert services['clio-worker']['command'] == ['clio', 'worker']
+    assert services['clio-worker']['healthcheck']['test'] == ['CMD', 'clio', 'check-health', 'worker']
+    assert not {'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'} & services.keys()
+
+
+def test_no_application_jobs_remain_in_cron():
+    lines = [line for line in (ROOT / '.deploy/cronjobs.txt').read_text().splitlines()
+             if line and not line.startswith('#')]
+    assert len(lines) == 1
+    assert lines[0].startswith('@reboot') and 'nginx-proxy-up.sh' in lines[0]
+
+
+def test_forecast_read_service_is_internal_and_requires_token():
+    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    reader = services['prophet-api']
+    assert 'ports' not in reader
+    assert set(reader['networks']) == {'backend', 'forecasts'}
+    assert all('/data' not in volume for volume in reader['volumes'])
+    assert reader['environment']['FORECASTS_SERVICE_TOKEN'].startswith('${FORECASTS_SERVICE_TOKEN:?')
+    assert services['api']['environment']['FORECASTS_URL'] == 'http://prophet-api:8000'
+
+
+def test_intelligence_credentials_and_networks_are_scoped():
+    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    runtime = services['intelligence']
+    assert 'profiles' not in runtime
+    assert runtime['command'] == ['intelligence', 'worker']
+    assert runtime['networks'] == ['backend', 'forecasts']
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'ARGUS_WORKDIR', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'}
+    assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
+    assert runtime['environment']['INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'] == '${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}'
+    assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
+    assert not any(key in runtime for key in ('ports', 'env_file'))
+    assert services['intelligence-migrate']['profiles'] == ['maintenance']
+    assert set(services['intelligence-migrate']['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
+    for name, service in services.items():
+        if not name.startswith('intelligence') and name != 'db-provision':
+            assert not any(key.startswith('INTELLIGENCE_DB_') for key in service.get('environment', {})), name
+
+
+def test_impact_service_is_internal_and_has_scoped_database_credentials():
+    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    runtime = services['intelligence-api']
+    assert runtime['command'] == ['intelligence', 'serve']
+    assert 'ports' not in runtime
+    assert set(runtime['networks']) == {'backend', 'forecasts', 'impacts'}
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'ARGUS_WORKDIR', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'INTELLIGENCE_SERVICE_TOKEN'}
+    assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
+    assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
+    assert 'env_file' not in runtime
+    assert services['api']['environment']['INTELLIGENCE_URL'] == 'http://intelligence-api:8000'
+    assert runtime['environment']['INTELLIGENCE_SERVICE_TOKEN'] == services['api']['environment']['INTELLIGENCE_SERVICE_TOKEN']
+
+
+@pytest.mark.parametrize('filename', ['docker-compose.yml', '.deploy/docker-compose.yml'])
+def test_runtime_storage_credentials_and_startup_boundaries(filename):
+    services = yaml.safe_load((ROOT / filename).read_text())['services']
+    owners = {'clio': 'CLIO', 'clio-worker': 'CLIO', 'prophet': 'PROPHET',
+              'prophet-api': 'PROPHET', 'intelligence': 'INTELLIGENCE',
+              'intelligence-api': 'INTELLIGENCE', 'api': 'API'}
+    allowed_data = {
+        'clio': {'observations': False}, 'clio-worker': {'observations': False},
+        'prophet': {'models': True, 'prophet': False, 'demo': False},
+        'proswin': {'models': True, 'prophet': False},
+        'prophet-api': {}, 'intelligence': {}, 'intelligence-api': {},
+        'api': {'metrics': True, 'demo': True},
+    }
+    for name, allowed in allowed_data.items():
+        service = services[name]
+        actual = {}
+        for mount in service.get('volumes', []):
+            parts = mount.split(':')
+            target = parts[1]
+            assert target != '/var/www/data', (filename, name, mount)
+            if target.startswith('/var/www/data/'):
+                actual[target.removeprefix('/var/www/data/')] = len(parts) == 3 and parts[2] == 'ro'
+        assert actual == allowed, (filename, name, actual)
+        for dependency, settings in service.get('depends_on', {}).items():
+            if dependency not in {'postgres', 'redis'}:
+                assert settings['condition'] == 'service_started', (filename, name, dependency)
+        if name in owners:
+            environment = service['environment']
+            db_keys = {key for key in environment if '_DB_' in key}
+            assert db_keys and all(key.startswith(owners[name] + '_DB_') for key in db_keys)
+            assert not {'DB_USER', 'DB_PASSWORD'} & environment.keys()
+            assert service['depends_on']['postgres']['condition'] == 'service_healthy'
+    for name in ('api', 'intelligence-api'):
+        assert services[name]['environment']['INTELLIGENCE_SERVICE_TOKEN'] == (
+            '${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}')
+
+

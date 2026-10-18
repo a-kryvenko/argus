@@ -3,13 +3,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from argus_prophet.services.generation import cycle
-from argus_prophet.services.generation.products import PRODUCTS
+from prophet.services.generation import cycle
+from prophet.services.generation.products import PRODUCTS
 
 
 def setup_run():
-    from argus_prophet.config import ProphetConfig
-    from argus_prophet.services.generation.service import ForecastGenerationService
+    from prophet.config import ProphetConfig
+    from prophet.services.generation.service import ForecastGenerationService
     recorders = {name: Mock(run_id=name) for name in PRODUCTS}
     runtime = SimpleNamespace(workdir='.', models_registry={'models': {}})
     policy = ProphetConfig()
@@ -136,7 +136,7 @@ def test_manual_input_preparation_uses_supervised_timeout():
 
 
 def test_manual_shutdown_records_interruption_and_stops_dispatch():
-    from argus_prophet.scheduling.execution import ShutdownRequested
+    from prophet.scheduling.execution import ShutdownRequested
     recorders, _, command, _, begin, service = setup_run()
     interruption = ShutdownRequested('shutdown deadline')
     service.executor = Mock(side_effect=interruption)
@@ -172,7 +172,7 @@ def test_reusing_service_loads_a_new_snapshot_per_cycle():
 
 
 def test_shutdown_after_loading_inputs_does_not_record_snapshot_or_calculate():
-    from argus_prophet.scheduling.execution import ShutdownRequested
+    from prophet.scheduling.execution import ShutdownRequested
     recorders, _, command, read, begin, service = setup_run()
     interruption = ShutdownRequested('stopped after inputs')
     service.before_dispatch = Mock(side_effect=[None, interruption])
@@ -186,8 +186,8 @@ def test_shutdown_after_loading_inputs_does_not_record_snapshot_or_calculate():
 
 def test_manual_composition_preserves_writer_and_trigger(monkeypatch):
     from common import config
-    from argus_prophet.services import inputs as observations
-    from argus_prophet.services import runs as ledger
+    from prophet.services.inputs import loader as observations
+    from prophet.services.releases import recording as ledger
     runtime = SimpleNamespace(workdir='.', models_registry={'models': {}})
     monkeypatch.setattr(config, 'get_config', lambda: runtime)
     monkeypatch.setattr(cycle, 'provenance', lambda _: {'source': 'test'})
@@ -210,7 +210,7 @@ def test_manual_composition_preserves_writer_and_trigger(monkeypatch):
 
 
 def test_calculation_uses_configured_timeout_and_only_serializable_request():
-    from argus_prophet.services.generation.calculation import CalculationRequest
+    from prophet.services.generation.calculation import CalculationRequest
     _, inputs, command, read, _, service = setup_run()
     executor = Mock(side_effect=lambda target, *args, **kw: target(*args))
     service.executor = executor

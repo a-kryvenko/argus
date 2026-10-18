@@ -5,7 +5,8 @@ import sys
 from fastapi import HTTPException
 import pytest
 
-from argus_intelligence import db, main
+from intelligence import main
+from intelligence.db import session as db
 
 
 @pytest.mark.parametrize('available', [True, False])

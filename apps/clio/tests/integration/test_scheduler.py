@@ -2,7 +2,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from domain_storage import database, migrate, runtime
+from tests.support.database import database, migrate, runtime
 
 
 def test_scheduler_retries_restarts_and_serializes_jobs(database, monkeypatch):

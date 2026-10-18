@@ -4,7 +4,7 @@ import gzip
 import hashlib
 from datetime import UTC, datetime, timedelta
 
-from domain_storage import database, migrate
+from tests.support.database import database, migrate
 
 
 def test_donki_versions_are_causal_and_empty_responses_replace_old_events(database, monkeypatch):
@@ -88,7 +88,7 @@ def test_closed_hourly_speed_history_prefers_covered_native_data_and_gates_recei
     migrate(environment)
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    from clio.db.models import Measurement
+    from clio.db.models.measurement import Measurement
     from clio.db.session import get_session_factory, dispose_engine
     from clio.routers.solar_wind_events import hourly_speeds
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)

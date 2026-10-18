@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from domain_storage import database, migrate, runtime
+from tests.support.database import database, migrate, runtime
 
 
 def configure(environment, monkeypatch, tmp_path):
@@ -152,6 +152,5 @@ def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, t
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261014_enlil_profile'
         assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (True, True)
     assert original.read_bytes() == b'retained SDO original'
-    from clio.db.base import Base
-    from clio.db import models
+    from clio.db.metadata import Base
     assert 'clio.aia_snapshot' not in Base.metadata.tables

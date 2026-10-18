@@ -8,7 +8,8 @@ RUN uv pip install --system timm==1.0.27 scikit-learn==1.9.0 scikit-image==0.26.
 WORKDIR /var/www
 COPY packages/common/src /var/www/packages/common/src
 COPY packages/forecast/src /var/www/packages/forecast/src
+COPY packages/forecast-core/src/forecast_core/models/proswin.py /var/www/packages/forecast-core/src/forecast_core/models/proswin.py
 COPY apps/prophet/src /var/www/apps/prophet/src
-ENV PYTHONPATH=/var/www/packages/common/src:/var/www/packages/forecast/src:/var/www/apps/prophet/src \
+ENV PYTHONPATH=/var/www/packages/common/src:/var/www/packages/forecast/src:/var/www/packages/forecast-core/src:/var/www/apps/prophet/src \
     XDG_CACHE_HOME=/tmp/proswin-cache TORCHINDUCTOR_CACHE_DIR=/tmp/torchinductor SUNPY_DOWNLOADDIR=/tmp/sunpy-downloads SUNPY_CONFIGDIR=/tmp/sunpy MPLCONFIGDIR=/tmp/matplotlib OPENBLAS_NUM_THREADS=4
-CMD ["python", "-m", "argus_prophet.services.proswin_queue"]
+CMD ["python", "-m", "prophet.services.proswin.queue"]

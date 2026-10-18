@@ -1380,18 +1380,14 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "common", editable = "packages/common" },
-    { name = "joblib", marker = "extra == 'models'", specifier = ">=1.5.3" },
-    { name = "lightgbm", marker = "extra == 'models'", specifier = ">=4.6.0" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2,<3" },
-    { name = "scikit-learn", marker = "extra == 'models'", specifier = ">=1.5" },
+    { name = "scikit-learn", marker = "extra == 'evaluation'", specifier = ">=1.5" },
 ]
-provides-extras = ["models"]
+provides-extras = ["evaluation"]
 
 [package.metadata.requires-dev]
 test = [
-    { name = "joblib", specifier = ">=1.5.3" },
-    { name = "lightgbm", specifier = ">=4.6.0" },
     { name = "pytest", specifier = ">=8,<10" },
     { name = "pytest-xdist", specifier = ">=3,<4" },
     { name = "scikit-learn", specifier = ">=1.5" },

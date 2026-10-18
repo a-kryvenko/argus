@@ -16,13 +16,13 @@ RUN uv sync --frozen --no-cache --no-install-local
 
 COPY packages/common ./../../packages/common
 
-COPY apps/api/app ./app
+COPY apps/api/src ./src
 
 RUN uv sync --frozen --no-cache
-COPY apps/api/alembic.ini ./alembic.ini
-COPY apps/api/alembic ./alembic
 COPY scripts/db/provision.py /var/www/scripts/db/provision.py
+
+ENV PATH="/var/www/apps/api/.venv/bin:$PATH"
 
 EXPOSE 8000
 
-CMD [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD [".venv/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 import pandas as pd
 from sqlalchemy import select
 
-from clio.providers.swpc_loader import SWPC_Loader
+from clio.providers.f107 import fetch_f107
 from clio.observations.schema import wide_to_measurements
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.db.session import get_session_factory
 from clio.domains.geomagnetic import ingest_source
 from clio.ingestion.adapters import clean_records
@@ -59,5 +59,5 @@ def live_adapters():
         'swpc.rtsw_plasma': SolarWindLiveAdapter('plasma'),
         'swpc.kp': GeomagneticLiveAdapter('kp'),
         'swpc.dst': GeomagneticLiveAdapter('dst'),
-        'swpc.f107': WideLiveAdapter(SWPC_Loader._fetch_f10_7_flux, ('f10_7',)),
+        'swpc.f107': WideLiveAdapter(fetch_f107, ('f10_7',)),
     }

@@ -67,7 +67,7 @@ def execute(args, remainder):
         options = cli.parser.parse_args(remainder)
         config = Config()
         config.cmd_opts = options
-        config.set_main_option('script_location', str(Path(__file__).parent / 'migrations'))
+        config.set_main_option('script_location', str(Path(__file__).parent / 'db' / 'migrations'))
         cli.run_cmd(config, options)
     elif args.command == 'worker':
         from clio.worker import work

@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from app.services import project_monitoring as monitoring
-from app.services.edge_traffic import read_batch, aggregate, traffic_summary
-from app.routers.dashboard import project_monitoring, project_traffic
+from api.services.monitoring import project as monitoring
+from api.services.monitoring.edge_traffic import read_batch, aggregate, traffic_summary
+from api.routers.dashboard import project_monitoring, project_traffic
 
 NOW = datetime(2026, 9, 17, 12, tzinfo=UTC)
 

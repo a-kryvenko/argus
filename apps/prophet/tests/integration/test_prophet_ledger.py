@@ -1,5 +1,5 @@
 """Uses the explicitly configured disposable PostgreSQL server, never production."""
-from domain_storage import ROOT, database, runtime
+from tests.support.database import ROOT, database, runtime
 from .storage import recorder_database, recorder_setup, store_product
 import gzip
 import hashlib
@@ -7,10 +7,10 @@ from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
-from common.schemas.forecast_inputs import ForecastInputs
+from forecast.inputs import ForecastInputs
 from common.schemas.observation import Observation
-from argus_prophet.services.runs import RunRecorder
-from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
+from prophet.services.releases.recording import RunRecorder
+from prophet.services.releases.publication import read_release, ReleaseNotFound
 
 
 @pytest.mark.parametrize(('speed_available', 'speed_integrated'), [(True, None), (True, 650), (False, None)])
@@ -20,7 +20,7 @@ def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, speed_
     import json
     from uuid import uuid4
     from common.schemas.solar_wind_events import EventInputs, SourcePoll, SolarWindEvent, SolarWindEventForecast
-    from argus_prophet.services.events import calculate
+    from prophet.services.events.calculation import calculate
     dsn, passwords, config, writer = recorder_setup
     now = datetime(2026, 10, 13, 12, tzinfo=UTC)
     rows = [dict(activityID='cme1', startTime='2026-10-13T00:00Z', cmeAnalyses=[dict(
@@ -113,7 +113,7 @@ def test_snapshot_bytes_publication_and_role_boundary(recorder_setup):
 def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
     dsn, passwords, config, writer = recorder_setup
     first = RunRecorder.begin('dst', 'manual', config, writer=writer)
-    from argus_prophet.scheduling.jobs import recover_interrupted
+    from prophet.scheduling.jobs import recover_interrupted
     recover_interrupted(writer)
     second = RunRecorder.begin('dst', 'manual', config, writer=writer)
     second.finish(error=ValueError('bad model'))
@@ -124,7 +124,7 @@ def test_interrupted_and_failed_runs_are_preserved(recorder_setup):
 
 
 def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
-    from argus_prophet.scheduling.execution import ShutdownRequested
+    from prophet.scheduling.execution import ShutdownRequested
     dsn, passwords, config, writer = recorder_setup
     run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     run.finish(error=ShutdownRequested('deadline'))
@@ -134,7 +134,7 @@ def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
 
 
 def test_cleanup_preserves_current_release_latest_attempt_and_slots(recorder_setup):
-    from argus_prophet.services.retention import cleanup
+    from prophet.services.releases.retention import cleanup
     from psycopg.types.json import Jsonb
     dsn, passwords, config, writer = recorder_setup
     old = datetime.now(UTC)-timedelta(days=100)
@@ -215,7 +215,7 @@ def test_publication_failure_does_not_roll_back_another_product(recorder_setup):
 
 
 def test_status_reports_product_failure_not_unrelated_success(recorder_setup):
-    from argus_prophet.services.releases.status import product_status
+    from prophet.services.releases.status import product_status
     _, _, config, writer = recorder_setup
     run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     now = datetime(2026, 9, 13, 1, tzinfo=UTC)
@@ -242,13 +242,13 @@ def test_export_migration_preserves_release_bytes_on_upgrade_and_downgrade(recor
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
     from sqlalchemy import create_engine
-    from argus_prophet.db.session import get_database_url
+    from prophet.db.session import get_database_url
     _, _, config, writer = recorder_setup
     run = RunRecorder.begin('dst', 'manual', config, writer=writer)
     expected = store_product(run)
     run.finish()
     release = read_release('dst')
-    path = ROOT / 'apps/prophet/src/argus_prophet/migrations/versions/20260918_remove_exports.py'
+    path = ROOT / 'apps/prophet/src/prophet/db/migrations/versions/20260918_remove_exports.py'
     spec = importlib.util.spec_from_file_location('remove_exports', path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

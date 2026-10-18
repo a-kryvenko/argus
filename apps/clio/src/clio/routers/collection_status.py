@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from clio.db import get_db_session
+from clio.db.session import get_db_session
 from common.schemas.response import success_response
 from clio.monitoring.status import source_status
 
@@ -21,6 +21,6 @@ async def collection_status(response: Response, session: AsyncSession = Depends(
 
 @router.get('/monitoring')
 async def monitoring(response: Response, session: AsyncSession = Depends(get_db_session)):
-    from clio.monitoring.monitoring import monitoring_status
+    from clio.monitoring.measurements import monitoring_status
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await monitoring_status(session))

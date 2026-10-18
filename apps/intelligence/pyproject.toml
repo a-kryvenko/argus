@@ -1,11 +1,11 @@
 [project]
-name = "argus-intelligence"
+name = "intelligence"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = ["common", "intelligence-core>=0.1.0", "fastapi>=0.115", "uvicorn>=0.30", "httpx>=0.28,<1", "psycopg[binary]>=3.2,<4", "sqlalchemy>=2.0,<3", "alembic>=1.16,<2"]
 
 [project.scripts]
-intelligence = "argus_intelligence.cli:main"
+intelligence = "intelligence.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -22,7 +22,7 @@ common = { path = "../../packages/common", editable = true }
 members = []
 
 [tool.setuptools.package-data]
-argus_intelligence = ["migrations/script.py.mako"]
+intelligence = ["db/migrations/script.py.mako"]
 
 [dependency-groups]
 test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "httpx>=0.28,<1", "httpx2"]

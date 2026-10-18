@@ -2,7 +2,7 @@ import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
 export default {
-  content: ["./app/dashboard/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  content: ["./src/app/dashboard/**/*.{ts,tsx}", "./src/components/**/*.{ts,tsx}"],
   important: ".dashboard",
   corePlugins: { preflight: false },
   theme: {

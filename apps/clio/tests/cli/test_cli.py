@@ -17,7 +17,8 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
     args = SimpleNamespace(limit=12)
     command = AsyncMock(side_effect=ValueError('command failed'))
     dispose = AsyncMock()
-    monkeypatch.setattr(runner.importlib, 'import_module', lambda name: SimpleNamespace(run=command))
+    from clio.commands import normalize
+    monkeypatch.setattr(normalize, 'run', command)
     monkeypatch.setattr(session, 'dispose_engine', dispose)
     with pytest.raises(ValueError, match='command failed'):
         runner.invoke('normalize', args)

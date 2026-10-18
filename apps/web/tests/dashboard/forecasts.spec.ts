@@ -1,7 +1,7 @@
 import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from '@playwright/test';
-import { products, type ProductConfig } from '../../app/_config/products';
-import type { Forecast, ForecastPoint } from '../../app/_utils/api';
+import { products, type ProductConfig } from '../../src/forecast/products';
+import type { Forecast, ForecastPoint } from '../../src/forecast/types';
 
 const issue = '2026-09-30T00:00:00.000Z';
 

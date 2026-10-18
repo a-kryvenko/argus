@@ -60,16 +60,14 @@ def main():
         python('-c', """
 from pathlib import Path
 import tempfile
-import sys
-sys.path.insert(0, 'tests/support')
-from domain_storage import provisioned_database, migrate
+from tests.support.database import provisioned_database, migrate
 with tempfile.TemporaryDirectory() as directory:
     with provisioned_database(Path(directory)) as (_, _, environment):
         migrate(environment)
 """)
         print('Domain storage, ownership, scheduling and verification', flush=True)
         python('-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib', '-q', '-n', '8',
-               'tests/test_database_urls.py', 'tests/integration', *sys.argv[1:])
+               'tests', *sys.argv[1:])
         for domain in ('clio', 'prophet', 'intelligence'):
             python('-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib', '-q', '-n', '8',
                    f'apps/{domain}/tests/integration', *sys.argv[1:], domain=domain)

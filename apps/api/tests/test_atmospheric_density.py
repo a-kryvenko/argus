@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.routers.atmospheric_density import router
-from app.routers.forecasts import router as general_router
-from app.services import atmospheric_density as service
+from api.routers.atmospheric_density import router
+from api.routers.forecasts import router as general_router
+from api.services.forecasts import density as service
 
 
 @pytest.fixture

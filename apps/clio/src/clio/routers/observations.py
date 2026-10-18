@@ -1,4 +1,4 @@
-from clio.db import get_db_session
+from clio.db.session import get_db_session
 from common.schemas.response import error_response, success_response
 from clio.observations.normalized import load_normalized_observations
 from fastapi import APIRouter, Depends, Query

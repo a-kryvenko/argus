@@ -6,9 +6,9 @@ from pydantic import AwareDatetime
 from sqlalchemy import func, select, text, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.db import get_db_session
+from clio.db.session import get_db_session
 from clio.routers.auth import require_service_token
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.observations.normalized import HISTORY_DAYS, load_normalized_observations
 from common.schemas.forecast_inputs import DensityObservation, ObservationInputs, SourceMeasurement, SpeedObservation
 from common.data.omni import OMNI_FILL_VALUES

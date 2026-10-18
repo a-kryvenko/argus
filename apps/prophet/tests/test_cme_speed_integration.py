@@ -8,9 +8,9 @@ import pytest
 
 from common.schemas.forecast_release import ForecastArtifact
 from common.schemas.solar_wind_events import CMESpeedOutlook
-from forecast.api import ForecastResult
-from argus_prophet.services.generation.calculation import serialize
-from argus_prophet.services.solar_event_speed import integrate_speed_forecast
+from forecast.calculation import ForecastResult
+from prophet.services.generation.calculation import serialize
+from prophet.services.events.speed import integrate_speed_forecast
 
 
 def setup():

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.routers import solar_wind as routes
 from clio.domains.solar_wind import observations as service
 
@@ -88,17 +88,6 @@ def test_api_validates_ranges_and_metrics_without_querying_database(monkeypatch)
         assert response.status_code == 200
         latest.assert_awaited_once_with(session, ['bz'])
 
-
-def test_one_source_failure_does_not_cancel_other_ingestion(monkeypatch):
-    completed = []
-    async def ingest(kind):
-        if kind == 'mag':
-            raise OSError('provider unavailable')
-        completed.append(kind)
-    monkeypatch.setattr(service, 'ingest_source', ingest)
-    with pytest.raises(RuntimeError, match='mag'):
-        asyncio.run(service.refresh_solar_wind())
-    assert completed == ['plasma']
 
 
 def test_locked_collector_does_not_fetch_or_commit(monkeypatch):

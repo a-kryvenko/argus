@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, Mock
 from sqlalchemy.dialects import postgresql
 
 from clio.observations.native import wind_measurements, geomagnetic_measurements, store_native
-from clio.monitoring import monitoring
-from clio.db.models import Measurement
+from clio.monitoring import measurements as monitoring
+from clio.db.models.measurement import Measurement
 
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 

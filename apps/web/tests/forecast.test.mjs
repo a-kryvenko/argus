@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
 const source = await readFile(
-  new URL("../app/_utils/forecast.ts", import.meta.url),
+  new URL("../src/forecast/format.ts", import.meta.url),
   "utf8",
 );
 const compiled = ts.transpileModule(source, {

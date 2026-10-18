@@ -12,7 +12,7 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.observations.native import wind_measurements, store_native
 from clio.domains.solar_wind.history import history
 from clio.observations.store import load_measurements
@@ -38,7 +38,7 @@ def database_url():
 
 
 def migrate(connection, target, start='base'):
-    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[2] / 'src/clio/migrations'))
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[2] / 'src/clio/db/migrations'))
     with Operations.context(MigrationContext.configure(connection)):
         for revision in reversed(list(scripts.iterate_revisions(target, start))):
             revision.module.upgrade()

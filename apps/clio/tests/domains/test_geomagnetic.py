@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.domains import geomagnetic as service
 from clio.routers import geomagnetic as routes
 
@@ -49,19 +49,6 @@ def test_empty_database_has_no_invented_indices():
     assert all(s['status'] == 'missing' and s['latest'] is None for s in series.values())
 
 
-def test_independent_source_failure(monkeypatch):
-    calls = []
-    async def ingest(metric):
-        calls.append(metric)
-        if metric == 'kp':
-            raise OSError('offline')
-    monkeypatch.setattr(service, 'ingest_source', ingest)
-    with pytest.raises(RuntimeError, match='kp'):
-        asyncio.run(service.refresh_geomagnetic())
-    assert calls == ['kp', 'dst']
-
-
-
 
 def test_api_rejects_invalid_ranges_before_querying(monkeypatch):
     app = FastAPI()
@@ -89,13 +76,3 @@ def test_completed_kp_waits_for_next_native_interval_before_becoming_stale():
     assert asyncio.run(service.latest(session, NOW))['series']['kp']['status'] == 'fresh'
     session.execute.side_effect = results()
     assert asyncio.run(service.latest(session, NOW+timedelta(seconds=1)))['series']['kp']['status'] == 'stale'
-
-
-def test_stored_kp_projection_reads_canonical_kp_and_ap():
-    session = AsyncMock()
-    session.execute.return_value = Mock(all=lambda: [('kp', 3.33, NOW), ('ap', 18., NOW)])
-    frame = asyncio.run(service.load_kp_measurements(session, since=NOW-timedelta(days=1), until=NOW))
-    assert frame.value.tolist() == [3.33, 18.]
-    assert frame.metric.tolist() == ['kp', 'ap']
-    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'clio.measurement' in sql and 'received_at <=' in sql

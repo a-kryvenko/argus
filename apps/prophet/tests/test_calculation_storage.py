@@ -10,16 +10,16 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
-from common.adapters import forecast_to_dataframe
+from forecast.adapters import forecast_to_dataframe
 from common.exceptions import ConfigurationException
-from common.schemas.forecast_inputs import ForecastInputs
+from forecast.inputs import ForecastInputs
 from common.schemas.forecast_release import ForecastArtifact
 from common.schemas.observation import Observation, ObservationPoint
-from forecast.api import calculate_forecast
-from forecast_core.api import DstFS
-from argus_prophet.services.generation import calculation as generation
-from argus_prophet.services import runs as ledger
-from argus_prophet.services.generation.models import load_model
+from forecast.calculation import calculate_snapshot
+from forecast_core.inference.geomagnetic.dst.lightgbm import LightgbmDstQuantileFS as DstFS
+from prophet.services.generation import calculation as generation
+from prophet.services.releases import recording as ledger
+from prophet.services.generation.models import load_model
 
 ISSUE = datetime(2026, 9, 18, 12, tzinfo=UTC)
 
@@ -34,9 +34,10 @@ class ConstantModel:
 
 @pytest.fixture
 def calculation_setup(tmp_path, monkeypatch):
-    bundle = {'lead_hours': 2, 'buckets': [(2, 'short')], 'feature_columns': ['v', 'lead_hours'],
-              'models': {('short', q): ConstantModel(value)
-                         for q, value in zip(('q10', 'q50', 'q90'), (-20., -10., 0.))}}
+    bundle = {'format': 'argus-revalidated-quantile-v1', 'target': 'dst',
+              'lead_hours': 2, 'buckets': [(1, 2)], 'feature_columns': ['v', 'lead_hours'],
+              'models': {}, 'offsets': np.zeros((2, 3)),
+              'heads': [{'lo': 1, 'hi': 2, 'models': [ConstantModel(v) for v in (-20., -10., 0.)]}]}
     path = tmp_path / 'data/models/dst.joblib'
     path.parent.mkdir(parents=True)
     joblib.dump(bundle, path)
@@ -54,7 +55,7 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
     service, metadata = load_model(DstFS, workdir=config.workdir, registry=config.models_registry['models'])
     assert metadata == {'registry_name': 'dst_quantile', 'model': 'dst',
                         'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
-    result = calculate_forecast(service, inputs.observations, issue_time=ISSUE, model_info=metadata)
+    result = calculate_snapshot(service, inputs, issue_time=ISSUE, model_info=metadata)
     expected = forecast_to_dataframe(DstFS(bundle).forecast(inputs.observations, issue_time=ISSUE))
     pd.testing.assert_frame_equal(result.frame, expected)
     assert result.frame.dst_q50.tolist() == [-10., -10.]
@@ -65,10 +66,10 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
     reference = tmp_path / 'reference.csv'
     expected.to_csv(reference, index=False)
     recorder = Mock()
-    from argus_prophet.services.generation.cycle import ProductRun
-    from argus_prophet.config import ProphetConfig
+    from prophet.services.generation.cycle import ProductRun
+    from prophet.config import ProphetConfig
     run = ProductRun('dst', recorder, config, ProphetConfig())
-    from argus_prophet.scheduling.execution import execute
+    from prophet.scheduling.execution import execute
     run.complete(execute(generation.calculate_product, run.prepare_calculation(inputs)))
     name, content, info, rows, columns = recorder.store.call_args.args
     assert content == reference.read_bytes()
@@ -88,8 +89,8 @@ def test_storage_failure_stops_run_without_touching_live_exports(calculation_set
     recorder = Mock()
     recorder.store.side_effect = RuntimeError('database unavailable')
     with pytest.raises(RuntimeError, match='database unavailable'):
-        from argus_prophet.services.generation.cycle import ProductRun
-        from argus_prophet.config import ProphetConfig
+        from prophet.services.generation.cycle import ProductRun
+        from prophet.config import ProphetConfig
         run = ProductRun('dst', recorder, config, ProphetConfig())
         run.complete(generation.calculate_product(run.prepare_calculation(inputs)))
     assert live.read_bytes() == b'previous release'
@@ -134,8 +135,8 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
     from common import config
     from importlib import import_module
     density_forecast = import_module("forecast_core.models.AtmosphericDensityForecastService")
-    from forecast.api import calculate_snapshot
-    from forecast_core.api import AtmosphericDensityForecastService
+    from forecast.calculation import calculate_snapshot
+    from forecast_core.models.AtmosphericDensityForecastService import AtmosphericDensityForecastService
 
     drivers = pd.DataFrame([{
         'valid_time': ISSUE + timedelta(hours=lead), 'observed_at': ISSUE,
@@ -179,7 +180,7 @@ def test_density_returns_same_grid_and_serialization_without_storage(monkeypatch
 
 @pytest.mark.parametrize('model', ['DTM2020', 'JB2008'])
 def test_density_generation_passes_registry_and_records_actual_model(tmp_path, monkeypatch, model):
-    from forecast_core.api import AtmosphericDensityForecastService
+    from forecast_core.models.AtmosphericDensityForecastService import AtmosphericDensityForecastService
     inputs = ForecastInputs(as_of=ISSUE, read_at=ISSUE, observations=Observation(points=[]))
     registry = {'atmospheric_density': {'model': model, 'runtime_path': 'data/models/licensed-dtm'}}
     def snapshot(service, inputs, *, issue_time):

@@ -1,21 +1,22 @@
 [project]
-name = "argus-api"
+name = "api"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.16,<2",
   "pandas>=2.2,<3",
-  "numpy>=1.26",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "httpx>=0.28,<1",
   "common",
   "sentry-sdk>=2.61.1",
   "pydantic>=2.13.4",
-  "pydantic-settings>=2.14.1",
   "sqlalchemy[asyncio]>=2.0,<3",
   "psycopg[binary]>=3.2,<4",
 ]
+
+[project.scripts]
+api = "api.cli:main"
 
 [tool.uv.sources]
 common = { path = "../../packages/common", editable = true }
@@ -28,7 +29,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+where = ["src"]
+
+[tool.setuptools.package-data]
+api = ["db/migrations/script.py.mako"]
 
 [dependency-groups]
 test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "httpx>=0.28,<1", "httpx2"]

@@ -2,7 +2,7 @@ from contextlib import nullcontext
 from unittest.mock import Mock
 
 import pytest
-from argus_prophet.db import session
+from prophet.db import session
 
 
 def test_all_writer_transactions_use_explicit_lock_connection_without_reconnecting(monkeypatch):

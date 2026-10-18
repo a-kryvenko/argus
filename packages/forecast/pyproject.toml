@@ -1,7 +1,7 @@
 [project]
 name = "forecast"
 version = "0.3.0"
-description = "Public solar-wind inference and shared forecast primitives for Argus Sunwatch"
+description = "Shared forecast contracts, snapshot calculation and verification for Argus Sunwatch"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-models = ["scikit-learn>=1.5", "lightgbm>=4.6.0", "joblib>=1.5.3"]
+evaluation = ["scikit-learn>=1.5"]
 
 [tool.setuptools.package-dir]
 "" = "src"
@@ -23,7 +23,7 @@ common = { path = "../common", editable = true }
 members = []
 
 [dependency-groups]
-test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "scikit-learn>=1.5", "lightgbm>=4.6.0", "joblib>=1.5.3"]
+test = ["pytest>=8,<10", "pytest-xdist>=3,<4", "scikit-learn>=1.5"]
 
 [build-system]
 requires = ["setuptools>=68"]

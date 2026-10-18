@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart TD
-    clio[HTTP API Clio: наблюдения и оригинальные файлы] --> preparation[Prophet: признаки AIA/GONG и калибровки GOES]
+    clio[HTTP API Clio: наблюдения и оригинальные файлы] --> preparation[Prophet: индексы GOES и прогнозы PROSWIN]
     preparation -->|Подготовленный снимок входов и SHA256| forecast_run
     generation[Ручной или плановый запуск расчёта] -->|Статус, ошибки и provenance| forecast_run
     scheduler[Планировщик расчётов по продуктам] --> forecast_slot

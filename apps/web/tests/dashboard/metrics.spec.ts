@@ -1,7 +1,7 @@
 import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from '@playwright/test';
-import { products, type ProductConfig } from '../../app/_config/products';
-import type { ForecastMetrics } from '../../app/_utils/api';
+import { products, type ProductConfig } from '../../src/forecast/products';
+import type { ForecastMetrics } from '../../src/app/metrics/_lib/types';
 
 function evaluation(product: ProductConfig): ForecastMetrics {
   return { target: product.apiTarget, variables: Object.fromEntries(product.variables.map(variable => [variable.key, {

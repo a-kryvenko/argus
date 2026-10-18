@@ -180,7 +180,7 @@ def test_legacy_repoll_does_not_erase_provenance_for_unchanged_values():
 
 def test_existing_observation_closes_hour_even_when_flagged_or_off_grid():
     stored = frame(('v', float('nan'), START + timedelta(minutes=5)))
-    assert service.missing_hours(stored, 'v', START, START + timedelta(hours=1)) == set()
+    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1)) == set()
 
 
 def test_all_sources_failing_does_not_commit(monkeypatch):

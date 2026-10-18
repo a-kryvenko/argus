@@ -2,9 +2,30 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
-const source = await readFile(new URL('../app/demo/_lib/replay.ts', import.meta.url), 'utf8');
+const source = await readFile(new URL('../src/app/demo/_lib/replay.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
-const { parseOffset, replayTime, countdown, demoHref, selectRelease, comparisonRows, observationKnownAt, selectEventRelease } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+const { parseOffset, replayTime, countdown, demoHref, selectRelease, comparisonRows, observationKnownAt, selectEventRelease, demoPageBundle } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
+
+test('page payload keeps replay history for its product and navigation metadata without unrelated forecasts', () => {
+  const release = { issue_time: '2026-01-19T19:00:00Z', available_variables: ['v'], predictions: [{ lead_hours: 1 }] };
+  const density = { ...release, available_variables: ['n'] };
+  const source = { releases: { speed: [release], density: [density], empty: [] }, observations: [], density_scenario: {} };
+  const page = demoPageBundle(source, 'density');
+  assert.deepEqual(Object.keys(page.releases), ['density']);
+  assert.equal(selectRelease(page, 'density', Date.parse(release.issue_time)), density);
+  assert.deepEqual(page.available_variables_by_product, { speed: ['v'], density: ['n'] });
+  assert.equal(page.observations, source.observations);
+  assert.equal(page.density_scenario, undefined);
+  assert.equal(page.density_scenario_available, true);
+  const observations = demoPageBundle(source);
+  assert.deepEqual(observations.releases, {});
+  assert.deepEqual(observations.available_variables_by_product, page.available_variables_by_product);
+  const leo = demoPageBundle(source, undefined, true);
+  assert.deepEqual(leo.releases, {});
+  assert.equal(leo.density_scenario, source.density_scenario);
+  assert.deepEqual(Object.keys(source.releases), ['speed', 'density', 'empty']);
+  assert.ok(source.density_scenario);
+});
 
 test('offset is a bounded integer, links retain it and T0 is the precise event time', () => {
   assert.equal(parseOffset(null), -96);

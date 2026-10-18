@@ -31,9 +31,9 @@ graph TB
       style 13 fill:#dbeafe,stroke:#99a3b1,color:#172554
       14[("Clio database<br/>[Container: PostgreSQL / clio]<br/>Measurements, aggregates,<br />normalized observations and<br />archive receipts")]
       style 14 fill:#dbeafe,stroke:#99a3b1,color:#172554
-      15[("Prophet database<br/>[Container: PostgreSQL / argus_prophet]<br/>Snapshots, forecasts,<br />releases and verification<br />records")]
+      15[("Prophet database<br/>[Container: PostgreSQL / prophet]<br/>Snapshots, forecasts,<br />releases and verification<br />records")]
       style 15 fill:#dbeafe,stroke:#99a3b1,color:#172554
-      16[("Intelligence database<br/>[Container: PostgreSQL / argus_intelligence]<br/>Spacecraft, assessments,<br />retained forecast inputs and<br />events")]
+      16[("Intelligence database<br/>[Container: PostgreSQL / intelligence]<br/>Spacecraft, assessments,<br />retained forecast inputs and<br />events")]
       style 16 fill:#dbeafe,stroke:#99a3b1,color:#172554
       17["Original file archive<br/>[Container: Clio-owned disk]<br/>AIA, HMI and new GONG<br />originals; owned by Clio"]
       style 17 fill:#fef3c7,stroke:#b1aa8b,color:#172554

@@ -8,7 +8,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.observations.schema import OBSERVATION_METRICS
-from clio.db.models import Measurement, NormalizedObservation
+from clio.db.models.measurement import Measurement
+from clio.db.models.normalized_observation import NormalizedObservation
 
 UPSERT_BATCH_SIZE = 5_000
 

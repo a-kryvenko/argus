@@ -1,10 +1,11 @@
 """Real PostgreSQL storage/retry test; provider reads are fixed deterministic inputs."""
+from tests.support.database import database
 from datetime import UTC, datetime, timedelta
 
-from .storage import recorder_setup, recorder_database, database, store_product
-from argus_prophet.services.runs import RunRecorder
-from argus_prophet.services import verification
-from argus_prophet.db.session import connect
+from .storage import recorder_setup, recorder_database, store_product
+from prophet.services.releases.recording import RunRecorder
+from prophet.services import verification
+from prophet.db.session import connect
 
 
 def test_real_releases_are_verified_and_revisions_replace_evidence(recorder_setup, monkeypatch):

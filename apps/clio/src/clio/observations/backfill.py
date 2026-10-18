@@ -22,11 +22,6 @@ def missing_slots(stored, metric, start, end):
     return clock - present
 
 
-def missing_hours(stored, metric, start, end):
-    """Compatibility helper for the original hourly plasma slice."""
-    return missing_slots(stored, metric, start, end)
-
-
 def request_ranges(hours):
     """Coalesce provider calendar days, bounded to 31 days per request."""
     days = sorted({hour.floor('D').to_pydatetime() for hour in hours})

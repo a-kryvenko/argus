@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from argus_prophet.config import VerificationSchedule
-from argus_prophet.scheduling import verification
+from prophet.config import VerificationSchedule
+from prophet.scheduling import verification
 
 
 def test_disabled_schedule_never_acquires_lock(monkeypatch):

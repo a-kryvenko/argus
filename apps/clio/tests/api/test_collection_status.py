@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import SQLAlchemyError
 
-from clio.db.models import ObservationSourceStatus
+from clio.db.models.observation_source_status import ObservationSourceStatus
 from clio.monitoring import status as service
 from clio.routers import collection_status as routes
 

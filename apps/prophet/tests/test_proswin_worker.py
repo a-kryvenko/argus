@@ -5,7 +5,7 @@ import json
 import httpx
 import pandas as pd
 
-from argus_prophet.services import proswin_worker as worker
+from prophet.services.proswin import worker as worker
 
 
 def test_worker_retries_transient_network_failure(monkeypatch):

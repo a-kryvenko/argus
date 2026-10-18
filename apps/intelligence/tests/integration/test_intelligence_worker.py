@@ -5,8 +5,8 @@ import pytest
 psycopg = pytest.importorskip('psycopg')
 from sqlalchemy.engine import make_url
 
-from domain_storage import database, migrate
-from argus_intelligence import worker
+from tests.support.database import database, migrate
+from intelligence import worker
 
 
 @pytest.fixture

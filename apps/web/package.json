@@ -13,7 +13,7 @@
     "lint": "eslint --max-warnings 0",
     "check-types": "next typegen && tsc --noEmit",
     "test:dashboard": "playwright test",
-    "lint:dashboard": "eslint --config eslint.dashboard.config.mjs app/dashboard components lib tailwind.config.ts playwright.config.ts tests/dashboard",
+    "lint:dashboard": "eslint src/app/dashboard tailwind.config.ts playwright.config.ts tests/dashboard",
     "test": "node --test --test-concurrency=8 tests/*.test.mjs"
   },
   "dependencies": {
@@ -24,7 +24,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "echarts": "^6.1.0",
-    "echarts-for-react": "^3.0.6",
     "lucide-react": "^1.52.0",
     "next": "16.3.8",
     "react": "^19.3.0",

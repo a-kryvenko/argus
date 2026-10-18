@@ -1,6 +1,7 @@
 """Production dispatcher, transaction boundaries and crash recovery on PostgreSQL."""
-from .storage import recorder_database, database, store_product
-from domain_storage import runtime
+from tests.support.database import database
+from .storage import recorder_database, store_product
+from tests.support.database import runtime
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -8,14 +9,14 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from argus_prophet.services.runs import RunRecorder
-from argus_prophet.services.generation.products import PRODUCTS
-from argus_prophet.services.releases.publication import read_release, ReleaseNotFound
-from argus_prophet.scheduling.jobs import generation_lock, GenerationBusy
-from argus_prophet.config import ProductSchedule, ProphetConfig
-from argus_prophet.scheduling.execution import ExecutionControl
-from argus_prophet.services.generation.calculation import Artifact
-from argus_prophet import worker
+from prophet.services.releases.recording import RunRecorder
+from prophet.services.generation.products import PRODUCTS
+from prophet.services.releases.publication import read_release, ReleaseNotFound
+from prophet.scheduling.jobs import generation_lock, GenerationBusy
+from prophet.config import ProductSchedule, ProphetConfig
+from prophet.scheduling.execution import ExecutionControl
+from prophet.services.generation.calculation import Artifact
+from prophet import worker
 
 NOW = datetime(2026, 9, 13, 10, 10, tzinfo=UTC)
 due_slot = ProductSchedule().due_slot
@@ -23,7 +24,7 @@ due_slot = ProductSchedule().due_slot
 
 def dispatch(config, now=NOW, *, fail=(), seen=None):
     """Real scheduler and DB; replace only process/model work with ready futures."""
-    from common.schemas.forecast_inputs import ForecastInputs
+    from forecast.inputs import ForecastInputs
     from common.schemas.observation import Observation
     class Pool:
         def submit(self, execute, target, *args, **kwargs):
@@ -191,7 +192,7 @@ def test_legacy_partial_batch_retries_only_unpublished_products(recorder_databas
 
 
 def test_product_slots_allow_subhour_retries_and_independent_clock_rollback(recorder_database):
-    from argus_prophet.scheduling.jobs import product_pending
+    from prophet.scheduling.jobs import product_pending
     dsn, passwords, config = recorder_database
     slot = NOW.replace(minute=5)
     with generation_lock() as writer:
@@ -215,7 +216,7 @@ def test_product_slots_allow_subhour_retries_and_independent_clock_rollback(reco
 
 
 def test_verification_excludes_generation_and_cleanup(recorder_database):
-    from argus_prophet.scheduling.jobs import verification_lock, retention_lock
+    from prophet.scheduling.jobs import verification_lock, retention_lock
     import threading
     acquired, release = threading.Event(), threading.Event()
     def verify():
@@ -241,7 +242,7 @@ def test_verification_excludes_generation_and_cleanup(recorder_database):
 
 
 def test_generation_excludes_verification_and_releases_locks_after_failure(recorder_database):
-    from argus_prophet.scheduling.jobs import verification_lock, retention_lock
+    from prophet.scheduling.jobs import verification_lock, retention_lock
     with pytest.raises(ValueError, match='calculation failed'):
         with generation_lock():
             with pytest.raises(GenerationBusy):
@@ -265,10 +266,10 @@ def test_product_slot_migration_preserves_aggregate_history(database, monkeypatc
     import subprocess
     import sys
     from uuid import uuid4
-    from domain_storage import ROOT
-    from argus_prophet.scheduling.jobs import product_pending
+    from tests.support.database import ROOT
+    from prophet.scheduling.jobs import product_pending
     dsn, passwords, environment = database
-    command = [sys.executable, '-c', 'from argus_prophet.cli import main; main()', 'migrate', 'upgrade']
+    command = [sys.executable, '-c', 'from prophet.cli import main; main()', 'migrate', 'upgrade']
     result = subprocess.run([*command, '20260929_prophet_jobs'], env=environment, cwd=ROOT,
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -297,8 +298,8 @@ def test_product_slot_migration_preserves_aggregate_history(database, monkeypatc
 
 
 def test_legacy_batch_is_readable_but_cannot_be_finished_or_republished(recorder_database):
-    from argus_prophet.services.releases.publication import publish_run
-    from argus_prophet.db.session import transaction
+    from prophet.services.releases.publication import publish_run
+    from prophet.db.session import transaction
     dsn, passwords, config = recorder_database
     with generation_lock() as writer:
         with pytest.raises(ValueError, match='one supported'):

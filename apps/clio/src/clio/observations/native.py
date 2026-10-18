@@ -4,7 +4,7 @@ import math
 from sqlalchemy import or_
 from sqlalchemy.dialects.postgresql import insert
 
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.providers.solar_wind_loader import FIELDS
 
 

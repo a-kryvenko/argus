@@ -7,13 +7,13 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.providers.solar_wind_loader import FIELDS, SOURCES, fetch_records
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.observations.native import wind_measurements, store_native
 from clio.db.session import get_session_factory
 from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
 from clio.monitoring.status import track_attempt
-from clio.coverage import coverage
+from clio.observations.coverage import coverage
 
 logger = logging.getLogger(__name__)
 METADATA = {
@@ -42,17 +42,6 @@ async def ingest_source(kind: str) -> None:
             attempt.received(records)
             await store_native(session, wind_measurements(kind, records))
         logger.info("Solar wind %s: ingested %d source samples", kind, len(records))
-
-
-async def refresh_solar_wind() -> None:
-    results = await asyncio.gather(*(ingest_source(kind) for kind in FIELDS), return_exceptions=True)
-    failed = []
-    for kind, result in zip(FIELDS, results):
-        if isinstance(result, BaseException):
-            logger.error("Solar wind %s failed: %s", kind, result)
-            failed.append(kind)
-    if failed:
-        raise RuntimeError(f"Solar wind ingestion failed for: {', '.join(failed)}")
 
 
 def metadata(metric: str) -> dict:

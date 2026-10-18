@@ -1,4 +1,4 @@
-import type { DemoBundle } from '../../app/demo/_lib/replay';
+import type { DemoBundle } from '../../src/app/demo/_lib/replay';
 
 // Synthetic values are confined to browser tests, never shipped as demo content.
 export function demoFixture(): DemoBundle {

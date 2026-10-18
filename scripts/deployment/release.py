@@ -14,16 +14,15 @@ INPUTS = {
     'proswin': ['apps/prophet/src', 'packages/common', 'packages/forecast'],
     'intelligence': ['apps/intelligence/pyproject.toml', 'apps/intelligence/uv.lock', 'apps/intelligence/src', 'packages/common'],
     'frontend': ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web'],
-    'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/app', 'apps/api/alembic',
-            'apps/api/alembic.ini', 'packages/common', 'scripts/db/provision.py'],
+    'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/src', 'packages/common', 'scripts/db/provision.py'],
     'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common'],
     'prophet': ['apps/prophet/pyproject.toml', 'apps/prophet/uv.lock', 'apps/prophet/src',
                 'packages/common', 'packages/forecast'],
 }
-MIGRATIONS = {'intelligence': ['apps/intelligence/src/argus_intelligence/migrations'],
-              'api': ['apps/api/alembic', 'apps/api/alembic.ini'],
-              'clio': ['apps/clio/src/clio/migrations'],
-              'prophet': ['apps/prophet/src/argus_prophet/migrations']}
+MIGRATIONS = {'intelligence': ['apps/intelligence/src/intelligence/db/migrations'],
+              'api': ['apps/api/src/api/db/migrations'],
+              'clio': ['apps/clio/src/clio/db/migrations'],
+              'prophet': ['apps/prophet/src/prophet/db/migrations']}
 IGNORED = {'.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.next',
            '.turbo', 'dist', 'build', 'coverage', 'test-results', 'playwright-report'}
 
@@ -83,6 +82,7 @@ def plan(root, *, rebuild=''):
     private = root / 'packages/forecast-core'
     private_sha = subprocess.check_output(['git', '-C', str(private), 'rev-parse', 'HEAD'], text=True).strip()
     private_hash = digest(private, ['.'], private=True)
+    proswin_hash = digest(private, ['src/forecast_core/models/proswin.py'], private=True)
     intelligence_core = root / 'packages/intelligence-core'
     intelligence_core_sha = subprocess.check_output(['git', '-C', str(intelligence_core), 'rev-parse', 'HEAD'], text=True).strip()
     intelligence_core_hash = digest(intelligence_core, ['.'], private=True)
@@ -91,7 +91,8 @@ def plan(root, *, rebuild=''):
               'config_hash': digest(root, ['configs']), 'cme_speed_model': cme_model}
     for name, prefixes in INPUTS.items():
         source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'])
-        backend_hash = private_hash if name == 'prophet' else intelligence_core_hash if name == 'intelligence' else ''
+        backend_hash = (private_hash if name == 'prophet' else proswin_hash if name == 'proswin'
+                        else intelligence_core_hash if name == 'intelligence' else '')
         identity = hashlib.sha256((source + backend_hash + rebuild).encode()).hexdigest()
         result['components'][name] = {'repository': 'ghcr.io/a-kryvenko/' + IMAGES[name], 'tag': 'src-' + identity}
     result['migrations'] = {name: digest(root, paths) for name, paths in MIGRATIONS.items()}

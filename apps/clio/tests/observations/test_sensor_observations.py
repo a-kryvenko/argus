@@ -7,7 +7,8 @@ import pandas as pd
 import pytest
 
 
-from clio.db.models import Measurement, NormalizedObservation
+from clio.db.models.measurement import Measurement
+from clio.db.models.normalized_observation import NormalizedObservation
 from clio.observations.schema import (
     OBSERVATION_METRICS,
     REQUIRED_METRICS,
@@ -106,9 +107,8 @@ def test_refresh_reads_stored_values_without_fetching(monkeypatch):
         session.execute.return_value.scalars.return_value.all.return_value = records
 
     monkeypatch.setattr(service, "upsert_normalized_observations", save)
-    from clio.providers.swpc_loader import SWPC_Loader
     fetch = Mock(side_effect=AssertionError("refresh must not fetch"))
-    monkeypatch.setattr(SWPC_Loader, 'load_measurements', fetch)
+    monkeypatch.setattr('requests.sessions.Session.request', fetch)
     result = asyncio.run(service.refresh_normalized_observations(session, now))
     load.assert_awaited_once_with(session, now - timedelta(days=60), until=now + timedelta(microseconds=1))
     assert len(result.points) == 1

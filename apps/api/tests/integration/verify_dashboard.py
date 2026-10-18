@@ -22,12 +22,12 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from app.db.session import get_db_session
-from app.db.models.dashboard import Session, ApiMetric, LoginAttempt
-from app.dashboard_auth import digest
-from app.routers.dashboard import router, create_user, UserCreate
-from app.routers.public.observations import router as public_router
-from app.services import api_statistics
+from api.db.session import get_db_session
+from api.db.models.dashboard import Session, ApiMetric, LoginAttempt
+from api.services.authentication import digest
+from api.routers.dashboard import router, create_user, UserCreate
+from api.routers.public.observations import router as public_router
+from api.services.monitoring import statistics as api_statistics
 
 
 
@@ -94,7 +94,7 @@ async def verify():
     engine = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'}, execution_options={'schema_translate_map': {'api': schema, 'clio': schema}})
     factory = async_sessionmaker(engine, expire_on_commit=False)
     created = False
-    spec = importlib.util.spec_from_file_location('dashboard_migration', root / 'apps/api/alembic/versions/20260911_0010_dashboard.py')
+    spec = importlib.util.spec_from_file_location('dashboard_migration', root / 'apps/api/src/api/db/migrations/versions/20260911_0010_dashboard.py')
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     def migrate(connection, direction):
@@ -168,7 +168,7 @@ async def verify():
                 assert response.status_code == 429
                 # Visitors share the nginx peer: one visitor must not exhaust a
                 # global API peer bucket and block unrelated accounts.
-                with patch('app.routers.dashboard.verify_password', return_value=False):
+                with patch('api.routers.dashboard.verify_password', return_value=False):
                     for i in range(101):
                         assert (await login(secondary, f'unknown-{i}', 'wrong')).status_code == 401
                     # Changing IPs and username casing must not bypass the account limit.

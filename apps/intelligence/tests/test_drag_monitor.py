@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 from common.schemas.drag_monitor import DragProfileInput
-from argus_intelligence import monitor
-from argus_intelligence.main import app
+from intelligence import monitor
+from intelligence.main import app
 from fastapi.testclient import TestClient
 
 

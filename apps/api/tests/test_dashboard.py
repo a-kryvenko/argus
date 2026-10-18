@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.dashboard_auth import hash_password, verify_password, current_user
-from app.db.session import get_db_session
-from app.routers.dashboard import router
-from app.services.api_statistics import summarize, record
+from api.services.authentication import hash_password, verify_password, current_user
+from api.db.session import get_db_session
+from api.routers.dashboard import router
+from api.services.monitoring.statistics import summarize, record
 
 
 def test_password_hashes_are_salted_and_verified():
@@ -69,7 +69,7 @@ def test_statistics_weighted_mean_statuses_and_p95():
 
 
 def test_metric_cardinality_is_bounded(monkeypatch):
-    from app.services import api_statistics
+    from api.services.monitoring import statistics as api_statistics
     monkeypatch.setattr(api_statistics, '_buffer', {})
     record('/users/{user_id}', 'UNRECOGNIZED', 200, 12)
     key = next(iter(api_statistics._buffer))

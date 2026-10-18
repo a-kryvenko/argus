@@ -4,11 +4,11 @@ import hashlib
 from uuid import uuid4
 
 import pytest
-from domain_storage import database,migrate
+from tests.support.database import database,migrate
 from common.schemas.density_advisory import AdvisoryProfileInput,DensityAdvisory
 from common.schemas.forecast_release import ForecastRelease
-from argus_intelligence import density_monitor as monitor
-from argus_intelligence.monitor import ProfileConflict,ProfileNotFound
+from intelligence import density_monitor as monitor
+from intelligence.monitor import ProfileConflict,ProfileNotFound
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def test_all_spacecraft_are_always_monitored_and_migration_resumes_paused_profil
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
     from sqlalchemy import create_engine
-    from domain_storage import ROOT, load
+    from tests.support.database import ROOT, load
 
     paused = monitor.save_profile(1, body().model_copy(update={'enabled': False}))
     active = monitor.save_profile(1, body())
@@ -62,7 +62,7 @@ def test_all_spacecraft_are_always_monitored_and_migration_resumes_paused_profil
     monkeypatch.setattr(monitor, 'retrieve_inputs', lambda: {})
     assert monitor.refresh_profiles() == {'profiles': 2, 'failed': 0}
     assert monitor.read_profile(1, paused.id).enabled is True
-    migration = load(ROOT / 'apps/intelligence/src/argus_intelligence/migrations/versions/20261017_density_always_on.py')
+    migration = load(ROOT / 'apps/intelligence/src/intelligence/db/migrations/versions/20261017_density_always_on.py')
     engine = create_engine(monitor.db.database_url())
     try:
         with engine.begin() as connection:

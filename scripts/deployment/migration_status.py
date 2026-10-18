@@ -22,12 +22,12 @@ def revision_status(scripts, current, *, online=False):
 
 
 def pending(domain, *, online=False):
-    modules = {'api': ('app.db.session', 'get_database_url', None),
+    modules = {'api': ('api.db.session', 'get_database_url', 'api'),
                'clio': ('clio.db.session', 'get_database_url', 'clio'),
-               'prophet': ('argus_prophet.db.session', 'get_database_url', 'argus_prophet'),
-               'intelligence': ('argus_intelligence.db', 'database_url', 'argus_intelligence')}
+               'prophet': ('prophet.db.session', 'get_database_url', 'prophet'),
+               'intelligence': ('intelligence.db.session', 'database_url', 'intelligence')}
     module, getter, package = modules[domain]
-    directory = Path('alembic') if package is None else Path(importlib.import_module(package).__file__).parent / 'migrations'
+    directory = Path(importlib.import_module(package).__file__).parent / 'db' / 'migrations'
     scripts = ScriptDirectory(str(directory))
     engine = create_engine(getattr(importlib.import_module(module), getter)(),
                            connect_args={'connect_timeout': 5, 'options': '-cstatement_timeout=5000'})

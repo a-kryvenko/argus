@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 import json
 
-from argus_prophet.services import proswin_cache
+from prophet.services.proswin import cache as proswin_cache
 
 
 def test_missing_corrupt_and_future_cache_leave_dlinear_available(tmp_path, monkeypatch):

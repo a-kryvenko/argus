@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from clio.db import get_db_session
+from clio.db.session import get_db_session
 from common.schemas.response import success_response
 from clio.domains import geomagnetic
 

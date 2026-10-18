@@ -5,8 +5,8 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from argus_prophet import main
-from argus_prophet.services import verification
+from prophet import main
+from prophet.services import verification
 
 
 def row(artifact, pairs, digest='model-a'):

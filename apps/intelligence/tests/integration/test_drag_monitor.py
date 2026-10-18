@@ -5,12 +5,12 @@ from uuid import uuid4
 
 import pytest
 import psycopg
-from domain_storage import database, migrate
+from tests.support.database import database, migrate
 from common.schemas.drag_monitor import DragProfileInput
 from common.schemas.leo_drag import LeoDragAssessment
-from argus_intelligence import monitor
-from argus_intelligence import events
-from argus_intelligence.drag import DragDomainError
+from intelligence import monitor
+from intelligence import events
+from intelligence.drag import DragDomainError
 
 
 @pytest.fixture

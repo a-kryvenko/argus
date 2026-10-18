@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from clio.db.models import Measurement, ObservationSourceStatus
+from clio.db.models.measurement import Measurement
+from clio.db.models.observation_source_status import ObservationSourceStatus
 from clio.domains.solar_wind import observations as solar_wind
 from clio.domains import geomagnetic
 

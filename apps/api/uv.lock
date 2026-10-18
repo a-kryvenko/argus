@@ -56,7 +56,7 @@ wheels = [
 ]
 
 [[package]]
-name = "argus-api"
+name = "api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -64,11 +64,9 @@ dependencies = [
     { name = "common" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "numpy" },
     { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
-    { name = "pydantic-settings" },
     { name = "sentry-sdk" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "uvicorn" },
@@ -88,11 +86,9 @@ requires-dist = [
     { name = "common", editable = "../../packages/common" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2,<3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.13.4" },
-    { name = "pydantic-settings", specifier = ">=2.14.1" },
     { name = "sentry-sdk", specifier = ">=2.61.1" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
     { name = "uvicorn", specifier = ">=0.30" },

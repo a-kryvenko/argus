@@ -6,13 +6,13 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.providers.geomagnetic_loader import SOURCES, INTERVAL_SECONDS, fetch_records
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.observations.native import geomagnetic_measurements, store_native
 from clio.db.session import get_session_factory
 from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import SOURCE_SPECS, poll_seconds
 from clio.monitoring.status import track_attempt
-from clio.coverage import coverage
+from clio.observations.coverage import coverage
 
 logger = logging.getLogger(__name__)
 
@@ -31,16 +31,6 @@ async def ingest_source(metric: str) -> list[dict] | None:
             await store_native(session, geomagnetic_measurements(metric, records))
         logger.info('%s: ingested %d intervals', metric, len(records))
         return records
-
-
-async def refresh_geomagnetic() -> None:
-    results = await asyncio.gather(*(ingest_source(metric) for metric in SOURCES), return_exceptions=True)
-    failures = [metric for metric, result in zip(SOURCES, results) if isinstance(result, BaseException)]
-    if failures:
-        for metric, result in zip(SOURCES, results):
-            if isinstance(result, BaseException):
-                logger.error('%s collection failed: %s', metric, result)
-        raise RuntimeError(f"Geomagnetic collection failed: {', '.join(failures)}")
 
 
 def metadata(metric: str) -> dict:
@@ -93,14 +83,3 @@ async def history(session: AsyncSession, start: datetime, end: datetime, now: da
     for metric, item in series.items():
         item['coverage'] = coverage(item['points'], start, end, INTERVAL_SECONDS[metric], intervals=True, now=now)
     return {'from': start, 'to': end, 'selection': 'intervals_overlapping_[from,to)', 'series': series}
-
-
-async def load_kp_measurements(session: AsyncSession, *, since: datetime, until: datetime):
-    """Read Kp and Ap directly from their canonical measurements."""
-    import pandas as pd
-    statement = select(Measurement.metric, Measurement.value, Measurement.observed_at).where(
-        Measurement.metric.in_(['kp', 'ap']), Measurement.value.is_not(None),
-        Measurement.quality.not_in(['flagged', 'missing']),
-        Measurement.observed_at >= since, Measurement.observed_at <= until,
-        Measurement.received_at <= until).order_by(Measurement.observed_at, Measurement.metric)
-    return pd.DataFrame((await session.execute(statement)).all(), columns=['metric', 'value', 'observed_at'])

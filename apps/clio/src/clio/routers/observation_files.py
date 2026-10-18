@@ -12,8 +12,9 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.db import get_db_session
-from clio.db.models import GONGSnapshot, GOESSnapshot
+from clio.db.session import get_db_session
+from clio.db.models.gong_snapshot import GONGSnapshot
+from clio.db.models.goes_snapshot import GOESSnapshot
 from clio.observations.files import archive_root
 from clio.routers.auth import require_service_token
 from common.schemas.forecast_inputs import RawObservationFile

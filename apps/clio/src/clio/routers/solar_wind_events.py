@@ -7,9 +7,9 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
-from clio.db import get_db_session
+from clio.db.session import get_db_session
 from clio.normalization.solar_wind_events import normalize_event_inputs
-from clio.db.models import Measurement
+from clio.db.models.measurement import Measurement
 from clio.db.models.donki_poll import DonkiPoll
 from clio.db.models.enlil_profile import EnlilProfileReceipt
 from common.schemas.solar_wind_events import EnlilProfile, EventInputs, HourlyWindSpeed, L1Sample, SourcePoll

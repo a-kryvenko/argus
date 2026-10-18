@@ -131,7 +131,7 @@ services:
       dockerfile: .deploy/proswin.Dockerfile
     image: argus-proswin-dev
     user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
-    command: ["python", "-m", "argus_prophet.services.proswin_queue"]
+    command: ["python", "-m", "prophet.services.proswin.queue"]
     mem_limit: 1536m
     memswap_limit: 1536m
     restart: unless-stopped
@@ -150,6 +150,7 @@ services:
       - ./apps/prophet/src:/var/www/apps/prophet/src
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/forecast/src:/var/www/packages/forecast/src
+      - ./packages/forecast-core/src/forecast_core/models/proswin.py:/var/www/packages/forecast-core/src/forecast_core/models/proswin.py:ro
     depends_on:
       clio:
         condition: service_started
@@ -173,7 +174,7 @@ services:
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/forecast/src:/var/www/packages/forecast/src
       - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
-    command: [".venv/bin/uvicorn", "argus_prophet.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
+    command: [".venv/bin/uvicorn", "prophet.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -280,9 +281,7 @@ services:
       - ./configs:/var/www/configs:ro
       - ./data/metrics:/var/www/data/metrics:ro
       - ./data/demo:/var/www/data/demo:ro
-      - ./apps/api/app:/var/www/apps/api/app
-      - ./apps/api/alembic:/var/www/apps/api/alembic
-      - ./apps/api/alembic.ini:/var/www/apps/api/alembic.ini:ro
+      - ./apps/api/src:/var/www/apps/api/src
       - ./scripts/db/provision.py:/var/www/scripts/db/provision.py:ro
       - ./packages/common/src:/var/www/packages/common/src
     depends_on:
@@ -292,7 +291,7 @@ services:
         condition: service_healthy
       prophet-api:
         condition: service_started
-    command: [".venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "app", "--reload-dir", "/var/www/packages"]
+    command: [".venv/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ping', timeout=5)"]
       interval: 5s

@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
-from clio.db.models import ObservationSourceStatus
+from clio.db.models.observation_source_status import ObservationSourceStatus
 from clio.monitoring.specs import SOURCE_SPECS, ATTEMPT_TIMEOUT_SECONDS, overdue_after, poll_seconds, collector_sources
 
 logger = logging.getLogger(__name__)

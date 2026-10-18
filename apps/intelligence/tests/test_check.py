@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from argus_intelligence import cli
+from intelligence import cli
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def test_cli_failure_is_nonzero_and_does_not_leak_inputs(monkeypatch, capsys):
 def test_refresh_all_is_handled_by_service_and_stops_on_failure(monkeypatch, capsys):
     from unittest.mock import Mock
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
-    from argus_intelligence import worker
+    from intelligence import worker
     operation = Mock(side_effect=lambda product: {'product': product})
     monkeypatch.setattr(worker, 'process_once', operation)
     cli.main(['refresh'])
@@ -80,7 +80,7 @@ def test_refresh_all_is_handled_by_service_and_stops_on_failure(monkeypatch, cap
 
 def test_invalid_refresh_product_does_not_process(monkeypatch):
     from unittest.mock import Mock
-    from argus_intelligence import worker
+    from intelligence import worker
     operation = Mock()
     monkeypatch.setattr(worker, 'process_once', operation)
     with pytest.raises(SystemExit) as result:

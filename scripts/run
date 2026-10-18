@@ -10,7 +10,8 @@ if [[ "${1:-}" == demo ]]; then
     shift
     demo_python="$root/notebooks/.venv/bin/python"
     [[ -x "$demo_python" ]] || { echo 'Demo rebuild requires the private notebooks checkout and its Python environment.' >&2; exit 2; }
-    exec "$demo_python" "$root/scripts/demo/rebuild.py" "$@"
+    cd "$root"
+    exec "$demo_python" -m notebooks.workflows.demo.rebuild "$@"
 fi
 compose=(docker compose --project-directory "$root")
 for file in "$root/.env" "$root/.env.local"; do
@@ -61,11 +62,7 @@ migrate() {
     local domain="$1" target="$1"
     shift
     [[ "$mode" != prod ]] || target+="-migrate"
-    if [[ "$domain" == api ]]; then
-        "${templates[@]}" run --rm --no-deps "$target" .venv/bin/alembic "$@"
-    else
-        "${templates[@]}" run --rm --no-deps "$target" "$domain" migrate "$@"
-    fi
+    "${templates[@]}" run --rm --no-deps "$target" "$domain" migrate "$@"
 }
 case "${1:-}" in
     -h|--help|'') usage; exit 0 ;;
@@ -100,12 +97,12 @@ case "${1:-}" in
                 user)
                     shift
                     lock s
-                    exec "${templates[@]}" run --rm --no-deps api .venv/bin/python -m app.commands.manage_user "$@"
+                    exec "${templates[@]}" run --rm --no-deps api .venv/bin/python -m api.commands.manage_user "$@"
                     ;;
                 serve)
                     [[ "$mode" == dev ]] || { usage >&2; exit 2; }
                     shift
-                    exec "${compose[@]}" run --rm --no-deps --service-ports api .venv/bin/uvicorn app.main:app "$@"
+                    exec "${compose[@]}" run --rm --no-deps --service-ports api .venv/bin/uvicorn api.main:app "$@"
                     ;;
                 *) usage >&2; exit 2 ;;
             esac

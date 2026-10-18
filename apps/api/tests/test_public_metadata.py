@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.routers.public import solar_wind, geomagnetic, observation_summary
-from app.routers import forecasts
-from app.services import forecast_products
+from api.routers.public import solar_wind, geomagnetic, observation_summary
+from api.routers import forecasts
+from api.services.forecasts import products as forecast_products
 
 TIME = '2026-09-30T00:00:00Z'
 END = '2026-09-30T01:00:00Z'

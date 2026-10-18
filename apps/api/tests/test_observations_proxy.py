@@ -5,9 +5,9 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.services import observations_client as service
-from app.routers.public import observations, solar_wind
-from app.routers import dashboard
+from api.services.observations import client as service
+from api.routers.public import observations, solar_wind
+from api.routers import dashboard
 
 
 def test_public_routes_use_clio_without_database_dependency(monkeypatch):

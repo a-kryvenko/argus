@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from app.main import app
+from api.main import app
 
 
 def test_application_exposes_current_routes():

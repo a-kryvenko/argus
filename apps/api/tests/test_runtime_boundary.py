@@ -18,7 +18,7 @@ assert importlib.util.find_spec('forecast') is None
 assert importlib.util.find_spec('clio') is None
 assert importlib.util.find_spec('clio') is None
 assert importlib.util.find_spec('forecast_core') is None
-assert importlib.util.find_spec('argus_prophet') is None
-import app.main
+assert importlib.util.find_spec('prophet') is None
+import api.main
 '''], cwd=root, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr

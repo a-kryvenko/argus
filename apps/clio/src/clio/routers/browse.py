@@ -3,8 +3,9 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from clio.db import get_db_session
-from clio.db.models import Measurement, NormalizedObservation
+from clio.db.session import get_db_session
+from clio.db.models.measurement import Measurement
+from clio.db.models.normalized_observation import NormalizedObservation
 from common.schemas.response import success_response
 
 router = APIRouter(prefix='/internal/v1/observations')

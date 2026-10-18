@@ -4,10 +4,10 @@ from unittest.mock import Mock
 import httpx
 import pytest
 import pandas as pd
-from forecast.api import ForecastResult
-from common.schemas.forecast_inputs import ForecastInputs
+from forecast.calculation import ForecastResult
+from forecast.inputs import ForecastInputs
 from common.schemas.observation import Observation, ObservationPoint
-from argus_prophet.services import inputs as observations
+from prophet.services.inputs import loader as observations
 
 NOW = datetime(2026, 9, 12, 12, tzinfo=UTC)
 
@@ -59,7 +59,7 @@ def test_rejects_incompatible_contract(monkeypatch):
 
 
 def test_verification_reads_raw_browse_pages_and_excludes_end(monkeypatch):
-    from argus_prophet.services.verification import read_targets
+    from prophet.services.verification import read_targets
     times = pd.date_range('2026-01-01', periods=201, freq='min', tz='UTC')
     rows = [{'observed_at': time.isoformat(), 'metric': 'v', 'value': 400.} for time in times]
     pages = []
@@ -84,7 +84,7 @@ def test_verification_reads_raw_browse_pages_and_excludes_end(monkeypatch):
 
 @pytest.mark.parametrize('failure', ['http', 'changed', 'incomplete'])
 def test_verification_rejects_failed_or_inconsistent_pages(monkeypatch, failure):
-    from argus_prophet.services.verification import read_targets
+    from prophet.services.verification import read_targets
     def handler(request):
         page = int(request.url.params['page'])
         if failure == 'http':
@@ -98,14 +98,14 @@ def test_verification_rejects_failed_or_inconsistent_pages(monkeypatch, failure)
 
 
 def test_verification_empty_observations(monkeypatch):
-    from argus_prophet.services.verification import read_targets
+    from prophet.services.verification import read_targets
     configure(monkeypatch, lambda _: httpx.Response(200, json={
         'success': True, 'data': {'items': [], 'total': 0}}))
     assert read_targets(NOW - pd.Timedelta(days=1), NOW)['points'] == []
 
 
 def test_verification_targets_preserve_gaps_and_derive_before_averaging():
-    from argus_prophet.services.verification import targets
+    from prophet.services.verification import targets
     frame = pd.DataFrame([
         {'observed_at': f'2026-01-01T{hour:02d}:{minute:02d}:00Z', 'metric': metric, 'value': value}
         for hour, minute, values in [(0, 0, {'bx': 3, 'by': 4, 'bz': -12, 'v': 400}),
@@ -119,7 +119,7 @@ def test_verification_targets_preserve_gaps_and_derive_before_averaging():
 
 
 def test_verification_incomplete_vectors_have_no_magnitude():
-    from argus_prophet.services.verification import targets
+    from prophet.services.verification import targets
     frame = pd.DataFrame({'observed_at': ['2026-01-01T00:00:00Z'] * 2,
                           'metric': ['bx', 'by'], 'value': [3., 4.]})
     assert targets(frame, datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC)) == []
@@ -130,10 +130,10 @@ def mock_models(monkeypatch):
     load = Mock(side_effect=lambda service, **_: (SimpleNamespace(registry_name=service.registry_name), {}))
     compute = Mock(side_effect=lambda service, *args, **kwargs:
                    ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
-    from argus_prophet.services.generation import models
-    from forecast import api
+    from prophet.services.generation import models
+    from forecast import calculation
     monkeypatch.setattr(models, 'load_model', load)
-    monkeypatch.setattr(api, 'calculate_snapshot', compute)
+    monkeypatch.setattr(calculation, 'calculate_snapshot', compute)
     return compute
 
 
@@ -146,7 +146,7 @@ def mock_models(monkeypatch):
     ('solar-wind-temperature', ['plasma_temperature_quantile']),
 ])
 def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
-    from argus_prophet.services.generation import calculation as generation
+    from prophet.services.generation import calculation as generation
     inputs = stored_inputs()
     from pathlib import Path
     compute = mock_models(monkeypatch)
@@ -159,7 +159,7 @@ def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
 
 
 def test_catalog_matches_public_contract():
-    from argus_prophet.services.generation.products import PRODUCTS
+    from prophet.services.generation.products import PRODUCTS
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     assert set(PRODUCTS) == set(PRODUCT_ARTIFACTS) - {'solar-radiation'}
     for name, product in PRODUCTS.items():
@@ -168,15 +168,30 @@ def test_catalog_matches_public_contract():
 
 
 def test_status_selections_include_canonical_names_and_historical_aliases():
-    from argus_prophet.services.generation.products import attempt_selections
+    from prophet.services.generation.products import attempt_selections
     assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
     assert attempt_selections('dst') == ['all', 'dst']
     assert attempt_selections('solar-radiation') == []
 
 
 def test_temperature_verification_uses_hourly_observations():
-    from argus_prophet.services.verification import targets
+    from prophet.services.verification import targets
     frame = pd.DataFrame({'metric': ['t', 't'], 'observed_at': [NOW, NOW+timedelta(minutes=30)],
                           'value': [100000., 200000.]})
     assert targets(frame, NOW, NOW+timedelta(hours=1)) == [
         {'valid_time': NOW.isoformat(), 'metric': 't', 'value': 150000., 'sample_count': 2}]
+
+
+def test_runtime_catalog_selects_explicit_services():
+    from prophet.services.generation.model_services import SERVICES
+    from prophet.services.generation.products import PRODUCTS
+    from forecast.inference.quantile import QuantileFS
+    from forecast.inference.probability import ProbabilityFS
+    for product, spec in PRODUCTS.items():
+        if product in {'solar-wind-events', 'atmospheric-density'}:
+            continue
+        for model in spec.models:
+            service = SERVICES[model.artifact]
+            assert service.registry_name == model.artifact
+            assert issubclass(service, (QuantileFS, ProbabilityFS))
+            assert service.__module__.startswith('forecast_core.inference.')

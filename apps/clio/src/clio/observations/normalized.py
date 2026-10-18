@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from clio.db.models import NormalizedObservation
+from clio.db.models.normalized_observation import NormalizedObservation
 from common.schemas.observation import Observation, ObservationPoint
 from clio.observations.schema import HISTORY_DAYS
 from clio.observations.derived import normalize_measurements

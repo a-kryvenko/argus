@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from common.schemas.forecast_release import ForecastRelease
 from common.schemas.leo_drag import LeoDragRequest
-from argus_intelligence import drag, main
+from intelligence import drag, main
 
 REQUEST = dict(altitude_km=400, inclination_deg=51.6, mass_kg=100,
                effective_area_m2=1, drag_coefficient=2.2, horizon_hours=24)

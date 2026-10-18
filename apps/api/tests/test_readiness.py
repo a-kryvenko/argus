@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import HTTPException
 import pytest
 
-from app.routers import healthcheck
+from api.routers import healthcheck
 
 
 @pytest.mark.parametrize('available', [True, False])

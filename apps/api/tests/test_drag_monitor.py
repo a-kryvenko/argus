@@ -5,10 +5,10 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from app.dashboard_auth import current_user
-from app.db.session import get_db_session
-from app.routers import drag_monitor
-from app.services import drag_monitor_client
+from api.services.authentication import current_user
+from api.db.session import get_db_session
+from api.routers import drag_monitor
+from api.services.intelligence import profiles as drag_monitor_client
 
 
 def test_session_owner_and_write_origin(monkeypatch):

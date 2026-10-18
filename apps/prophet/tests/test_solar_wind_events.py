@@ -6,12 +6,13 @@ from uuid import uuid4
 
 import pytest
 
-from common.schemas.forecast_inputs import ForecastInputs
+from forecast.inputs import ForecastInputs
 from common.schemas.forecast_release import ForecastArtifact, ForecastRelease
 from common.schemas.observation import Observation
 from common.schemas.solar_wind_events import EventInputs, L1Sample, SourcePoll, SolarWindEvent
-from argus_prophet.services.events import forecast, l1_detections
-from argus_prophet.services.generation.calculation import CalculationRequest, calculate_product
+from prophet.services.events.arrival import forecast_events as forecast
+from forecast_core.solar_events.events import l1_detections
+from prophet.services.generation.calculation import CalculationRequest, calculate_product
 
 NOW = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
 
@@ -119,9 +120,7 @@ def test_empty_successful_feed_is_distinct_from_missing_or_stale_feed():
 
 def test_event_inputs_require_no_normalized_data_or_image_preparation(monkeypatch):
     import httpx
-    from argus_prophet.services import inputs as loader
-    from argus_prophet.services import hss_inputs
-    monkeypatch.setattr(hss_inputs, 'enrich_hss_inputs', lambda inputs, *args: inputs)
+    from prophet.services.inputs import loader as loader
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
     real_client = httpx.Client
@@ -138,7 +137,7 @@ def test_event_inputs_require_no_normalized_data_or_image_preparation(monkeypatc
 
 def test_speed_context_failure_preserves_arrival_inputs(monkeypatch):
     import httpx
-    from argus_prophet.services import inputs as loader
+    from prophet.services.inputs import loader as loader
     monkeypatch.setenv('OBSERVATIONS_URL','http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN','test-token')
     real=httpx.Client
@@ -152,7 +151,7 @@ def test_speed_context_failure_preserves_arrival_inputs(monkeypatch):
 
 
 def test_changed_model_fingerprint_disables_only_speed(tmp_path):
-    from argus_prophet.services.solar_event_speed import calculate_speed
+    from prophet.services.events.speed import calculate_speed
     models=tmp_path/'data/models';models.mkdir(parents=True)
     (models/'cme.joblib').write_bytes(b'not a valid model')
     inputs=ForecastInputs(as_of=NOW,read_at=NOW,observations=Observation(points=[]),solar_wind_events=source(poll('WSAEnlilSimulations', [])))
@@ -167,7 +166,7 @@ def test_CME_only_release_excludes_DBEM_and_verifies_ensemble_count():
     import io
     from common.schemas.forecast_release import ForecastArtifact
     from pydantic import ValidationError
-    from argus_prophet.services.events import calculate
+    from prophet.services.events.calculation import calculate
     inputs = ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[]), solar_wind_events=source(poll('CME', [dict(
         activityID='cme1', startTime='2026-10-13T00:00Z', cmeAnalyses=[dict(
             isMostAccurate=True, featureCode='LE', time21_5='2026-10-13T03:00Z',
@@ -195,10 +194,10 @@ def test_CME_only_release_excludes_DBEM_and_verifies_ensemble_count():
 def test_main_speed_scenario_reuses_baseline_and_bundled_model(tmp_path, monkeypatch):
     import pandas as pd
     from common.schemas.forecast_inputs import SpeedObservation, DensityObservation
-    from forecast.api import ForecastResult
-    from argus_prophet.services import solar_event_speed
-    from argus_prophet.services.generation import models
-    from argus_prophet.services.generation.calculation import serialize
+    from forecast.calculation import ForecastResult
+    from prophet.services.events import speed as solar_event_speed
+    from prophet.services.generation import models
+    from prophet.services.generation.calculation import serialize
     import csv
     import io
     src=source(poll('CME',[dict(activityID='cme1',startTime=(NOW-timedelta(hours=4)).isoformat(),
@@ -240,8 +239,8 @@ def test_main_speed_scenario_reuses_baseline_and_bundled_model(tmp_path, monkeyp
 
 def test_old_clio_snapshot_preserves_background_and_marks_cme_unavailable(tmp_path):
     import pandas as pd
-    from forecast.api import ForecastResult
-    from argus_prophet.services.solar_event_speed import attach_speed_outlook
+    from forecast.calculation import ForecastResult
+    from prophet.services.events.speed import attach_speed_outlook
     src = source(poll('CME', []))
     src.events = None  # Legacy Clio contract, before normalized events were supplied.
     inputs = ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[]), solar_wind_events=src)

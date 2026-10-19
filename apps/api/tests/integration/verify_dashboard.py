@@ -16,20 +16,17 @@ from unittest.mock import patch
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import select, text, update
+from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from api.db.session import get_db_session
-from api.db.models.dashboard import Session, ApiMetric, LoginAttempt
+from api.db.models.dashboard import Session, LoginAttempt
 from api.services.authentication import digest
 from api.routers.dashboard import router, create_user, UserCreate
 from api.routers.observations import router as public_router
 from api.services.monitoring import statistics as api_statistics
-
-
 
 @contextmanager
 def clio_server(root, schema):
@@ -38,12 +35,15 @@ def clio_server(root, schema):
         listener.bind(('127.0.0.1', 0))
         port = listener.getsockname()[1]
     code = """
+import asyncio
 import os
+from datetime import datetime, timedelta, timezone
 import uvicorn
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from clio.main import app
 from clio.db.session import get_db_session
+from clio.db.models.measurement import Measurement
 url = make_url(os.environ['TEST_DATABASE_ADMIN_DSN']).set(drivername='postgresql+psycopg')
 engine = create_async_engine(url, execution_options={'schema_translate_map': {'clio': os.environ['TEST_DASHBOARD_SCHEMA']}})
 factory = async_sessionmaker(engine)
@@ -51,7 +51,29 @@ async def session():
     async with factory() as db:
         yield db
 app.dependency_overrides[get_db_session] = session
-uvicorn.run(app, host='127.0.0.1', port=int(os.environ['TEST_DASHBOARD_PORT']), log_level='error')
+async def serve():
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Measurement.__table__.create)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        async with factory() as db:
+            for metric, value in {'bx': 1, 'by': 2, 'bz': -3, 'bt': 5, 'v': 400, 'n': 2, 't': 100000}.items():
+                source = 'mag' if metric in ('bx', 'by', 'bz', 'bt') else 'plasma'
+                for minutes in (60, 0):
+                    db.add(Measurement(metric=metric, value=value, observed_at=now-timedelta(minutes=minutes),
+                                       received_at=now, source_product=f'swpc.rtsw_{source}', spacecraft='DSCOVR'))
+            for metric, value, hours, source in (
+                ('kp', 2, 3, 'swpc.kp'), ('dst', -10, 1, 'swpc.dst'),
+                ('ap', 7, 3, 'swpc.kp'), ('f10_7', 145, 24, 'swpc.f107'),
+            ):
+                db.add(Measurement(metric=metric, value=value, observed_at=now-timedelta(hours=hours),
+                                   interval_end=now, received_at=now, source_product=source))
+            await db.commit()
+        config = uvicorn.Config(app, host='127.0.0.1', port=int(os.environ['TEST_DASHBOARD_PORT']), log_level='error')
+        await uvicorn.Server(config).serve()
+    finally:
+        await engine.dispose()
+asyncio.run(serve())
 """
     process = subprocess.Popen([str(root / 'apps/clio/.venv/bin/python'), '-c', code],
         env={**os.environ, 'PYTHONPATH': '', 'TEST_DASHBOARD_SCHEMA': schema,
@@ -106,16 +128,11 @@ async def verify():
             created = True
         async with engine.begin() as conn:
             await conn.run_sync(lambda c: migrate(c, 'upgrade'))
-            await conn.execute(text('CREATE TABLE normalized_observation (observed_at timestamptz PRIMARY KEY, '
-                                    'bx float8, by float8, bz float8, v float8, n float8, t float8, '
-                                    'kp float8, dst float8, ap float8, f10_7 float8, s10 float8, m10 float8, y10 float8)'))
         async with factory() as db:
             primary = await create_user(db, UserCreate(username='Admin', password='administrator-password', groups=['admins']))
             other = await create_user(db, UserCreate(username='other', password='other-admin-password', groups=['admins']))
             reader = await create_user(db, UserCreate(username='reader', password='reader-password'))
             now = datetime.now(timezone.utc).replace(microsecond=0)
-            await db.execute(text('INSERT INTO normalized_observation (observed_at,bx,by,bz,v,n,t,kp,dst,ap,f10_7) '
-                                  'VALUES (:now,1,2,3,400,2,1,1,1,1,1)'), {'now': now})
             await db.commit()
         app = FastAPI()
         app.include_router(router)
@@ -129,7 +146,15 @@ async def verify():
         with clio_server(root, schema) as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
-                assert (await client.get('/observations')).status_code == 200
+                for params in ({}, {'trends': 'true'}, {'meta': 'true', 'trends': 'true'}):
+                    response = await client.get('/observations', params=params)
+                    assert response.status_code == 200, response.text
+                    data = response.json()['data']
+                    assert data['v']['value'] == 400 and data['bt']['value'] == 5
+                    assert data['kp']['value'] == 2 and data['f10_7']['value'] == 145
+                    assert 'southward_bz' not in data
+                    if params.get('trends') == 'true':
+                        assert data['changes_1h']['v'] == 0
                 for path in ['me', 'users', 'groups', 'api-stats']:
                     assert (await client.get('/dashboard/'+path)).status_code == 401
                 async def login(c, username='admin', password='administrator-password'):

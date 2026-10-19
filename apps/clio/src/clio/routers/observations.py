@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import UTC, datetime, timedelta
 from sqlalchemy import select, tuple_
 from clio.db.models.measurement import Measurement
+from clio.observations.summary import value_change
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/internal/v1/observations", tags=["observations"])
@@ -45,14 +46,16 @@ async def latest_observations(
 @router.get('/current-indices')
 async def current_indices(
     metrics: str = Query(default='ap,f10_7,s10,m10,y10'),
+    trends: bool = Query(default=False),
     session: AsyncSession = Depends(get_db_session),
 ):
     selected = list(dict.fromkeys(value.strip() for value in metrics.split(',')))
     if any(value not in ('ap', 'f10_7', 's10', 'm10', 'y10') for value in selected):
         raise HTTPException(422, 'Unknown index')
     # S10/M10/Y10 are calibrated by Prophet; legacy stored estimates are not source observations.
+    now = datetime.now(UTC)
     statement = (select(Measurement)
-                 .where(Measurement.metric.in_(selected), Measurement.observed_at <= datetime.now(UTC),
+                 .where(Measurement.metric.in_(selected), Measurement.observed_at <= now,
                         tuple_(Measurement.metric, Measurement.source_product).in_([
                             ('ap', 'swpc.kp'), ('f10_7', 'swpc.f107'), ('f10_7', 'gfz.f107'),
                         ]))
@@ -66,4 +69,10 @@ async def current_indices(
         if record.interval_end is not None:
             point['interval_end'] = record.interval_end
         series[record.metric] = point
-    return success_response({'series': series})
+    data = {'series': series}
+    if trends:
+        previous_records = (await session.execute(statement.where(
+            Measurement.observed_at <= now-timedelta(hours=1)))).scalars().all()
+        previous = {record.metric: {'value': record.value, 'quality': record.quality} for record in previous_records}
+        data['changes_1h'] = {metric: value_change(series[metric], previous.get(metric)) for metric in selected}
+    return success_response(data)

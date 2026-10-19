@@ -52,34 +52,26 @@ def selected_observations(observations: str | None = Query(
 def payload(result):
     if isinstance(result, JSONResponse):
         return None, result
-    result = jsonable_encoder(result, by_alias=True)
+    result = (result.model_dump(mode='json', by_alias=True) if isinstance(result, ApiResponse)
+              else jsonable_encoder(result, by_alias=True))
     if not result.get('success') or result.get('data') is None:
         return None, result
     return result['data'], None
 
 
-def select_series(data, selected):
-    data['series'] = {key: value for key, value in data['series'].items() if key in selected}
-    if 'meta' in data:
-        data['meta']['series'] = {key: value for key, value in data['meta']['series'].items() if key in selected}
-    return data
-
-
 @router.get('', response_model=ApiResponse[CurrentObservations], response_model_exclude_unset=True)
 async def current_observations(response: Response, meta: MetaQuery = False,
-                               trends: bool = Query(default=False, description='Include observed changes and southward Bz duration'),
+                               trends: bool = Query(default=False, description='Include observed one-hour changes'),
                                selected: list[str] = Depends(selected_current_observations)):
     response.headers['Cache-Control'] = 'no-store'
     data = {}
     trend_data = None
-    if trends and set(selected) & set(WIND):
+    if trends and set(selected) & set((*WIND, *INDICES)):
         result = public_observations(await read_observations('summary'), ObservationSummary, meta=meta)
         trend_data, error = payload(result)
         if error is not None:
             return error
-        data['changes_1h'] = {key: value for key, value in trend_data['changes_1h'].items() if key in selected}
-        if 'bz' in selected:
-            data['southward_bz'] = trend_data['southward_bz']
+        data['changes_1h'] = {key: value['value'] for key, value in trend_data['changes_1h'].items() if key in selected}
     for group, metrics, resource, model in (
         ('solar_wind', WIND, 'solar-wind/latest', SolarLatest),
         ('geomagnetic', INDICES, 'geomagnetic/latest', IndexLatest),
@@ -103,12 +95,18 @@ async def current_observations(response: Response, meta: MetaQuery = False,
                 key: value for key, value in current['meta']['series'].items() if key in requested})
     additional = [key for key in selected if key in HOURLY]
     if additional:
-        result = public_observations(await read_observations('current-indices', {'metrics': ','.join(additional)}),
+        params = {'metrics': ','.join(additional)}
+        if trends:
+            params['trends'] = True
+        result = public_observations(await read_observations('current-indices', params),
                                      CurrentAdditionalIndices, meta=False)
         current, error = payload(result)
         if error is not None:
             return error
         data.update({key: value for key, value in current['series'].items() if key in additional})
+        if trends:
+            changes = current.get('changes_1h', {})
+            data.setdefault('changes_1h', {}).update({key: changes.get(key) for key in additional})
     return success_response(data)
 
 
@@ -120,7 +118,9 @@ async def observation_history(
     limit: int = Query(default=24, ge=1, le=168),
     start: datetime | None = Query(default=None, alias='from'),
     end: datetime | None = Query(default=None, alias='to'),
-    resolution: Literal['1m', '5m', '1h', 'auto'] = Query(default='1m'),
+    resolution: Literal['1m', '5m', '1h', 'auto'] = Query(
+        default='1m', description='auto: 1m through 6 hours, 5m through 24 hours, otherwise 1h',
+    ),
 ):
     """Selected native series and hourly indices. Missing measurements remain gaps."""
     response.headers['Cache-Control'] = 'no-store'
@@ -136,7 +136,7 @@ async def observation_history(
     reads = []
     if wind:
         if resolution == 'auto':
-            resolution = '1m' if interval <= timedelta(days=1) else '5m' if interval <= timedelta(days=7) else '1h'
+            resolution = '1m' if interval <= timedelta(hours=6) else '5m' if interval <= timedelta(hours=24) else '1h'
         days = {'1m': 7, '5m': 31, '1h': 366}[resolution]
         if interval > timedelta(days=days):
             raise HTTPException(422, f'History interval must be at most {days} days for {resolution}')
@@ -151,16 +151,15 @@ async def observation_history(
     data = {'from': start, 'to': end, 'series': {}}
     for (_, model, _), result in zip(reads, results):
         result = public_observations(result, model, meta=meta)
-        part, error = payload(result)
-        if error is not None:
-            return error
-        part = select_series(part, selected)
-        data['series'].update(part.pop('series'))
-        if 'meta' in part:
-            metadata = part.pop('meta')
-            data.setdefault('meta', {'series': {}})['series'].update(metadata.pop('series'))
-            data['meta'].update(metadata)
-        data.update(part)
+        if not isinstance(result, ApiResponse) or not result.success or result.data is None:
+            return result
+        part = result.data
+        data['series'].update({key: value for key, value in part.series.items() if key in selected})
+        if part.meta is not None:
+            metadata = data.setdefault('meta', {'series': {}})
+            metadata['series'].update({key: value for key, value in part.meta.series.items() if key in selected})
+            metadata.update(part.meta.model_dump(exclude={'series'}, exclude_none=True))
+        data.update(part.model_dump(exclude={'series', 'meta'}, exclude_none=True, by_alias=True))
     if set(selected) & set(HOURLY):
         params = {'limit': limit}
         if bounded:

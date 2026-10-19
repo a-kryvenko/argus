@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 from fastapi import FastAPI
@@ -52,3 +53,26 @@ def test_resolution_routing_and_bounds(monkeypatch):
         assert client.get(base+'&resolution=5m').status_code == 200
         assert aggregate.call_args.args[-1] == 300
         assert client.get(base+'&resolution=bad').status_code == 422
+
+
+@pytest.mark.parametrize('hours,seconds', [(6, None), (6.1, 300), (24, 300), (24.1, 3600), (72, 3600), (168, 3600), (720, 3600)])
+def test_auto_resolution_bounds_keep_daily_histories_compact(monkeypatch, hours, seconds):
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.get_db_session] = lambda: object()
+    native = AsyncMock(return_value={'series': {}})
+    aggregate = AsyncMock(return_value={'series': {}})
+    monkeypatch.setattr(routes.solar_wind, 'history', native)
+    monkeypatch.setattr(routes.aggregate_history, 'history', aggregate)
+    with TestClient(app) as client:
+        response = client.get('/internal/v1/observations/solar-wind/history', params={
+            'from': START.isoformat(), 'to': (START+timedelta(hours=hours)).isoformat(), 'resolution': 'auto',
+        })
+        assert response.status_code == 200
+        assert response.headers['cache-control'] == 'no-store'
+        if seconds is None:
+            native.assert_awaited_once()
+            aggregate.assert_not_awaited()
+        else:
+            assert aggregate.await_args.args[-1] == seconds
+            native.assert_not_awaited()

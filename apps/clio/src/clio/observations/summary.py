@@ -9,7 +9,6 @@ from clio.domains import geomagnetic
 from clio.domains.solar_wind import observations as solar_wind
 from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
 
-MIN_COVERAGE = 0.8
 LOOKBACK_MINUTES = 75
 
 
@@ -36,30 +35,28 @@ def change_one_hour(points: list[dict], now: datetime) -> dict:
     if (now-end).total_seconds() > WIND_STALE_AFTER_SECONDS:
         return unavailable('stale', as_of=end)
     
-    by_time = {point['observed_at']: point for point in points if valid(point)}
-    windows = [[by_time.get(end-timedelta(minutes=minute)) for minute in range(a, b)]
-               for a, b in [(0, 5), (60, 65), (0, 60)]]
-    coverage = [sum(point is not None for point in window)/len(window) for window in windows]
+    windows = [[point for point in points if valid(point)
+                and end-timedelta(minutes=b) < point['observed_at'] <= end-timedelta(minutes=a)]
+               for a, b in [(0, 5), (60, 65)]]
+    coverage = [len(window)/5 for window in windows]
 
     info = {
         'as_of': end,
         'coverage': {
             'recent': coverage[0],
-            'previous': coverage[1],
-            'last_hour': coverage[2]
+            'previous': coverage[1]
         },
-        'minimum_coverage': MIN_COVERAGE,
         'method': 'difference_of_5_minute_means_60_minutes_apart'
     }
     
-    if min(coverage) < MIN_COVERAGE:
-        return unavailable('insufficient_coverage', **info)
+    if any(not window for window in windows):
+        return unavailable('missing_comparison', **info)
     
     relevant = [point for point in points if end-timedelta(minutes=64) <= point['observed_at'] <= end]
     if any(point['spacecraft'] != last['spacecraft'] for point in relevant):
         return unavailable('source_changed', **info)
     
-    recent, previous = (mean(point['value'] for point in window if point is not None) for window in windows[:2])
+    recent, previous = (mean(point['value'] for point in window if point is not None) for window in windows)
     return {
         'status': 'available',
         'value': round(recent-previous, 3),
@@ -69,51 +66,22 @@ def change_one_hour(points: list[dict], now: datetime) -> dict:
     }
 
 
-def southward_duration(points: list[dict], now: datetime) -> dict:
-    if not points or not valid(points[-1]):
-        return unavailable('missing_latest')
-    
-    last = points[-1]
-    end = last['observed_at']
-    if (now-end).total_seconds() > WIND_STALE_AFTER_SECONDS:
-        return unavailable('stale', as_of=end)
-    
-    if last['value'] >= 0:
-        return {
-            'status': 'available',
-            'value': 0,
-            'unit': 'sampled_minutes',
-            'as_of': end
-        }
-    
-    expected = end
-    count = 0
-    for point in reversed(points):
-        if point['observed_at'] != expected or not valid(point):
-            return unavailable('insufficient_coverage', as_of=end)
-        
-        if point['spacecraft'] != last['spacecraft']:
-            return unavailable('source_changed', as_of=end)
-        
-        if point['value'] >= 0:
-            return {
-                'status': 'available',
-                'value': count,
-                'unit': 'sampled_minutes',
-                'as_of': end
-            }
-        
-        count += 1
-        expected -= timedelta(minutes=1)
+def value_change(current: dict | None, previous: dict | None) -> float | None:
+    if current is None or previous is None or not valid(current) or not valid(previous):
+        return None
+    return round(current['value'] - previous['value'], 3)
 
-    # All available samples are consecutive and negative; the onset is outside the window.
-    return {
-        'status': 'lower_bound',
-        'value': count,
-        'unit': 'sampled_minutes',
-        'reason': 'onset_before_available_window',
-        'as_of': end
-    }
+
+def interval_change(points: list[dict], now: datetime) -> dict:
+    if not points:
+        return unavailable('missing_latest')
+    current = points[-1]
+    previous = next((point for point in reversed(points)
+                     if point['interval_start'] <= now-timedelta(hours=1)), None)
+    change = value_change(current, previous)
+    if change is None:
+        return unavailable('missing_comparison')
+    return {'status': 'available', 'value': change, 'as_of': current['interval_end']}
 
 
 async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
@@ -122,7 +90,7 @@ async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
     indices = await geomagnetic.latest(session, now)
     past = await solar_wind.history(
         session,
-        ['v', 'n', 'bz', 'bt'],
+        list(solar_wind.METADATA),
         now-timedelta(minutes=LOOKBACK_MINUTES),
         now+timedelta(microseconds=1)
     )
@@ -134,11 +102,20 @@ async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
         } for metric, series in past['series'].items()
     }
 
+    index_history = await geomagnetic.history(
+        session, now-timedelta(hours=4), now+timedelta(microseconds=1), now,
+    )
+    for metric, series in index_history['series'].items():
+        changes[metric] = {
+            **(interval_change(series['points'], now) if indices['series'][metric]['status'] != 'stale'
+               else unavailable('stale')),
+            'unit': series['unit'],
+        }
+
     return {
         'generated_at': now,
         'solar_wind': current['series'],
         'geomagnetic': indices['series'],
         'changes_1h': changes,
-        'southward_bz': southward_duration(past['series']['bz']['points'], now),
         'lookback_minutes': LOOKBACK_MINUTES
     }

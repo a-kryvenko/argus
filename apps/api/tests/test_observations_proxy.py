@@ -120,8 +120,8 @@ def test_history_rejects_oversized_ranges_before_reading(monkeypatch, selected, 
     read.assert_not_awaited()
 
 
-@pytest.mark.parametrize('days,resolution', [(1, '1m'), (7, '5m'), (8, '1h')])
-def test_history_selects_auto_resolution_and_passes_selected_metrics(monkeypatch, days, resolution):
+@pytest.mark.parametrize('hours,resolution', [(6, '1m'), (6.1, '5m'), (24, '5m'), (24.1, '1h'), (72, '1h'), (168, '1h'), (720, '1h')])
+def test_history_selects_auto_resolution_and_passes_selected_metrics(monkeypatch, hours, resolution):
     from datetime import UTC, datetime, timedelta
     read = AsyncMock(return_value={'success': False, 'data': None,
         'error': {'code': 'NOT_READY', 'message': 'Not ready'}})
@@ -129,7 +129,7 @@ def test_history_selects_auto_resolution_and_passes_selected_metrics(monkeypatch
     app = FastAPI()
     app.include_router(observations.router)
     start = datetime(2026, 1, 1, tzinfo=UTC)
-    end = start + timedelta(days=days)
+    end = start + timedelta(hours=hours)
     with TestClient(app) as client:
         result = client.get('/observations/history', params={
             'observations': 'bz,v', 'resolution': 'auto', 'from': start.isoformat(), 'to': end.isoformat(),

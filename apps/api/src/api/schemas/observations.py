@@ -11,6 +11,8 @@ from api.schemas.metadata import metadata_field
 
 Metric = Literal['bx', 'by', 'bz', 'bt', 'v', 'n', 't']
 Index = Literal['kp', 'dst']
+AdditionalIndex = Literal['ap', 'f10_7', 's10', 'm10', 'y10']
+ObservationMetric = Metric | Index | AdditionalIndex
 Quality = Annotated[
     Literal['missing', 'flagged'] | None,
     BeforeValidator(lambda value: None if value == 'unverified' else value),
@@ -174,11 +176,10 @@ class IndexHistory(TimeRange):
 class ChangeCoverage(BaseModel):
     recent: float
     previous: float
-    last_hour: float
 
 
 class DerivedValue(BaseModel):
-    status: Literal['available', 'lower_bound', 'unavailable']
+    status: Literal['available', 'unavailable']
     value: float | None
     reason: str | None = optional_field()
     as_of: datetime | None = optional_field()
@@ -193,29 +194,22 @@ class ChangeMetadata(BaseModel):
     previous_mean: float | None = optional_field()
 
 
-class DurationMetadata(BaseModel):
-    unit: Literal['sampled_minutes'] = 'sampled_minutes'
-
-
 class SummaryMetadata(BaseModel):
     solar_wind: dict[Metric, SeriesMetadata]
     geomagnetic: dict[Index, SeriesMetadata]
-    changes_1h: dict[Metric, ChangeMetadata]
-    southward_bz: DurationMetadata = Field(default_factory=DurationMetadata)
+    changes_1h: dict[ObservationMetric, ChangeMetadata]
     lookback_minutes: int
 
 
 class ObservationSummary(BaseModel):
     """Native observations and trends in fixed units: v km/s, n cm^-3, t K,
     bx/by/bz GSM nT, bt nT, Kp index, Dst nT. changes_1h shares the variable's
-    units. southward_bz.value counts sampled minutes, not continuous duration;
-    lower_bound means onset predates the available window.
+    units.
     """
     generated_at: datetime
     solar_wind: dict[Metric, SolarLatestSeries]
     geomagnetic: dict[Index, IndexLatestSeries]
-    changes_1h: dict[Metric, DerivedValue]
-    southward_bz: DerivedValue
+    changes_1h: dict[ObservationMetric, DerivedValue]
     meta: SummaryMetadata | None = metadata_field()
 
 
@@ -234,7 +228,8 @@ class CurrentIndexSample(BaseModel):
 
 
 class CurrentAdditionalIndices(BaseModel):
-    series: dict[Literal['ap', 'f10_7', 's10', 'm10', 'y10'], CurrentSolarSample | None]
+    series: dict[AdditionalIndex, CurrentSolarSample | None]
+    changes_1h: dict[AdditionalIndex, float | None] | None = optional_field()
 
 
 class CurrentObservations(BaseModel):
@@ -252,8 +247,7 @@ class CurrentObservations(BaseModel):
     s10: CurrentSolarSample | None = None
     m10: CurrentSolarSample | None = None
     y10: CurrentSolarSample | None = None
-    changes_1h: dict[Metric, DerivedValue] | None = optional_field()
-    southward_bz: DerivedValue | None = optional_field()
+    changes_1h: dict[ObservationMetric, float | None] | None = optional_field()
     meta: ObservationMetadata | None = metadata_field()
 
 

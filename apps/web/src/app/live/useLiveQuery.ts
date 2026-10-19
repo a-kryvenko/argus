@@ -4,11 +4,9 @@ import { apiRequest } from '../../lib/http';
 import type { Metric, Sample } from './solarWind';
 import type { IndexMetric, IndexSample } from './geomagnetic';
 
-export type Derived = { status: 'available' | 'lower_bound' | 'unavailable'; value: number | null; reason?: string; as_of?: string };
 export type Summary = {
-  changes_1h?: Record<string, Derived>;
-  southward_bz?: Derived;
-} & Partial<Record<Metric, Pick<Sample, 'observed_at' | 'value' | 'quality'> | null>>
+  changes_1h?: Record<string, number | null>;
+} & Partial<Record<Metric | 'f10_7', Pick<Sample, 'observed_at' | 'value' | 'quality'> | null>>
   & Partial<Record<IndexMetric, Pick<IndexSample, 'interval_start' | 'interval_end' | 'value' | 'quality'> | null>>;
 export type QueryResult<T> = { data?: T; receivedAt?: number; failed: boolean; loading: boolean };
 export type LiveSnapshot = QueryResult<Summary> & { now?: number };
@@ -44,7 +42,8 @@ export function useLiveQuery<T>(path: string | null, range?: HistoryWindow): Que
       // The page advances history windows once a minute, also after failed reads.
       if (!controller.signal.aborted && !from) timer = setTimeout(refresh, 60000);
     }
-    void refresh();
+    // Cancel the initial load if the effect is cleaned up before it starts.
+    timer = setTimeout(() => { void refresh(); }, 0);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [path, from, to, key]);
   return state.key === key ? state : { failed: false, loading: true };

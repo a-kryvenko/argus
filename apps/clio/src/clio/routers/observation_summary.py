@@ -11,9 +11,9 @@ router = APIRouter(prefix='/internal/v1/observations', tags=['observations'])
 async def observation_summary(response: Response, session: AsyncSession = Depends(get_db_session)):
     """Current values and observed trends with coverage; no forecast or impact score.
 
-    Changes compare five-minute means one hour apart with at least 80% coverage
-    in both windows and the last hour. Source changes and stale inputs suppress them.
-    Southward Bz duration requires consecutive, unflagged samples from one spacecraft.
+    Solar-wind changes compare available samples in two five-minute windows one hour apart.
+    Indices compare the last available values now and one hour ago.
+    Source changes and stale inputs suppress trends.
     """
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await summary(session))

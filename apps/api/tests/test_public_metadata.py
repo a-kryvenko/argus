@@ -35,8 +35,7 @@ def observation_payload(kind):
     if kind == 'summary':
         return dict(generated_at=TIME, solar_wind={'bz': wind}, geomagnetic={'kp': index},
                     changes_1h={'bz': dict(status='unavailable', value=None, reason='stale', unit='nT')},
-                    southward_bz=dict(status='lower_bound', value=12, as_of=TIME, unit='sampled_minutes',
-                                      reason='onset_before_available_window'), lookback_minutes=75)
+                    lookback_minutes=75)
     if kind.endswith('latest'):
         return dict(generated_at=TIME, series={'bz': wind} if kind.startswith('solar') else {'kp': index})
     if kind.startswith('geomagnetic'):
@@ -82,8 +81,8 @@ def test_observation_metadata_is_opt_in_and_data_does_not_change(monkeypatch, ki
             assert next(iter(compact['series'].values()))['coverage']['gaps'][0]['from'] == TIME
             assert 'from_' not in compact
         if kind == 'summary':
-            assert compact['changes_1h']['bz']['value'] is None
-            assert compact['southward_bz']['status'] == 'lower_bound'
+            assert compact['changes_1h']['bz'] is None
+            assert 'southward_bz' not in compact
         spec = api.get('/openapi.json').json()
         parameter = next(p for p in spec['paths'][path]['get']['parameters'] if p['name'] == 'meta')
         assert parameter['schema']['default'] is False
@@ -227,8 +226,8 @@ def test_current_observations_only_include_trends_when_requested(monkeypatch, me
         expanded = client.get('/observations', params={**params, 'trends': 'true'})
         assert expanded.status_code == 200
         expanded = expanded.json()['data']
-        assert expanded.pop('changes_1h')['bz'] == {'status': 'unavailable', 'value': None, 'reason': 'stale'}
-        assert expanded.pop('southward_bz')['value'] == 12
+        assert expanded.pop('changes_1h')['bz'] is None
+        assert 'southward_bz' not in expanded
         assert expanded == compact
         reader.assert_awaited_once_with('summary')
         assert client.get('/observations?trends=invalid').status_code == 422
@@ -307,3 +306,52 @@ def test_current_observations_never_load_hourly_snapshot(monkeypatch, trends, me
         schema = client.get('/openapi.json').json()['components']['schemas']['CurrentObservations']['properties']
         assert not {'issue_time', 'generated_at', 'solar_wind', 'geomagnetic'} & schema.keys()
         assert {'ap', 'f10_7', 's10', 'm10', 'y10'} <= schema.keys()
+
+
+@pytest.mark.parametrize('value', [60, -2.5, 0, None])
+def test_changes_only_return_values_without_metadata(monkeypatch, value):
+    data = observation_payload('summary')
+    change = {'status': 'available' if value is not None else 'unavailable', 'value': value, 'as_of': TIME,
+              'coverage': {'recent': 0.8, 'previous': 0.8}}
+    data['changes_1h'] = {'bz': change}
+    monkeypatch.setattr(observations, 'read_observations', AsyncMock(return_value=dict(success=True, data=data)))
+    app = FastAPI()
+    app.include_router(observations.router)
+    with TestClient(app) as client:
+        result = client.get('/observations?observations=bz&trends=true')
+        assert result.status_code == 200
+        assert result.json()['data']['changes_1h'] == {'bz': value}
+
+
+@pytest.mark.parametrize('selection', [None, 'bx,by,t,kp,dst', 'ap,f10_7,s10,m10,y10'])
+def test_trends_include_all_requested_variables(monkeypatch, selection):
+    wind_and_geomagnetic = (*observations.WIND, *observations.INDICES)
+    changes = {key: float(i) for i, key in enumerate(wind_and_geomagnetic)}
+    changes.update(ap=2., f10_7=0., s10=None, m10=None, y10=None)
+
+    async def read(resource, params=None):
+        if resource == 'current-indices':
+            selected = params['metrics'].split(',')
+            assert params['trends'] is True
+            return dict(success=True, data={
+                'series': {key: None for key in selected},
+                'changes_1h': {key: changes[key] for key in selected},
+            })
+        assert resource == 'summary'
+        data = observation_payload(resource)
+        data['changes_1h'] = {key: {'status': 'available', 'value': changes[key], 'unit': ''}
+                              for key in wind_and_geomagnetic}
+        return dict(success=True, data=data)
+
+    reader = AsyncMock(side_effect=read)
+    monkeypatch.setattr(observations, 'read_observations', reader)
+    app = FastAPI()
+    app.include_router(observations.router)
+    params = {'trends': True}
+    if selection is not None:
+        params['observations'] = selection
+    with TestClient(app) as client:
+        response = client.get('/observations', params=params)
+        assert response.status_code == 200
+        expected = changes if selection is None else {key: changes[key] for key in selection.split(',')}
+        assert response.json()['data']['changes_1h'] == expected

@@ -45,8 +45,8 @@ async def history(
 ):
     """Native measurements, optionally summarized into closed UTC windows.
 
-    Limits: 1m seven days, 5m 31 days, 1h 366 days. Auto: 1m through 24h,
-    5m through seven days, otherwise 1h. Aggregate left edge may precede from;
+    Limits: 1m seven days, 5m 31 days, 1h 366 days. Auto: 1m through six hours,
+    5m through 24 hours, otherwise 1h. Aggregate left edge may precede from;
     current partial buckets are excluded. Statistics are computed from stored measurements.
     Omitted timestamps are gaps; explicit missing values are null.
     """
@@ -56,13 +56,14 @@ async def history(
         raise HTTPException(422, "from and to must include a timezone")
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if resolution == 'auto':
-        resolution = '1m' if end-start <= timedelta(days=1) else '5m' if end-start <= timedelta(days=7) else '1h'
+        resolution = '1m' if end-start <= timedelta(hours=6) else '5m' if end-start <= timedelta(hours=24) else '1h'
     days = {'1m': 7, '5m': 31, '1h': 366}[resolution]
     if not timedelta(0) < end - start <= timedelta(days=days):
         raise HTTPException(422, f"History interval must be positive and at most {days} days for {resolution}")
-    response.headers["Cache-Control"] = "no-store"
     if resolution != '1m':
-        return success_response(await aggregate_history.history(session, metrics, start, end, 300 if resolution == '5m' else 3600))
-    data = await solar_wind.history(session, metrics, start, end)
-    data['resolution_seconds'] = 60
-    return success_response(data)
+        data = await aggregate_history.history(session, metrics, start, end, 300 if resolution == '5m' else 3600)
+    else:
+        data = await solar_wind.history(session, metrics, start, end)
+        data['resolution_seconds'] = 60
+    return Response(content=success_response(data).model_dump_json(), media_type='application/json',
+                    headers={'Cache-Control': 'no-store'})

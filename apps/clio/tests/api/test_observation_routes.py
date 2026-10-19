@@ -105,3 +105,29 @@ def test_current_indices_preserve_missing_values_and_validate_selection():
         for metrics in ('', 'unknown', 'f10_7,unknown'):
             assert client.get('/internal/v1/observations/current-indices', params={'metrics': metrics}).status_code == 422
         session.execute.assert_not_awaited()
+
+
+def test_current_indices_can_include_changes_against_last_hour():
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from sqlalchemy.dialects import postgresql
+    now = datetime.now(UTC)
+    session = AsyncMock()
+    def result(records):
+        return Mock(scalars=lambda: Mock(all=lambda: records))
+    session.execute.side_effect = [
+        result([SimpleNamespace(metric='ap', value=6., observed_at=now, interval_end=None, quality=None),
+                SimpleNamespace(metric='f10_7', value=112., observed_at=now, interval_end=None, quality=None)]),
+        result([SimpleNamespace(metric='ap', value=4., quality=None),
+                SimpleNamespace(metric='f10_7', value=112., quality=None)]),
+    ]
+    app = FastAPI()
+    app.include_router(observations.router)
+    app.dependency_overrides[observations.get_db_session] = lambda: session
+    with TestClient(app) as client:
+        response = client.get('/internal/v1/observations/current-indices?trends=true')
+        assert response.status_code == 200
+        assert response.json()['data']['changes_1h'] == {'ap': 2, 'f10_7': 0, 's10': None, 'm10': None, 'y10': None}
+    previous = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
+    from datetime import timedelta
+    assert (previous.params['observed_at_1'] - previous.params['observed_at_2']) == timedelta(hours=1)

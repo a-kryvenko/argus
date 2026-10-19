@@ -1,5 +1,4 @@
-Allow:
-/
-/api/forecast
-/metrics
-/help
+User-agent: *
+Allow: /
+
+Sitemap: https://argussun.com/sitemap.xml

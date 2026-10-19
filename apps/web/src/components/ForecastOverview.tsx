@@ -17,10 +17,10 @@ const targets = [
   { slug: 'dst', key: 'dst', label: 'Dst index', unit: 'nT', color: '#73b9bc' },
 ];
 export default function ForecastOverview() {
-  const speed = useResource<Forecast>('/public/forecasts/solar-wind-speed');
-  const density = useResource<Forecast>('/public/forecasts/solar-wind-density');
-  const geomagnetic = useResource<Forecast>('/public/forecasts/geomagnetic-activity');
-  const dst = useResource<Forecast>('/public/forecasts/dst');
+  const speed = useResource<Forecast>('/forecasts/solar-wind-speed');
+  const density = useResource<Forecast>('/forecasts/solar-wind-density');
+  const geomagnetic = useResource<Forecast>('/forecasts/geomagnetic-activity');
+  const dst = useResource<Forecast>('/forecasts/dst');
   const resources: Record<string, ForecastResource> = { 'solar-wind-speed': speed, 'solar-wind-density': density, 'geomagnetic-activity': geomagnetic, dst };
   const [selected, setSelected] = useState('solar-wind-speed');
   return <WorkspaceShell section="Forecast overview">

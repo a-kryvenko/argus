@@ -56,7 +56,7 @@ class ForecastPoint(BaseModel):
 class Forecast(BaseModel):
     """Forecast for one product, issued at a single time."""
 
-    target: str = Field(description="Forecast product identifier; see the endpoint's visibility/target table.", examples=["solar-wind-speed"])
+    target: str = Field(description="Forecast product identifier; see the endpoint's target list.", examples=["solar-wind-speed"])
     issue_time: datetime = Field(description="Date and time when the forecast was made (ISO 8601).", examples=["2026-09-05T00:00:00Z"])
     horizon_hours: int = Field(description="Largest lead_hours among returned predictions; may be shorter than the product's maximum horizon.", examples=[1])
     available_variables: list[str] = Field(description="Variable names available for this forecast issuance. A particular prediction may contain only a subset.", examples=[["v"]])

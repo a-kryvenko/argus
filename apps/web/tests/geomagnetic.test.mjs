@@ -5,7 +5,7 @@ import ts from 'typescript';
 const source = await readFile(new URL('../src/app/live/geomagnetic.ts', import.meta.url), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const { intervalBounds } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
-const point = { interval_start: '2026-09-07T12:00:00Z', interval_end: '2026-09-07T15:00:00Z', value: 3.33, quality: 'unverified' };
+const point = { interval_start: '2026-09-07T12:00:00Z', interval_end: '2026-09-07T15:00:00Z', value: 3.33, quality: undefined };
 const start = Date.parse('2026-09-07T13:00:00Z'), end = Date.parse('2026-09-07T16:00:00Z');
 test('partially visible Kp intervals use true bounds rather than synthetic hourly points', () => {
   assert.deepEqual(intervalBounds(point, start, end), [start, Date.parse(point.interval_end)]);

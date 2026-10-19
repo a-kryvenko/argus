@@ -12,7 +12,7 @@ type EventForecast = { issue_time: string; events: Event[]; source_status: Recor
 const number = (v: number) => Math.round(v).toLocaleString('en-US');
 
 export default function SolarEvents() {
-  const { data, error, retry } = useResource<EventForecast>('/public/forecasts/solar-wind-events');
+  const { data, error, retry } = useResource<EventForecast>('/forecasts/solar-wind-events');
   const speed = data?.cme_speed;
   const points = speed?.points ?? [];
   const chartData = points.map(p => ({

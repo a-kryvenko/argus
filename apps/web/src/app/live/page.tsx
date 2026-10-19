@@ -7,7 +7,6 @@ import WorkspaceShell from '../../components/WorkspaceShell';
 import GeomagneticLive from './GeomagneticLive';
 import ObservationSummary from './ObservationSummary';
 import ObservationInspector from './ObservationInspector';
-import CollectionStatus from './CollectionStatus';
 import SolarWindLive from './SolarWindLive';
 import HourlyObservations from './HourlyObservations';
 import type { History } from './solarWind';
@@ -21,14 +20,14 @@ export default function Live() {
   const [selected, setSelected] = useState<Selection>('bz');
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const now = useClock();
-  const snapshot = { ...useLiveQuery<Summary>('/public/observations/summary'), now };
+  const snapshot = { ...useLiveQuery<Summary>('/observations?trends=true'), now };
   const minute = now === undefined ? undefined : Math.floor(now / 60000);
   const window = useMemo(() => minute === undefined ? undefined : {
     from: new Date(minute * 60000 - hours * 3600000).toISOString(),
     to: new Date(minute * 60000).toISOString(),
   }, [minute, hours]);
-  const windHistory = useLiveQuery<History>(window ? '/public/observations/solar-wind/history?metrics=bx,by,bz,bt,v,n,t&resolution=auto' : null, window);
-  const indexHistory = useLiveQuery<IndexHistory>(window ? '/public/observations/geomagnetic/history' : null, window);
+  const windHistory = useLiveQuery<History>(window ? '/observations/history?observations=bx,by,bz,bt,v,n,t&resolution=auto' : null, window);
+  const indexHistory = useLiveQuery<IndexHistory>(window ? '/observations/history?observations=kp,dst' : null, window);
   const select = (metric: Selection) => { setSelected(metric); setInspectorOpen(true); };
   const snapshotOld = now && snapshot.receivedAt ? now - snapshot.receivedAt > 120000 : false;
   return <WorkspaceShell section="Observations" contentId="live-content"
@@ -37,7 +36,7 @@ export default function Live() {
       <main id="live-content" className={styles.page}>
         <div className={styles.pageHeading}>
           <div><h1>Live observations</h1><p>Solar wind upstream. Geomagnetic response on Earth.</p></div>
-          <div className={styles.snapshotTime}><span>LATEST SNAPSHOT · UTC</span><time dateTime={snapshot.data?.generated_at}>{stamp(snapshot.data?.generated_at)}</time></div>
+          <div className={styles.snapshotTime}><span>REFRESHED · UTC</span><time dateTime={snapshot.receivedAt ? new Date(snapshot.receivedAt).toISOString() : undefined}>{stamp(snapshot.receivedAt)}</time></div>
         </div>
         <ObservationSummary snapshot={snapshot} selected={selected} onSelect={select} />
         <div className={styles.toolbar}>
@@ -51,13 +50,12 @@ export default function Live() {
             <SolarWindLive hours={hours} history={windHistory} selected={selected} onSelect={select} />
             <GeomagneticLive history={indexHistory} selected={selected} onSelect={select} />
             <div className={styles.supportPanels}>
-              <CollectionStatus now={now} />
               <details className={styles.additional}>
                 <summary>Additional hourly indices <span>Ap · F10.7 · S10 · M10 · Y10</span></summary>
                 <HourlyObservations />
               </details>
             </div>
-            <div className={styles.workspaceFooter}><span>All times UTC · operational observations</span><a href="/api/v1/public/observations/summary">Observation summary <ArrowUpRight size={12} aria-hidden="true" /></a></div>
+            <div className={styles.workspaceFooter}><span>All times UTC · operational observations</span><a href="/api/v1/observations">Observation summary <ArrowUpRight size={12} aria-hidden="true" /></a></div>
           </div>
           <ObservationInspector selected={selected} onSelect={select} snapshot={snapshot} windHistory={windHistory} indexHistory={indexHistory} expanded={inspectorOpen} onToggle={() => setInspectorOpen(open => !open)} />
         </div>

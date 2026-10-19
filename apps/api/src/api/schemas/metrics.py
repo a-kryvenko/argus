@@ -68,7 +68,7 @@ class ForecastMetrics(BaseModel):
     """Evaluation metrics for one product; these are scores, not forecast values."""
 
     evaluation: EvaluationContext | None = None
-    target: str = Field(description="Forecast product identifier; see the endpoint's visibility/target table.", examples=["solar-wind-speed"])
+    target: str = Field(description="Forecast product identifier; see the endpoint's target list.", examples=["solar-wind-speed"])
     variables: dict[str, VariableMetrics] = Field(description="Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted.")
     meta: ForecastMetadata | None = metadata_field()
 

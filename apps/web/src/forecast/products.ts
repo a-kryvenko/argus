@@ -9,7 +9,6 @@ export type ProductVariable = {
 export type ProductConfig = {
   slug: string;
   apiTarget: string;
-  visibility: "public" | "private";
   title: string;
   description: string;
   variables: ProductVariable[];
@@ -19,7 +18,6 @@ export const products: ProductConfig[] = [
   {
     slug: "solar-wind-speed",
     apiTarget: "solar-wind-speed",
-    visibility: "public",
     title: "Solar Wind Speed",
     description: "Quantile forecast and probabilities of high-speed solar wind.",
     variables: [{
@@ -30,7 +28,6 @@ export const products: ProductConfig[] = [
   {
     slug: "solar-wind-density",
     apiTarget: "solar-wind-density",
-    visibility: "public",
     title: "Solar Wind Plasma Density",
     description: "Quantile forecast of proton number density in the solar wind.",
     variables: [{ key: "n", label: "Plasma Density", unit: "cm⁻³", quantile: true, thresholds: [] }],
@@ -38,7 +35,6 @@ export const products: ProductConfig[] = [
   {
     slug: "solar-wind-temperature",
     apiTarget: "solar-wind-temperature",
-    visibility: "public",
     title: "Solar Wind Temperature",
     description: "Hourly forecast of proton temperature in the solar wind, up to 96 hours ahead.",
     variables: [{ key: "t", label: "Proton Temperature", unit: "K", quantile: true, thresholds: [] }],
@@ -46,7 +42,6 @@ export const products: ProductConfig[] = [
   {
     slug: "hmf",
     apiTarget: "hmf",
-    visibility: "private",
     title: "Heliospheric Magnetic Field",
     description: "Threshold probabilities for total field strength and southward Bz.",
     variables: [
@@ -63,7 +58,6 @@ export const products: ProductConfig[] = [
   {
     slug: "solar-radiation",
     apiTarget: "solar-radiation",
-    visibility: "private",
     title: "Solar Radiation Indices",
     description: "Joint forecast of the F10.7, S10, M10 and Y10 solar indices.",
     variables: [
@@ -76,7 +70,6 @@ export const products: ProductConfig[] = [
   {
     slug: "geomagnetic-activity",
     apiTarget: "geomagnetic-activity",
-    visibility: "public",
     title: "Geomagnetic Activity",
     description: "Kp threshold probabilities and the related Ap quantile forecast.",
     variables: [
@@ -90,7 +83,6 @@ export const products: ProductConfig[] = [
   {
     slug: "dst",
     apiTarget: "dst",
-    visibility: "public",
     title: "Dst Index",
     description: "Quantile forecast of the storm-time disturbance index.",
     variables: [{ key: "dst", label: "Dst Index", unit: "nT", quantile: true, thresholds: [] }],
@@ -100,5 +92,5 @@ export const products: ProductConfig[] = [
 export const productsBySlug = Object.fromEntries(products.map(product => [product.slug, product]));
 
 export function productApiPath(product: ProductConfig, suffix = "") {
-  return `/${product.visibility}/forecasts/${product.apiTarget}${suffix}`;
+  return `/forecasts/${product.apiTarget}${suffix}`;
 }

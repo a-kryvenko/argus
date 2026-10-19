@@ -8,7 +8,7 @@ export type Sample = {
   received_at: string;
   value: number | null;
   spacecraft: string;
-  quality: 'missing' | 'flagged' | 'unverified';
+  quality?: 'missing' | 'flagged';
   min?: number; max?: number; count?: number; expected_count?: number;
   coverage_percent?: number; source_changes?: number; last_spacecraft?: string;
 };

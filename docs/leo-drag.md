@@ -6,7 +6,7 @@ flight-loss accuracy remains unvalidated.
 
 ## Calculator
 
-`POST /api/v1/public/risks/leo-drag` (direct Uvicorn: omit `/api/v1`).
+`POST /api/v1/risks/leo-drag` (direct Uvicorn: omit `/api/v1`).
 
 ```json
 {

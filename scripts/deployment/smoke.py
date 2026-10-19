@@ -64,7 +64,7 @@ def check(options):
             data, _ = request('/dashboard/me', headers=session_headers)
             if not data.get('success') or data['data']['id'] != user['data']['id']:
                 raise RuntimeError('Invalid authenticated session')
-            for path in ('/public/observations/summary', '/public/forecasts/solar-wind-speed'):
+            for path in ('/observations', '/forecasts/solar-wind-speed'):
                 data, _ = request(path)
                 if not data.get('success') or data.get('data') is None:
                     raise RuntimeError('Invalid public API response')

@@ -8,7 +8,7 @@ const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const { chartPoints } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString('base64')}`);
-const point = (time, value, spacecraft = 'A', quality = 'unverified') => ({
+const point = (time, value, spacecraft = 'A', quality = undefined) => ({
   observed_at: new Date(time).toISOString(), value, spacecraft, quality,
 });
 

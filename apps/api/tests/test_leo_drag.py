@@ -49,7 +49,7 @@ def test_http_contract_and_public_envelope(result, monkeypatch):
         return httpx.Response(200, json=result)
     monkeypatch.setattr(leo_drag, 'assess_drag', lambda request: service.assess_drag(request, transport=httpx.MockTransport(respond)))
     with client() as api:
-        response = api.post('/public/risks/leo-drag', json=REQUEST)
+        response = api.post('/risks/leo-drag', json=REQUEST)
         assert response.status_code == 200
         assert response.json()['data']['estimated_altitude_loss_m'] == 100
         assert response.json()['success'] is True
@@ -59,12 +59,12 @@ def test_http_contract_and_public_envelope(result, monkeypatch):
         assert compact['source']['release_id'] == result['source']['release_id']
         assert compact['source']['driver_mode'] == 'observed_persistence'
         assert compact['source']['background_interpolated'] is False
-        expanded = api.post('/public/risks/leo-drag?meta=true', json=REQUEST).json()['data']
+        expanded = api.post('/risks/leo-drag?meta=true', json=REQUEST).json()['data']
         metadata = expanded.pop('meta')
         assert metadata['source']['model'] == 'JB2008'
         assert metadata['source']['dtc_method'] == 'causal_dst_ap_v1'
         assert expanded == compact
-        assert '/public/risks/leo-drag' in api.get('/openapi.json').json()['paths']
+        assert '/risks/leo-drag' in api.get('/openapi.json').json()['paths']
 
 
 @pytest.mark.parametrize('change', [dict(mass_kg=0), dict(effective_area_m2=-1), dict(drag_coefficient=0),
@@ -76,7 +76,7 @@ def test_invalid_inputs_do_not_call_service(change, monkeypatch):
         pytest.fail('Invalid input reached impact service')
     monkeypatch.setattr(leo_drag, 'assess_drag', unexpected)
     with client() as api:
-        assert api.post('/public/risks/leo-drag', json={**REQUEST, **change}).status_code == 422
+        assert api.post('/risks/leo-drag', json={**REQUEST, **change}).status_code == 422
 
 
 @pytest.mark.parametrize('status', [401, 404, 500, 503, 302])
@@ -104,7 +104,7 @@ def test_public_error_mapping(error, status, monkeypatch):
     def fail(_): raise error
     monkeypatch.setattr(leo_drag, 'assess_drag', fail)
     with client() as api:
-        response = api.post('/public/risks/leo-drag', json=REQUEST)
+        response = api.post('/risks/leo-drag', json=REQUEST)
     assert response.status_code == status
     assert 'private detail' not in response.text
 
@@ -116,7 +116,7 @@ def test_dtm_source_survives_public_projection(result, monkeypatch):
     monkeypatch.setattr(leo_drag, 'assess_drag', lambda request: service.assess_drag(
         request, transport=httpx.MockTransport(lambda _: httpx.Response(200, json=result))))
     with client() as api:
-        response = api.post('/public/risks/leo-drag?meta=true', json=REQUEST)
+        response = api.post('/risks/leo-drag?meta=true', json=REQUEST)
     assert response.status_code == 200
     data = response.json()['data']
     assert data['meta']['source']['model'] == 'DTM2020'

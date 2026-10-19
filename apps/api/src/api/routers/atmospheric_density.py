@@ -10,7 +10,7 @@ router = APIRouter(tags=["forecasts"])
 
 
 @router.get(
-    "/public/forecasts/atmospheric-density",
+    "/forecasts/atmospheric-density",
     response_model=ApiResponse[DensityForecast],
     summary="Get the latest atmospheric density forecast",
     description=(

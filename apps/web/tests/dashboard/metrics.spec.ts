@@ -23,7 +23,7 @@ async function mock(page: Page, state: { failed?: boolean; empty?: boolean; miss
   await page.route('**/api/v1/**/forecasts/**/verification', async route => {
     const path = new URL(route.request().url()).pathname;
     const product = products.find(item => path.endsWith(`/forecasts/${item.apiTarget}/verification`))!;
-    expect(path).toBe(`/api/v1/${product.visibility}/forecasts/${product.apiTarget}/verification`);
+    expect(path).toBe(`/api/v1/forecasts/${product.apiTarget}/verification`);
     await route.fulfill({ json: { success: true, error: null, data: {
       product: product.apiTarget, start: '2026-09-03T00:00:00Z', end: '2026-10-03T00:00:00Z', groups: [],
     } } });
@@ -31,7 +31,7 @@ async function mock(page: Page, state: { failed?: boolean; empty?: boolean; miss
   await page.route('**/api/v1/**/forecasts/**/metrics', async route => {
     const path = new URL(route.request().url()).pathname;
     const product = products.find(item => path.endsWith(`/forecasts/${item.apiTarget}/metrics`))!;
-    expect(path).toBe(`/api/v1/${product.visibility}/forecasts/${product.apiTarget}/metrics`);
+    expect(path).toBe(`/api/v1/forecasts/${product.apiTarget}/metrics`);
     const data = evaluation(product);
     if (state.empty) data.variables = {};
     if (state.missing) delete data.variables[product.variables[0].key];
@@ -219,7 +219,7 @@ test('solar wind blend shows evaluation scope without legacy probability scores'
   const { readFile } = await import('node:fs/promises');
   const report = JSON.parse(await readFile(new URL('../../../../configs/evaluations/solar-wind-speed.json', import.meta.url), 'utf8'));
   await mock(page);
-  await page.route('**/api/v1/public/forecasts/solar-wind-speed/metrics', route => route.fulfill({ json: { success: true, data: report, error: null } }));
+  await page.route('**/api/v1/forecasts/solar-wind-speed/metrics', route => route.fulfill({ json: { success: true, data: report, error: null } }));
   await page.goto('/metrics/solar-wind-speed');
   const scope = page.getByRole('region', { name: 'Evaluation scope' });
   await expect(scope).toContainText('DLinear + PROSWIN');

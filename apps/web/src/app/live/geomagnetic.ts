@@ -9,7 +9,7 @@ export type IndexSample = {
   interval_end: string;
   interval_status: 'in_progress' | 'completed';
   value: number | null;
-  quality: 'missing' | 'flagged' | 'unverified';
+  quality?: 'missing' | 'flagged';
   received_at: string;
   station_count: number | null;
 };

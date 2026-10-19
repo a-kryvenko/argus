@@ -16,7 +16,7 @@ export default function ObservationSummary({ snapshot, selected, onSelect }: {
 }) {
   const bz = measurement('bz', snapshot);
   const duration = snapshot.data?.southward_bz;
-  const bzPoint = snapshot.data?.solar_wind.bz?.latest;
+  const bzPoint = snapshot.data?.bz;
   const showDuration = bz.usable && (bzPoint?.value ?? 0) < 0 && duration?.status !== 'unavailable'
     && duration?.value != null && duration.value > 0 && duration.as_of === bzPoint?.observed_at;
   return <section className={styles.summary} aria-label="Observation summary">
@@ -26,7 +26,7 @@ export default function ObservationSummary({ snapshot, selected, onSelect }: {
       {metrics.map(metric => {
         const { label, unit } = definition(metric);
         const { point, usable, status } = measurement(metric, snapshot);
-        const change = snapshot.data?.changes_1h[metric];
+        const change = snapshot.data?.changes_1h?.[metric];
         const TrendIcon = change?.value == null || !usable ? Minus : change.value < 0 ? ArrowDownRight : ArrowUpRight;
         return <button key={metric} className={styles.metricCard} aria-pressed={selected === metric}
           aria-label={`Inspect ${label}`} onClick={() => onSelect(metric)} style={{ '--metric-color': metricColors[metric] } as React.CSSProperties}>

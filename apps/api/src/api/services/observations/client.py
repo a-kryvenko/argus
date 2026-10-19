@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 READS = frozenset({
-    'latest', 'history', 'status', 'summary', 'solar-wind/latest',
+    'history', 'summary', 'current-indices', 'solar-wind/latest',
     'solar-wind/history', 'geomagnetic/latest', 'geomagnetic/history',
 })
 

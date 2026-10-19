@@ -20,11 +20,7 @@ from api.routers.leo_drag import router as leo_drag_router
 from api.routers.drag_monitor import router as drag_monitor_router
 from api.routers.density_advisory import router as density_advisory_router
 from api.routers.healthcheck import router as healthcheck_router
-from api.routers.public.observations import router as observations_router
-from api.routers.public.solar_wind import router as solar_wind_router
-from api.routers.public.geomagnetic import router as geomagnetic_router
-from api.routers.public.observation_summary import router as observation_summary_router
-from api.routers.public.collection_status import router as collection_status_router
+from api.routers.observations import router as observations_router
 from common.schemas.response import error_response
 
 config = get_config()
@@ -54,7 +50,7 @@ if not config.debug:
 )
 
 app = FastAPI(
-    title="ARGUS SUNWATCH Public API",
+    title="ARGUS SUNWATCH API",
     debug=config.debug,
     root_path="/api/v1",
     lifespan=lifespan,
@@ -99,15 +95,11 @@ app.include_router(dashboard_router, include_in_schema=False)
 app.include_router(drag_monitor_router, include_in_schema=False)
 app.include_router(density_advisory_router, include_in_schema=False)
 app.include_router(healthcheck_router)
+app.include_router(observations_router)
 
 app.include_router(atmospheric_density_router)
 app.include_router(leo_drag_router)
 app.include_router(forecasts_router)
-app.include_router(observations_router)
-app.include_router(solar_wind_router)
-app.include_router(geomagnetic_router)
-app.include_router(observation_summary_router)
-app.include_router(collection_status_router)
 
 @app.middleware("http")
 async def add_processing_time_header(request: Request, call_next):

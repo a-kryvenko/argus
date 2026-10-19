@@ -4,14 +4,17 @@ Units and coordinate frames are fixed by this API: wind v km/s, n cm^-3,
 t K, bx/by/bz (GSM) and bt nT; Kp is an index, Dst nT. All times are UTC.
 """
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from api.schemas.metadata import metadata_field
 
 Metric = Literal['bx', 'by', 'bz', 'bt', 'v', 'n', 't']
 Index = Literal['kp', 'dst']
-Quality = Literal['missing', 'flagged', 'unverified']
+Quality = Annotated[
+    Literal['missing', 'flagged'] | None,
+    BeforeValidator(lambda value: None if value == 'unverified' else value),
+]
 Freshness = Literal['missing', 'stale', 'fresh']
 
 
@@ -49,7 +52,7 @@ class SolarSample(BaseModel):
     received_at: datetime
     value: float | None
     spacecraft: str
-    quality: Quality
+    quality: Quality = optional_field()
     interval_end: datetime | None = optional_field()
     min: float | None = optional_field()
     max: float | None = optional_field()
@@ -66,7 +69,7 @@ class IndexSample(BaseModel):
     interval_end: datetime
     interval_status: Literal['in_progress', 'completed']
     value: float | None
-    quality: Quality
+    quality: Quality = optional_field()
     received_at: datetime
     station_count: int | None
 
@@ -214,3 +217,50 @@ class ObservationSummary(BaseModel):
     changes_1h: dict[Metric, DerivedValue]
     southward_bz: DerivedValue
     meta: SummaryMetadata | None = metadata_field()
+
+
+class CurrentSolarSample(BaseModel):
+    observed_at: datetime
+    interval_end: datetime | None = optional_field()
+    value: float | None
+    quality: Quality = optional_field()
+
+
+class CurrentIndexSample(BaseModel):
+    interval_start: datetime
+    interval_end: datetime
+    value: float | None
+    quality: Quality = optional_field()
+
+
+class CurrentAdditionalIndices(BaseModel):
+    series: dict[Literal['ap', 'f10_7', 's10', 'm10', 'y10'], CurrentSolarSample | None]
+
+
+class CurrentObservations(BaseModel):
+    bx: CurrentSolarSample | None = None
+    by: CurrentSolarSample | None = None
+    bz: CurrentSolarSample | None = None
+    bt: CurrentSolarSample | None = None
+    v: CurrentSolarSample | None = None
+    n: CurrentSolarSample | None = None
+    t: CurrentSolarSample | None = None
+    kp: CurrentIndexSample | None = None
+    dst: CurrentIndexSample | None = None
+    ap: CurrentSolarSample | None = None
+    f10_7: CurrentSolarSample | None = None
+    s10: CurrentSolarSample | None = None
+    m10: CurrentSolarSample | None = None
+    y10: CurrentSolarSample | None = None
+    changes_1h: dict[Metric, DerivedValue] | None = optional_field()
+    southward_bz: DerivedValue | None = optional_field()
+    meta: ObservationMetadata | None = metadata_field()
+
+
+class ObservationHistory(TimeRange):
+    series: dict[str, SolarHistorySeries | IndexHistorySeries]
+    resolution_seconds: int | None = optional_field()
+    evaluated_from: datetime | None = optional_field()
+    evaluated_to: datetime | None = optional_field()
+    points: list[dict] | None = optional_field()
+    meta: ObservationMetadata | None = metadata_field()

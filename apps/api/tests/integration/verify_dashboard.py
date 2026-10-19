@@ -26,7 +26,7 @@ from api.db.session import get_db_session
 from api.db.models.dashboard import Session, ApiMetric, LoginAttempt
 from api.services.authentication import digest
 from api.routers.dashboard import router, create_user, UserCreate
-from api.routers.public.observations import router as public_router
+from api.routers.observations import router as public_router
 from api.services.monitoring import statistics as api_statistics
 
 
@@ -129,7 +129,7 @@ async def verify():
         with clio_server(root, schema) as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
-                assert (await client.get('/public/observations/latest')).status_code == 200
+                assert (await client.get('/observations')).status_code == 200
                 for path in ['me', 'users', 'groups', 'api-stats']:
                     assert (await client.get('/dashboard/'+path)).status_code == 401
                 async def login(c, username='admin', password='administrator-password'):
@@ -194,7 +194,7 @@ async def verify():
                     await db.execute(update(Session).values(expires_at=now-timedelta(seconds=1)))
                     await db.commit()
                 assert (await client.get('/dashboard/me')).status_code == 401
-                assert (await client.get('/public/observations/latest')).status_code == 200
+                assert (await client.get('/observations')).status_code == 200
         async with engine.begin() as conn:
             await conn.run_sync(lambda c: migrate(c, 'downgrade'))
             await conn.run_sync(lambda c: migrate(c, 'upgrade'))

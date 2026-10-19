@@ -21,7 +21,7 @@ function number(value: number | null | undefined) {
 }
 
 export default function HourlyObservations() {
-  const { data, loading, failed: error, receivedAt } = useLiveQuery<{ points: ObservationPoint[] }>('/public/observations/history?limit=24');
+  const { data, loading, failed: error, receivedAt } = useLiveQuery<{ points: ObservationPoint[] }>('/observations/history?observations=ap,f10_7,s10,m10,y10&limit=24');
   const points = data?.points ?? [];
   const checkedAt = receivedAt ? new Date(receivedAt).toISOString() : undefined;
 
@@ -35,8 +35,8 @@ export default function HourlyObservations() {
       <p className={styles.description}>These are normalized data; missing measurements may be interpolated or filled during processing.</p>
       <p className={styles.description}>S10, M10 and Y10 are calibrated GOES estimates of daily solar indices, updated from the UTC day’s available observations at each hour boundary. Midnight closes the previous day. These estimates are provisional; no forecasts are shown. A dash means no calibrated estimate is available for that hour; these indices are not gap-filled.</p>
       <nav className="api-links" aria-label="Observations API">
-        <a href="/api/v1/public/observations/latest">Latest observation API (JSON)</a>
-        <a href="/api/v1/public/observations/history?limit=24">Observation history API (JSON)</a>
+        <a href="/api/v1/observations">Latest observation API (JSON)</a>
+        <a href="/api/v1/observations/history?observations=ap,f10_7,s10,m10,y10&limit=24">Observation history API (JSON)</a>
       </nav>
       {loading && <p className="state-message" role="status">Loading observations…</p>}
       {error && <p className="state-message" role="alert">Unable to refresh observations. {latest ? 'Showing the last loaded data. ' : ''}Retrying automatically in one minute.</p>}

@@ -18,27 +18,9 @@ from fastapi import APIRouter, HTTPException, Path
 
 router = APIRouter(tags=["forecasts"])
 
-TARGETS_BY_VISIBILITY = {
-    visibility: ", ".join(
-        f"`{target}`"
-        for target, product in PRODUCTS.items()
-        if product.visibility == visibility
-    )
-    for visibility in ("public", "private")
-}
-TARGET_DESCRIPTION = "Available targets by visibility:\n\n" + "\n".join(
-    f"- **{visibility}**: {targets}"
-    for visibility, targets in TARGETS_BY_VISIBILITY.items()
-)
+TARGET_DESCRIPTION = "Available targets: " + ", ".join(f"`{target}`" for target in PRODUCTS)
 AVAILABILITY_DESCRIPTION = (
-    "Choose a `target` with its matching `visibility`:\n\n"
-    "| visibility | target |\n"
-    "| --- | --- |\n"
-    + "\n".join(
-        f"| `{visibility}` | {targets} |"
-        for visibility, targets in TARGETS_BY_VISIBILITY.items()
-    )
-    + "\n\nA target requested under the wrong visibility returns **404**."
+    TARGET_DESCRIPTION
     + "\n\n### Product variables\n\n"
     "| target | variable (unit) | forecast type | maximum horizon (hours) |\n"
     "| --- | --- | --- | --- |\n"
@@ -65,7 +47,7 @@ def _documented_responses(model, not_ready_message: str) -> dict:
         }}}},
         404: {
             "model": ApiResponse[None],
-            "description": "Unknown product or target/visibility mismatch.",
+            "description": "Unknown product.",
             "content": {"application/json": {"example": {
                 "success": False, "error": {"code": "NOT_FOUND", "message": "Forecast product not found"},
             }}},
@@ -80,21 +62,17 @@ def _documented_responses(model, not_ready_message: str) -> dict:
     }
 
 
-Visibility = Annotated[
-    Literal["public", "private"], Path(description=TARGET_DESCRIPTION)
-]
 
-
-def _product(target: str, visibility: str):
+def _product(target: str):
     try:
-        return get_product(target, visibility)
+        return get_product(target)
     except ProductNotFoundError:
         raise HTTPException(status_code=404, detail="Forecast product not found")
 
 TargetType = Literal[*PRODUCTS.keys()]
 
 
-@router.get('/public/forecasts/solar-wind-events',
+@router.get('/forecasts/solar-wind-events',
             response_model=ApiResponse[SolarWindEventForecast],
             summary='Get CME arrivals and conditional solar-wind speed forecasts',
             description='Published DONKI/ENLIL Earth impacts with a separate CME-conditioned speed outlook. '
@@ -109,46 +87,44 @@ def solar_wind_events():
 
 
 @router.get(
-    "/{visibility}/forecasts/{target}",
+    "/forecasts/{target}",
     response_model=ApiResponse[Forecast],
     summary="Get a forecast",
     description=AVAILABILITY_DESCRIPTION,
     responses=_documented_responses(Forecast, "Forecast is not ready"),
 )
 def forecast(
-    visibility: Visibility,
     target: Annotated[TargetType, Path(description=TARGET_DESCRIPTION)],
     meta: MetaQuery = False,
 ):
     try:
-        return success_response(load_forecast(_product(target, visibility), meta=meta))
+        return success_response(load_forecast(_product(target), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Forecast is not ready")
 
 
 @router.get(
-    "/{visibility}/forecasts/{target}/metrics",
+    "/forecasts/{target}/metrics",
     response_model=ApiResponse[ForecastMetrics],
     summary="Get forecast metrics",
     description=AVAILABILITY_DESCRIPTION,
     responses=_documented_responses(ForecastMetrics, "Metrics are not ready"),
 )
 def metrics(
-    visibility: Visibility,
     target: Annotated[str, Path(description=TARGET_DESCRIPTION)],
     meta: MetaQuery = False,
 ):
     try:
-        return success_response(load_metrics(_product(target, visibility), meta=meta))
+        return success_response(load_metrics(_product(target), meta=meta))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Metrics are not ready")
 
 
-@router.get('/{visibility}/forecasts/{target}/verification',
+@router.get('/forecasts/{target}/verification',
             response_model=ApiResponse[ForecastVerification],
             summary='Get last 30 days published forecast accuracy')
-def verification(visibility: Visibility, target: str):
-    product = _product(target, visibility)
+def verification(target: str):
+    product = _product(target)
     from api.services.forecasts.client import read_verification
     try:
         return success_response(read_verification(product.target))

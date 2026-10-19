@@ -48,7 +48,7 @@ async function mockForecasts(page: Page, state: { failed?: boolean } = {}) {
     const path = new URL(route.request().url()).pathname;
     const product = products.find(item => path.endsWith(`/forecasts/${item.apiTarget}`));
     if (!product) { await route.fulfill({ status: 404, json: {} }); return; }
-    expect(path).toBe(`/api/v1/${product.visibility}/forecasts/${product.apiTarget}`);
+    expect(path).toBe(`/api/v1/forecasts/${product.apiTarget}`);
     await route.fulfill(state.failed ? { status: 503, json: { success: false, data: null, error: { message: 'Not ready' } } }
       : { json: { success: true, data: release(product), error: null } });
   });
@@ -143,7 +143,7 @@ test('forecast range supports keyboard selection and chart clicks do not take fo
 test('forecast range follows available times with gaps and disables a single or empty timeline', async ({ page }) => {
   const forecast = release(products[0]);
   forecast.predictions = forecast.predictions.filter(point => [1, 5, 12].includes(point.lead_hours));
-  await page.route('**/api/v1/public/forecasts/solar-wind-speed', route => route.fulfill({ json: { success: true, data: forecast, error: null } }));
+  await page.route('**/api/v1/forecasts/solar-wind-speed', route => route.fulfill({ json: { success: true, data: forecast, error: null } }));
   await page.goto('/forecast/solar-wind-speed');
   const slider = page.getByRole('slider', { name: 'Forecast time · UTC', exact: true });
   await expect(slider).toHaveAttribute('max', '2');

@@ -39,37 +39,36 @@ class Variable:
 @dataclass(frozen=True)
 class Product:
     target: str
-    visibility: str
     max_horizon_hours: int
     variables: tuple[Variable, ...]
 
 
 PRODUCTS = {
-    "solar-wind-speed": Product("solar-wind-speed", "public", 96, (
+    "solar-wind-speed": Product("solar-wind-speed", 96, (
         Variable("v", "plasma_speed_quantile", "km/s", "v", quantiles=True),
         Variable("v", "plasma_speed_threshold", "km/s", "v", (450, 500, 600)),
     )),
-    "solar-wind-density": Product("solar-wind-density", "public", 96, (
+    "solar-wind-density": Product("solar-wind-density", 96, (
         Variable("n", "plasma_density_quantile", "cm^-3", "n", quantiles=True),
     )),
-    "solar-wind-temperature": Product("solar-wind-temperature", "public", 96, (
+    "solar-wind-temperature": Product("solar-wind-temperature", 96, (
         Variable("t", "plasma_temperature_quantile", "K", "t", quantiles=True),
     )),
-    "hmf": Product("hmf", "private", 48, (
+    "hmf": Product("hmf", 48, (
         Variable("bt", "hmf_total_threshold", "nT", "bt", (5, 10, 15)),
         Variable("bs", "hmf_southward_threshold", "nT", "bs", (5, 10, 15)),
     )),
-    "solar-radiation": Product("solar-radiation", "private", 48, (
+    "solar-radiation": Product("solar-radiation", 48, (
         Variable("f10_7", "f10_7_quantile", "sfu", "f107", quantiles=True),
         Variable("s10", "s10_quantile", "index", "s10", quantiles=True),
         Variable("m10", "m10_quantile", "index", "m10", quantiles=True),
         Variable("y10", "y10_quantile", "index", "y10", quantiles=True),
     )),
-    "geomagnetic-activity": Product("geomagnetic-activity", "public", 48, (
+    "geomagnetic-activity": Product("geomagnetic-activity", 48, (
         Variable("kp", "kp_threshold", "index", "kp", (4, 5, 6)),
         Variable("ap", "ap_quantile", "index", "ap", quantiles=True),
     )),
-    "dst": Product("dst", "public", 48, (
+    "dst": Product("dst", 48, (
         Variable("dst", "dst_quantile", "nT", "dst", quantiles=True),
     )),
 }
@@ -79,9 +78,9 @@ class ProductNotFoundError(Exception):
     pass
 
 
-def get_product(target: str, visibility: str) -> Product:
+def get_product(target: str) -> Product:
     product = PRODUCTS.get(target)
-    if product is None or product.visibility != visibility:
+    if product is None:
         raise ProductNotFoundError(target)
     return product
 

@@ -1,17 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../../lib/http';
-import type { Latest } from './solarWind';
-import type { IndexLatest } from './geomagnetic';
+import type { Metric, Sample } from './solarWind';
+import type { IndexMetric, IndexSample } from './geomagnetic';
 
 export type Derived = { status: 'available' | 'lower_bound' | 'unavailable'; value: number | null; reason?: string; as_of?: string };
 export type Summary = {
-  generated_at: string;
-  solar_wind: Latest['series'];
-  geomagnetic: IndexLatest['series'];
-  changes_1h: Record<string, Derived>;
-  southward_bz: Derived;
-};
+  changes_1h?: Record<string, Derived>;
+  southward_bz?: Derived;
+} & Partial<Record<Metric, Pick<Sample, 'observed_at' | 'value' | 'quality'> | null>>
+  & Partial<Record<IndexMetric, Pick<IndexSample, 'interval_start' | 'interval_end' | 'value' | 'quality'> | null>>;
 export type QueryResult<T> = { data?: T; receivedAt?: number; failed: boolean; loading: boolean };
 export type LiveSnapshot = QueryResult<Summary> & { now?: number };
 export type HistoryWindow = { from: string; to: string };

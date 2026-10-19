@@ -27,19 +27,17 @@ export function stamp(value: string | number | undefined) {
 
 // A successful refresh does not make an old or provider-flagged sample usable.
 export function measurement(metric: Selection, snapshot: LiveSnapshot) {
-  const series = isWind(metric) ? snapshot.data?.solar_wind[metric] : snapshot.data?.geomagnetic[metric];
-  const point = series?.latest;
-  const elapsed = snapshot.now && snapshot.receivedAt ? Math.max(0, (snapshot.now - snapshot.receivedAt) / 1000) : 0;
-  let age: number | null = null;
-  if (series && 'age_seconds' in series && series.age_seconds != null) age = series.age_seconds + elapsed;
-  if (point && 'interval_end' in point && point.interval_end && snapshot.data) {
-    age = Math.max(0, (Date.parse(snapshot.data.generated_at) - Date.parse(point.interval_end)) / 1000 + elapsed);
-  }
-  const stale = series?.status === 'stale' || (age != null && series != null && age > series.stale_after_seconds);
+  const point = snapshot.data?.[metric];
+  const staleAfter = isWind(metric) ? 600 : metric === 'kp' ? 14400 : 7200;
+  const series = point ? { stale_after_seconds: staleAfter } : undefined;
+  const now = snapshot.now ?? snapshot.receivedAt;
+  const measuredAt = point && ('observed_at' in point ? point.observed_at : point.interval_end);
+  const age = measuredAt && now != null ? Math.max(0, (now - Date.parse(measuredAt)) / 1000) : null;
+  const stale = age != null && age > staleAfter;
   const outdated = snapshot.now && snapshot.receivedAt ? snapshot.now - snapshot.receivedAt > 120000 : false;
   const flagged = point?.quality === 'flagged';
-  const missing = point?.value == null || point.quality === 'missing' || series?.status === 'missing';
-  const usable = !missing && !flagged && !stale && !outdated && series?.status === 'fresh';
+  const missing = point?.value == null || point.quality === 'missing';
+  const usable = !missing && !flagged && !stale && !outdated;
   const status = !snapshot.data ? snapshot.failed ? 'Unavailable' : 'Loading' : missing ? 'No data' : flagged ? 'Flagged' :
     stale ? 'Delayed' : outdated ? 'Old snapshot' : 'Recent';
   return { series, point, age, stale, outdated, flagged, missing, usable, status };

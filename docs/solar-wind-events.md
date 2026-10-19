@@ -4,8 +4,8 @@ UI: `/forecast/solar-events`. API paths below omit the proxy's `/api/v1` prefix.
 
 | Product | Output |
 | --- | --- |
-| `/public/forecasts/solar-wind-events` | CME arrivals and L1 compression candidates |
-| `/public/forecasts/solar-wind-speed` | Background quantiles plus conditional nominal/early/late CME speed scenarios |
+| `/forecasts/solar-wind-events` | CME arrivals and L1 compression candidates |
+| `/forecasts/solar-wind-speed` | Background quantiles plus conditional nominal/early/late CME speed scenarios |
 
 HSS and DBEM forecasts are disabled. CME scenarios are not quantiles or calibrated
 impact probabilities. Missing inputs mean unavailable context; compression alone

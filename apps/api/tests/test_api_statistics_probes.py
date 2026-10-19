@@ -21,7 +21,7 @@ def test_own_ping_probes_do_not_enter_usage_statistics(monkeypatch, status):
     ('/ping', 'GET', ''),
     ('/ping', 'GET', 'Mozilla/5.0'),
     ('/ping', 'POST', 'Argus-Monitor/1'),
-    ('/public/observations/latest', 'GET', 'Argus-Monitor/1'),
+    ('/observations', 'GET', 'Argus-Monitor/1'),
     ('__unmatched__', 'GET', 'Argus-Monitor/1'),
 ])
 def test_real_requests_still_enter_usage_statistics(monkeypatch, route, method, agent):

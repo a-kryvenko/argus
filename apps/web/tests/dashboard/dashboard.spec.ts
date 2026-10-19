@@ -89,9 +89,9 @@ const stats = {
     errors_5xx: i % 9 === 0 ? 1 : 0,
   })),
   routes: [
-    "/public/observations/latest",
-    "/public/solar-wind/history",
-    "/public/geomagnetic/history",
+    "/observations",
+    "/observations/history",
+    "/forecasts/dst",
   ].map((route, i) => ({
     ...summary,
     route,
@@ -322,7 +322,7 @@ test("dashboard styles do not change public typography after client navigation",
   page, baseURL,
 }) => {
   await mockApi(page);
-  await page.route('**/api/v1/public/forecasts/**', route => route.fulfill({ status: 503, json: { success: false, data: null, error: { message: 'No test forecast' } } }));
+  await page.route('**/api/v1/forecasts/**', route => route.fulfill({ status: 503, json: { success: false, data: null, error: { message: 'No test forecast' } } }));
   await page.goto("/");
   const before = await page
     .locator("h1")

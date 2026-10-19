@@ -7,15 +7,15 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
   const requests: URL[] = [];
   const values = { bx: 1.4, by: 2.1, bz: -3.6, bt: 5.8, v: 420, n: 6.2, t: 108000 };
   const solarWind = Object.fromEntries(Object.entries(values).map(([metric, value]) => [metric, {
-    latest: { observed_at: now, received_at: now, value, spacecraft: 'DSCOVR', quality: metric === 'by' ? 'flagged' : 'unverified' },
+    latest: { observed_at: now, received_at: now, value, spacecraft: 'DSCOVR', quality: metric === 'by' ? 'flagged' : undefined },
     age_seconds: options.stale ? 900 : 0, status: options.stale ? 'stale' : 'fresh', stale_after_seconds: 600,
   }]));
   const geomagnetic = Object.fromEntries(['kp', 'dst'].map(metric => [metric, {
     latest: { interval_start: before, interval_end: now, interval_status: 'completed', value: metric === 'kp' ? 3 : -20,
-      quality: 'unverified', received_at: now, station_count: null },
+      quality: undefined, received_at: now, station_count: null },
     lag_seconds: 0, status: 'fresh', stale_after_seconds: metric === 'kp' ? 14400 : 7200, data_status: metric === 'kp' ? 'estimated' : 'realtime',
   }]));
-  await page.route('**/api/v1/public/observations/**', async route => {
+  await page.route('**/api/v1/observations**', async route => {
     const url = new URL(route.request().url());
     expect(url.searchParams.has('meta')).toBe(false);
     if (url.searchParams.has('from')) requests.push(url);
@@ -24,16 +24,25 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
       return;
     }
     let data;
-    if (url.pathname.endsWith('/summary')) {
-      data = { generated_at: now, solar_wind: solarWind, geomagnetic,
+    if (!url.pathname.endsWith('/history')) {
+      expect(url.searchParams.get('trends')).toBe('true');
+      data = {
         changes_1h: { v: { status: 'available', value: 10, as_of: now }, n: { status: 'available', value: .4, as_of: now },
           bt: { status: 'available', value: .8, as_of: now }, bz: { status: 'available', value: -1.2, as_of: now } },
-        southward_bz: { status: 'lower_bound', value: 12, as_of: now, reason: 'onset_before_available_window' } };
+        southward_bz: { status: 'lower_bound', value: 12, as_of: now, reason: 'onset_before_available_window' },
+        ...Object.fromEntries(Object.entries(solarWind).map(([metric, { latest }]) => [metric, {
+          observed_at: options.stale ? new Date(Date.now() - 900000).toISOString() : latest.observed_at,
+          value: latest.value, quality: latest.quality,
+        }])),
+        ...Object.fromEntries(Object.entries(geomagnetic).map(([metric, { latest }]) => [metric, {
+          interval_start: latest.interval_start, interval_end: latest.interval_end, value: latest.value, quality: latest.quality,
+        }])),
+      };
     } else if (url.searchParams.has('from')) {
       const from = url.searchParams.get('from')!, to = url.searchParams.get('to')!;
       const start = Date.parse(from), end = Date.parse(to);
       const resolution = end - start > 7 * 86400000 ? 3600 : end - start > 86400000 ? 300 : 60;
-      if (url.pathname.endsWith('/solar-wind/history')) {
+      if (url.searchParams.get('observations') === 'bx,by,bz,bt,v,n,t') {
         const count = Math.floor((end - start) / (resolution * 1000));
         const coverage = { expected_slots: count, usable_slots: count - 2, missing_slots: 2, invalid_slots: 0,
           percent: Math.round((count - 2) / count * 10000) / 100, resolution_seconds: 60, evaluated_to: to, basis: 'sample_timestamps',
@@ -42,7 +51,7 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
           points: Array.from({ length: count - 2 }, (_, i) => {
             const amplitude = metric === 'v' ? 20 : metric === 't' ? 10000 : 2;
             const value = series.latest.value + amplitude * (Math.sin(i / 64) + .18 * Math.sin(i / 8));
-            return { ...series.latest, quality: 'unverified', observed_at: new Date(start + (i + 2) * resolution * 1000).toISOString(),
+            return { ...series.latest, quality: undefined, observed_at: new Date(start + (i + 2) * resolution * 1000).toISOString(),
               value, ...(resolution > 60 ? { min: value - amplitude * .3, max: value + amplitude * .3, count: resolution / 60,
                 expected_count: resolution / 60, coverage_percent: 100, recalculation_pending: false, source_changes: 0, last_spacecraft: 'DSCOVR' } : {}) };
           }), coverage,
@@ -62,14 +71,6 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
           } }];
         })) };
       }
-    } else if (url.pathname.endsWith('/status')) {
-      data = { generated_at: now, status: 'ok', sources: Object.fromEntries(['solar_wind_mag', 'kp', 'dst'].map(source_id => [source_id, {
-        source_id, label: source_id === 'solar_wind_mag' ? 'Solar wind magnetic field' : source_id.toUpperCase(),
-        source_url: 'https://www.spaceweather.gov/', status: 'ok', poll_seconds: 60,
-        last_attempt_at: now, last_completed_at: now, last_response_at: now, last_success_at: now,
-        last_error_at: null, last_error_message: null, last_error_code: null, consecutive_failures: 0,
-        latest_observation_at: now, latest_interval_end: now,
-      }])) };
     } else {
       data = { points: [] };
     }
@@ -100,7 +101,7 @@ test('workspace renders compact observations and inspects quality without losing
   await expect(inspector).toContainText('WDC Kyoto via NOAA SWPC');
   await inspector.getByLabel('Selected measurement').selectOption('by');
   await expect(inspector).toContainText('Provider quality flag');
-  await expect(inspector).toContainText('excluded from chart lines and derived trends');
+  await expect(inspector).toContainText('excluded from chart lines');
   await expect(page.getByRole('region', { name: 'By, nT', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -114,7 +115,7 @@ test('one period control updates both histories with exactly the same UTC bounds
   await expect(page.getByText('5-minute means', { exact: true })).toBeVisible();
   await expect.poll(() => requests.filter(url => Date.parse(url.searchParams.get('to')!) - Date.parse(url.searchParams.get('from')!) === 72 * 3600000).length).toBeGreaterThanOrEqual(2);
   const latest = requests.filter(url => Date.parse(url.searchParams.get('to')!) - Date.parse(url.searchParams.get('from')!) === 72 * 3600000).slice(-2);
-  expect(new Set(latest.map(url => url.pathname)).size).toBe(2);
+  expect(new Set(latest.map(url => url.searchParams.get('observations'))).size).toBe(2);
   expect(latest[0].searchParams.get('from')).toBe(latest[1].searchParams.get('from'));
   expect(latest[0].searchParams.get('to')).toBe(latest[1].searchParams.get('to'));
 });
@@ -139,7 +140,7 @@ test('mobile keeps navigation, shared controls and an expandable inspector witho
   await captureScreenshot(page, { path: 'test-results/live-workspace-mobile.png', fullPage: true });
 });
 
-test('delayed values do not produce an apparently current southward duration or trend', async ({ page }) => {
+test('delayed measurements stay explicit without trends or duration', async ({ page }) => {
   await observations(page, { stale: true, historyFailure: true });
   await page.goto('/live');
   const summary = page.getByRole('region', { name: 'Observation summary' });

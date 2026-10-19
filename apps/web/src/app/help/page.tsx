@@ -80,7 +80,7 @@ export default function Help() {
             <div className={styles.cards}>
               {products.map(product => (
                 <article key={product.slug} className={styles.card}>
-                  <span className={styles.badge}>{product.visibility === "public" ? "Public API" : "Private API"}</span>
+                  <span className={styles.badge}>API</span>
                   <h3><Link href={`/forecast/${product.slug}`}>{product.title}</Link></h3>
                   <p>{product.description}</p>
                   <p className={styles.units}>{product.variables.map(variable => `${variable.label}: ${variable.unit}`).join(" · ")}</p>
@@ -119,11 +119,11 @@ export default function Help() {
             <h2>API & support</h2>
             <p>Use the <a href="/api/v1/docs">API documentation</a> to explore endpoints and response schemas. Product pages link directly to their forecast and metrics JSON responses.</p>
             <div className={styles.resources}>
-              <a href="/api/v1/public/observations/summary">Current observations <span aria-hidden="true">↗</span></a>
-              <a href="/api/v1/public/observations/solar-wind/history?resolution=auto">Solar wind history <span aria-hidden="true">↗</span></a>
-              <a href="/api/v1/public/observations/geomagnetic/history">Kp/Dst history <span aria-hidden="true">↗</span></a>
-              <a href="/api/v1/public/forecasts/solar-wind-speed">Solar wind forecast <span aria-hidden="true">↗</span></a>
-              <a href="/api/v1/public/forecasts/solar-wind-speed/metrics">Solar wind metrics <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/observations">Current observations <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/observations/history?observations=bx,by,bz,bt,v,n,t&resolution=auto">Solar wind history <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/observations/history?observations=kp,dst">Kp/Dst history <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/forecasts/solar-wind-speed">Solar wind forecast <span aria-hidden="true">↗</span></a>
+              <a href="/api/v1/forecasts/solar-wind-speed/metrics">Solar wind metrics <span aria-hidden="true">↗</span></a>
             </div>
             <p>API probabilities are numbers from 0 to 1; heatmaps display them as percentages. Forecast responses include the available variables and prediction times, so check these before using a value.</p>
             <div className={styles.contact}>

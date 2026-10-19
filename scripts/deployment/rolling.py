@@ -322,6 +322,17 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         if available < self.minimum_available:
             raise RuntimeError(f'{service}: only {available} MiB available; need {self.minimum_available} MiB before starting a replacement')
 
+    def diagnose_candidate(self, name):
+        print(f'[deploy] Failed candidate {name}: container state and recent logs', flush=True)
+        try:
+            containers = self.compose('ps', '--all', '-q', name, capture=True).split()
+            for container in containers:
+                # Inspect only runtime state; container configuration includes secrets.
+                self.run('docker', 'inspect', '--format', '{{json .State}}', container)
+                self.run('docker', 'logs', '--tail', '100', container)
+        except Exception:
+            print(f'[deploy] Could not collect diagnostics for {name}', file=sys.stderr)
+
     def replace(self, service):
         previous = self.state['active'][service]
         spec = copy.deepcopy(self.desired['services'][service])
@@ -360,6 +371,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             self.save()
             self.install_runtime()
         except BaseException:
+            self.diagnose_candidate(name)
             self.recover()
             raise
 

@@ -43,8 +43,7 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /var/www/apps/web/.next/standalone ./
 COPY --from=builder /var/www/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /var/www/apps/web/public ./apps/web/public
-RUN mv /var/www/apps/web/server.js /var/www/apps/web/server.cjs
 
 EXPOSE 3000
 
-CMD ["node", "/var/www/apps/web/server.cjs"]
+CMD ["node", "/var/www/apps/web/server.js"]

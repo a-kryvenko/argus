@@ -2,6 +2,7 @@
 import copy
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
@@ -93,6 +94,36 @@ def test_interrupted_switch_is_recovered_from_disk(tmp_path):
     deployment.recover()
     assert 'clio-blue:8000' in (tmp_path / 'routes/clio/default.conf').read_text()
     assert 'pending' not in json.loads(deployment.state_path.read_text())
+
+
+@pytest.mark.parametrize('diagnostics_fail', [False, True])
+def test_startup_diagnostics_precede_recovery_and_preserve_original_failure(tmp_path, diagnostics_fail):
+    deployment = harness(tmp_path)
+    original_compose = deployment.compose
+    failure = subprocess.CalledProcessError(1, ['docker', 'compose', 'up', 'clio-green'])
+
+    def compose(*args, **kwargs):
+        original_compose(*args, **kwargs)
+        if args[0] == 'up' and args[-1] == 'clio-green':
+            raise failure
+        return 'failed-container' if args == ('ps', '--all', '-q', 'clio-green') else ''
+
+    def run(*args, **kwargs):
+        deployment.calls.append(args)
+        if diagnostics_fail:
+            raise RuntimeError('diagnostics unavailable')
+
+    deployment.compose, deployment.run = compose, run
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        deployment.replace('clio')
+    assert error.value is failure
+    inspect = ('docker', 'inspect', '--format', '{{json .State}}', 'failed-container')
+    restore = ('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', 'clio-blue')
+    assert deployment.calls.index(inspect) < deployment.calls.index(restore)
+    if not diagnostics_fail:
+        assert ('docker', 'logs', '--tail', '100', 'failed-container') in deployment.calls
+    assert deployment.state['active']['clio']['slot'] == 'blue'
+    assert 'pending' not in deployment.state
 
 
 def test_unchanged_service_and_memory_gate_do_not_start_replacement(tmp_path):

@@ -20,10 +20,16 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "pnpm exec next dev --turbopack --port 3100",
+    command: [
+      "pnpm run build",
+      "cp -R public .next/playwright/standalone/apps/web/public",
+      "cp -R .next/playwright/static .next/playwright/standalone/apps/web/.next/playwright/static",
+      "mv .next/playwright/standalone/apps/web/server.js .next/playwright/standalone/apps/web/server.cjs",
+      "node .next/playwright/standalone/apps/web/server.cjs",
+    ].join(' && '),
     url: "http://localhost:3100",
     reuseExistingServer: false,
-    env: { NEXT_DIST_DIR: ".next/playwright", DEMO_BUNDLE_PATH: demoPath },
+    env: { NEXT_DIST_DIR: ".next/playwright", DEMO_BUNDLE_PATH: demoPath, PORT: '3100', HOSTNAME: '127.0.0.1' },
     timeout: 120000,
   },
 });

@@ -150,7 +150,7 @@ jobs:
             echo 'exists=false' >> "$GITHUB_OUTPUT"
           fi
       - name: Check out the exact private backend used by the plan
-        if: steps.cache.outputs.exists != 'true' && (matrix.component == 'clio' || matrix.component == 'prophet')
+        if: steps.cache.outputs.exists != 'true' && (matrix.component == 'clio' || matrix.component == 'prophet' || matrix.component == 'proswin')
         uses: actions/checkout@v6
         with:
           repository: a-kryvenko/argus-forecast-core

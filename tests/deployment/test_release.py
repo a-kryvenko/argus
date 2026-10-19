@@ -28,6 +28,32 @@ def test_deployment_waits_for_validation_while_images_build_concurrently():
     assert 'if' not in jobs['deploy']  # Default success gate must remain in force.
 
 
+def test_image_jobs_checkout_private_docker_inputs():
+    import re
+    import shlex
+    import yaml
+
+    job = yaml.safe_load((ROOT / '.github/workflows/deploy.yml').read_text())['jobs']['images']
+    steps = job['steps']
+    build_index = next(i for i, step in enumerate(steps) if step.get('uses', '').startswith('docker/build-push-action@'))
+    for component in job['strategy']['matrix']['component']:
+        dockerfile = (ROOT / '.deploy' / (component + '.Dockerfile')).read_text()
+        for line in dockerfile.splitlines():
+            if not line.startswith('COPY ') or line.startswith('COPY --from='):
+                continue
+            for source in shlex.split(line)[1:-1]:
+                for package in ('forecast-core', 'intelligence-core'):
+                    path = 'packages/' + package
+                    if source != path and not source.startswith(path + '/'):
+                        continue
+                    checkout = next(step for step in steps[:build_index]
+                                    if step.get('uses', '').startswith('actions/checkout@')
+                                    and step.get('with', {}).get('path') == path)
+                    components = re.findall(r"matrix\.component == '([^']+)'", checkout.get('if', ''))
+                    assert component in components, f'{component} copies {source} but skips its private checkout'
+                    assert checkout['with']['ref'].startswith('${{ needs.plan.outputs.')
+
+
 def tracked_repo(path, files):
     path.mkdir(parents=True, exist_ok=True)
     subprocess.run(['git', 'init', '-q', str(path)], check=True)

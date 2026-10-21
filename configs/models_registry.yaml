@@ -7,21 +7,21 @@ models:
     sha256: 9eee53f8996b044f95d523ac79fc8ca6508a7c6d29ede2fe8d9b923526b48379
     integration:
       enabled: true
-      version: cme-arrival-window-v2
+      version: cme-arrival-arc-v3
 
   plasma_speed_dlinear:
-    model: argus-plasma-speed-dlinear-v1
-    artifact_path: data/models/argus-plasma-speed-dlinear-v1.joblib
-    metrics: data/metrics/dlinear
+    model: argus-plasma-speed-dlinear-2026-v2
+    artifact_path: data/models/argus-plasma-speed-dlinear-2026-v2.joblib
+    metrics: data/metrics/plasma/speed_2026_v3/fallback
 
   plasma_speed_quantile:
-    model: argus-plasma-speed-aia-ridge-v1
-    metrics: data/metrics/plasma/speed_quantile
+    model: argus-plasma-speed-proswin-2026-v3
+    metrics: data/metrics/plasma/speed_2026_v3/quantile
     metrics_report: configs/evaluations/solar-wind-speed.json
-  
+
   plasma_speed_threshold:
-    model: argus-plasma-speed-aia-ridge-v1
-    metrics: data/metrics/plasma/speed_proba
+    model: argus-plasma-speed-proswin-2026-v3
+    metrics: data/metrics/plasma/speed_2026_v3/probability
 
   plasma_density_quantile:
     model: argus-plasma-density-proswin-blend-v1

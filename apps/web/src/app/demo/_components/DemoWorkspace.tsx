@@ -67,7 +67,7 @@ export default function DemoWorkspace({ bundle, sectionPath }: { bundle: DemoPag
         <p>Retrospective forecasts generated specifically for this demo with current models. These are not operational releases.</p>
         <p>{bundle.input_source}</p>
         <p>Dataset {bundle.version} · Generated {formatForecastTime(bundle.generated_at)}. Observations: {bundle.observation_source}.</p>
-        {Object.entries(bundle.models).map(([name, model]) => <p key={name}>{name} · SHA256 {model.sha256} · Training ends {formatForecastTime(model.training_end)} · {model.training_evidence}</p>)}
+        {Object.entries(bundle.models).map(([name, model]) => <p key={name}>{model.model ?? name} · SHA256 {model.sha256}{model.training_end && <> · Training ends {formatForecastTime(model.training_end)}</>} · {model.training_evidence}</p>)}
       </details>
       {bundle.density_scenario_available && <p><Link className={forecastStyles.headingLink} href={href(density ? '/forecast' : '/leo')}>{density ? 'Forecast →' : 'Explore LEO density scenario →'}</Link></p>}
       {solarEvents ? <DemoCME report={eventReport} /> : density ? <>

@@ -37,8 +37,10 @@ def setup():
     return SimpleNamespace(registry=registry), results, services, outlook
 
 
-def test_point_intervals_probabilities_and_serialized_contract_change_together():
+@pytest.mark.parametrize('version', ['cme-arrival-window-v2', 'cme-arrival-arc-v3'])
+def test_point_intervals_probabilities_and_serialized_contract_change_together(version):
     request, results, services, outlook = setup()
+    request.registry['solar_event_speed']['integration']['version'] = version
     before_q = results['plasma_speed_quantile'].frame.copy()
     before_p = results['plasma_speed_threshold'].frame.copy()
     integrate_speed_forecast(request, results, services, outlook)
@@ -49,8 +51,8 @@ def test_point_intervals_probabilities_and_serialized_contract_change_together()
     pd.testing.assert_frame_equal(p.drop(index=1), before_p.drop(index=1))
     assert json.loads(q.cme_speed_json.iloc[0])['integrated_into_speed']
     for result in results.values():
-        assert result.model_info['cme_integration']['version'] == 'cme-arrival-window-v2'
-        assert result.model_info['model'].endswith('+cme-window-v2')
+        assert result.model_info['cme_integration']['version'] == version
+        assert result.model_info['model'].endswith('+cme-arc-v3' if version == 'cme-arrival-arc-v3' else '+cme-window-v2')
         artifact = serialize(result)
         ForecastArtifact(name=artifact.name, csv_text=artifact.content.decode(),
             sha256=__import__('hashlib').sha256(artifact.content).hexdigest(),
@@ -79,3 +81,30 @@ def test_background_mismatch_rejected_before_changing_outputs():
     with pytest.raises(ValueError, match='different background'):
         integrate_speed_forecast(request, results, services, outlook)
     pd.testing.assert_frame_equal(before, results['plasma_speed_quantile'].frame)
+
+
+@pytest.mark.parametrize('mode', ['blend', 'fallback'])
+@pytest.mark.parametrize('model_version', ['proswin-fold1-nrt-v1', 'proswin-fold1-science-v1'])
+def test_new_speed_artifact_uses_causal_residual_mode_for_cme_probabilities(mode, model_version):
+    request, results, services, outlook = setup()
+    request.registry['solar_event_speed']['integration']['version'] = 'cme-arrival-arc-v3'
+    fallback = np.linspace(-50, 50, 101)
+    blend = np.linspace(-20, 80, 101)
+    services['plasma_speed_threshold'].models_bundle = dict(format='proswin_revalidated_raw',
+        point_quantile='raw', thresholds=[450, 500, 600],
+        residuals={'blend': [blend]*4, 'fallback': [fallback]*4})
+    services['plasma_speed_threshold']._speed = SimpleNamespace(allowed_model_versions=(model_version,))
+    frame = results['plasma_speed_threshold'].frame
+    issue = frame.issue_time.iloc[0]
+    valid = frame.valid_time.iloc[1]
+    records = [dict(valid_time=valid, image_slot=valid-pd.Timedelta(hours=96),
+        available_at=valid-pd.Timedelta(hours=95), value=400., model_version=model_version)] if mode == 'blend' else []
+    request.inputs = SimpleNamespace(as_of=issue, proswin_ready_at=None, proswin_predictions=records)
+    if mode == 'blend':
+        for threshold in (450, 500, 600):
+            frame.loc[1, f'p_v_ge_{threshold}'] = 1-np.searchsorted(blend, threshold-400., side='left')/len(blend)
+    integrate_speed_forecast(request, results, services, outlook)
+    expected_samples = blend if mode == 'blend' else fallback
+    expected = 1-np.searchsorted(expected_samples, 0., side='left')/len(expected_samples)
+    assert results['plasma_speed_threshold'].frame.loc[1, 'p_v_ge_500'] == pytest.approx(expected)
+    np.testing.assert_array_equal(results['plasma_speed_quantile'].frame.v_q50, [400, 500, 400, 400])

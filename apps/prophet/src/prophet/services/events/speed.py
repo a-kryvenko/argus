@@ -40,7 +40,8 @@ def calculate_speed(request, events, *, baseline=None):
         metadata=baseline.model_info
         f=baseline.frame.sort_values('valid_time')
         f=f[(pd.to_datetime(f.valid_time,utc=True)>request.inputs.as_of) & (f.lead_hours<=96)]
-        output=forecast_cme_speed(request.inputs,events,bundle,pd.to_datetime(f.valid_time,utc=True),f['v_q50'].to_numpy())
+        output=forecast_cme_speed(request.inputs,events,bundle,pd.to_datetime(f.valid_time,utc=True),f['v_q50'].to_numpy(),
+            integration_version=entry.get('integration', {}).get('version', 'cme-arrival-window-v2'))
         output.update(model_sha256=sha,background_model=dict(metadata),as_of=request.inputs.as_of)
         return output
     except (OSError, ValueError, KeyError, RuntimeError, ImportError, ConfigurationException) as exc:
@@ -79,7 +80,8 @@ def integrate_speed_forecast(request, results, services, outlook):
     policy = request.registry.get('solar_event_speed', {}).get('integration', {})
     if not policy.get('enabled', False):
         return
-    if policy.get('version') != 'cme-arrival-window-v2':
+    version = policy.get('version')
+    if version not in ('cme-arrival-window-v2', 'cme-arrival-arc-v3'):
         raise ValueError('Unsupported CME speed integration policy')
     quantiles = results['plasma_speed_quantile']
     probabilities = results['plasma_speed_threshold']
@@ -104,8 +106,20 @@ def integrate_speed_forecast(request, results, services, outlook):
         raise ValueError('Invalid CME speed increment')
     active = increment > 0
     if active.any():
+        bundle = services['plasma_speed_threshold'].models_bundle
+        translation_frame = p
+        if bundle.get('format') in ('proswin_revalidated', 'proswin_revalidated_raw'):
+            from forecast_core.inference.plasma.speed.dlinear_proswin import select_predictions
+            speed = getattr(services['plasma_speed_threshold'], '_speed', None)
+            known = select_predictions(pd.Timestamp(q.issue_time.iloc[0]), pd.to_datetime(p.valid_time, utc=True),
+                request.inputs.proswin_predictions,
+                ready_at=request.inputs.proswin_ready_at or request.inputs.as_of,
+                source_cutoff=request.inputs.as_of,
+                allowed_model_versions=getattr(speed, 'allowed_model_versions', ('proswin-fold1-nrt-v1',)))
+            translation_frame = p.assign(speed_residual_mode=np.where(
+                np.isfinite(known) & p.lead_hours.le(96).to_numpy(), 'blend', 'fallback'))
         translated = translated_speed_probabilities(
-            services['plasma_speed_threshold'].models_bundle, p, background, increment)
+            bundle, translation_frame, background, increment)
         for column, values in translated.items():
             p.loc[active, column] = values[active]
         for column in ('v_q10', 'v_q50', 'v_q90'):
@@ -113,7 +127,7 @@ def integrate_speed_forecast(request, results, services, outlook):
     q['v_background_q50'] = background
     outlook.integrated_into_speed = True
     q.loc[q.index[0], 'cme_speed_json'] = outlook.model_dump_json()
-    integration = dict(version='cme-arrival-window-v2', peak_weight=1., window_width_multiplier=1.,
+    integration = dict(version=version, peak_weight=1., window_width_multiplier=1.,
         late_extension_hours=12., corrected_hours=int(active.sum()), source_state=outlook.state,
         cme_model_sha256=outlook.model_sha256,
         uncertainty='Conditional translation of background residuals; CME timing/amplitude uncertainty is not calibrated')
@@ -125,6 +139,6 @@ def integrate_speed_forecast(request, results, services, outlook):
             cme_model_sha256=request.registry['solar_event_speed']['sha256'],
             integration_version=integration['version'], peak_weight=1., late_extension_hours=12.)
         result.model_info.update(background_model=dict(result.model_info), cme_integration=integration,
-            model=result.model_info['model']+'+cme-window-v2',
+            model=result.model_info['model']+('+cme-arc-v3' if version == 'cme-arrival-arc-v3' else '+cme-window-v2'),
             sha256=hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
             uncertainty=integration['uncertainty'])

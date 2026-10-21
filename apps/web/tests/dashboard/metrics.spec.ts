@@ -3,9 +3,9 @@ import { test, expect, type Page } from '@playwright/test';
 import { products, type ProductConfig } from '../../src/forecast/products';
 import type { ForecastMetrics } from '../../src/app/metrics/_lib/types';
 
-function evaluation(product: ProductConfig): ForecastMetrics {
+function evaluation(product: ProductConfig, horizon = 48): ForecastMetrics {
   return { target: product.apiTarget, variables: Object.fromEntries(product.variables.map(variable => [variable.key, {
-    continuous: variable.quantile ? { quantiles: [.1, .5, .9], by_lead_hour: Array.from({ length: 48 }, (_, i) => ({
+    continuous: variable.quantile ? { quantiles: [.1, .5, .9], by_lead_hour: Array.from({ length: horizon }, (_, i) => ({
       lead_hours: i + 1, values: { mae: i === 5 ? null : 20 + i / 2, rmse: 30 + i / 2, coverage_80: .72 + i / 1000, n: 1000 - i, bias: -2, ...(i ? { q50_pinball: 10 + i / 4 } : {}) },
     })) } : null,
     binary: variable.thresholds.map((threshold, j) => ({ threshold: threshold.value, operator: 'gte' as const,
@@ -178,28 +178,44 @@ test('monthly observed accuracy is independent of static metrics and preserves z
     success: true, error: null, data: {
       product: 'solar-wind-speed', start: '2026-09-03T00:00:00Z', end: '2026-10-03T00:00:00Z',
       groups: [
-        { artifact: 'plasma_speed_quantile', releases: 48,
+        { artifact: 'plasma_speed_quantile', model: 'speed-v1', model_sha256: 'a'.repeat(64), last_issue_time: '2026-09-20T00:00:00Z', releases: 48,
           evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 100, missing: 2, pending: 3 },
           by_lead_hour: [
             { lead_hours: 3, counts: { verified: 80, missing: 2, pending: 3 }, continuous: { mae: 12.5, rmse: 18.5 }, binary: {} },
             { lead_hours: 48, counts: { verified: 20, missing: 0, pending: 0 }, continuous: { mae: 42, rmse: 50 }, binary: {} },
           ] },
-        { artifact: 'plasma_speed_threshold', releases: 48,
+        { artifact: 'plasma_speed_threshold', model: 'speed-v1', model_sha256: 'a'.repeat(64), last_issue_time: '2026-09-20T00:00:00Z', releases: 48,
           evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 100, missing: 2, pending: 3 },
           by_lead_hour: [{ lead_hours: 3, counts: { verified: 100, missing: 2, pending: 3 }, continuous: null, binary: { '450': { brier: 0 }, '500': { brier: .000004949486147261768 } } }] },
+        { artifact: 'plasma_speed_quantile', model: 'speed-v1', model_sha256: 'b'.repeat(64), last_issue_time: '2026-10-02T00:00:00Z', releases: 12,
+          evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 10 },
+          by_lead_hour: [{ lead_hours: 3, counts: { verified: 10 }, continuous: { mae: 70, rmse: 80 }, binary: {} }] },
+        { artifact: 'plasma_speed_quantile', releases: 1,
+          evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 0 }, by_lead_hour: [] },
       ],
     },
   } }));
   await page.goto('/metrics/solar-wind-speed');
   const monthly = page.getByRole('region', { name: 'Last 30 days average accuracy' });
+  const tabs = monthly.getByRole('tab');
+  await expect(tabs).toHaveText(['speed-v1', 'speed-v1', 'Unknown model']);
+  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(tabs.nth(1)).toHaveAttribute('tabindex', '-1');
+  await expect(monthly.getByRole('tabpanel')).toContainText('SHA-256: bbbbbbbbbbbb');
+  await expect(monthly.getByRole('tabpanel').getByTitle('70', { exact: true })).toHaveText('70');
+  await tabs.nth(1).click();
+  await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
   await expect(monthly.getByTitle('12.5', { exact: true })).toHaveText('13');
   await expect(monthly.getByTitle('18.5', { exact: true })).toHaveText('19');
   await expect(monthly.getByTitle('0.000004949486147261768', { exact: true })).toHaveText('<0.001');
   await expect(monthly).toContainText('100 verified pairs');
   await expect(monthly.getByRole('heading', { name: 'Solar Wind Speed · Quantile forecast', exact: true })).toHaveCount(1);
-  await expect(monthly).toContainText('All model versions are combined for this period.');
+  await monthly.getByText('How this average is calculated', { exact: true }).click();
+  await expect(monthly).toContainText('separately for each model name and SHA-256');
+  await expect(monthly.getByRole('tabpanel')).toContainText('Model: speed-v1 · SHA-256: aaaaaaaaaaaa');
+  await expect(monthly.getByRole('tabpanel').getByTitle('a'.repeat(64))).toHaveCount(2);
   await expect(monthly).toContainText('2026-09-03 00:00 UTC');
-  await expect(monthly.getByRole('table').last().getByText('0', { exact: true })).toBeVisible();
+  await expect(monthly.getByRole('tabpanel').getByRole('table').nth(1).getByText('0', { exact: true })).toBeVisible();
   await expect(monthly).toContainText('Brier score · ≥ 450 km/s');
   const continuousTable = monthly.getByRole('table').first();
   await expect(continuousTable.getByRole('row').filter({ hasText: '+3h' })).toContainText('13');
@@ -208,6 +224,20 @@ test('monthly observed accuracy is independent of static metrics and preserves z
   await expect(continuousTable.getByRole('row')).toHaveCount(7);
   await expect(monthly.getByRole('columnheader', { name: 'Missing', exact: true })).toHaveCount(0);
   await expect(monthly.getByRole('columnheader', { name: 'Pending', exact: true })).toHaveCount(0);
+  await tabs.nth(1).press('End');
+  await expect(tabs.nth(2)).toBeFocused();
+  await expect(monthly.getByRole('tabpanel')).toContainText('Unknown model · Version unavailable');
+  await tabs.nth(2).press('Home');
+  await expect(tabs.nth(0)).toBeFocused();
+  await expect(monthly.getByRole('tabpanel')).toContainText('10 verified pairs · 12 releases');
+  await tabs.nth(0).press('ArrowRight');
+  await expect(tabs.nth(1)).toBeFocused();
+  await expect(monthly.getByRole('tabpanel')).toContainText('SHA-256: aaaaaaaaaaaa');
+  await tabs.nth(1).press('ArrowLeft');
+  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await screenshot(page, 'metrics-model-tabs-mobile');
   await page.route('**/api/v1/**/forecasts/**/verification', route => route.fulfill({ json: {
     success: true, data: { start: '2026-09-03T00:00:00Z', end: '2026-10-03T00:00:00Z', groups: [] }, error: null,
   } }));
@@ -215,21 +245,33 @@ test('monthly observed accuracy is independent of static metrics and preserves z
   await expect(monthly).toContainText('No verified forecast data available for this period.');
 });
 
-test('solar wind blend shows evaluation scope without legacy probability scores', async ({ page }) => {
-  const { readFile } = await import('node:fs/promises');
-  const report = JSON.parse(await readFile(new URL('../../../../configs/evaluations/solar-wind-speed.json', import.meta.url), 'utf8'));
+for (const calibrated of [false, true]) test(`${calibrated ? 'calibrated' : 'point-only'} evaluation shows its scope and only supplied scores`, async ({ page }) => {
+  const report = evaluation(products.find(product => product.slug === 'solar-wind-speed')!, 120);
+  report.evaluation = { label: 'Synthetic speed evaluation', period: 'Test period', sample: 'Test cohort', notes: ['Synthetic data'] };
+  if (!calibrated) {
+    report.variables.v.binary = [];
+    report.variables.v.continuous!.quantiles = [];
+    for (const row of report.variables.v.continuous!.by_lead_hour) {
+      row.values = { mae: row.values.mae, rmse: row.values.rmse, n: row.values.n };
+    }
+  }
   await mock(page);
   await page.route('**/api/v1/forecasts/solar-wind-speed/metrics', route => route.fulfill({ json: { success: true, data: report, error: null } }));
   await page.goto('/metrics/solar-wind-speed');
   const scope = page.getByRole('region', { name: 'Evaluation scope' });
-  await expect(scope).toContainText('DLinear + PROSWIN');
-  await expect(scope).toContainText('156 daily target timestamps');
-  await expect(scope).toContainText('not a blind holdout');
-  await expect(page.getByLabel('Threshold metric')).toHaveCount(0);
-  await expect(page.getByLabel('Continuous metric').locator('option[value="coverage_80"]')).toHaveCount(0);
+  await expect(scope).toContainText('Synthetic speed evaluation');
+  await expect(scope).toContainText(report.evaluation!.period);
+  await expect(scope).toContainText(report.evaluation!.sample);
+  for (const note of report.evaluation!.notes) await expect(scope).toContainText(note);
+  await expect(page.getByLabel('Threshold metric')).toHaveCount(calibrated ? 1 : 0);
+  await expect(page.getByRole('region', { name: 'Brier score by lead hour' })).toHaveCount(calibrated ? 1 : 0);
+  await expect(page.getByLabel('Continuous metric').locator('option[value="coverage_80"]')).toHaveCount(calibrated ? 1 : 0);
   const slider = page.getByRole('slider', { name: 'Evaluation lead hour' });
   await slider.focus();
   await page.keyboard.press('End');
-  await expect(page.getByRole('region', { name: 'Selected lead metrics' })).toContainText('MAE56km/sLead +96h');
-  await screenshot(page, 'metrics-proswin-evaluation');
+  const last = report.variables.v.continuous!.by_lead_hour.reduce((a, b) => a.lead_hours > b.lead_hours ? a : b);
+  const summary = page.getByRole('region', { name: 'Selected lead metrics' });
+  await expect(summary).toContainText(`Lead +${last.lead_hours}h`);
+  await expect(summary.getByTitle(String(last.values.mae), { exact: true })).toBeVisible();
+  await screenshot(page, `metrics-${calibrated ? 'calibrated' : 'point-only'}-evaluation`);
 });

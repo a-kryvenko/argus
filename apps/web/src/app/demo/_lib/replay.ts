@@ -14,7 +14,7 @@ export type DemoBundle = {
   event: { name: string; starts_at: string; source_url: string; description: string };
   observation_source: string;
   input_source: string;
-  models: Record<string, { sha256: string; training_end: string; training_evidence: string }>;
+  models: Record<string, { model?: string | null; sha256: string; training_end: string | null; training_evidence: string }>;
   observations: DemoObservation[];
   releases: Record<string, Forecast[]>;
   density_scenario?: DensityScenario;

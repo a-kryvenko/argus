@@ -1,0 +1,26 @@
+{
+  "source": "data/experiments/speed_dlinear_proswin_20261013T070431805471Z",
+  "test_start": "2026-01-01 00:00:00+00:00",
+  "test_end_exclusive": "2026-07-01 00:00:00+00:00",
+  "test_policy": "Retrospective 2026, no test-driven tuning; partial PROSWIN coverage",
+  "persistence": "Raw v at issue_time - 1h; no fill",
+  "climatology": "Mean observed hourly v in 2025",
+  "blend_fit_end_exclusive": "2026-01-01 00:00:00+00:00",
+  "proswin_mode": "science_hourly",
+  "assumed_image_delay_hours": 1,
+  "comparison": "Identical hourly pairs per lead for all five models at +1..+95h; PROSWIN unavailable at >=96h; blend equals DLinear there.",
+  "sources_sha256": {
+    "metrics_2026.csv": "da3ac6d1280163a5db9ef18a74ff5f9b735155e2b9f9736a644371fdee9c006d",
+    "coverage_2026.csv": "47500da30d5997cd6ef66770509de7a88699b34e1611eda1d96995832c34c54e",
+    "config.json": "ee1badf55fc16fc8982b8dbae8851a88ca81e5c68692f2708c8226822625b085",
+    "manifest.json": "488ce789dedca1792246ba18bec6655b28675c626a12838a75cd7c6ec9dd317d",
+    "blend_weights.csv": "2aa4555d58ac5e08d4e94bdc030bdca42b5614ac7822ad8d33bc4be04d702f13",
+    "dlinear_state.pt": "5d3d9d28da10f787ecaa2d78f93b9f0c6fe03f85e4dc7bc904bdf0e12967481d"
+  },
+  "plot_code_sha256": "eb1b39ccc6e9667858f60045c7ffb7f0486a3e285d5bda959af7fb7d6ad8c8b0",
+  "artifacts_sha256": {
+    "solar_wind_speed_mae_2026.png": "35a0b5c3219f0710b0971c7a915eeb1df5d8b507ef3fc2a4be732d02b6572e55",
+    "solar_wind_speed_mae_2026.svg": "52838e0f2a8163d4058971057c0a46c1b69d391c37a1feef8a796e747e31e4c7",
+    "mae_by_lead.csv": "42ba9f39ad1ac5adf7bf73a2d464b1ce72003384253de39b5cfbbcf8ca0da2d5"
+  }
+}

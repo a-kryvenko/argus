@@ -14,6 +14,9 @@ class VerificationLead(BaseModel):
 
 class VerificationGroup(BaseModel):
     artifact: str
+    model: str | None = None
+    model_sha256: str | None = None
+    last_issue_time: datetime | None = None
     releases: int
     evaluated_at: datetime
     counts: dict[str, int]

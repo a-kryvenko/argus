@@ -180,7 +180,7 @@ def verification_report(product, *, days=7):
 
 
 def monthly_accuracy(product, *, now=None):
-    """Pool matched pairs across all models, over valid times in the trailing 30 days."""
+    """Score each model version over valid times in the trailing 30 days."""
     from psycopg.rows import dict_row
     from common.schemas.forecast_verification import ForecastVerification, VerificationGroup, VerificationLead
     if product not in PRODUCT_ARTIFACTS:
@@ -191,17 +191,19 @@ def monthly_accuracy(product, *, now=None):
         cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         cursor.execute('SET LOCAL statement_timeout=10000')
         # Include releases before the window whose forecast horizons enter it.
-        cursor.execute("""SELECT v.artifact,v.evaluated_at,v.report
+        cursor.execute("""SELECT v.artifact,v.evaluated_at,v.report,r.issue_time
             FROM prophet.forecast_verification v JOIN prophet.forecast_release r ON r.id=v.release_id
             WHERE r.product=%s AND r.issue_time >= %s AND r.issue_time <= %s
             ORDER BY r.issue_time,r.id""", (product, start-timedelta(hours=96), now))
         rows = cursor.fetchall()
     groups = {}
     for row in rows:
-        groups.setdefault(row['artifact'], []).append(row)
+        info = row['report'].get('model_info') or {}
+        key = (row['artifact'], info.get('model'), info.get('sha256'))
+        groups.setdefault(key, []).append(row)
     result = []
-    for artifact, entries in groups.items():
-        # Build and filter one frame per artifact instead of one per release.
+    for (artifact, model, digest), entries in groups.items():
+        # Build and filter one frame per model version instead of one per release.
         pairs = [pair for entry in entries for pair in entry['report']['pairs']]
         if not pairs:
             continue
@@ -229,7 +231,8 @@ def monthly_accuracy(product, *, now=None):
                     point.continuous = values
                 else:
                     point.binary[table.removeprefix('threshold_').removesuffix('.csv')] = values
-        result.append(VerificationGroup(artifact=artifact,
+        result.append(VerificationGroup(artifact=artifact, model=model, model_sha256=digest,
+            last_issue_time=max(entries[index]['issue_time'] for index in included),
             releases=len(included), evaluated_at=max(entries[index]['evaluated_at'] for index in included),
             counts=scored['counts'], by_lead_hour=list(leads.values())))
     return ForecastVerification(product=product, start=start, end=now, groups=result)

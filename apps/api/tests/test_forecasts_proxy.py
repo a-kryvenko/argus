@@ -125,11 +125,14 @@ def test_verification_route_rejects_old_prefix_and_preserves_upstream_failure(mo
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from api.routers.forecasts import router
-    from common.schemas.forecast_verification import ForecastVerification
+    from common.schemas.forecast_verification import ForecastVerification, VerificationGroup
     app = FastAPI()
     app.include_router(router)
     expected = ForecastVerification(product='dst', start=datetime(2026, 9, 3, tzinfo=UTC),
-                                    end=datetime(2026, 10, 3, tzinfo=UTC))
+        end=datetime(2026, 10, 3, tzinfo=UTC), groups=[VerificationGroup(
+            artifact='dst_quantile', model='dst-v2', model_sha256='a' * 64,
+            last_issue_time=datetime(2026, 10, 2, tzinfo=UTC),
+            releases=2, evaluated_at=datetime(2026, 10, 3, tzinfo=UTC), counts={'verified': 12})])
     calls = []
     def read(product):
         calls.append(product)
@@ -140,7 +143,11 @@ def test_verification_route_rejects_old_prefix_and_preserves_upstream_failure(mo
         assert calls == []
         response = client.get('/forecasts/dst/verification')
         assert response.status_code == 200
-        assert response.json()['data']['groups'] == []
+        group = response.json()['data']['groups'][0]
+        assert group['model'] == 'dst-v2'
+        assert group['model_sha256'] == 'a' * 64
+        assert group['last_issue_time'] == '2026-10-02T00:00:00Z'
+        assert group['counts']['verified'] == 12
         assert calls == ['dst']
         def unavailable(product):
             raise ArtifactNotReadyError('unavailable')

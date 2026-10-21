@@ -28,6 +28,10 @@
 .monthly summary { cursor: pointer; }
 .monthlyGroup { border-top: 1px solid var(--border); margin-top: 18px; }
 .monthlyGroup .summary { margin: 14px 0; }
+.modelTabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; }
+.modelTabs button { flex: 0 0 auto; padding: 10px 14px; border: 1px solid var(--border); border-radius: 3px; background: transparent; color: #9eb4c7; font-size: 11px; cursor: pointer; }
+.modelTabs button[aria-selected='true'] { color: #d9e6f2; background: #233345; border-color: #607f9b; }
+.modelTabs button:focus-visible { outline: 2px solid #9eb4c7; outline-offset: 2px; }
 
 .monthlyTable { width: 100%; border-collapse: collapse; font-size: 11px; color: #c8d9e6; }
 .monthlyTable caption { text-align: left; color: #9eb4c7; padding: 10px 0; }

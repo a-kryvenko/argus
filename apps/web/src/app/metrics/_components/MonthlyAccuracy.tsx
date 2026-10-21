@@ -61,6 +61,12 @@ function ModelTabs({ product, groups }: { product: ProductConfig; groups: Verifi
     models.set(key, version);
   }
   const versions = [...models.values()].sort((a, b) => b.latest - a.latest || a.key.localeCompare(b.key));
+  const variableOrder = new Map(product.variables.map((variable, index) => [variable.key, index]));
+  for (const version of versions) {
+    version.groups.sort((a, b) => Number(a.artifact.endsWith('_threshold')) - Number(b.artifact.endsWith('_threshold'))
+      || (variableOrder.get(variables[a.artifact]) ?? variableOrder.size) - (variableOrder.get(variables[b.artifact]) ?? variableOrder.size)
+      || a.artifact.localeCompare(b.artifact));
+  }
   const active = versions.some(version => version.key === selected) ? selected : versions[0]?.key;
   function navigate(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const next = event.key === 'ArrowRight' ? (index + 1) % versions.length

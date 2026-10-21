@@ -187,6 +187,8 @@ test('monthly observed accuracy is independent of static metrics and preserves z
         { artifact: 'plasma_speed_threshold', model: 'speed-v1', model_sha256: 'a'.repeat(64), last_issue_time: '2026-09-20T00:00:00Z', releases: 48,
           evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 100, missing: 2, pending: 3 },
           by_lead_hour: [{ lead_hours: 3, counts: { verified: 100, missing: 2, pending: 3 }, continuous: null, binary: { '450': { brier: 0 }, '500': { brier: .000004949486147261768 } } }] },
+        { artifact: 'plasma_speed_threshold', model: 'speed-v1', model_sha256: 'b'.repeat(64), last_issue_time: '2026-10-02T00:00:00Z', releases: 12,
+          evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 10 }, by_lead_hour: [] },
         { artifact: 'plasma_speed_quantile', model: 'speed-v1', model_sha256: 'b'.repeat(64), last_issue_time: '2026-10-02T00:00:00Z', releases: 12,
           evaluated_at: '2026-10-03T00:00:00Z', counts: { verified: 10 },
           by_lead_hour: [{ lead_hours: 3, counts: { verified: 10 }, continuous: { mae: 70, rmse: 80 }, binary: {} }] },
@@ -202,9 +204,15 @@ test('monthly observed accuracy is independent of static metrics and preserves z
   await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
   await expect(tabs.nth(1)).toHaveAttribute('tabindex', '-1');
   await expect(monthly.getByRole('tabpanel')).toContainText('SHA-256: bbbbbbbbbbbb');
+  await expect(monthly.getByRole('tabpanel').getByRole('heading', { level: 3 })).toHaveText([
+    'Solar Wind Speed · Quantile forecast', 'Solar Wind Speed · Threshold probabilities',
+  ]);
   await expect(monthly.getByRole('tabpanel').getByTitle('70', { exact: true })).toHaveText('70');
   await tabs.nth(1).click();
   await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(monthly.getByRole('tabpanel').getByRole('heading', { level: 3 })).toHaveText([
+    'Solar Wind Speed · Quantile forecast', 'Solar Wind Speed · Threshold probabilities',
+  ]);
   await expect(monthly.getByTitle('12.5', { exact: true })).toHaveText('13');
   await expect(monthly.getByTitle('18.5', { exact: true })).toHaveText('19');
   await expect(monthly.getByTitle('0.000004949486147261768', { exact: true })).toHaveText('<0.001');

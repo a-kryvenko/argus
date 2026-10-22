@@ -8,8 +8,6 @@ from api.schemas.metrics import ForecastMetrics
 from api.schemas.metadata import MetaQuery
 from common.schemas.response import ApiResponse, success_response
 from api.services.forecasts.products import (
-    ProductNotFoundError,
-    get_product,
     load_forecast,
     load_metrics,
     PRODUCTS
@@ -37,37 +35,12 @@ AVAILABILITY_DESCRIPTION = (
 )
 
 
-def _documented_responses(model, not_ready_message: str) -> dict:
-    return {
-        200: {"content": {"application/json": {"examples": {
-            "sample": {
-                "summary": "Illustrative response (one lead time)",
-                "value": {"success": True, "data": model.model_config["json_schema_extra"]["examples"][0], "error": None},
-            },
-        }}}},
-        404: {
-            "model": ApiResponse[None],
-            "description": "Unknown product.",
-            "content": {"application/json": {"example": {
-                "success": False, "error": {"code": "NOT_FOUND", "message": "Forecast product not found"},
-            }}},
-        },
-        503: {
-            "model": ApiResponse[None],
-            "description": not_ready_message,
-            "content": {"application/json": {"example": {
-                "success": False, "error": {"code": "NOT_READY", "message": not_ready_message},
-            }}},
-        },
-    }
-
-
-
 def _product(target: str):
-    try:
-        return get_product(target)
-    except ProductNotFoundError:
+    product = PRODUCTS.get(target)
+    if product is None:
         raise HTTPException(status_code=404, detail="Forecast product not found")
+    return product
+
 
 TargetType = Literal[*PRODUCTS.keys()]
 
@@ -91,7 +64,8 @@ def solar_wind_events():
     response_model=ApiResponse[Forecast],
     summary="Get a forecast",
     description=AVAILABILITY_DESCRIPTION,
-    responses=_documented_responses(Forecast, "Forecast is not ready"),
+    responses={404: {"model": ApiResponse[None], "description": "Unknown product"},
+               503: {"model": ApiResponse[None], "description": "Forecast is not ready"}},
 )
 def forecast(
     target: Annotated[TargetType, Path(description=TARGET_DESCRIPTION)],
@@ -108,7 +82,8 @@ def forecast(
     response_model=ApiResponse[ForecastMetrics],
     summary="Get forecast metrics",
     description=AVAILABILITY_DESCRIPTION,
-    responses=_documented_responses(ForecastMetrics, "Metrics are not ready"),
+    responses={404: {"model": ApiResponse[None], "description": "Unknown product"},
+               503: {"model": ApiResponse[None], "description": "Metrics are not ready"}},
 )
 def metrics(
     target: Annotated[str, Path(description=TARGET_DESCRIPTION)],

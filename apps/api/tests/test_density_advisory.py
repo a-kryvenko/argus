@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from api.services.authentication import current_user
 from api.db.session import get_db_session
 from api.routers import density_advisory
-from api.services.intelligence.profiles import request
+from api.routers.density_advisory import request
 
 
 def test_session_ownership_origin_and_exact_source_routes(monkeypatch):
@@ -38,7 +38,6 @@ def test_session_ownership_origin_and_exact_source_routes(monkeypatch):
         suffix = f'/{profile}/runs/{run}/inputs/atmospheric-density'
         assert client.get(base+suffix+'?owner_id=999').status_code==200
         assert calls[-1][0][1:3]==(7,suffix)
-        assert calls[-1][1]['max_response_bytes']==64*1024*1024
         assert client.get(base+f'/{profile}/runs/{run}/inputs/unsupported').status_code==422
         assert client.get(base+'/events?page=2').status_code==200
         assert calls[-1][1]['params']=={'page':2}
@@ -53,7 +52,7 @@ def test_density_transport_paths_and_sanitized_errors(monkeypatch,status,expecte
         assert req.headers['Authorization']=='Bearer test-token'
         return httpx.Response(status,json={'detail':'secret upstream error'})
     with pytest.raises(HTTPException) as raised:
-        request('GET',7,'',list,resource='density-advisory',transport=httpx.MockTransport(respond))
+        request('GET',7,'',list,transport=httpx.MockTransport(respond))
     assert raised.value.status_code==expected
     assert 'secret' not in raised.value.detail
 
@@ -69,7 +68,7 @@ def test_density_validation_errors_describe_spacecraft_and_hide_upstream_inputs(
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
     transport = httpx.MockTransport(lambda req: httpx.Response(422, json={'detail': detail}))
     with pytest.raises(HTTPException) as raised:
-        request('POST', 7, '', dict, resource='density-advisory', transport=transport)
+        request('POST', 7, '', dict, transport=transport)
     assert raised.value.status_code == 422
     assert raised.value.detail.startswith(expected)
     assert 'secret' not in raised.value.detail and 'trajectory' not in raised.value.detail

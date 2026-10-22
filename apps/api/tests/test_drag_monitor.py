@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from api.services.authentication import current_user
 from api.db.session import get_db_session
 from api.routers import drag_monitor
-from api.services.intelligence import profiles as drag_monitor_client
 
 
 def test_session_owner_and_write_origin(monkeypatch):
@@ -55,16 +54,13 @@ def test_transport_sanitizes_errors(monkeypatch, upstream, expected):
         assert request.headers['Authorization'] == 'Bearer test-token'
         return httpx.Response(upstream, json={'detail': 'secret upstream content'})
     with pytest.raises(HTTPException) as raised:
-        drag_monitor_client.request('GET', 7, '', list, transport=httpx.MockTransport(respond))
+        drag_monitor.request('GET', 7, '', list, transport=httpx.MockTransport(respond))
     assert raised.value.status_code == expected
     assert 'secret' not in raised.value.detail
 
 
-def test_transport_size_and_contract_checks(monkeypatch):
+def test_transport_contract_check(monkeypatch):
     monkeypatch.setenv('INTELLIGENCE_URL', 'http://internal')
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
     with pytest.raises(HTTPException):
-        drag_monitor_client.request('GET', 7, '', list[int], transport=httpx.MockTransport(lambda _: httpx.Response(200, json=['bad'])))
-    monkeypatch.setattr(drag_monitor_client, 'MAX_RESPONSE_BYTES', 1)
-    with pytest.raises(HTTPException):
-        drag_monitor_client.request('GET', 7, '', list, transport=httpx.MockTransport(lambda _: httpx.Response(200, json=[1])))
+        drag_monitor.request('GET', 7, '', list[int], transport=httpx.MockTransport(lambda _: httpx.Response(200, json=['bad'])))

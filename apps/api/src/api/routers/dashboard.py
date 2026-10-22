@@ -4,40 +4,18 @@ import os
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, Field, field_validator
+from api.schemas.dashboard import Credentials, UserCreate, UserUpdate
 from sqlalchemy import select, delete, func
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from api.db.session import get_db_session
 from api.db.models.dashboard import User, Group, Membership, Session, LoginAttempt, ApiMetric
-from api.services.authentication import COOKIE, DUMMY_HASH, check_origin, current_user, digest, hash_password, verify_password, require, user_info
+from api.services.authentication import COOKIE, DUMMY_HASH, check_origin, current_user, digest, hash_password, verify_password, require, user_info, users_info, validate_groups, create_user
 from common.schemas.response import success_response
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'])
-
-
-class Credentials(BaseModel):
-    username: str = Field(min_length=1, max_length=80, pattern=r'^[a-zA-Z0-9_.@-]+$')
-    password: str = Field(min_length=1, max_length=256)
-
-    @field_validator('username')
-    @classmethod
-    def normalize(cls, value):
-        return value.lower()
-
-
-class UserCreate(Credentials):
-    password: str = Field(min_length=12, max_length=256)
-    groups: list[str] = Field(default_factory=list, max_length=50)
-
-
-class UserUpdate(BaseModel):
-    active: bool | None = None
-    groups: list[str] | None = Field(default=None, max_length=50)
-    password: str | None = Field(default=None, min_length=12, max_length=256)
 
 
 @router.post('/login', dependencies=[Depends(check_origin)])
@@ -88,28 +66,6 @@ async def me(user: User = Depends(current_user), db: AsyncSession = Depends(get_
     return success_response(await user_info(db, user))
 
 
-async def validate_groups(db, names):
-    names = sorted(set(names))
-    known = set((await db.scalars(select(Group.name).where(Group.name.in_(names)))).all())
-    if set(names) != known:
-        raise HTTPException(422, 'Unknown group')
-    return names
-
-
-async def create_user(db, body: UserCreate):
-    groups = await validate_groups(db, body.groups)
-    user = User(username=body.username, password_hash=await run_in_threadpool(hash_password, body.password), active=True)
-    db.add(user)
-    try:
-        await db.flush()
-        db.add_all([Membership(user_id=user.id, group_name=name) for name in groups])
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(409, 'Username already exists')
-    return await user_info(db, user)
-
-
 @router.get('/groups', dependencies=[Depends(require('users.manage'))])
 async def groups(db: AsyncSession = Depends(get_db_session)):
     rows = (await db.scalars(select(Group).order_by(Group.name))).all()
@@ -119,7 +75,7 @@ async def groups(db: AsyncSession = Depends(get_db_session)):
 @router.get('/users', dependencies=[Depends(require('users.manage'))])
 async def users(page: int = Query(1, ge=1, le=100000), db: AsyncSession = Depends(get_db_session)):
     rows = (await db.scalars(select(User).order_by(User.id).offset((page-1)*50).limit(50))).all()
-    return success_response({'items': [await user_info(db, u) for u in rows], 'total': await db.scalar(select(func.count()).select_from(User))})
+    return success_response({'items': await users_info(db, rows), 'total': await db.scalar(select(func.count()).select_from(User))})
 
 
 @router.post('/users', dependencies=[Depends(check_origin), Depends(require('users.manage'))])

@@ -1,3 +1,38 @@
+x-admin-db: &admin-db
+  DB_HOST: ${DB_HOST:-postgres}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_NAME: ${DB_NAME:?DB_NAME is required}
+  DB_USER: ${DB_USER:?DB_USER is required}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+
+x-api-db: &api-db
+  API_DB_HOST: ${API_DB_HOST:-postgres}
+  API_DB_PORT: ${API_DB_PORT:-5432}
+  API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
+  API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
+  API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+
+x-clio-db: &clio-db
+  CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
+  CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
+  CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+  CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
+  CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+
+x-prophet-db: &prophet-db
+  PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
+  PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
+  PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
+  PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
+  PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
+
+x-intelligence-db: &intelligence-db
+  INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
+  INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
+  INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
+  INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
+  INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
+
 x-clio-runtime: &clio-runtime
   image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
   restart: unless-stopped
@@ -6,11 +41,7 @@ x-clio-runtime: &clio-runtime
   environment:
     ARGUS_WORKDIR: /var/www
     DEBUG: ${DEBUG:-false}
-    CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
-    CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
-    CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
-    CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
-    CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+    <<: *clio-db
     OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
     SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
   volumes:
@@ -22,31 +53,122 @@ x-clio-runtime: &clio-runtime
   networks:
     backend:
 
+x-prophet-runtime: &prophet-runtime
+  image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
+  restart: unless-stopped
+  init: true
+  environment:
+    ARGUS_WORKDIR: /var/www
+    <<: *prophet-db
+    OBSERVATIONS_URL: http://clio:8000
+    OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+    SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+    FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+  volumes:
+    - ./configs:/var/www/configs:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-intelligence-runtime: &intelligence-runtime
+  image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
+  restart: unless-stopped
+  init: true
+  environment:
+    ARGUS_WORKDIR: /var/www
+    INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR: ${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}
+    <<: *intelligence-db
+    FORECASTS_URL: http://prophet-api:8000
+    FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+    INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
+  volumes:
+    - ./configs:/var/www/configs:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    prophet-api:
+      condition: service_started
+
 services:
-  intelligence:
-    image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
-    restart: unless-stopped
-    init: true
-    stop_grace_period: 2m
-    command: ["intelligence", "worker"]
+  clio:
+    <<: *clio-runtime
+    command: ["clio", "serve"]
+    expose: ["8000"]
+    networks:
+      backend:
+      observations:
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+      # Detect readiness promptly before starting dependent services.
+      start_interval: 1s
+
+  clio-worker:
+    <<: *clio-runtime
+    command: ["clio", "worker"]
+    healthcheck:
+      test: ["CMD", "clio", "check-health", "worker"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  clio-migrate:
+    image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
+    profiles: ["maintenance"]
+    command: ["clio", "migrate", "upgrade", "head"]
     environment:
       ARGUS_WORKDIR: /var/www
-      INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR: ${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}
-      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
-      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
-      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
-      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
-      FORECASTS_URL: http://prophet-api:8000
-      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      <<: *clio-db
     volumes:
       - ./configs:/var/www/configs:ro
+    networks: [backend]
+
+  prophet:
+    <<: *prophet-runtime
+    command: ["prophet", "worker"]
+    stop_grace_period: 10m
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./data/models:/var/www/data/models:ro
+      - ./data/prophet:/var/www/data/prophet
+      - ./data/demo:/var/www/data/demo
     depends_on:
       postgres:
         condition: service_healthy
-      prophet-api:
+      clio:
         condition: service_started
+    networks:
+      backend:
+      observations:
+
+  prophet-api:
+    <<: *prophet-runtime
+    command: ["prophet", "serve"]
+    expose: ["8000"]
     networks: [backend, forecasts]
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+      # Detect readiness promptly before starting dependent services.
+      start_interval: 1s
+
+  prophet-migrate:
+    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
+    profiles: ["maintenance"]
+    command: ["prophet", "migrate", "upgrade", "head"]
+    environment:
+      ARGUS_WORKDIR: /var/www
+      <<: *prophet-db
+    volumes:
+      - ./configs:/var/www/configs:ro
+    networks: [backend]
 
   proswin:
     image: ${ARGUS_PROSWIN_IMAGE:-ghcr.io/a-kryvenko/argus-proswin:latest}
@@ -68,28 +190,15 @@ services:
         condition: service_started
     networks: [observations]
 
+  intelligence:
+    <<: *intelligence-runtime
+    stop_grace_period: 2m
+    command: ["intelligence", "worker"]
+    networks: [backend, forecasts]
+
   intelligence-api:
-    image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
-    restart: unless-stopped
-    init: true
+    <<: *intelligence-runtime
     command: ["intelligence", "serve"]
-    environment:
-      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
-      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
-      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
-      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
-      ARGUS_WORKDIR: /var/www
-      FORECASTS_URL: http://prophet-api:8000
-      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
-    volumes:
-      - ./configs:/var/www/configs:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-      prophet-api:
-        condition: service_started
     networks: [backend, forecasts, impacts]
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
@@ -105,11 +214,7 @@ services:
     profiles: ["maintenance"]
     command: ["intelligence", "migrate", "upgrade", "head"]
     environment:
-      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
-      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
-      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
-      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
+      <<: *intelligence-db
     networks: [backend]
 
   api:
@@ -120,11 +225,7 @@ services:
     environment:
       ARGUS_WORKDIR: /var/www
       DEBUG: ${DEBUG:-false}
-      API_DB_HOST: ${API_DB_HOST:-postgres}
-      API_DB_PORT: ${API_DB_PORT:-5432}
-      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
-      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
-      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
+      <<: *api-db
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
       INTELLIGENCE_URL: http://intelligence-api:8000
       INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
@@ -176,164 +277,21 @@ services:
       start_interval: 1s
     stop_grace_period: 60s
 
-  clio:
-    <<: *clio-runtime
-    command: ["clio", "serve"]
-    expose: ["8000"]
-    networks:
-      backend:
-      observations:
-    healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-      # Detect readiness promptly before starting dependent services.
-      start_interval: 1s
-
-  clio-worker:
-    <<: *clio-runtime
-    command: ["clio", "worker"]
-    healthcheck:
-      test: ["CMD", "clio", "check-health", "worker"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 120s
+  api-migrate:
+    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
+    profiles: ["maintenance"]
+    command: ["api", "migrate", "upgrade", "head"]
+    environment:
+      <<: *api-db
+    networks: [backend]
 
   db-provision:
     image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
     command: [".venv/bin/python", "/var/www/scripts/db/provision.py", "--apply"]
     environment:
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:?DB_NAME is required}
-      DB_USER: ${DB_USER:?DB_USER is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      API_DB_HOST: ${API_DB_HOST:-postgres}
-      API_DB_PORT: ${API_DB_PORT:-5432}
-      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
-      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
-      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
-      CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
-      CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
-      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
-      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
-      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
-      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
-      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
-      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
-      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
-      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
-      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
-      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
+      <<: [*admin-db, *api-db, *clio-db, *prophet-db, *intelligence-db]
     networks: [backend]
-
-  api-migrate:
-    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
-    profiles: ["maintenance"]
-    command: ["api", "migrate", "upgrade", "head"]
-    environment:
-      API_DB_HOST: ${API_DB_HOST:-postgres}
-      API_DB_PORT: ${API_DB_PORT:-5432}
-      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
-      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
-      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
-    networks: [backend]
-
-  clio-migrate:
-    image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
-    profiles: ["maintenance"]
-    command: ["clio", "migrate", "upgrade", "head"]
-    environment:
-      ARGUS_WORKDIR: /var/www
-      CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
-      CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
-      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
-      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
-      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
-    volumes:
-      - ./configs:/var/www/configs:ro
-    networks: [backend]
-
-  prophet-migrate:
-    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
-    profiles: ["maintenance"]
-    command: ["prophet", "migrate", "upgrade", "head"]
-    environment:
-      ARGUS_WORKDIR: /var/www
-      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
-      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
-      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
-      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-    volumes:
-      - ./configs:/var/www/configs:ro
-    networks: [backend]
-
-  prophet:
-    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
-    restart: unless-stopped
-    init: true
-    command: ["prophet", "worker"]
-    stop_grace_period: 10m
-    environment:
-      ARGUS_WORKDIR: /var/www
-      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
-      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
-      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
-      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-      OBSERVATIONS_URL: http://clio:8000
-      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
-      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
-    volumes:
-      - ./configs:/var/www/configs:ro
-      - ./data/models:/var/www/data/models:ro
-      - ./data/prophet:/var/www/data/prophet
-      - ./data/demo:/var/www/data/demo
-    depends_on:
-      postgres:
-        condition: service_healthy
-      clio:
-        condition: service_started
-    networks:
-      backend:
-      observations:
-
-  prophet-api:
-    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
-    restart: unless-stopped
-    init: true
-    command: ["prophet", "serve"]
-    environment:
-      ARGUS_WORKDIR: /var/www
-      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
-      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
-      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
-      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-    volumes:
-      - ./configs:/var/www/configs:ro
-    expose: ["8000"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks: [backend, forecasts]
-    healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-      start_period: 30s
-      # Detect readiness promptly before starting dependent services.
-      start_interval: 1s
 
   frontend:
     image: ${ARGUS_FRONTEND_IMAGE:-ghcr.io/a-kryvenko/argus-frontend:latest}
@@ -419,7 +377,7 @@ services:
       application:
           aliases:
             - ${APP_NAME}
-  
+
   alloy:
     image: grafana/alloy:latest
     container_name: argusAlloy
@@ -445,7 +403,7 @@ services:
       - run
       - /etc/alloy/config.alloy
       - --server.http.listen-addr=0.0.0.0:12345
-    
+
     depends_on:
       - nginx
 

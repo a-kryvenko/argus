@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from api.routers.atmospheric_density import router
 from api.routers.forecasts import router as general_router
-from api.services.forecasts import density as service
+from api.services.forecasts import products as service
 
 
 @pytest.fixture

@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from api.schemas.metadata import MetaQuery
 from api.schemas.observations import (
@@ -14,11 +14,12 @@ from api.schemas.observations import (
     IndexLatest,
     ObservationHistory,
     ObservationSummary,
+    ObservationMetadata,
+    SummaryMetadata,
     SolarHistory,
     SolarLatest,
 )
 from api.services.observations.client import read_observations
-from api.services.observations.responses import public_observations
 from common.schemas.response import ApiResponse, success_response
 
 router = APIRouter(prefix='/observations', tags=['observations'])
@@ -26,49 +27,43 @@ WIND = ('bx', 'by', 'bz', 'bt', 'v', 'n', 't')
 INDICES = ('kp', 'dst')
 HOURLY = ('ap', 'f10_7', 's10', 'm10', 'y10')
 METRICS = (*WIND, *INDICES, *HOURLY)
-CURRENT_METRICS = METRICS
-
-
-def parse_observations(observations: str | None, supported: tuple[str, ...]) -> list[str]:
-    selected = list(supported) if observations is None else list(dict.fromkeys(
-        value.strip() for value in observations.split(',')))
-    if not selected or any(value not in supported for value in selected):
-        raise HTTPException(422, 'Unknown observation. Supported: ' + ','.join(supported))
-    return selected
-
-
-def selected_current_observations(observations: str | None = Query(
-    default=None, description='Comma-separated latest native observations: ' + ','.join(CURRENT_METRICS),
-)) -> list[str]:
-    return parse_observations(observations, CURRENT_METRICS)
 
 
 def selected_observations(observations: str | None = Query(
     default=None, description='Comma-separated observations: ' + ','.join(METRICS),
 )) -> list[str]:
-    return parse_observations(observations, METRICS)
+    selected = list(METRICS) if observations is None else list(dict.fromkeys(
+        value.strip() for value in observations.split(',')))
+    if not selected or any(value not in METRICS for value in selected):
+        raise HTTPException(422, 'Unknown observation. Supported: ' + ','.join(METRICS))
+    return selected
 
 
-def payload(result):
-    if isinstance(result, JSONResponse):
-        return None, result
-    result = (result.model_dump(mode='json', by_alias=True) if isinstance(result, ApiResponse)
-              else jsonable_encoder(result, by_alias=True))
-    if not result.get('success') or result.get('data') is None:
-        return None, result
-    return result['data'], None
+def observation_data(response, model=None, *, meta=False):
+    if isinstance(response, JSONResponse) or not response.get('success') or response.get('data') is None:
+        return None, response
+    data = response['data']
+    if model is None:
+        return data, None
+    try:
+        result = model.model_validate(data)
+        if meta:
+            result.meta = (SummaryMetadata.model_validate(data) if model is ObservationSummary
+                           else ObservationMetadata.model_validate(data))
+        return result.model_dump(by_alias=True), None
+    except ValidationError:
+        raise HTTPException(503, 'Observation service returned an invalid response') from None
 
 
 @router.get('', response_model=ApiResponse[CurrentObservations], response_model_exclude_unset=True)
 async def current_observations(response: Response, meta: MetaQuery = False,
                                trends: bool = Query(default=False, description='Include observed one-hour changes'),
-                               selected: list[str] = Depends(selected_current_observations)):
+                               selected: list[str] = Depends(selected_observations)):
     response.headers['Cache-Control'] = 'no-store'
     data = {}
     trend_data = None
     if trends and set(selected) & set((*WIND, *INDICES)):
-        result = public_observations(await read_observations('summary'), ObservationSummary, meta=meta)
-        trend_data, error = payload(result)
+        trend_data, error = observation_data(await read_observations('summary'), ObservationSummary, meta=meta)
         if error is not None:
             return error
         data['changes_1h'] = {key: value['value'] for key, value in trend_data['changes_1h'].items() if key in selected}
@@ -85,8 +80,7 @@ async def current_observations(response: Response, meta: MetaQuery = False,
                 current['meta'] = {'series': trend_data['meta'][group]}
         else:
             params = {'metrics': ','.join(requested)} if group == 'solar_wind' else None
-            result = public_observations(await read_observations(resource, params), model, meta=meta)
-            current, error = payload(result)
+            current, error = observation_data(await read_observations(resource, params), model, meta=meta)
             if error is not None:
                 return error
         data.update({key: value['latest'] for key, value in current['series'].items() if key in requested})
@@ -98,9 +92,7 @@ async def current_observations(response: Response, meta: MetaQuery = False,
         params = {'metrics': ','.join(additional)}
         if trends:
             params['trends'] = True
-        result = public_observations(await read_observations('current-indices', params),
-                                     CurrentAdditionalIndices, meta=False)
-        current, error = payload(result)
+        current, error = observation_data(await read_observations('current-indices', params), CurrentAdditionalIndices)
         if error is not None:
             return error
         data.update({key: value for key, value in current['series'].items() if key in additional})
@@ -150,21 +142,20 @@ async def observation_history(
     results = await asyncio.gather(*(read_observations(resource, params) for resource, _, params in reads))
     data = {'from': start, 'to': end, 'series': {}}
     for (_, model, _), result in zip(reads, results):
-        result = public_observations(result, model, meta=meta)
-        if not isinstance(result, ApiResponse) or not result.success or result.data is None:
-            return result
-        part = result.data
-        data['series'].update({key: value for key, value in part.series.items() if key in selected})
-        if part.meta is not None:
+        part, error = observation_data(result, model, meta=meta)
+        if error is not None:
+            return error
+        data['series'].update({key: value for key, value in part['series'].items() if key in selected})
+        if 'meta' in part:
             metadata = data.setdefault('meta', {'series': {}})
-            metadata['series'].update({key: value for key, value in part.meta.series.items() if key in selected})
-            metadata.update(part.meta.model_dump(exclude={'series'}, exclude_none=True))
-        data.update(part.model_dump(exclude={'series', 'meta'}, exclude_none=True, by_alias=True))
+            metadata['series'].update({key: value for key, value in part['meta']['series'].items() if key in selected})
+            metadata.update({key: value for key, value in part['meta'].items() if key != 'series' and value is not None})
+        data.update({key: value for key, value in part.items() if key not in {'series', 'meta'} and value is not None})
     if set(selected) & set(HOURLY):
         params = {'limit': limit}
         if bounded:
             params.update({'from': start, 'to': end})
-        hourly, error = payload(await read_observations('history', params))
+        hourly, error = observation_data(await read_observations('history', params))
         if error is not None:
             return error
         data['points'] = [{key: value for key, value in point.items() if key == 'issue_time' or key in selected}

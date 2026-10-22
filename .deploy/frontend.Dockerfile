@@ -1,10 +1,7 @@
-# syntax=docker/dockerfile:1.7
-
 ARG NODE_VERSION=22-slim
 
 FROM node:${NODE_VERSION} AS base
 
-RUN mkdir -p /var/www
 WORKDIR /var/www
 
 RUN corepack enable
@@ -21,9 +18,6 @@ FROM base AS builder
 ARG DEPLOYMENT_VERSION
 ENV NEXT_DEPLOYMENT_ID=${DEPLOYMENT_VERSION}
 
-RUN mkdir -p /var/www
-WORKDIR /var/www
-
 COPY --from=deps /var/www/package.json /var/www/pnpm-lock.yaml /var/www/pnpm-workspace.yaml ./
 COPY --from=deps /var/www/node_modules ./node_modules
 COPY --from=deps /var/www/apps ./apps
@@ -33,7 +27,6 @@ RUN pnpm --filter web build
 
 FROM node:${NODE_VERSION} AS runner
 
-RUN mkdir -p /var/www
 WORKDIR /var/www
 
 ENV NODE_ENV=production

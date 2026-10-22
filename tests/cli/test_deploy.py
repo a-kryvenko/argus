@@ -16,6 +16,9 @@ CHECKS = [
     'test-python',
     'test-domain-storage',
     'pnpm docs:architecture',
+    *[f'docker build --file .deploy/{component}.Dockerfile --tag argus-{component}:build-check '
+      '--build-arg DEPLOYMENT_VERSION=build-check .'
+      for component in ('frontend', 'api', 'clio', 'prophet', 'proswin', 'intelligence')],
 ]
 
 
@@ -36,7 +39,7 @@ if Path(sys.argv[0]).name in ('git', 'rsync'):
     raise SystemExit(99)
 raise SystemExit(17 if command == os.getenv('FAIL_CHECK') else 0)
 '''
-    for file in [*(binaries / name for name in ('pnpm', 'git', 'rsync')),
+    for file in [*(binaries / name for name in ('pnpm', 'docker', 'git', 'rsync')),
                  tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
         file.write_text(stub)
         file.chmod(0o755)
@@ -84,7 +87,7 @@ if 'status --porcelain' in command:
 if 'diff --cached --quiet' in command:
     raise SystemExit(0 if sys.argv[2] == 'notebooks' and os.getenv('DIRTY_SUBMODULE_ONLY') == '1' else 1)
 '''
-    for file in [*(binaries / name for name in ('pnpm', 'git', 'rsync')),
+    for file in [*(binaries / name for name in ('pnpm', 'docker', 'git', 'rsync')),
                  tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
         file.write_text(stub)
         file.chmod(0o755)

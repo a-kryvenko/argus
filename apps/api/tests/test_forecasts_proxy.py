@@ -54,7 +54,7 @@ def install_transport(monkeypatch, response):
 def test_public_forecast_renders_http_release_without_local_files(monkeypatch):
     install_transport(monkeypatch, httpx.Response(200, json=payload()))
     monkeypatch.setattr(forecast_products, 'get_config', lambda: pytest.fail('Forecast must not read local paths'))
-    result = forecast_products.load_forecast(forecast_products.get_product('dst'))
+    result = forecast_products.load_forecast(forecast_products.PRODUCTS['dst'])
     assert result.predictions[0].variables['dst'].continuous.q50 == -10
 
 
@@ -82,7 +82,7 @@ def test_missing_token_fails_without_http(monkeypatch):
 
 def test_hmf_preserves_southward_after_total_horizon(monkeypatch):
     import pandas as pd
-    product = forecast_products.get_product('hmf')
+    product = forecast_products.PRODUCTS['hmf']
     issue = pd.Timestamp('2026-09-24T00:00Z')
     frames = []
     for variable, horizon in zip(product.variables, [24, 48]):
@@ -161,7 +161,7 @@ def test_temperature_public_forecast_contract(monkeypatch):
     frame = pd.DataFrame({'issue_time': [issue], 'valid_time': [issue+pd.Timedelta(hours=96)],
                           'lead_hours': [96], 't_q10': [10000.], 't_q50': [100000.], 't_q90': [200000.]})
     monkeypatch.setattr(forecast_products, 'read_frames', lambda _: {'plasma_temperature_quantile': frame})
-    result = forecast_products.load_forecast(forecast_products.get_product('solar-wind-temperature'), meta=True)
+    result = forecast_products.load_forecast(forecast_products.PRODUCTS['solar-wind-temperature'], meta=True)
     assert result.horizon_hours == 96 and result.available_variables == ['t']
     assert result.meta.variables['t'].unit == 'K'
     assert result.predictions[0].variables['t'].continuous.q50 == 100000.
@@ -246,10 +246,10 @@ def test_speed_serves_CME_from_same_artifact_without_reading_event_release(monke
         p_v_ge_450=.1,p_v_ge_500=.05,p_v_ge_600=.01)])
     monkeypatch.setattr(forecast_products,'read_frames',lambda product:{'plasma_speed_quantile':quantiles,'plasma_speed_threshold':thresholds})
     monkeypatch.setattr(forecasts_client,'read_event_forecast',lambda:pytest.fail('Must not mix releases'))
-    result=forecast_products.load_forecast(forecast_products.get_product('solar-wind-speed'))
+    result=forecast_products.load_forecast(forecast_products.PRODUCTS['solar-wind-speed'])
     assert result.predictions[0].variables['v'].continuous.q50==400
     assert result.predictions[0].variables['v'].binary[0].probability==.1
     assert result.cme_speed.points[0].speed_nominal==800
     assert result.cme_speed.scenario_kind=='conditional_scenarios_not_quantiles'
     quantiles.drop(columns=['cme_speed_json'],inplace=True)
-    assert forecast_products.load_forecast(forecast_products.get_product('solar-wind-speed')).cme_speed is None
+    assert forecast_products.load_forecast(forecast_products.PRODUCTS['solar-wind-speed']).cme_speed is None

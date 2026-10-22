@@ -15,11 +15,7 @@ def get_database_url():
     """Runtime and Alembic share credentials; passwords remain raw strings."""
     from sqlalchemy import URL
     from common.database import database_parameters
-    try:
-        parameters = database_parameters('API')
-    except ValueError as exc:
-        raise RuntimeError(str(exc)) from None
-    return URL.create('postgresql+psycopg', **parameters)
+    return URL.create('postgresql+psycopg', **database_parameters('API'))
 
 
 def get_engine() -> AsyncEngine:
@@ -52,11 +48,7 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
     """Provide one transaction-aware session per request."""
 
     async with get_session_factory()() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
+        yield session
 
 
 async def dispose_engine() -> None:

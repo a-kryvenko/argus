@@ -55,7 +55,7 @@ def test_intelligence_credentials_and_networks_are_scoped():
     assert 'profiles' not in runtime
     assert runtime['command'] == ['intelligence', 'worker']
     assert runtime['networks'] == ['backend', 'forecasts']
-    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'ARGUS_WORKDIR', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'}
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'ARGUS_WORKDIR', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR', 'INTELLIGENCE_SERVICE_TOKEN'}
     assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
     assert runtime['environment']['INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'] == '${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}'
     assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
@@ -73,7 +73,7 @@ def test_impact_service_is_internal_and_has_scoped_database_credentials():
     assert runtime['command'] == ['intelligence', 'serve']
     assert 'ports' not in runtime
     assert set(runtime['networks']) == {'backend', 'forecasts', 'impacts'}
-    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'ARGUS_WORKDIR', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'INTELLIGENCE_SERVICE_TOKEN'}
+    assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'ARGUS_WORKDIR', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'INTELLIGENCE_SERVICE_TOKEN', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'}
     assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
     assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
     assert 'env_file' not in runtime

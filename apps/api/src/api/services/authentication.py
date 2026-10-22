@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
+from api.schemas.dashboard import UserCreate
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.db.session import get_db_session
 from api.db.models.dashboard import User, Group, Membership, Session
@@ -57,11 +60,41 @@ async def current_user(request: Request, db: AsyncSession = Depends(get_db_sessi
     return user
 
 
+async def users_info(db, users):
+    groups = {user.id: [] for user in users}
+    rows = await db.execute(select(Membership.user_id, Group).join(Group, Group.name == Membership.group_name)
+                            .where(Membership.user_id.in_(groups)))
+    for user_id, group in rows:
+        groups[user_id].append(group)
+    return [{'id': user.id, 'username': user.username, 'active': user.active,
+             'groups': [g.name for g in groups[user.id]],
+             'permissions': sorted({p for g in groups[user.id] for p in g.permissions})} for user in users]
+
+
 async def user_info(db, user):
-    groups = list((await db.scalars(select(Group).join(Membership, Membership.group_name == Group.name)
-        .where(Membership.user_id == user.id))).all())
-    return {'id': user.id, 'username': user.username, 'active': user.active,
-            'groups': [g.name for g in groups], 'permissions': sorted({p for g in groups for p in g.permissions})}
+    return (await users_info(db, [user]))[0]
+
+
+async def validate_groups(db, names):
+    names = sorted(set(names))
+    known = set((await db.scalars(select(Group.name).where(Group.name.in_(names)))).all())
+    if set(names) != known:
+        raise HTTPException(422, 'Unknown group')
+    return names
+
+
+async def create_user(db, body: UserCreate):
+    groups = await validate_groups(db, body.groups)
+    user = User(username=body.username, password_hash=await run_in_threadpool(hash_password, body.password), active=True)
+    db.add(user)
+    try:
+        await db.flush()
+        db.add_all([Membership(user_id=user.id, group_name=name) for name in groups])
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(409, 'Username already exists')
+    return await user_info(db, user)
 
 
 def require(permission):

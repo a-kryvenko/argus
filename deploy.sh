@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 usage() {
     echo "Usage: $0 [patch|minor|major] [-m message]"
-    echo "  No arguments: run checks and generate architecture diagrams."
+    echo "  No arguments: run checks, generate architecture diagrams and build images."
     echo "  -m message: run checks, generate diagrams, commit and push."
     echo "  patch|minor|major with -m: also upload artifacts and create/push a release tag."
 }
@@ -71,8 +71,15 @@ echo "Running Domain isolation tests"
 echo "Generating architecture diagrams"
 pnpm docs:architecture
 
+echo "Checking Docker image builds"
+for component in frontend api clio prophet proswin intelligence; do
+    docker build --file ".deploy/$component.Dockerfile" \
+        --tag "argus-$component:build-check" \
+        --build-arg DEPLOYMENT_VERSION=build-check .
+done
+
 if [[ "$COMMIT" = false ]]; then
-    echo "All checks passed and architecture diagrams generated."
+    echo "All checks passed, architecture diagrams generated and images built."
     exit 0
 fi
 

@@ -56,16 +56,22 @@ def read_batch(path, cursor):
 def aggregate(lines, now):
     buckets = defaultdict(lambda: [0, 0.0])
     invalid = 0
+    last_event = None
     for line in lines:
         try:
             event = json.loads(line)
+            try:
+                stamp = datetime.fromtimestamp(float(event['time']), UTC)
+            except (ValueError, KeyError, TypeError, OverflowError, OSError):
+                stamp = None
+            if stamp is not None and stamp <= now + timedelta(seconds=5):
+                last_event = stamp.isoformat()
             channel = event['channel']
             if channel == 'monitor':
                 continue
             status = int(event['status'])
             duration = float(event['seconds'])*1000
-            stamp = datetime.fromtimestamp(float(event['time']), UTC)
-            if channel not in {'site', 'api'} or not 100 <= status <= 599 or not math.isfinite(duration) or duration < 0:
+            if stamp is None or channel not in {'site', 'api'} or not 100 <= status <= 599 or not math.isfinite(duration) or duration < 0:
                 raise ValueError('Invalid record')
             if stamp > now + timedelta(minutes=5) or stamp < now - timedelta(days=30):
                 continue
@@ -79,7 +85,7 @@ def aggregate(lines, now):
                 entry[1] += duration
         except (ValueError, KeyError, TypeError, OverflowError, OSError):
             invalid += 1
-    return buckets, invalid
+    return buckets, invalid, last_event
 
 
 async def ingest():
@@ -97,7 +103,7 @@ async def ingest():
             return
         try:
             lines, cursor, caught_up = await asyncio.to_thread(read_batch, path, previous)
-            buckets, invalid = aggregate(lines, now)
+            buckets, invalid, last_event = aggregate(lines, now)
         except (OSError, ValueError):
             await save_state(db, 'traffic', {**previous, 'status': 'unknown', 'error': 'Traffic log is unavailable'}, now)
             await db.commit()
@@ -113,16 +119,8 @@ async def ingest():
         await db.execute(delete(TrafficMetric).where(or_(
             and_(TrafficMetric.resolution == 'minute', TrafficMetric.time < now-timedelta(hours=48)),
             TrafficMetric.time < now-timedelta(days=30))))
-        last_event = previous.get('last_event_at')
-        for line in reversed(lines):
-            try:
-                stamp = datetime.fromtimestamp(float(json.loads(line)['time']), UTC)
-                if stamp <= now + timedelta(seconds=5):
-                    last_event = stamp.isoformat()
-                    break
-            except (ValueError, KeyError, TypeError, OverflowError, OSError):
-                pass
-        await save_state(db, 'traffic', {**cursor, 'last_event_at': last_event, 'status': 'ok' if caught_up and not invalid else 'warning',
+        await save_state(db, 'traffic', {**cursor, 'last_event_at': last_event or previous.get('last_event_at'),
+            'status': 'ok' if caught_up and not invalid else 'warning',
             'caught_up': caught_up, 'invalid_records': invalid,
             'since': previous.get('since', now.isoformat()), 'error': None}, now)
         await db.commit()

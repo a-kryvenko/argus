@@ -1,11 +1,11 @@
 """Migrations are scoped to api; runtime and migrations share one database owner."""
 from alembic import context
 from sqlalchemy import create_engine, pool, text
-from api.db.metadata import Base
+from api.db.base import Base
+from api.db.models import dashboard, monitoring
 from api.db.session import get_database_url
 
 DOMAIN = 'api'
-config = context.config
 
 
 def include_name(name, type_, parent_names):

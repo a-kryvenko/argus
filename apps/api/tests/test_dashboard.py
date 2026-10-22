@@ -1,13 +1,14 @@
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.services.authentication import hash_password, verify_password, current_user
 from api.db.session import get_db_session
-from api.routers.dashboard import router
+from api.routers.dashboard import router, users
 from api.services.monitoring.statistics import summarize, record
 
 
@@ -18,6 +19,25 @@ def test_password_hashes_are_salted_and_verified():
     assert verify_password('correct horse battery staple', one)
     assert not verify_password('incorrect password', one)
     assert not verify_password('anything', 'malformed')
+
+
+def test_users_page_loads_all_groups_in_one_query():
+    db = AsyncMock()
+    page = [SimpleNamespace(id=i, username=f'user{i}', active=True) for i in range(50)]
+    db.scalars.return_value = Mock(all=Mock(return_value=page))
+    db.execute.return_value = [(0, SimpleNamespace(name='admins', permissions=['write', 'read'])),
+                               (0, SimpleNamespace(name='readers', permissions=['read'])),
+                               (1, SimpleNamespace(name='readers', permissions=['read']))]
+    db.scalar.return_value = 100
+    data = asyncio.run(users(page=1, db=db)).data
+    assert data['total'] == 100 and len(data['items']) == 50
+    assert data['items'][0]['groups'] == ['admins', 'readers']
+    assert data['items'][0]['permissions'] == ['read', 'write']
+    assert data['items'][1]['permissions'] == ['read']
+    assert all(item['groups'] == item['permissions'] == [] for item in data['items'][2:])
+    db.execute.assert_awaited_once()
+    db.scalars.assert_awaited_once()
+    db.scalar.assert_awaited_once()
 
 
 def test_anonymous_cannot_access_dashboard():

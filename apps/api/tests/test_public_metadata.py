@@ -131,7 +131,9 @@ def test_observation_projection_preserves_errors(monkeypatch, response, status):
 
 @pytest.mark.parametrize('target,product', forecast_products.PRODUCTS.items())
 @pytest.mark.parametrize('suffix', ['', '/metrics'])
-def test_forecast_and_metrics_metadata_for_every_product(monkeypatch, target, product, suffix):
+def test_forecast_and_metrics_metadata_for_every_product(monkeypatch, tmp_path, target, product, suffix):
+    import json
+    from types import SimpleNamespace
     import pandas as pd
     issue = pd.Timestamp(TIME)
     frames = []
@@ -141,9 +143,10 @@ def test_forecast_and_metrics_metadata_for_every_product(monkeypatch, target, pr
                     if name not in row})
         frames.append((variable, pd.DataFrame([row])))
     monkeypatch.setattr(forecast_products, '_load_variable_frames', lambda _: frames)
-    monkeypatch.setattr(forecast_products, '_continuous_metrics', lambda *_: None)
-    monkeypatch.setattr(forecast_products, '_binary_metrics', lambda *_: [
-        forecast_products.BinaryMetricsSeries(threshold=5, by_lead_hour=[])])
+    (tmp_path / 'report.json').write_text(json.dumps({'target': target, 'variables': {
+        v.name: {'binary': [{'threshold': 5, 'by_lead_hour': []}]} for v in product.variables}}))
+    registry = {'models': {v.registry_name: {'metrics_report': 'report.json'} for v in product.variables}}
+    monkeypatch.setattr(forecast_products, 'get_config', lambda: SimpleNamespace(workdir=tmp_path, models_registry=registry))
     app = FastAPI()
     app.include_router(forecasts.router)
     path = f'/forecasts/{target}{suffix}'

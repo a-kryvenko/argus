@@ -1,19 +1,32 @@
 """Session-owned supplied-trajectory density exposure advisory transport."""
 from uuid import UUID
 from typing import Literal
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from common.schemas.density_advisory import AdvisorySpacecraftInput, AdvisoryProfile, AdvisoryItem, AdvisoryRun, AdvisoryRunSummary, AdvisoryEvent, AdvisoryEventPage
 from common.schemas.forecast_release import ForecastRelease
 from api.services.authentication import current_user, check_origin
 from api.db.models.dashboard import User
 from common.schemas.response import success_response
-from api.services.intelligence.profiles import request as forward
+from api.services.intelligence.profiles import request as forward, profile_response
 
 router=APIRouter(prefix='/dashboard/density-advisory',tags=['dashboard'])
+SPACECRAFT_VALIDATION_ERROR = 'Invalid spacecraft parameters. Check orbital parameters, optional properties and density ratio thresholds.'
+VALIDATION_MESSAGES = {
+    'High density ratio must exceed review density ratio': 'High density ratio must exceed review density ratio.',
+    'Apoapsis, periapsis and inclination are required': 'Apoapsis, periapsis and inclination are required.',
+}
 
 
-def request(method,owner_id,suffix,response_type,**kwargs):
-    return forward(method,owner_id,suffix,response_type,resource='density-advisory',**kwargs)
+def request(method, owner_id, suffix, response_type, **kwargs):
+    response = forward(method, f'/internal/v1/density-advisory/{owner_id}' + suffix, **kwargs)
+    if response.status_code == 422:
+        try:
+            detail = response.json().get('detail')
+        except (ValueError, AttributeError):
+            detail = None
+        message = VALIDATION_MESSAGES.get(detail, SPACECRAFT_VALIDATION_ERROR) if isinstance(detail, str) else SPACECRAFT_VALIDATION_ERROR
+        raise HTTPException(422, message)
+    return profile_response(response, response_type)
 
 
 @router.get('')
@@ -69,5 +82,4 @@ def run(profile_id:UUID,run_id:UUID,user:User=Depends(current_user)):
 @router.get('/{profile_id}/runs/{run_id}/inputs/{product}')
 def retained_input(profile_id:UUID, run_id:UUID, product:Literal['atmospheric-density', 'solar-wind-events'], user:User=Depends(current_user)):
     return success_response(request('GET', user.id,
-        f'/{profile_id}/runs/{run_id}/inputs/{product}', ForecastRelease,
-        max_response_bytes=64 * 1024 * 1024))
+        f'/{profile_id}/runs/{run_id}/inputs/{product}', ForecastRelease))

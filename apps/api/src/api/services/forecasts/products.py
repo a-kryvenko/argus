@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pathlib import Path
 
 import pandas as pd
 from api.schemas.forecast import (
@@ -11,16 +10,10 @@ from api.schemas.forecast import (
     QuantileForecast,
     VariableForecast,
 )
-from api.schemas.metrics import (
-    BinaryMetricsPoint,
-    BinaryMetricsSeries,
-    ContinuousMetrics,
-    ContinuousMetricsPoint,
-    ForecastMetrics,
-    ReliabilityPoint,
-    VariableMetrics,
-)
+from api.schemas.metrics import ForecastMetrics
 from common.config import get_config
+from common.density_contract import parse_density_frame
+from common.schemas.atmospheric_density import DensityForecast
 from api.services.errors import ArtifactNotReadyError
 from api.services.forecasts.client import read_frames
 from common.schemas.solar_wind_events import CMESpeedOutlook
@@ -74,21 +67,6 @@ PRODUCTS = {
 }
 
 
-class ProductNotFoundError(Exception):
-    pass
-
-
-def get_product(target: str) -> Product:
-    product = PRODUCTS.get(target)
-    if product is None:
-        raise ProductNotFoundError(target)
-    return product
-
-
-def _registry(variable: Variable) -> dict:
-    return get_config().models_registry["models"][variable.registry_name]
-
-
 def _required_columns(variable: Variable) -> set[str]:
     columns = {"issue_time", "valid_time", "lead_hours"}
     if variable.quantiles:
@@ -111,10 +89,6 @@ def _load_variable_frames(product: Product) -> list[tuple[Variable, pd.DataFrame
     return frames
 
 
-def _number(value) -> float | None:
-    return None if pd.isna(value) else float(value)
-
-
 def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
     continuous = None
     speed = variable.name == "v" and variable.unit == "km/s"
@@ -129,24 +103,10 @@ def _variable_forecast(variable: Variable, row: dict) -> VariableForecast:
         )
     binary = []
     for threshold in variable.thresholds:
-        probability = _number(
-            row[f"p_{variable.source_prefix}_ge_{threshold:g}"]
-        )
-        if probability is not None:
-            binary.append(BinaryForecast(threshold=int(threshold) if speed else threshold, probability=probability))
+        probability = row[f"p_{variable.source_prefix}_ge_{threshold:g}"]
+        if not pd.isna(probability):
+            binary.append(BinaryForecast(threshold=int(threshold) if speed else threshold, probability=float(probability)))
     return VariableForecast(continuous=continuous, binary=binary)
-
-
-def _merge_variable_forecasts(
-    current: VariableForecast | None,
-    addition: VariableForecast,
-) -> VariableForecast:
-    if current is None:
-        return addition
-    return VariableForecast(
-        continuous=current.continuous or addition.continuous,
-        binary=[*current.binary, *addition.binary],
-    )
 
 
 def product_metadata(product: Product, available: list[str]) -> ForecastMetadata:
@@ -154,6 +114,16 @@ def product_metadata(product: Product, available: list[str]) -> ForecastMetadata
         variable.name: ForecastVariableMetadata(unit=variable.unit)
         for variable in product.variables if variable.name in available
     })
+
+
+def load_density_forecast() -> DensityForecast:
+    config = get_config()
+    entry = config.models_registry["models"]["atmospheric_density"]
+    try:
+        frame = read_frames("atmospheric-density")["atmospheric_density"]
+        return parse_density_frame(frame, max_age_hours=entry.get("max_age_hours", 6))
+    except (OSError, ValueError, KeyError) as exc:
+        raise ArtifactNotReadyError("Atmospheric density forecast is not ready") from exc
 
 
 def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
@@ -188,10 +158,10 @@ def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
         for variable, rows in rows_by_source:
             row = rows.get(lead_hours)
             if row is not None:
-                values[variable.name] = _merge_variable_forecasts(
-                    values.get(variable.name),
-                    _variable_forecast(variable, row),
-                )
+                addition = _variable_forecast(variable, row)
+                current = values.setdefault(variable.name, VariableForecast())
+                current.continuous = current.continuous or addition.continuous
+                current.binary.extend(addition.binary)
         predictions.append(ForecastPoint(
             valid_time=base_row["valid_time"],
             lead_hours=lead_hours,
@@ -220,73 +190,12 @@ def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
     )
 
 
-def _parse_reliability(value) -> list[ReliabilityPoint]:
-    if pd.isna(value) or not value:
-        return []
-    return [
-        ReliabilityPoint(
-            predicted_probability=float(pair.split("_", 1)[0]),
-            observed_frequency=float(pair.split("_", 1)[1]),
-        )
-        for pair in str(value).split(";")
-    ]
-
-
-def _metrics_path(variable: Variable, filename: str) -> Path:
-    return get_config().workdir / _registry(variable)["metrics"] / filename
-
-
-def _continuous_metrics(variable: Variable, max_horizon_hours: int) -> ContinuousMetrics | None:
-    if not variable.quantiles:
-        return None
-    path = _metrics_path(variable, "regression.csv")
-    if not path.is_file():
-        return None
-    frame = pd.read_csv(path)
-    frame = frame[frame["lead_hours"] <= max_horizon_hours]
-    return ContinuousMetrics(
-        quantiles=[0.1, 0.5, 0.9],
-        by_lead_hour=[
-            ContinuousMetricsPoint(
-                lead_hours=int(row.pop("lead_hours")),
-                values={key: _number(value) for key, value in row.items()},
-            )
-            for row in frame.to_dict("records")
-        ],
-    )
-
-
-def _binary_metrics(variable: Variable, max_horizon_hours: int) -> list[BinaryMetricsSeries]:
-    series = []
-    for threshold in variable.thresholds:
-        path = _metrics_path(variable, f"threshold_{threshold:g}.csv")
-        if not path.is_file():
-            continue
-        frame = pd.read_csv(path)
-        frame = frame[frame["lead_hours"] <= max_horizon_hours]
-        rows = [
-            BinaryMetricsPoint(
-                lead_hours=row["lead_hours"],
-                brier_score=_number(row.get("brier")),
-                roc_auc=_number(row.get("roc_auc")),
-                average_precision=_number(row.get("avg_precision")),
-                threat_score=_number(row.get("threat_score")),
-                heidke_skill_score=_number(row.get("heidke")),
-                reliability=_parse_reliability(row.get("reliability")),
-            )
-            for row in frame.to_dict("records")
-        ]
-        series.append(BinaryMetricsSeries(threshold=threshold, by_lead_hour=rows))
-    return series
-
-
 def load_metrics(product: Product, *, meta: bool = False) -> ForecastMetrics:
-    # A versioned report replaces the complete product evaluation: never mix
-    # point scores from a new model with legacy probability/interval scores.
+    config = get_config()
     for variable in product.variables:
-        report_path = _registry(variable).get("metrics_report")
+        report_path = config.models_registry["models"][variable.registry_name].get("metrics_report")
         if report_path:
-            path = get_config().workdir / report_path
+            path = config.workdir / report_path
             if not path.is_file():
                 raise ArtifactNotReadyError(product.target)
             report = ForecastMetrics.model_validate_json(path.read_text())
@@ -300,17 +209,4 @@ def load_metrics(product: Product, *, meta: bool = False) -> ForecastMetrics:
                     series.by_lead_hour = [r for r in series.by_lead_hour if r.lead_hours <= product.max_horizon_hours]
             report.meta = product_metadata(product, list(report.variables)) if meta else None
             return report
-    variables = {}
-    for variable in product.variables:
-        continuous = _continuous_metrics(variable, product.max_horizon_hours)
-        binary = _binary_metrics(variable, product.max_horizon_hours)
-        if continuous is not None or binary:
-            current = variables.get(variable.name)
-            variables[variable.name] = VariableMetrics(
-                continuous=(current.continuous if current else None) or continuous,
-                binary=[*(current.binary if current else []), *binary],
-            )
-    if not variables:
-        raise ArtifactNotReadyError(product.target)
-    return ForecastMetrics(target=product.target, variables=variables,
-                           meta=product_metadata(product, list(variables)) if meta else None)
+    raise ArtifactNotReadyError(product.target)

@@ -85,12 +85,11 @@ def test_upstream_errors_are_unavailable(result, status):
         service.assess_drag(LeoDragRequest(**REQUEST), transport=httpx.MockTransport(lambda r: httpx.Response(status)))
 
 
-@pytest.mark.parametrize('failure', ['malformed', 'mismatch', 'partial', 'large', 'missing-config', 'timeout'])
+@pytest.mark.parametrize('failure', ['malformed', 'mismatch', 'partial', 'missing-config', 'timeout'])
 def test_unusable_responses(result, failure, monkeypatch):
     if failure == 'malformed': result = {'bad': 'payload'}
     elif failure == 'mismatch': result['inputs']['mass_kg'] = 200
     elif failure == 'partial': result['predictions'].pop()
-    elif failure == 'large': monkeypatch.setattr(service, 'MAX_RESPONSE_BYTES', 10)
     elif failure == 'missing-config': monkeypatch.delenv('INTELLIGENCE_SERVICE_TOKEN')
     def respond(request):
         if failure == 'timeout': raise httpx.ReadTimeout('secret upstream info')

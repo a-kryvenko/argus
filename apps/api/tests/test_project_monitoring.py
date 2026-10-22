@@ -36,12 +36,25 @@ def test_traffic_tailer_handles_partial_writes_restart_and_rotation(tmp_path):
 
 
 def test_traffic_filters_probes_invalid_records_and_retention():
-    buckets, invalid = aggregate([event(), event('site', 404), event('monitor'), b'{broken',
+    buckets, invalid, last_event = aggregate([event(), event('site', 404), event('monitor'), b'{broken',
         event(seconds='NaN'), event(stamp=NOW-timedelta(days=31)), event(stamp=NOW+timedelta(days=1))], NOW)
     assert invalid == 2
     assert sum(v[0] for v in buckets.values()) == 4  # two requests, minute + hour
     assert {key[2] for key in buckets} == {'api', 'site'}
     assert {key[4] for key in buckets} == {50}
+    assert last_event == (NOW-timedelta(days=31)).isoformat()
+
+
+@pytest.mark.parametrize('lines,invalid,last_event', [
+    ([event('monitor')], 0, NOW.isoformat()),
+    ([b'{"channel":"monitor"}'], 0, None),
+    ([event(), b'{broken', event(stamp=NOW+timedelta(seconds=6))], 1, NOW.isoformat()),
+    ([json.dumps({'time': NOW.timestamp()}).encode()], 1, NOW.isoformat()),
+    ([], 0, None),
+])
+def test_traffic_heartbeat_includes_probes_and_ignores_future_timestamps(lines, invalid, last_event):
+    _, actual_invalid, actual_last_event = aggregate(lines, NOW)
+    assert (actual_invalid, actual_last_event) == (invalid, last_event)
 
 
 def test_traffic_summary_separates_channels_and_fills_empty_intervals():

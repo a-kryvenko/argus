@@ -38,11 +38,14 @@ async def flush():
     pending, _buffer = _buffer, {}
     try:
         async with get_session_factory()() as db:
-            for (hour, route, method, status, bucket), (count, duration) in pending.items():
-                stmt = insert(ApiMetric).values(hour=hour, route=route, method=method, status=status,
-                    bucket_ms=bucket, count=count, duration_ms=duration)
+            values = [dict(hour=hour, route=route, method=method, status=status,
+                           bucket_ms=bucket, count=count, duration_ms=duration)
+                      for (hour, route, method, status, bucket), (count, duration) in pending.items()]
+            for offset in range(0, len(values), 500):
+                stmt = insert(ApiMetric).values(values[offset:offset+500])
                 await db.execute(stmt.on_conflict_do_update(index_elements=['hour', 'route', 'method', 'status', 'bucket_ms'],
-                    set_={'count': ApiMetric.count + count, 'duration_ms': ApiMetric.duration_ms + duration}))
+                    set_={'count': ApiMetric.count + stmt.excluded.count,
+                          'duration_ms': ApiMetric.duration_ms + stmt.excluded.duration_ms}))
             await db.execute(delete(ApiMetric).where(ApiMetric.hour < datetime.now(timezone.utc)-timedelta(days=30)))
             await db.commit()
     except Exception:

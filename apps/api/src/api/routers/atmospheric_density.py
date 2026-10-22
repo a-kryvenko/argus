@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from api.schemas.atmospheric_density import DensityForecast
 from api.schemas.metadata import MetaQuery
 from common.schemas.response import ApiResponse, success_response
-from api.services.forecasts.density import load_density_forecast
+from api.services.forecasts.products import load_density_forecast
 from api.services.errors import ArtifactNotReadyError
 
 router = APIRouter(tags=["forecasts"])

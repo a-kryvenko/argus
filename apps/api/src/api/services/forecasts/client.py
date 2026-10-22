@@ -8,9 +8,6 @@ import pandas as pd
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
 from api.services.errors import ArtifactNotReadyError
 
-MAX_RESPONSE_BYTES = 64 * 1024 * 1024
-
-
 def read_event_forecast():
     from common.schemas.solar_wind_events import SolarWindEventForecast
     release = read_release('solar-wind-events')
@@ -27,15 +24,10 @@ def read_release(product: str) -> ForecastRelease:
         raise ArtifactNotReadyError('Forecast service is not configured')
     try:
         with httpx.Client(timeout=httpx.Timeout(60, connect=10), follow_redirects=False, trust_env=False) as client:
-            with client.stream('GET', url.rstrip('/') + f'/internal/v1/forecasts/{product}/latest',
-                               headers={'Authorization': f'Bearer {token}'}) as response:
-                response.raise_for_status()
-                content = bytearray()
-                for chunk in response.iter_bytes():
-                    content.extend(chunk)
-                    if len(content) > MAX_RESPONSE_BYTES:
-                        raise ValueError('Forecast response is too large')
-        release = ForecastRelease.model_validate_json(content)
+            response = client.get(url.rstrip('/') + f'/internal/v1/forecasts/{product}/latest',
+                                  headers={'Authorization': f'Bearer {token}'})
+            response.raise_for_status()
+        release = ForecastRelease.model_validate_json(response.content)
         if release.product != product:
             raise ValueError('Unexpected forecast product')
         return release

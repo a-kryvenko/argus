@@ -24,7 +24,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from api.db.session import get_db_session
 from api.db.models.dashboard import Session, LoginAttempt
 from api.services.authentication import digest
-from api.routers.dashboard import router, create_user, UserCreate
+from api.routers.dashboard import router
+from api.schemas.dashboard import UserCreate
+from api.services.authentication import create_user
 from api.routers.observations import router as public_router
 from api.services.monitoring import statistics as api_statistics
 

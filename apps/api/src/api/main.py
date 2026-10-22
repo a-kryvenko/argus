@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
-import os
 import asyncio
 from contextlib import suppress
 import time
 
 import sentry_sdk
 from common.config import get_config
+from common.runtime import setup_sentry
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -28,26 +28,18 @@ config = get_config()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    from api.services.monitoring.project import run_monitor_loop
-    from api.services.monitoring.edge_traffic import run_traffic_loop
-    tasks = [asyncio.create_task(loop()) for loop in (run_flush_loop, run_monitor_loop, run_traffic_loop)]
+    flush_task = asyncio.create_task(run_flush_loop())
     try:
         yield
     finally:
-        for task in tasks:
-            task.cancel()
-        for task in tasks:
-            with suppress(asyncio.CancelledError):
-                await task
+        flush_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await flush_task
         with suppress(TimeoutError):
             await asyncio.wait_for(flush(), timeout=5)
         await dispose_engine()
 
-if not config.debug:
-    sentry_sdk.init(
-    dsn=os.getenv("SENTRY_COLLECT_POINT"),
-    send_default_pii=True,
-)
+setup_sentry()
 
 app = FastAPI(
     title="ARGUS SUNWATCH API",

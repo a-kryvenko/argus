@@ -13,8 +13,6 @@ ROOT = Path(__file__).resolve().parents[3]
 def report_config(tmp_path, monkeypatch):
     registry = {'models': {}}
     monkeypatch.setattr(service, 'get_config', lambda: SimpleNamespace(workdir=tmp_path, models_registry=registry))
-    monkeypatch.setattr(service, '_binary_metrics', lambda *_: pytest.fail('Legacy probabilities must not be loaded'))
-    monkeypatch.setattr(service, '_continuous_metrics', lambda *_: pytest.fail('Legacy quantiles must not be loaded'))
 
     def install(target, calibrated):
         product = service.PRODUCTS[target]
@@ -37,7 +35,7 @@ def report_config(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize('calibrated', [False, True], ids=['point-only', 'calibrated'])
 @pytest.mark.parametrize('target', ['solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'])
-def test_report_replaces_legacy_metrics_and_limits_horizon(report_config, target, calibrated):
+def test_report_limits_horizon(report_config, target, calibrated):
     product, variable = report_config(target, calibrated)
     result = service.load_metrics(product, meta=True)
     assert result.evaluation.sample == 'Test cohort'
@@ -56,7 +54,7 @@ def test_report_replaces_legacy_metrics_and_limits_horizon(report_config, target
         assert all('coverage_80' not in row.values for row in metrics.continuous.by_lead_hour)
 
 
-def test_missing_report_never_falls_back_to_old_metrics(report_config, tmp_path):
+def test_missing_report_is_unavailable(report_config, tmp_path):
     product, _ = report_config('solar-wind-speed', True)
     (tmp_path / 'report.json').unlink()
     with pytest.raises(ArtifactNotReadyError):

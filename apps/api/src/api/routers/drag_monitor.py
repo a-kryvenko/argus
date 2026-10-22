@@ -6,9 +6,14 @@ from common.schemas.drag_monitor import DragProfileInput, DragProfile, DragRun, 
 from api.services.authentication import current_user, check_origin
 from api.db.models.dashboard import User
 from common.schemas.response import success_response
-from api.services.intelligence.profiles import request
+from api.services.intelligence.profiles import request as forward, profile_response
 
 router = APIRouter(prefix='/dashboard/drag-monitor', tags=['dashboard'])
+
+
+def request(method, owner_id, suffix, response_type, **kwargs):
+    response = forward(method, f'/internal/v1/drag-monitor/{owner_id}' + suffix, **kwargs)
+    return profile_response(response, response_type)
 
 
 @router.get('')

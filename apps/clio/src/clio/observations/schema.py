@@ -4,7 +4,7 @@ import pandas as pd
 REQUIRED_METRICS = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', 'ap', 'f10_7')
 SOLAR_INDEX_METRICS = ("s10", "m10", "y10")
 OBSERVATION_METRICS = (*REQUIRED_METRICS, *SOLAR_INDEX_METRICS)
-# Rotation DLinear needs 57 days of context plus a bounded fill buffer.
+# Retained normalized observation history.
 HISTORY_DAYS = 60
 LIVE_SOURCE_DAYS = 6
 

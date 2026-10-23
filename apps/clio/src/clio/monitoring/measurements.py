@@ -12,11 +12,12 @@ async def monitoring_status(session):
     measurements = []
     # Monitor native numeric observations, not the legacy forecast input schema
     # (which still contains derived s10/m10/y10 indices without source policies).
-    for metric, definition in OBSERVATIONS.items():
-        if definition.kind != 'numeric':
-            continue
-        record = await session.scalar(select(Measurement).where(Measurement.metric == metric)
-                                      .order_by(Measurement.observed_at.desc()).limit(1))
+    numeric = {metric: definition for metric, definition in OBSERVATIONS.items() if definition.kind == 'numeric'}
+    records = {record.metric: record for record in await session.scalars(
+        select(Measurement).where(Measurement.metric.in_(numeric))
+        .distinct(Measurement.metric).order_by(Measurement.metric, Measurement.observed_at.desc()))}
+    for metric, definition in numeric.items():
+        record = records.get(metric)
         received_at = record.received_at if record else None
         latest = record.observed_at if record else None
         age = (now - latest).total_seconds() if latest else None

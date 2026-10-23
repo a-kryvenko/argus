@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
 from clio.config import ClioObservations
-from clio.ingestion.adapters import PlasmaHistoryAdapter, WideHistoryAdapter, historical_adapters
+from clio.ingestion.adapters import WideHistoryAdapter, historical_adapters
 from clio.ingestion.products import PRODUCTS
 from clio.observations import backfill as service
 from clio.observations.store import upsert_measurements
@@ -105,7 +105,7 @@ def test_calendar_requests_are_bounded_and_skip_complete_days():
 def test_adapter_clips_provider_days_and_rejects_invalid_plasma():
     loader = Mock(return_value=pd.DataFrame({'issue_time': [START, END, START + timedelta(hours=1)],
                                            'v': [400., 500., -1e31], 'by': [1., 2., 3.]}))
-    result = PlasmaHistoryAdapter(loader).fetch(START, END)
+    result = WideHistoryAdapter(loader, ('v', 'n', 't')).fetch(START, END)
     assert result.metric.tolist() == ['v']
     assert result.value.tolist() == [400.]
 

@@ -9,5 +9,4 @@ fi
 command -v python3 >/dev/null
 exec 8>"$root/.deployment.lock"
 flock -n 8
-python3 "$bundle/rolling.py" "$root" "$bundle" --preflight
 python3 "$bundle/rolling.py" "$root" "$bundle"

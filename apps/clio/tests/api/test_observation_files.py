@@ -16,7 +16,7 @@ NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 
 
 def test_catalog_reads_causal_metadata_without_features_or_blobs(monkeypatch):
-    monkeypatch.setattr(routes, 'aia_files', lambda _: [])
+    monkeypatch.setattr(routes, 'aia_files', lambda *args, **kwargs: [])
     session = AsyncMock()
     row = SimpleNamespace(slot_at=NOW, observed_at=NOW, available_at=NOW, sha256='a'*64, source_product='gong.live')
     session.scalars.side_effect = [Mock(all=lambda: [row]), Mock(all=lambda: [])]
@@ -26,7 +26,7 @@ def test_catalog_reads_causal_metadata_without_features_or_blobs(monkeypatch):
     for call in session.scalars.call_args_list:
         query = call.args[0].compile(dialect=postgresql.dialect())
         assert query.params['available_at_1'] == NOW
-        assert query.params['observed_at_2'] == NOW
+        assert query.params['observed_at_3'] == NOW
         assert 'fits_gzip' not in str(query) and 'gong_snapshot.features' not in str(query)
 
 
@@ -119,7 +119,32 @@ def test_proswin_channel_originals(tmp_path, monkeypatch, channel):
     http, _ = client(monkeypatch, None)
     url = '/internal/v1/observations/files/aia/' + digest
     headers = {'Authorization': 'Bearer secret'}
+    catalog = http.get('/internal/v1/observations/files', params={
+        'kind': 'aia', 'channel': channel, 'start': slot.isoformat(),
+        'end': (slot+timedelta(hours=1)).isoformat(), 'as_of': now.isoformat()}, headers=headers)
+    assert catalog.status_code == 200
+    assert catalog.json()['data'][0]['sha256'] == digest
+    assert catalog.json()['data'][0]['source_product'] == 'aia.nrt_' + channel[3:]
     response = http.get(url, params={'slot_at': slot.isoformat(), 'channel': channel}, headers=headers)
     assert response.status_code == 200 and response.content == content
     assert http.get(url, params={'slot_at': slot.isoformat()}, headers=headers).status_code == 404
     assert http.get(url, params={'channel': 'arbitrary'}, headers=headers).status_code == 422
+
+
+def test_catalog_http_uses_requested_kind_interval_and_cutoff(monkeypatch):
+    http, session = client(monkeypatch, None)
+    session.scalars.return_value = Mock(all=lambda: [])
+    start = NOW-timedelta(days=7)
+    result = http.get('/internal/v1/observations/files', params={
+        'kind': 'goes', 'start': start.isoformat(), 'end': NOW.isoformat(), 'as_of': NOW.isoformat()},
+        headers={'Authorization': 'Bearer secret'})
+    assert result.status_code == 200 and result.json()['data'] == []
+    session.scalars.assert_awaited_once()
+    query = session.scalars.call_args.args[0].compile(dialect=postgresql.dialect())
+    assert 'clio.goes_snapshot' in str(query)
+    assert query.params['observed_at_1'] == start
+    assert query.params['observed_at_2'] == NOW
+    assert query.params['available_at_1'] == NOW
+    assert http.get('/internal/v1/observations/files', params={
+        'kind': 'goes', 'start': NOW.isoformat(), 'end': start.isoformat(), 'as_of': NOW.isoformat()},
+        headers={'Authorization': 'Bearer secret'}).status_code == 422

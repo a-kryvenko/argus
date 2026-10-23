@@ -245,18 +245,15 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         write_json(self.root / '.release-compose.json', self.desired)
         demo = self.root / 'data/demo/current.json'
         demo.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=demo.parent, delete=False) as output:
-            temporary = Path(output.name)
-            try:
+        output = tempfile.NamedTemporaryFile(dir=demo.parent, delete=False)
+        temporary = Path(output.name)
+        try:
+            with output:
                 with (artifact_root / 'demo/current.json').open('rb') as source:
                     shutil.copyfileobj(source, output)
                 os.fchmod(output.fileno(), 0o644)
                 output.flush()
                 os.fsync(output.fileno())
-            except BaseException:
-                temporary.unlink(missing_ok=True)
-                raise
-        try:
             temporary.replace(demo)
         finally:
             temporary.unlink(missing_ok=True)
@@ -437,11 +434,10 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
 if __name__ == '__main__':
     deployment = None
     try:
-        if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != '--preflight'):
-            raise RuntimeError('Usage: rolling.py ROOT BUNDLE [--preflight]')
+        if len(sys.argv) != 3:
+            raise RuntimeError('Usage: rolling.py ROOT BUNDLE')
         deployment = Deployment(Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve())
-        if len(sys.argv) == 3:
-            deployment.apply()
+        deployment.apply()
     except (RuntimeError, subprocess.CalledProcessError) as error:
         if deployment is not None:
             deployment.resume_workers()

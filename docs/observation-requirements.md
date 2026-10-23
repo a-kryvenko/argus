@@ -98,7 +98,7 @@ forecasts. Forecast inputs must have been available at issue time.
 - Configured backfill does not establish complete 81-day solar-index coverage.
 
 Sources: [registry](../configs/models_registry.yaml), [collection settings](../configs/project.yaml),
-[input contract](../packages/common/src/common/schemas/forecast_inputs.py),
+[input contract](../packages/forecast/src/forecast/observation_inputs.py),
 [JB2008 drivers](../packages/forecast-core/src/forecast_core/models/jb2008_drivers.py),
 [DTM2020 drivers](../packages/forecast-core/src/forecast_core/models/dtm2020_drivers.py),
 [accuracy](accuracy/ATMOSPHERIC.md).

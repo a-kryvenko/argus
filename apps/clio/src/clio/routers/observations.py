@@ -1,11 +1,11 @@
 from clio.db.session import get_db_session
 from common.schemas.response import error_response, success_response
 from clio.observations.normalized import load_normalized_observations
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from datetime import UTC, datetime, timedelta
 from sqlalchemy import select, tuple_
 from clio.db.models.measurement import Measurement
-from clio.observations.summary import value_change
+from clio.observations.summary import summary, value_change
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/internal/v1/observations", tags=["observations"])
@@ -13,19 +13,19 @@ router = APIRouter(prefix="/internal/v1/observations", tags=["observations"])
 
 @router.get("/history")
 async def observation_history(
-    limit: int = Query(default=24, ge=1, le=168),
+    limit: int = Query(default=24, ge=1, le=8784),
     session: AsyncSession = Depends(get_db_session),
     start: datetime | None = Query(default=None, alias='from'),
     end: datetime | None = Query(default=None, alias='to'),
 ):
-    """Return the most recent hourly observations, oldest first (up to 168)."""
+    """Return the most recent hourly observations, oldest first (up to 8784)."""
     bounds = {}
     if start is not None or end is not None:
         if start is None or end is None or start.tzinfo is None or end.tzinfo is None or start >= end:
             raise HTTPException(422, 'from and to must define a positive timezone-aware interval')
         bounds = {'since': start, 'until': end - timedelta(microseconds=1)}
     observations = await load_normalized_observations(session, limit=limit, **bounds)
-    return success_response(observations.model_dump())
+    return success_response(observations)
 
 
 @router.get("/latest")
@@ -40,7 +40,19 @@ async def latest_observations(
         )
 
     latest = observations.points[-1]
-    return success_response(latest.model_dump())
+    return success_response(latest)
+
+
+@router.get('/summary')
+async def observation_summary(response: Response, session: AsyncSession = Depends(get_db_session)):
+    """Current values and observed trends with coverage; no forecast or impact score.
+
+    Solar-wind changes compare available samples in two five-minute windows one hour apart.
+    Indices compare the last available values now and one hour ago.
+    Source changes and stale inputs suppress trends.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    return success_response(await summary(session))
 
 
 @router.get('/current-indices')
@@ -52,7 +64,7 @@ async def current_indices(
     selected = list(dict.fromkeys(value.strip() for value in metrics.split(',')))
     if any(value not in ('ap', 'f10_7', 's10', 'm10', 'y10') for value in selected):
         raise HTTPException(422, 'Unknown index')
-    # S10/M10/Y10 are calibrated by Prophet; legacy stored estimates are not source observations.
+    # Legacy stored S10/M10/Y10 estimates are not source observations.
     now = datetime.now(UTC)
     statement = (select(Measurement)
                  .where(Measurement.metric.in_(selected), Measurement.observed_at <= now,

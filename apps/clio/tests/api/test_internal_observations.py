@@ -1,102 +1,78 @@
-from datetime import UTC, datetime
-from types import SimpleNamespace
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
-from clio.routers import forecast_inputs as routes
-from common.schemas.observation import Observation
+from clio.routers import measurements as routes
 
-NOW = datetime(2026, 9, 12, 0, tzinfo=UTC)
+NOW = datetime(2026, 9, 12, tzinfo=UTC)
 
 
 def client_with_session(monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
     session = AsyncMock()
-    session.execute.return_value = Mock(all=lambda: [SimpleNamespace(
-        metric='dst', value=-10, observed_at=NOW, received_at=NOW, interval_end=None, issue_time=NOW, v=420., n=4.5)])
-    loader = AsyncMock(return_value=Observation(points=[]))
-    monkeypatch.setattr(routes, 'load_normalized_observations', loader)
-    monkeypatch.setattr(routes, 'load_observation_files', AsyncMock(return_value=[]))
-    monkeypatch.setattr(routes, 'solar_history', AsyncMock(return_value={'series': {}}))
+    session.execute.return_value = Mock(all=lambda: [])
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.get_db_session] = lambda: session
-    return TestClient(app), session, loader
+    return TestClient(app), session
+
+
+def params(**kwargs):
+    return {'start': (NOW-timedelta(days=3)).isoformat(), 'end': NOW.isoformat(),
+            'metrics': 'bx,t', **kwargs}
 
 
 def test_read_requires_service_credentials(monkeypatch):
-    client, session, _ = client_with_session(monkeypatch)
+    client, session = client_with_session(monkeypatch)
     for headers in ({}, {'Authorization': 'Bearer wrong'}):
-        assert client.get('/internal/v1/observations/forecast-inputs',
-                          params={'as_of': NOW.isoformat()}, headers=headers).status_code == 401
+        assert client.get('/internal/v1/observations/measurements', params=params(), headers=headers).status_code == 401
     session.execute.assert_not_called()
     monkeypatch.delenv('OBSERVATIONS_SERVICE_TOKEN')
-    assert client.get('/internal/v1/observations/forecast-inputs',
-                      params={'as_of': NOW.isoformat()}).status_code == 503
+    assert client.get('/internal/v1/observations/measurements', params=params()).status_code == 503
 
 
-def test_reads_both_sets_in_bounded_read_only_transaction(monkeypatch):
-    client, session, loader = client_with_session(monkeypatch)
-    response = client.get('/internal/v1/observations/forecast-inputs', params={'as_of': NOW.isoformat()},
-                          headers={'Authorization': 'Bearer test-token'})
+def test_measurement_selection_and_aggregation_are_requested_by_caller(monkeypatch):
+    client, session = client_with_session(monkeypatch)
+    response = client.get('/internal/v1/observations/measurements',
+        params=params(aggregation='hourly', min_value=0, max_value=1000, exclude_value=999),
+        headers={'Authorization': 'Bearer test-token'})
     assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload['schema_version'] == 1
-    assert payload['files'] == []
-    assert payload['solar_wind_hourly'] == {'series': {}}
-    args = routes.solar_history.call_args.args
-    assert args[0] is session and args[1] == ['bx','by','bz','v','n','t']
-    assert args[3] == NOW and (NOW-args[2]).total_seconds() == 168*3600
-    assert args[4] == 3600
-    routes.load_observation_files.assert_awaited_once_with(session, NOW)
-    assert payload['measurements'][0]['metric'] == 'dst'
-    assert datetime.fromisoformat(payload['measurements'][0]['available_at'].replace('Z', '+00:00')) == NOW
-    assert payload['speed_observations'][0]['v'] == 420.
-    assert payload['density_observations'][0]['n'] == 4.5
-    statements = session.execute.call_args_list
-    assert str(statements[0].args[0]) == 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'
-    query = statements[2].args[0].compile(dialect=postgresql.dialect())
-    assert set(query.params['metric_1']) == {'f10_7', 'dst', 'ap'}
+    assert response.json()['data'] == {'schema_version': 1, 'items': []}
+    query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
+    assert query.params['metric_1'] == ['bx', 't']
+    assert query.params['observed_at_1'] == NOW-timedelta(days=3)
     assert query.params['observed_at_2'] == NOW
-    assert loader.call_args.kwargs['until'] == NOW
-    assert (NOW - loader.call_args.kwargs['since']).days == 60
-    speed_query = statements[3].args[0].compile(dialect=postgresql.dialect())
-    assert speed_query.params['metric_1'] == 'v'
-    assert speed_query.params['value_1'] == 0
-    assert speed_query.params['value_2'] == 9999
-    assert speed_query.params['observed_at_2'] == NOW
-    assert (NOW - speed_query.params['observed_at_1']).days == 60
-    assert 'avg(clio.measurement.value)' in str(speed_query)
-    assert 'GROUP BY date_trunc' in str(speed_query)
-    density_query = statements[4].args[0].compile(dialect=postgresql.dialect())
-    assert density_query.params['metric_1'] == 'n'
-    assert density_query.params['value_1'] == 0
-    assert density_query.params['value_2'] == 999.9
-    assert density_query.params['value_3'] == float('inf')
-    assert density_query.params['observed_at_2'] == NOW
-    assert (NOW - density_query.params['observed_at_1']).days == 60
-    assert 'avg(clio.measurement.value)' in str(density_query)
-    assert 'GROUP BY date_trunc' in str(density_query)
-    session.rollback.assert_awaited_once()
-    session.commit.assert_not_called()
+    assert 'avg(clio.measurement.value)' in str(query)
+    assert 'GROUP BY' in str(query)
+    assert 'clio.measurement.observed_at < ' in str(query)
+    assert {0, 1000, 999} <= set(v for v in query.params.values() if isinstance(v, (float, int)))
 
 
-def test_rejects_naive_and_future_cutoffs(monkeypatch):
-    client, session, _ = client_with_session(monkeypatch)
-    for cutoff in ('2026-09-12T00:00:00', '2999-01-01T00:00:00Z'):
-        assert client.get('/internal/v1/observations/forecast-inputs', params={'as_of': cutoff},
+def test_raw_measurements_preserve_values_and_availability(monkeypatch):
+    client, session = client_with_session(monkeypatch)
+    session.execute.return_value = Mock(all=lambda: [Mock(_mapping={
+        'metric': 'bx', 'value': -3., 'observed_at': NOW, 'available_at': NOW})])
+    response = client.get('/internal/v1/observations/measurements', params=params(),
+                          headers={'Authorization': 'Bearer test-token'})
+    assert response.json()['data']['items'][0]['value'] == -3.
+    sql = str(session.execute.call_args.args[0])
+    assert 'avg(' not in sql and 'greatest(' in sql
+
+
+def test_rejects_naive_future_and_invalid_intervals(monkeypatch):
+    client, session = client_with_session(monkeypatch)
+    for changes in ({'start': '2026-09-12T00:00:00'}, {'end': '2999-01-01T00:00:00Z'},
+                    {'start': NOW.isoformat()}, {'metrics': ','}, {'min_value': 2, 'max_value': 1}):
+        assert client.get('/internal/v1/observations/measurements', params=params(**changes),
                           headers={'Authorization': 'Bearer test-token'}).status_code == 422
     session.execute.assert_not_called()
 
 
-def test_failed_read_releases_transaction(monkeypatch):
-    import pytest
-    client, session, loader = client_with_session(monkeypatch)
-    loader.side_effect = RuntimeError('read failed')
-    with pytest.raises(RuntimeError, match='read failed'):
-        client.get('/internal/v1/observations/forecast-inputs', params={'as_of': NOW.isoformat()},
-                   headers={'Authorization': 'Bearer test-token'})
-    session.rollback.assert_awaited_once()
+def test_oversized_reads_fail_without_truncation(monkeypatch):
+    client, session = client_with_session(monkeypatch)
+    session.execute.return_value = Mock(all=lambda: [None]*250_001)
+    assert client.get('/internal/v1/observations/measurements', params=params(),
+                      headers={'Authorization': 'Bearer test-token'}).status_code == 503

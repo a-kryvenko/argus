@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_db_session
@@ -37,8 +38,8 @@ async def latest(
 @router.get("/history")
 async def history(
     response: Response,
-    start: datetime | None = Query(default=None, alias="from", description="Inclusive UTC timestamp; default last 24 hours"),
-    end: datetime | None = Query(default=None, alias="to", description="Exclusive UTC timestamp; default now"),
+    start: AwareDatetime | None = Query(default=None, alias="from", description="Inclusive UTC timestamp; default last 24 hours"),
+    end: AwareDatetime | None = Query(default=None, alias="to", description="Exclusive UTC timestamp; default now"),
     resolution: Literal["1m", "5m", "1h", "auto"] = Query(default="1m"),
     metrics: list[str] = Depends(selected_metrics),
     session: AsyncSession = Depends(get_db_session),
@@ -52,8 +53,6 @@ async def history(
     """
     end = end or datetime.now(UTC)
     start = start or end - timedelta(hours=24)
-    if start.tzinfo is None or end.tzinfo is None:
-        raise HTTPException(422, "from and to must include a timezone")
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if resolution == 'auto':
         resolution = '1m' if end-start <= timedelta(hours=6) else '5m' if end-start <= timedelta(hours=24) else '1h'

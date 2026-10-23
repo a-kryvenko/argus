@@ -2,7 +2,7 @@
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat
-from common.schemas.forecast_inputs import ObservationInputs
+from forecast.observation_inputs import ObservationInputs
 from common.schemas.solar_wind_events import CoronalHoleFrame, EventInputs
 
 
@@ -16,7 +16,7 @@ class ProswinPrediction(BaseModel):
 
 
 class ForecastInputs(ObservationInputs):
-    """Prophet-owned enrichment of the source observation response."""
+    """Model context enriched after reading observation resources."""
     proswin_predictions: list[ProswinPrediction] = Field(default_factory=list)
 
     proswin_ready_at: AwareDatetime | None = None

@@ -1,10 +1,4 @@
-"""Loader for live GOES-R solar irradiance observations.
-
-The normalized records contain the EUVS measurements needed to reconstruct
-S10 and M10, plus the XRS background and Lyman-alpha measurements needed to
-reconstruct Y10. The reconstruction and calibration themselves belong in
-Prophet; this loader only returns source measurements.
-"""
+"""Load native GOES-R EUVS, XRS and Lyman-alpha measurements."""
 
 from __future__ import annotations
 

@@ -21,11 +21,6 @@ class WideHistoryAdapter:
         return clean_records(frame, start, end, self.metrics)
 
 
-class PlasmaHistoryAdapter(WideHistoryAdapter):
-    def __init__(self, loader):
-        super().__init__(loader, ('v', 'n', 't'))
-
-
 def clean_records(frame, start, end, metrics):
     frame = frame.copy()
     frame['observed_at'] = pd.to_datetime(frame.observed_at, utc=True)
@@ -51,7 +46,7 @@ def historical_adapters():
     from clio.providers.soho_loader import SOHOLoader
     return {
         'omni.hourly': WideHistoryAdapter(OMNIWeb_Loader.load, PRODUCTS['omni.hourly'].metrics),
-        'ace.plasma_hourly': PlasmaHistoryAdapter(SPDF_Loader.load_plasma),
-        'soho.plasma_hourly': PlasmaHistoryAdapter(SOHOLoader().load),
+        'ace.plasma_hourly': WideHistoryAdapter(SPDF_Loader.load_plasma, ('v', 'n', 't')),
+        'soho.plasma_hourly': WideHistoryAdapter(SOHOLoader().load, ('v', 'n', 't')),
         'gfz.f107': DailyHistoryAdapter(load_gfz_f107, ('f10_7',)),
     }

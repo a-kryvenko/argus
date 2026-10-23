@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from clio.db.session import get_db_session
 from common.schemas.response import success_response
@@ -17,8 +18,8 @@ async def latest(response: Response, session: AsyncSession = Depends(get_db_sess
 
 @router.get('/history')
 async def history(response: Response,
-                  start: datetime | None = Query(default=None, alias='from'),
-                  end: datetime | None = Query(default=None, alias='to'),
+                  start: AwareDatetime | None = Query(default=None, alias='from'),
+                  end: AwareDatetime | None = Query(default=None, alias='to'),
                   session: AsyncSession = Depends(get_db_session)):
     """Native intervals overlapping [from,to); default 24h, maximum 31 days.
 
@@ -27,8 +28,6 @@ async def history(response: Response,
     """
     end = end or datetime.now(UTC)
     start = start or end-timedelta(hours=24)
-    if start.tzinfo is None or end.tzinfo is None:
-        raise HTTPException(422, 'from and to must include a timezone')
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if not timedelta(0) < end-start <= timedelta(days=31):
         raise HTTPException(422, 'Interval must be positive and at most 31 days')

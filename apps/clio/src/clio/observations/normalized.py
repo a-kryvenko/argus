@@ -18,7 +18,7 @@ async def refresh_normalized_observations(
     session: AsyncSession,
     now: datetime | None = None,
 ) -> Observation:
-    """Rebuild model inputs exclusively from persisted observations."""
+    """Rebuild normalized history from persisted observations."""
 
     now = now or datetime.now(UTC)
     if now.tzinfo is None:

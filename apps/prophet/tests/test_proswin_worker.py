@@ -28,11 +28,8 @@ def test_failed_slot_resumes_and_completed_slot_is_immutable(tmp_path, monkeypat
     state = {'fail': True, 'predictions': 0, 'downloads': 0}
     monkeypatch.setattr(worker, 'cache_root', lambda: tmp_path)
     monkeypatch.setattr(worker, 'physical_features', lambda *_: [400.] * 63)
-    monkeypatch.setattr(worker, 'ObservationInputs', SimpleNamespace(model_validate=lambda value: SimpleNamespace(
-        as_of=pd.Timestamp(value['as_of']), read_at=now)))
+    monkeypatch.setattr(worker, 'read_observations', lambda client, url, token, cutoff, **kwargs: SimpleNamespace(as_of=cutoff, read_at=now))
     def get(client, url, **kwargs):
-        if url.endswith('forecast-inputs'):
-            return SimpleNamespace(json=lambda: {'as_of': kwargs['params']['as_of']})
         if 'SILSO' in url:
             assert 'headers' not in kwargs
             return SimpleNamespace(content=b'2026;1;2026.0;100;0;1;1\n')

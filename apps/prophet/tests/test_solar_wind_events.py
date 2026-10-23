@@ -193,7 +193,7 @@ def test_CME_only_release_excludes_DBEM_and_verifies_ensemble_count():
 
 def test_main_speed_scenario_reuses_baseline_and_bundled_model(tmp_path, monkeypatch):
     import pandas as pd
-    from common.schemas.forecast_inputs import SpeedObservation, DensityObservation
+    from forecast.observation_inputs import SpeedObservation, DensityObservation
     from forecast.calculation import ForecastResult
     from prophet.services.events import speed as solar_event_speed
     from prophet.services.generation import models

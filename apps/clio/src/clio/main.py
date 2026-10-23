@@ -10,13 +10,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from clio.config import load_observation_config
 from clio.db.session import dispose_engine, get_session_factory
+from clio.routers.auth import require_service_token
 from clio.routers import (
     browse,
     collection_status,
-    forecast_inputs,
+    measurements,
     geomagnetic,
     observation_files,
-    observation_summary,
     observations,
     sdo_images,
     solar_wind,
@@ -44,14 +44,13 @@ for module in (
     solar_wind,
     solar_wind_events,
     geomagnetic,
-    observation_summary,
     collection_status,
-    forecast_inputs,
+    measurements,
     browse,
     sdo_images,
     observation_files
 ):
-    app.include_router(module.router, dependencies=[Depends(forecast_inputs.require_service_token)])
+    app.include_router(module.router, dependencies=[Depends(require_service_token)])
 
 
 @app.exception_handler(StarletteHTTPException)

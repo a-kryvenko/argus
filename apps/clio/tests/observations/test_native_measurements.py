@@ -48,20 +48,24 @@ def test_upsert_updates_quality_but_receipt_alone_is_not_a_revision():
 def test_monitoring_reads_latest_measurement_and_its_receipt(monkeypatch):
     point = Measurement(metric='bz', value=-2, observed_at=NOW, received_at=NOW-timedelta(seconds=5))
     session = AsyncMock()
-    session.scalar.return_value = point
+    session.scalars.return_value = [point]
     session.get.return_value = None
-    monkeypatch.setattr(monitoring, 'OBSERVATIONS', {'bz': monitoring.OBSERVATIONS['bz']})
+    monkeypatch.setattr(monitoring, 'OBSERVATIONS', {metric: monitoring.OBSERVATIONS[metric] for metric in ('bz', 'v')})
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
     result = asyncio.run(monitoring.monitoring_status(session))
     assert result['measurements'][0]['latest_observation_at'] == NOW
     assert result['measurements'][0]['received_at'] == point.received_at
-    assert 'clio.measurement' in str(session.scalar.call_args.args[0])
+    assert result['measurements'][1]['metric'] == 'v'
+    assert result['measurements'][1]['status'] == 'unavailable'
+    query = str(session.scalars.call_args.args[0].compile(dialect=postgresql.dialect()))
+    assert 'DISTINCT ON (clio.measurement.metric)' in query
+    session.scalars.assert_awaited_once()
 
 
 def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
     point = Measurement(metric='bz', value=None, observed_at=NOW, received_at=NOW, quality='missing')
     session = AsyncMock()
-    session.scalar.return_value = point
+    session.scalars.return_value = [point]
     session.get.return_value = None
     monkeypatch.setattr(monitoring, 'OBSERVATIONS', {'bz': monitoring.OBSERVATIONS['bz']})
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
@@ -72,7 +76,7 @@ def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
 
 def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(monkeypatch):
     session = AsyncMock()
-    session.scalar.return_value = None
+    session.scalars.return_value = []
     session.get.return_value = None
     sources = {'solar_wind_mag': {'status': 'not_started'}}
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'degraded', 'sources': sources}))

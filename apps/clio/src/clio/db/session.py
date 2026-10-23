@@ -52,11 +52,7 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
     """Provide one transaction-aware session per request."""
 
     async with get_session_factory()() as session:
-        try:
-            yield session
-        except Exception:
-            await session.rollback()
-            raise
+        yield session
 
 
 async def dispose_engine() -> None:

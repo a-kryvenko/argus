@@ -97,12 +97,12 @@ case "${1:-}" in
                 user)
                     shift
                     lock s
-                    exec "${templates[@]}" run --rm --no-deps api .venv/bin/python -m api.commands.manage_user "$@"
+                    exec "${templates[@]}" run --rm --no-deps api api user "$@"
                     ;;
                 serve)
                     [[ "$mode" == dev ]] || { usage >&2; exit 2; }
                     shift
-                    exec "${compose[@]}" run --rm --no-deps --service-ports api .venv/bin/uvicorn api.main:app "$@"
+                    exec "${compose[@]}" run --rm --no-deps --service-ports api api serve "$@"
                     ;;
                 *) usage >&2; exit 2 ;;
             esac

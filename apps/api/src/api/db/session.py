@@ -15,7 +15,11 @@ def get_database_url():
     """Runtime and Alembic share credentials; passwords remain raw strings."""
     from sqlalchemy import URL
     from common.database import database_parameters
-    return URL.create('postgresql+psycopg', **database_parameters('API'))
+    try:
+        parameters = database_parameters('API')
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from None
+    return URL.create('postgresql+psycopg', **parameters)
 
 
 def get_engine() -> AsyncEngine:

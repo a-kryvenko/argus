@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 import httpx
-from common.schemas.forecast_inputs import ObservationInputs
+from prophet.services.inputs.observations import read_observations
 from forecast.inputs import ForecastInputs
 
 
@@ -16,13 +16,7 @@ def load_inputs(as_of: datetime | None = None, *, prepare_proswin=False, include
     as_of = as_of or datetime.now(UTC)
     with httpx.Client(timeout=httpx.Timeout(180, connect=10), follow_redirects=False,
                       trust_env=False) as client:
-        response = client.get(
-            url.rstrip('/') + '/internal/v1/observations/forecast-inputs',
-            params={'as_of': as_of.isoformat()},
-            headers={'Authorization': f'Bearer {token}'},
-        )
-        response.raise_for_status()
-        source = ObservationInputs.model_validate(response.json())
+        source = read_observations(client, url, token, as_of)
         inputs = ForecastInputs.model_validate(source.model_dump())
         if inputs.as_of != as_of:
             raise RuntimeError('Observation service returned a different as_of')
@@ -72,12 +66,7 @@ def load_event_inputs(as_of: datetime | None = None, *, include_speed=False):
                                 observations=Observation(points=[]), solar_wind_events=source)
         if include_speed:
             try:
-                response = client.get(url.rstrip('/') + '/internal/v1/observations/forecast-inputs',
-                    params={'as_of': as_of.isoformat()}, headers={'Authorization': f'Bearer {token}'})
-                response.raise_for_status()
-                context = ObservationInputs.model_validate(response.json())
-                if context.as_of != as_of:
-                    raise ValueError('Observation service returned a different speed cutoff')
+                context = read_observations(client, url, token, as_of)
                 inputs = ForecastInputs.model_validate(context.model_dump())
                 inputs.solar_wind_events = source
                 from prophet.services.proswin.cache import read_predictions

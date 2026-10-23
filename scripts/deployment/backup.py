@@ -1,9 +1,7 @@
 """Stream a database dump to a verified archive with progress while services stay online."""
 import gzip
 import os
-from pathlib import Path
 import subprocess
-import sys
 import threading
 import time
 
@@ -47,11 +45,3 @@ def create_backup(command, directory):
     finally:
         finished.set()
         monitor.join()
-
-
-if __name__ == '__main__':
-    try:
-        create_backup(sys.argv[3:], Path(sys.argv[1]))
-    except (RuntimeError, OSError, subprocess.CalledProcessError) as error:
-        print(f'[deploy] Backup failed: {error}', file=sys.stderr)
-        sys.exit(1)

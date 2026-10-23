@@ -1,8 +1,9 @@
-"""Version 1 observation read contract, independent of storage and model code."""
+"""Forecast-owned observation context assembled through the Clio API."""
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat
 from common.schemas.observation import Observation
+from common.schemas.observation_files import RawObservationFile
 
 DensityMetric = Literal['f10_7', 's10', 'm10', 'y10', 'dst', 'ap']
 DENSITY_METRICS = ('f10_7', 's10', 'm10', 'y10', 'dst', 'ap')
@@ -25,15 +26,6 @@ class DensityObservation(BaseModel):
     """Observed hourly proton density, without interpolation or gap filling."""
     issue_time: AwareDatetime
     n: FiniteFloat
-
-
-class RawObservationFile(BaseModel):
-    kind: Literal['aia', 'gong', 'goes']
-    slot_at: AwareDatetime
-    observed_at: AwareDatetime
-    available_at: AwareDatetime
-    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
-    source_product: str
 
 
 class ObservationInputs(BaseModel):

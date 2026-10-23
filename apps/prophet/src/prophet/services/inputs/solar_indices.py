@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from common.config import get_config
-from common.schemas.forecast_inputs import SourceMeasurement
+from forecast.observation_inputs import SourceMeasurement
 
 from prophet.services.inputs.cache import original, prune_source_cache
 

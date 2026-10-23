@@ -92,7 +92,7 @@ def normalize_event_inputs(inputs):
                     source='DONKI', source_ids=linked, source_url=row.get('link'),
                     available_at=poll.received_at, observed_at=onset)
 
-    # Retain external alternatives and retractions. Prophet selects the forecast version.
+    # Retain external alternatives and retractions without selecting a version.
     predictions = []
     for key, (row, received) in sorted(simulations.items()):
         completed = timestamp(row.get('modelCompletionTime'))
@@ -114,5 +114,5 @@ def normalize_event_inputs(inputs):
 
 
 def normalize_events(inputs):
-    """Catalog observations only; arrival forecasts belong to Prophet."""
+    """Normalize catalog observations only."""
     return normalize_event_inputs(inputs)[0]

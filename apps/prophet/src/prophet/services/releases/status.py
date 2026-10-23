@@ -2,7 +2,7 @@
 import math
 from datetime import UTC, datetime
 
-from common.schemas.forecast_inputs import DENSITY_METRICS
+from forecast.observation_inputs import DENSITY_METRICS
 from common.schemas.forecast_status import ForecastStatus
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 

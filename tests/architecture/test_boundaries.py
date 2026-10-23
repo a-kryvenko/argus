@@ -107,16 +107,39 @@ def test_private_source_is_not_in_public_tree():
     assert len(result.stdout.splitlines()) == 2
 
 
+def sql_domains(source):
+    tree = ast.parse(source)
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.body and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    }
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+            yield from re.findall(r'\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(api|clio|prophet|intelligence)\.', node.value, re.I)
+
+
+@pytest.mark.parametrize(('source', 'expected'), [
+    ('"""Responses from Intelligence."""', []),
+    ('def read():\n    """Responses from Intelligence."""\n    return "SELECT * FROM clio.measurement"', ['clio']),
+    ('async def read():\n    """Responses from Intelligence."""\n    await execute("SELECT * FROM intelligence.profile")', ['intelligence']),
+    ('class Client:\n    """Responses from Intelligence."""\n    query = "SELECT * FROM api.users JOIN prophet.release ON true"', ['api', 'prophet']),
+])
+def test_sql_domain_scan_ignores_only_docstrings(source, expected):
+    assert list(sql_domains(source)) == expected
+
+
 def test_runtime_sql_does_not_read_foreign_domain_tables():
     roots = {'api': ROOT / 'apps/api/src/api', 'clio': ROOT / 'apps/clio/src/clio',
              'prophet': ROOT / 'apps/prophet/src/prophet',
              'intelligence': ROOT / 'apps/intelligence/src/intelligence'}
     for owner, root in roots.items():
         for path in root.rglob('*.py'):
-            for node in ast.walk(ast.parse(path.read_text())):
-                if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                    for domain in re.findall(r'\b(?:FROM|JOIN|UPDATE|INTO|TABLE)\s+(api|clio|prophet|intelligence)\.', node.value, re.I):
-                        assert domain.lower() == owner, (path, domain)
+            for domain in sql_domains(path.read_text()):
+                assert domain.lower() == owner, (path, domain)
 
 
 @pytest.mark.parametrize('root,blocked,private_surface', [

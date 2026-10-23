@@ -56,6 +56,8 @@ def main():
             executable = str(ROOT / 'apps' / domain / '.venv/bin/python') if domain else sys.executable
             run(executable, *args, env=environment)
 
+        pytest_args = ('-m', 'pytest', '-q', '-n', '8')
+        discovery_args = ('--rootdir=.', '--confcutdir=.', '--import-mode=importlib')
         print('Preflight: isolated service imports and migrations', flush=True)
         python('-c', """
 from pathlib import Path
@@ -66,13 +68,12 @@ with tempfile.TemporaryDirectory() as directory:
         migrate(environment)
 """)
         print('Domain storage, ownership, scheduling and verification', flush=True)
-        python('-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib', '-q', '-n', '8',
-               'tests', *sys.argv[1:])
+        python(*pytest_args, *discovery_args, 'tests', *sys.argv[1:])
         for domain in ('clio', 'prophet', 'intelligence'):
-            python('-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib', '-q', '-n', '8',
+            python(*pytest_args, *discovery_args,
                    f'apps/{domain}/tests/integration', *sys.argv[1:], domain=domain)
         python(str(ROOT / 'apps/clio/tests/integration/test_observation_recovery.py'), domain='clio')
-        python('-m', 'pytest', '-q', '-n', '8', 'apps/prophet/tests/test_observations.py', '-k', 'verification', *sys.argv[1:], domain='prophet')
+        python(*pytest_args, 'apps/prophet/tests/test_observations.py', '-k', 'verification', *sys.argv[1:], domain='prophet')
         python('apps/api/tests/integration/verify_dashboard.py', domain='api')
 
 

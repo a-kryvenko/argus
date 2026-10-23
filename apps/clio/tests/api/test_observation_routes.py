@@ -33,7 +33,7 @@ def test_history_returns_points_and_passes_limit(monkeypatch):
         assert latest.status_code == 200
         assert latest.json()['data']['s10'] == 110.5
         assert latest.json()['data']['y10'] is None
-        for limit in [0, 169, 'invalid']:
+        for limit in [0, 8785, 'invalid']:
             assert client.get(f'/internal/v1/observations/history?limit={limit}').status_code == 422
         loader.return_value = Observation(points=[])
         assert client.get('/internal/v1/observations/history').json() == {

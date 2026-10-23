@@ -1,11 +1,14 @@
 """Migrations are scoped to clio; runtime and migrations share one database owner."""
 from alembic import context
 from sqlalchemy import create_engine, pool, text
-from clio.db.metadata import Base
+from clio.db.base import Base
+from clio.db.models import (
+    measurement, normalized_observation, observation_source_status, scheduled_job,
+    gong_snapshot, goes_snapshot, donki_poll, enlil_profile,
+)
 from clio.db.session import get_database_url
 
 DOMAIN = 'clio'
-config = context.config
 
 
 def include_name(name, type_, parent_names):

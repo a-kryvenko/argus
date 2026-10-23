@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from common.schemas.forecast_inputs import SourceMeasurement
+from forecast.observation_inputs import SourceMeasurement
 from forecast.inputs import ForecastInputs
 from common.schemas.observation import Observation, ObservationPoint
 from prophet.services.releases.status import input_diagnostics

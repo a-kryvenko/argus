@@ -3,7 +3,9 @@ import argparse
 from datetime import UTC, datetime
 
 
-def utc_hour(value):
+def boundary(value):
+    if len(value) == 10:
+        value += 'T00:00:00Z'
     try:
         result = datetime.fromisoformat(value.replace('Z', '+00:00'))
         if result.tzinfo is None:
@@ -14,10 +16,3 @@ def utc_hour(value):
         return result
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
-
-
-def boundary(value):
-    if len(value) == 10:
-        value += 'T00:00:00Z'
-    return utc_hour(value)
-

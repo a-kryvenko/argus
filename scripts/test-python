@@ -2,18 +2,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 unset PYTHONPATH UV_PROJECT_ENVIRONMENT
+pytest_args=(-m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs)
 for app in api clio prophet intelligence; do
     uv sync --locked --project "apps/$app" --group test
-    "apps/$app/.venv/bin/python" -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs -n 8 "apps/$app/tests" "$@"
+    "apps/$app/.venv/bin/python" "${pytest_args[@]}" -n 8 "apps/$app/tests" "$@"
 done
 uv sync --locked --project tests/runtime
-tests/runtime/.venv/bin/python -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs -n 8 tests "$@"
+tests/runtime/.venv/bin/python "${pytest_args[@]}" -n 8 tests "$@"
 for package in common forecast forecast-core intelligence-core; do
     extras=()
     if [[ "$package" == forecast-core ]]; then extras=(--extra models --extra datasets); fi
     uv sync --locked --project "packages/$package" --group test "${extras[@]}"
-    "packages/$package/.venv/bin/python" -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs -n 8 "packages/$package/tests" "$@"
+    "packages/$package/.venv/bin/python" "${pytest_args[@]}" -n 8 "packages/$package/tests" "$@"
 done
 # Private research has its own dependencies; never use a serving environment.
 uv sync --locked --project notebooks
-notebooks/.venv/bin/python -m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs notebooks/workflows/revalidation notebooks/workflows/training/thermosphere notebooks/tests "$@"
+notebooks/.venv/bin/python "${pytest_args[@]}" notebooks/workflows/revalidation notebooks/workflows/training/thermosphere notebooks/tests "$@"

@@ -14,7 +14,8 @@ import httpx
 import numpy as np
 import pandas as pd
 from common.config import get_config
-from common.schemas.forecast_inputs import ObservationInputs
+from forecast.observation_inputs import ObservationInputs
+from prophet.services.inputs.observations import read_observations
 from forecast.inputs import ProswinPrediction
 from forecast_core.models.proswin import digest, physical_features
 from prophet.services.inputs.cache import atomic_write
@@ -37,8 +38,7 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
     hour=now.floor('h');root=cache_root()
     headers={'Authorization':f'Bearer {token}'}
     if inputs is None:
-        response=get(client,url+'/internal/v1/observations/forecast-inputs',params={'as_of':now.isoformat()},headers=headers)
-        inputs=ObservationInputs.model_validate(response.json())
+        inputs=read_observations(client,url,token,now.to_pydatetime(),request=lambda url, **kwargs: get(client,url,**kwargs))
         if pd.Timestamp(inputs.as_of)!=now: raise ValueError('Clio returned wrong input time')
     # Preserve first-seen timing of the snapshot actually used. It is never backdated.
     ssn=root/'sunspots.csv';meta=root/'sunspots.json'

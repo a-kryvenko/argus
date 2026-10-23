@@ -11,7 +11,7 @@ import pytest
 
 from prophet.services.inputs import solar_indices as service
 from prophet.services.inputs import cache as source_cache
-from common.schemas.forecast_inputs import RawObservationFile
+from common.schemas.observation_files import RawObservationFile
 from forecast.inputs import ForecastInputs
 from common.schemas.observation import Observation, ObservationPoint
 
@@ -77,7 +77,7 @@ def test_missing_calibration_keeps_estimates_absent(calibrated_goes):
 
 
 def test_wire_features_and_legacy_calibrations_are_not_trusted():
-    from common.schemas.forecast_inputs import ObservationInputs
+    from forecast.observation_inputs import ObservationInputs
     source = inputs().model_dump()
     source['gong'] = {'invalid': 'Clio must not supply features'}
     parsed = ObservationInputs.model_validate(source)

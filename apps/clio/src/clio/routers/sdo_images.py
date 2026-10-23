@@ -6,7 +6,7 @@ from zipfile import BadZipFile
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AwareDatetime
 
-from clio.routers.forecast_inputs import require_service_token
+from clio.routers.auth import require_service_token
 from common.schemas.response import ApiResponse, success_response
 from common.schemas.sdo_images import MissingSDOImage, SDOImageCatalog, SDOImageReference
 from common.sdo_images import OBSERVED_CHANNELS, RETENTION_HOURS, archive_root, image_path, read_metadata, utc

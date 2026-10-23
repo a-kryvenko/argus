@@ -2,7 +2,7 @@
 import asyncio
 import gzip
 import hashlib
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import AwareDatetime
@@ -17,44 +17,66 @@ from clio.db.models.gong_snapshot import GONGSnapshot
 from clio.db.models.goes_snapshot import GOESSnapshot
 from clio.observations.files import archive_root
 from clio.routers.auth import require_service_token
-from common.schemas.forecast_inputs import RawObservationFile
+from common.schemas.observation_files import RawObservationFile
+from common.schemas.response import success_response
 
 MODELS = {'gong': GONGSnapshot, 'goes': GOESSnapshot}
 router = APIRouter(prefix='/internal/v1/observations', dependencies=[Depends(require_service_token)])
 
 
-async def load_observation_files(session, as_of: datetime):
+async def load_observation_files(session, as_of: datetime, *, start=None, end=None, kinds=('gong', 'goes', 'aia'), channel='aia193'):
+    start = start or datetime.min.replace(tzinfo=UTC)
+    end = end or datetime.max.replace(tzinfo=UTC)
     files = []
     for kind, model in MODELS.items():
-        days = {'gong': 2, 'goes': 90}[kind]
+        if kind not in kinds:
+            continue
         rows = (await session.scalars(select(model).where(
-            model.observed_at >= as_of - timedelta(days=days), model.observed_at <= as_of,
+            model.observed_at >= start, model.observed_at < end, model.observed_at <= as_of,
             model.available_at <= as_of).order_by(model.observed_at).limit(2401))).all()
         if len(rows) > 2400:
             raise HTTPException(503, 'Observation file range exceeds the supported batch size')
         files.extend(RawObservationFile(kind=kind, slot_at=row.slot_at, observed_at=row.observed_at,
             available_at=row.available_at, sha256=row.sha256,
             source_product=row.source_product) for row in rows)
-    files.extend(await asyncio.to_thread(aia_files, as_of))
+    if 'aia' in kinds:
+        files.extend(await asyncio.to_thread(aia_files, as_of, start=start, end=end, channel=channel))
     return files
 
 
-def aia_files(as_of):
+def aia_files(as_of, *, start=None, end=None, channel='aia193'):
     from common.sdo_images import archive_root, hourly_slots, read_metadata, original_path, utc
     root = archive_root()
     files = []
     for slot in hourly_slots(as_of):
         try:
-            metadata = read_metadata(root, slot, 'aia193')
+            metadata = read_metadata(root, slot, channel)
         except FileNotFoundError:
             continue
         if (utc(metadata['observed_at']) > as_of or utc(metadata['available_at']) > as_of
-                or not original_path(root, slot, 'aia193').is_file()):
+                or not original_path(root, slot, channel).is_file()):
+            continue
+        observed_at = utc(metadata['observed_at'])
+        if (start is not None and observed_at < start) or (end is not None and observed_at >= end):
             continue
         files.append(RawObservationFile(kind='aia', slot_at=slot,
             observed_at=utc(metadata['observed_at']), available_at=utc(metadata['available_at']),
-            sha256=metadata['sha256'], source_product='aia.nrt_193'))
+            sha256=metadata['sha256'], source_product='aia.nrt_' + channel[3:]))
     return files
+
+
+@router.get('/files')
+async def list_files(
+    start: AwareDatetime,
+    end: AwareDatetime,
+    as_of: AwareDatetime,
+    kind: Literal['aia', 'gong', 'goes'],
+    channel: Literal['aia171', 'aia193', 'aia211'] = 'aia193',
+    session: AsyncSession = Depends(get_db_session),
+):
+    if not timedelta(0) < end - start <= timedelta(days=366) or as_of > datetime.now(UTC):
+        raise HTTPException(422, 'Invalid observation file interval or cutoff')
+    return success_response(await load_observation_files(session, as_of, start=start, end=end, kinds=(kind,), channel=channel))
 
 
 def aia_original(sha256, slot_at=None, channel="aia193"):

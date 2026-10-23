@@ -25,14 +25,37 @@ def configure(monkeypatch, handler):
     monkeypatch.setattr(observations.httpx, 'Client', lambda **kwargs: client)
 
 
-def test_reads_versioned_owner_contract(monkeypatch):
+def resource_response(request, payload):
+    resource = request.url.path.removeprefix('/internal/v1/observations/')
+    if resource == 'history':
+        data = payload['observations']
+    elif resource == 'measurements':
+        data = {'schema_version': payload.get('schema_version', 1), 'items': []}
+    elif resource == 'files':
+        data = []
+    elif resource == 'solar-wind/history':
+        data = {'series': {}}
+    else:
+        raise AssertionError(resource)
+    return httpx.Response(200, json={'success': True, 'data': data})
+
+
+def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
+    calls = []
     def handler(request):
-        assert request.url.path == '/internal/v1/observations/forecast-inputs'
+        calls.append(request)
         assert request.headers['Authorization'] == 'Bearer test-token'
-        assert request.url.params['as_of'] == NOW.isoformat()
-        return httpx.Response(200, json=stored_inputs().model_dump(mode='json'))
+        return resource_response(request, stored_inputs().model_dump(mode='json'))
     configure(monkeypatch, handler)
     assert observations.load_inputs(NOW).observations.points[0].v == 420
+    assert len(calls) == 8
+    assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
+    assert calls[1].url.params['start'] == (NOW-timedelta(days=88)).isoformat()
+    assert calls[2].url.params['metrics'] == 'v'
+    assert calls[2].url.params['aggregation'] == 'hourly'
+    assert calls[3].url.params['metrics'] == 'n'
+    assert [request.url.params['kind'] for request in calls[4:7]] == ['gong', 'goes', 'aia']
+    assert calls[7].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
 
 
 @pytest.mark.parametrize('status', [401, 503])
@@ -45,7 +68,7 @@ def test_owner_failure_is_propagated_without_fallback(monkeypatch, status):
 def test_empty_inputs_fail_without_ingestion(monkeypatch):
     payload = stored_inputs().model_dump(mode='json')
     payload['observations']['points'] = []
-    configure(monkeypatch, lambda _: httpx.Response(200, json=payload))
+    configure(monkeypatch, lambda request: resource_response(request, payload))
     with pytest.raises(RuntimeError, match='check ingestion'):
         observations.load_inputs(NOW)
 
@@ -53,7 +76,7 @@ def test_empty_inputs_fail_without_ingestion(monkeypatch):
 def test_rejects_incompatible_contract(monkeypatch):
     payload = stored_inputs().model_dump(mode='json')
     payload['schema_version'] = 2
-    configure(monkeypatch, lambda _: httpx.Response(200, json=payload))
+    configure(monkeypatch, lambda request: resource_response(request, payload))
     with pytest.raises(ValueError):
         observations.load_inputs(NOW)
 
@@ -195,3 +218,25 @@ def test_runtime_catalog_selects_explicit_services():
             assert service.registry_name == model.artifact
             assert issubclass(service, (QuantileFS, ProbabilityFS))
             assert service.__module__.startswith('forecast_core.inference.')
+
+
+def test_assembles_native_measurements_and_originals(monkeypatch):
+    from prophet.services.inputs.observations import read_observations
+    def handler(request):
+        if request.url.path.endswith('/measurements'):
+            metrics = request.url.params['metrics']
+            metric, value = ('v', 430.) if metrics == 'v' else ('n', 4.5) if metrics == 'n' else ('dst', -20.)
+            return httpx.Response(200, json={'success': True, 'data': {'schema_version': 1, 'items': [{
+                'metric': metric, 'value': value, 'observed_at': NOW.isoformat(), 'available_at': NOW.isoformat()}]}})
+        if request.url.path.endswith('/files') and request.url.params['kind'] == 'gong':
+            return httpx.Response(200, json={'success': True, 'data': [{
+                'kind': 'gong', 'slot_at': NOW.isoformat(), 'observed_at': NOW.isoformat(),
+                'available_at': NOW.isoformat(), 'sha256': 'a'*64, 'source_product': 'gong.live'}]})
+        return resource_response(request, stored_inputs().model_dump(mode='json'))
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = read_observations(client, 'http://observations', 'test-token', NOW)
+    assert result.as_of == NOW
+    assert result.measurements[0].metric == 'dst' and result.measurements[0].value == -20.
+    assert result.speed_observations[0].v == 430.
+    assert result.density_observations[0].n == 4.5
+    assert result.files[0].kind == 'gong'

@@ -54,3 +54,14 @@ The configured forecasting pipeline uses the following models:
 ---
 
 > Argus Sunwatch is an independently designed and developed project. I am responsible for the system architecture, scientific data pipelines, forecasting methodology and experiments, backend services, APIs, infrastructure, deployment, and web application.
+
+---
+
+Copyright (c) 2026 Andrii Kryvenko.
+All Rights Reserved.
+
+The source code is publicly available for inspection only.
+No permission is granted to use, execute, modify, or
+distribute this software without prior written authorization.
+
+See [LICENSE](LICENSE) for details.

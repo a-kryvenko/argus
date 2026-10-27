@@ -28,12 +28,8 @@ def main(argv=None):
 
     backfill.add_argument('--batch', action='store_true', help='Bound SDO warmup to one configured batch')
     commands.add_parser('sdo-cleanup')
-    commands.add_parser('migrate', add_help=False)
 
-    args, remainder = parser.parse_known_args(argv)
-
-    if args.command != 'migrate' and remainder:
-        parser.error('Unrecognized arguments: ' + ' '.join(remainder))
+    args = parser.parse_args(argv)
 
     args.now = datetime.now(UTC)
 
@@ -53,21 +49,17 @@ def main(argv=None):
 
     from common.runtime import run_command
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    result = run_command(lambda: dispatch(args, remainder))
+    result = run_command(lambda: dispatch(args))
     if result:
         raise SystemExit(result)
 
 
-def dispatch(args, remainder):
-    if args.command != 'migrate':
-        from clio.config import load_observation_config
-        load_observation_config()
+def dispatch(args):
+    from clio.config import load_observation_config
+    load_observation_config()
     if args.command == 'serve':
         import uvicorn
         uvicorn.run('clio.main:app', host=args.host, port=args.port)
-    elif args.command == 'migrate':
-        from clio.commands.migrate import run
-        return run(remainder)
     else:
         result = invoke(args.command, args)
         if isinstance(result, dict):

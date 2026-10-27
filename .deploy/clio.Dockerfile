@@ -11,6 +11,7 @@ RUN uv sync --frozen --no-cache --no-install-local
 COPY packages/common /var/www/packages/common
 
 COPY apps/clio/src ./src
+COPY apps/clio/alembic.ini ./alembic.ini
 
 RUN uv sync --frozen --no-cache
 

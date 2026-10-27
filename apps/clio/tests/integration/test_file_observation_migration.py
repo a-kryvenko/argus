@@ -14,8 +14,8 @@ from tests.support.database import database, runtime
 
 
 def upgrade(environment, revision):
-    return subprocess.run([sys.executable, '-c', 'from clio.cli import main; main()',
-        'migrate', 'upgrade', revision], env=environment, capture_output=True, text=True)
+    return subprocess.run([sys.executable, '-m', 'alembic', '-c',
+        str(Path(__file__).resolve().parents[2] / 'alembic.ini'), 'upgrade', revision], env=environment, capture_output=True, text=True)
 
 
 
@@ -97,12 +97,12 @@ def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_d
     settings = seed_legacy(database, monkeypatch, tmp_path)
     dsns, urls, environment, roots, _ = settings
     result = upgrade(environment, '20261027_file_cutover')
-    assert result.returncode != 0 and 'unarchived or conflicting receipts' in result.stderr
+    assert result.returncode != 0 and 'unarchived or conflicting receipts' in result.stdout + result.stderr
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
     archive_stage1(settings)
     result = upgrade(environment, '20261027_file_cutover')
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     assert upgrade(environment, '20261027_file_cutover').returncode == 0
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_cutover'
@@ -116,7 +116,7 @@ def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_d
         before = conn.execute('SELECT id,kind,raw_path,sha256 FROM clio.file_observation ORDER BY id').fetchall()
     originals = {(kind, path): (roots[kind] / path).read_bytes() for _, kind, path, _ in before if path}
     result = upgrade(environment, '20261027_drop_legacy_files')
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     with runtime(dsns, 'clio', urls) as conn:
         for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
             assert conn.execute('SELECT to_regclass(%s)', ('clio.' + table,)).fetchone()[0] is None
@@ -142,7 +142,7 @@ def test_cutover_refuses_corrupt_archive_before_advancing_revision(database, mon
         metadata['available_at'] = datetime.now(UTC).isoformat()
         receipt.write_text(json.dumps(metadata))
     result = upgrade(environment, '20261027_file_cutover')
-    assert result.returncode != 0 and 'cutover blocked' in result.stderr
+    assert result.returncode != 0 and 'cutover blocked' in result.stdout + result.stderr
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
         assert conn.execute('SELECT count(*) FROM clio.gong_snapshot').fetchone()[0] == 1

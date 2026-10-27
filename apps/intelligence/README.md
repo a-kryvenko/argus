@@ -16,7 +16,7 @@ and `INTELLIGENCE_SERVICE_TOKEN` for the API.
 Compose runs `intelligence-api` and `intelligence` (worker, 60-second polling).
 
 ```bash
-./argus compose exec -T intelligence intelligence migrate upgrade head
+./argus intelligence migrate
 ./argus compose restart intelligence-api intelligence
 ```
 

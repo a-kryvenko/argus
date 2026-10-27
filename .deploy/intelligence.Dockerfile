@@ -12,6 +12,7 @@ COPY packages/intelligence-core /var/www/packages/intelligence-core
 COPY packages/common /var/www/packages/common
 
 COPY apps/intelligence/src ./src
+COPY apps/intelligence/alembic.ini ./alembic.ini
 
 RUN uv sync --frozen --no-cache
 

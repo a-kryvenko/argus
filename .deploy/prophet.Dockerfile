@@ -17,6 +17,7 @@ COPY packages/forecast /var/www/packages/forecast
 COPY packages/forecast-core /var/www/packages/forecast-core
 
 COPY apps/prophet/src ./src
+COPY apps/prophet/alembic.ini ./alembic.ini
 
 RUN uv sync --frozen --no-cache
 

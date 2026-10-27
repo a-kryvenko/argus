@@ -28,6 +28,7 @@ INPUTS = {
     'intelligence': [
         'apps/intelligence/pyproject.toml',
         'apps/intelligence/uv.lock',
+        'apps/intelligence/alembic.ini',
         'apps/intelligence/src',
         'packages/common'
     ],
@@ -40,6 +41,7 @@ INPUTS = {
     'api': [
         'apps/api/pyproject.toml',
         'apps/api/uv.lock',
+        'apps/api/alembic.ini',
         'apps/api/src',
         'packages/common',
         'scripts/db/provision.py'
@@ -47,12 +49,14 @@ INPUTS = {
     'clio': [
         'apps/clio/pyproject.toml',
         'apps/clio/uv.lock',
+        'apps/clio/alembic.ini',
         'apps/clio/src',
         'packages/common'
     ],
     'prophet': [
         'apps/prophet/pyproject.toml',
         'apps/prophet/uv.lock',
+        'apps/prophet/alembic.ini',
         'apps/prophet/src',
         'packages/common',
         'packages/forecast'
@@ -60,10 +64,10 @@ INPUTS = {
 }
 
 MIGRATIONS = {
-    'intelligence': ['apps/intelligence/src/intelligence/db/migrations'],
-    'api': ['apps/api/src/api/db/migrations'],
-    'clio': ['apps/clio/src/clio/db/migrations'],
-    'prophet': ['apps/prophet/src/prophet/db/migrations']
+    'intelligence': ['apps/intelligence/alembic.ini', 'apps/intelligence/src/intelligence/db/migrations'],
+    'api': ['apps/api/alembic.ini', 'apps/api/src/api/db/migrations'],
+    'clio': ['apps/clio/alembic.ini', 'apps/clio/src/clio/db/migrations'],
+    'prophet': ['apps/prophet/alembic.ini', 'apps/prophet/src/prophet/db/migrations']
 }
 
 IGNORED = {

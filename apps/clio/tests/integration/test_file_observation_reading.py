@@ -1,6 +1,7 @@
 """Stage 2 uses only file storage and is ready for legacy table removal."""
 import asyncio
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 import gzip
 import hashlib
 import json
@@ -15,9 +16,9 @@ from tests.support.database import database, runtime
 
 
 def migrate(environment, revision='20261027_file_cutover'):
-    result = subprocess.run([sys.executable, '-c', 'from clio.cli import main; main()',
-        'migrate', 'upgrade', revision], env=environment, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
+    result = subprocess.run([sys.executable, '-m', 'alembic', '-c',
+        str(Path(__file__).resolve().parents[2] / 'alembic.ini'), 'upgrade', revision], env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.parametrize('kind', ['gong', 'goes'])

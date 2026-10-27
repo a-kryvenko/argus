@@ -109,7 +109,7 @@ services:
   clio-migrate:
     image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
     profiles: ["maintenance"]
-    command: ["clio", "migrate", "upgrade", "head"]
+    command: ["alembic", "upgrade", "head"]
     environment:
       ARGUS_WORKDIR: /var/www
       <<: *clio-db
@@ -155,7 +155,7 @@ services:
   prophet-migrate:
     image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
     profiles: ["maintenance"]
-    command: ["prophet", "migrate", "upgrade", "head"]
+    command: ["alembic", "upgrade", "head"]
     environment:
       ARGUS_WORKDIR: /var/www
       <<: *prophet-db
@@ -205,7 +205,7 @@ services:
   intelligence-migrate:
     image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
     profiles: ["maintenance"]
-    command: ["intelligence", "migrate", "upgrade", "head"]
+    command: ["alembic", "upgrade", "head"]
     environment:
       <<: *intelligence-db
     networks: [backend]
@@ -273,7 +273,7 @@ services:
   api-migrate:
     image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
     profiles: ["maintenance"]
-    command: ["api", "migrate", "upgrade", "head"]
+    command: ["alembic", "upgrade", "head"]
     environment:
       <<: *api-db
     networks: [backend]

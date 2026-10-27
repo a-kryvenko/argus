@@ -1,4 +1,4 @@
-"""Validate Prophet releases and manage Intelligence processing and migrations."""
+"""Validate Prophet releases and manage Intelligence processing."""
 import argparse
 import asyncio
 from datetime import UTC, datetime
@@ -59,29 +59,11 @@ def main(argv=None):
         sub.add_argument('product', choices=PRODUCT_ARTIFACTS if command == 'worker' else ('all', *PROCESS_PRODUCTS),
                          nargs='?', default='solar-wind-speed' if command == 'worker' else 'all')
     commands.add_parser('serve')
-    commands.add_parser('migrate', add_help=False)
-    args, remaining = parser.parse_known_args(argv)
+    args = parser.parse_args(argv)
     if args.command == 'serve':
-        if remaining:
-            parser.error('Unrecognized arguments: ' + ' '.join(remaining))
         import uvicorn
         uvicorn.run('intelligence.main:app', host='0.0.0.0', port=8000)
         return
-    if args.command == 'migrate':
-        from pathlib import Path
-        from alembic.config import Config, CommandLine
-        runner = CommandLine(prog='intelligence migrate')
-        if not remaining:
-            runner.parser.print_help()
-            return
-        options = runner.parser.parse_args(remaining)
-        config = Config()
-        config.cmd_opts = options
-        config.set_main_option('script_location', str(Path(__file__).parent / 'db' / 'migrations'))
-        runner.run_cmd(config, options)
-        return
-    if remaining:
-        parser.error('Unrecognized arguments: ' + ' '.join(remaining))
     if args.command in ('worker', 'process', 'refresh', 'status'):
         from intelligence import worker
         try:

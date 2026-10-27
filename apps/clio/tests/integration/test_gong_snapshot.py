@@ -101,7 +101,8 @@ def test_goes_source_files_are_persisted_and_served_without_calibration(database
 
 def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, tmp_path):
     dsns, urls, environment = database
-    command = [sys.executable, '-c', 'from clio.cli import main; main()', 'migrate', 'upgrade']
+    command = [sys.executable, '-m', 'alembic', '-c',
+               str(Path(__file__).resolve().parents[2] / 'alembic.ini'), 'upgrade']
     subprocess.run([*command, '20261004_raw_observation_files'], env=environment,
                    check=True, capture_output=True)
     now = datetime.now(UTC)

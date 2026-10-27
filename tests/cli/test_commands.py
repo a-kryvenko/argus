@@ -103,7 +103,7 @@ def test_all_migrations_are_sequential_and_stop_on_failure(cli, fail):
     assert len(calls) == (2 if fail else 4)
     for domain, call in zip(('api', 'clio', 'prophet', 'intelligence'), calls):
         args = call['args']
-        assert args[-4:] == [domain, 'migrate', 'upgrade', 'head']
+        assert args[-3:] == ['alembic', 'upgrade', 'head']
         target = domain if mode == 'local' else domain + '-migrate'
         assert args[args.index('--no-deps') + 1] == target
 
@@ -118,9 +118,9 @@ def test_specific_migration_uses_maintenance_service(cli, domain):
         assert calls[1]['args'][-6:] == ['up', '-d', '--wait', '--wait-timeout', '60', 'postgres']
         assert calls[-1]['args'][-2:] == ['stop', 'postgres']
         calls = calls[2:-1]
-    assert calls[0]['args'][-3:] == [domain, 'migrate', 'current']
+    assert calls[0]['args'][-2:] == ['alembic', 'current']
     if mode == 'production':
-        assert calls[0]['args'][-4] == domain + '-migrate'
+        assert calls[0]['args'][-3] == domain + '-migrate'
 
 
 def test_unknown_commands_do_not_run_tools(cli):

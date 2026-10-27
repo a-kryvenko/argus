@@ -81,8 +81,7 @@ def migration_sql(domain, revision, tmp_path):
                       dict(HOST='localhost', PORT='5432', NAME=domain, USER='owner', PASSWORD='p@ss:word/%').items()},
                    'PYTHONPATH': ''}
     python = str(ROOT / 'apps' / domain / '.venv/bin/python')
-    module = domain
-    command = [python, '-c', f'from {module}.cli import main; main()', 'migrate']
+    command = [python, '-m', 'alembic', '-c', str(ROOT / 'apps' / domain / 'alembic.ini')]
     return subprocess.run([*command, 'upgrade', revision, '--sql'], env=environment,
                           capture_output=True, text=True)
 

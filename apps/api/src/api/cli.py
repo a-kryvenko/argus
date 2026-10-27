@@ -12,7 +12,6 @@ def main(argv=None):
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
     
-    commands.add_parser('migrate', add_help=False)
     commands.add_parser('worker')
 
     user = commands.add_parser('user')
@@ -32,14 +31,7 @@ def main(argv=None):
     reset_user_password.add_argument('username')
     reset_user_password.set_defaults(command_parser=reset_user_password)
 
-    args, remaining = parser.parse_known_args(argv)
-
-    if args.command == 'migrate':
-        from api.commands.migrate import run
-        return run(remaining)
-
-    if remaining:
-        parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+    args = parser.parse_args(argv)
 
     if args.command == 'worker':
         from common.runtime import run_command

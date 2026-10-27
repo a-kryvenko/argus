@@ -76,6 +76,8 @@ def source(tmp_path):
              'apps/clio/src/clio/db/migrations/versions/test.py': 'migration',
              'apps/api/src/api/db/migrations/versions/test.py': 'API migration',
              'configs/project.yaml': 'config'}
+    files.update({f'apps/{domain}/alembic.ini': f'[alembic]\nscript_location = {domain}:db/migrations\n'
+                  for domain in release.MIGRATIONS})
     files.update({f'.deploy/{name}.Dockerfile': 'FROM scratch' for name in release.IMAGES})
     tracked_repo(tmp_path, files)
     tracked_repo(tmp_path / 'packages/forecast-core', {'src/forecast_core/api.py': 'private',
@@ -91,6 +93,7 @@ def changed_components(before, after):
 
 @pytest.mark.parametrize('path,expected', [
     ('apps/intelligence/src/intelligence/cli.py', {'intelligence'}),
+    *((f'apps/{domain}/alembic.ini', {domain}) for domain in release.MIGRATIONS),
     ('packages/forecast/src/forecast/example.py', {'prophet', 'proswin'}),
     ('docs/example.md', set()), ('apps/web/src/app/page.tsx', {'frontend'}),
     ('packages/common/src/common/shared.py', {'api', 'clio', 'prophet', 'proswin', 'intelligence'}),
@@ -105,6 +108,9 @@ def test_only_actual_consumers_rebuild(source, path, expected):
     (source / path).write_text('changed')
     after = release.plan(source)
     assert changed_components(before, after) == expected
+    if path.endswith('/alembic.ini'):
+        assert {name for name in before['migrations']
+                if before['migrations'][name] != after['migrations'][name]} == expected
 
 
 def test_deleted_sources_and_explicit_rebuild_are_not_missed(source):

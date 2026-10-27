@@ -9,7 +9,6 @@ def main(argv=None) -> None:
     commands = parser.add_subparsers(dest='command', required=True)
     generate_parser = commands.add_parser('generate', aliases=['refresh'], help='Generate forecasts once')
     generate_parser.add_argument('product', nargs='?', choices=GENERATION_CHOICES, default='all')
-    commands.add_parser('migrate', add_help=False)
     serve = commands.add_parser('serve', help='Serve published forecast contracts')
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
@@ -21,12 +20,7 @@ def main(argv=None) -> None:
         verification = commands.add_parser(command, help='Verify published forecasts against later observations')
         verification.add_argument('product', nargs='?', default='solar-wind-speed', choices=(*VERIFIED_PRODUCTS, 'all'))
         verification.add_argument('--days', type=int, choices=range(1, 26), default=7)
-    args, remaining = parser.parse_known_args(argv)
-    if args.command == 'migrate':
-        from prophet.commands.migrate import run
-        return run(remaining)
-    if remaining:
-        parser.error('Unrecognized arguments: ' + ' '.join(remaining))
+    args = parser.parse_args(argv)
     if args.command == 'serve':
         import uvicorn
         uvicorn.run('prophet.main:app', host=args.host, port=args.port)

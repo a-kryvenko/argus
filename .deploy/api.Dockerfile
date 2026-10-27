@@ -11,6 +11,7 @@ RUN uv sync --frozen --no-cache --no-install-local
 COPY packages/common /var/www/packages/common
 
 COPY apps/api/src ./src
+COPY apps/api/alembic.ini ./alembic.ini
 
 RUN uv sync --frozen --no-cache
 COPY scripts/db/provision.py /var/www/scripts/db/provision.py

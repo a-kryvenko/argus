@@ -75,11 +75,10 @@ def database(tmp_path):
 def migrate(environment):
     for domain in provisioning.DOMAINS:
         python = str(ROOT / 'apps' / domain / '.venv/bin/python')
-        module = domain
-        command = [python, '-c', f'from {module}.cli import main; main()', 'migrate']
+        command = [python, '-m', 'alembic', '-c', str(ROOT / 'apps' / domain / 'alembic.ini')]
         result = subprocess.run([*command, 'upgrade', 'head'], env={**environment, 'PYTHONPATH': ''},
                                 cwd=ROOT, capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 0, result.stdout + result.stderr
 
 
 def runtime(dsns, domain, urls):

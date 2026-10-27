@@ -1,6 +1,6 @@
 from contextlib import nullcontext
 from datetime import UTC, datetime
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,11 +21,11 @@ def pair(value, median, *, time='2026-09-10T00:00Z', lead=3, state='verified'):
 
 
 def install_rows(monkeypatch, rows):
-    cursor = Mock()
-    cursor.fetchall.return_value = rows
-    conn = Mock()
-    conn.cursor.return_value = nullcontext(cursor)
-    monkeypatch.setattr(verification, 'connect', lambda: nullcontext(conn))
+    result = Mock()
+    result.mappings.return_value.all.return_value = rows
+    conn = Mock(execute=AsyncMock(return_value=result))
+    conn.begin.return_value = nullcontext()
+    monkeypatch.setattr(verification, 'get_db_session', lambda: nullcontext(conn))
 
 
 @pytest.fixture(autouse=True)
@@ -35,31 +35,31 @@ def clear_monthly_cache():
     verification._monthly_cache.clear()
 
 
-def test_monthly_cache_reuses_results_until_expiry_and_isolates_products(monkeypatch):
+async def test_monthly_cache_reuses_results_until_expiry_and_isolates_products(monkeypatch):
     clock = Mock(return_value=0)
-    calculate = Mock(side_effect=lambda product: object())
+    calculate = AsyncMock(side_effect=lambda product: object())
     monkeypatch.setattr(verification, 'monotonic', clock)
     monkeypatch.setattr(verification, 'monthly_accuracy', calculate)
-    first = verification.cached_monthly_accuracy('dst')
+    first = (await verification.cached_monthly_accuracy('dst'))
     clock.return_value = 299
-    assert verification.cached_monthly_accuracy('dst') is first
-    assert verification.cached_monthly_accuracy('solar-wind-density') is not first
+    assert (await verification.cached_monthly_accuracy('dst')) is first
+    assert (await verification.cached_monthly_accuracy('solar-wind-density')) is not first
     assert calculate.call_count == 2
     clock.return_value = 300
-    assert verification.cached_monthly_accuracy('dst') is not first
+    assert (await verification.cached_monthly_accuracy('dst')) is not first
     assert calculate.call_count == 3
 
 
-def test_monthly_cache_does_not_cache_errors(monkeypatch):
-    calculate = Mock(side_effect=[RuntimeError('unavailable'), object()])
+async def test_monthly_cache_does_not_cache_errors(monkeypatch):
+    calculate = AsyncMock(side_effect=[RuntimeError('unavailable'), object()])
     monkeypatch.setattr(verification, 'monthly_accuracy', calculate)
     with pytest.raises(RuntimeError):
-        verification.cached_monthly_accuracy('dst')
-    assert verification.cached_monthly_accuracy('dst') is not None
+        (await verification.cached_monthly_accuracy('dst'))
+    assert (await verification.cached_monthly_accuracy('dst')) is not None
     assert calculate.call_count == 2
 
 
-def test_monthly_separates_model_hashes_and_filters_valid_times(monkeypatch):
+async def test_monthly_separates_model_hashes_and_filters_valid_times(monkeypatch):
     install_rows(monkeypatch, [
         row('dst_quantile', [pair(0, 0), pair(0, 4, lead=48),
             pair(None, 100, state='missing'), pair(None, 100, lead=12, state='pending'),
@@ -70,7 +70,7 @@ def test_monthly_separates_model_hashes_and_filters_valid_times(monkeypatch):
         row('dst_quantile', [pair(0, 100, time='2026-08-01T00:00Z')], issue='2026-10-02T00:00:00+00:00'),
         row('dst_quantile', []),
     ])
-    result = verification.monthly_accuracy('dst', now=datetime(2026, 10, 3, tzinfo=UTC))
+    result = (await verification.monthly_accuracy('dst', now=datetime(2026, 10, 3, tzinfo=UTC)))
     assert len(result.groups) == 2
     a = result.groups[0]
     assert a.model == 'test-model-v1'
@@ -95,14 +95,14 @@ def test_monthly_separates_model_hashes_and_filters_valid_times(monkeypatch):
     assert result.start == datetime(2026, 9, 3, tzinfo=UTC)
 
 
-def test_monthly_brier_and_empty_history(monkeypatch):
+async def test_monthly_brier_and_empty_history(monkeypatch):
     pairs = [{'valid_time': '2026-09-10T00:00Z', 'lead_hours': lead,
               'value': value, 'state': 'verified',
               'p_kp_ge_4': probability, 'p_kp_ge_5': probability, 'p_kp_ge_6': probability}
              for lead, value, probability in [(3, 7, .8), (48, 0, .3)]]
     install_rows(monkeypatch, [row('kp_threshold', pairs),
         row('kp_threshold', [{**pairs[0], 'p_kp_ge_4': .1}], 'model-b')])
-    result = verification.monthly_accuracy('geomagnetic-activity', now=datetime(2026, 10, 3, tzinfo=UTC))
+    result = (await verification.monthly_accuracy('geomagnetic-activity', now=datetime(2026, 10, 3, tzinfo=UTC)))
     assert len(result.groups) == 2
     assert result.groups[1].by_lead_hour[0].binary['4']['brier'] == pytest.approx(.81)
     short, long = result.groups[0].by_lead_hour
@@ -111,7 +111,7 @@ def test_monthly_brier_and_empty_history(monkeypatch):
     assert long.binary['4']['brier'] == pytest.approx(.09)
     assert short.continuous is None
     install_rows(monkeypatch, [])
-    assert verification.monthly_accuracy('dst').groups == []
+    assert (await verification.monthly_accuracy('dst')).groups == []
 
 
 def test_monthly_endpoint_requires_auth(monkeypatch):
@@ -127,7 +127,7 @@ def test_monthly_endpoint_requires_auth(monkeypatch):
         assert client.get('/internal/v1/forecasts/unknown/verification', headers=headers).status_code == 404
 
 
-def test_monthly_separates_names_and_missing_version_metadata(monkeypatch):
+async def test_monthly_separates_names_and_missing_version_metadata(monkeypatch):
     unknown = row('dst_quantile', [pair(0, 30)])
     unknown['report'].pop('model_info')
     install_rows(monkeypatch, [
@@ -137,7 +137,10 @@ def test_monthly_separates_names_and_missing_version_metadata(monkeypatch):
         unknown,
         row('dst_quantile', [pair(0, 100, time='2026-08-01T00:00Z')], 'outside'),
     ])
-    result = verification.monthly_accuracy('dst', now=datetime(2026, 10, 3, tzinfo=UTC))
+    result = (await verification.monthly_accuracy('dst', now=datetime(2026, 10, 3, tzinfo=UTC)))
     assert [(g.model, g.model_sha256) for g in result.groups] == [
         ('model-v1', 'same-hash'), ('model-v2', 'same-hash'), ('model-v2', None), (None, None)]
     assert [g.by_lead_hour[0].continuous['mae'] for g in result.groups] == [1, 2, 3, 30]
+
+
+pytestmark = pytest.mark.anyio

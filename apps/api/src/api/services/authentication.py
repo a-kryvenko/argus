@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 from api.schemas.dashboard import UserCreate
 from sqlalchemy.ext.asyncio import AsyncSession
-from api.db.session import get_db_session
+from api.db.session import get_db_session, get_request_db_session
 from api.db.models.dashboard import User, Group, Membership, Session
 
 COOKIE = 'argus_session'
@@ -49,7 +49,7 @@ def check_origin(request: Request):
         raise HTTPException(403, 'Untrusted request origin')
 
 
-async def current_user(request: Request, db: AsyncSession = Depends(get_db_session)):
+async def current_user(request: Request, db: AsyncSession = Depends(get_request_db_session)):
     token = request.cookies.get(COOKIE)
     if not token:
         raise HTTPException(401, 'Please sign in')
@@ -98,7 +98,7 @@ async def create_user(db, body: UserCreate):
 
 
 def require(permission):
-    async def dependency(user: User = Depends(current_user), db: AsyncSession = Depends(get_db_session)):
+    async def dependency(user: User = Depends(current_user), db: AsyncSession = Depends(get_request_db_session)):
         if permission not in (await user_info(db, user))['permissions']:
             raise HTTPException(403, 'Access denied')
         return user

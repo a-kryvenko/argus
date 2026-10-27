@@ -8,7 +8,7 @@ from sqlalchemy import select
 from clio.providers.f107 import fetch_f107
 from clio.observations.schema import wide_to_measurements
 from clio.db.models.measurement import Measurement
-from clio.db.session import get_session_factory
+from clio.db.session import get_db_session
 from clio.domains.geomagnetic import ingest_source
 from clio.ingestion.adapters import clean_records
 
@@ -34,7 +34,7 @@ class GeomagneticLiveAdapter:
 
 
 async def stored_native_frame(metrics, start, now, product):
-    async with get_session_factory()() as session:
+    async with get_db_session() as session:
         statement = select(Measurement.metric, Measurement.value, Measurement.observed_at, Measurement.received_at).where(
             Measurement.metric.in_(metrics), Measurement.source_product == product, Measurement.observed_at >= start, Measurement.observed_at <= now,
             Measurement.quality.not_in(['flagged', 'missing']), Measurement.value.is_not(None))

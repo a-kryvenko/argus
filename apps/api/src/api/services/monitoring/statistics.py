@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 from api.db.models.dashboard import ApiMetric
-from api.db.session import get_session_factory
+from api.db.session import get_db_session
 
 logger = logging.getLogger(__name__)
 BOUNDS = (5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000, 60000)
@@ -37,7 +37,7 @@ async def flush():
     global _buffer
     pending, _buffer = _buffer, {}
     try:
-        async with get_session_factory()() as db:
+        async with get_db_session() as db:
             values = [dict(hour=hour, route=route, method=method, status=status,
                            bucket_ms=bucket, count=count, duration_ms=duration)
                       for (hour, route, method, status, bucket), (count, duration) in pending.items()]

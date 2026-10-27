@@ -9,7 +9,6 @@ def main(argv=None) -> None:
     commands = parser.add_subparsers(dest='command', required=True)
     generate_parser = commands.add_parser('generate', aliases=['refresh'], help='Generate forecasts once')
     generate_parser.add_argument('product', nargs='?', choices=GENERATION_CHOICES, default='all')
-    commands.add_parser('worker', help='Generate hourly at :10 UTC; retry failures')
     commands.add_parser('migrate', add_help=False)
     serve = commands.add_parser('serve', help='Serve published forecast contracts')
     serve.add_argument('--host', default='0.0.0.0')
@@ -32,7 +31,7 @@ def main(argv=None) -> None:
         import uvicorn
         uvicorn.run('prophet.main:app', host=args.host, port=args.port)
         return
-    if args.command in ('generate', 'refresh', 'worker'):
+    if args.command in ('generate', 'refresh'):
         from prophet.commands.generation import run
     elif args.command in ('verify', 'verification-report'):
         from prophet.commands.verification import run

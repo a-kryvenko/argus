@@ -151,16 +151,6 @@ services:
     ports:
       - 127.0.0.1:8001:8000
 
-  clio-worker:
-    <<: *clio-runtime
-    command: ["clio", "worker"]
-    healthcheck:
-      test: ["CMD", "clio", "check-health", "worker"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 120s
-
   prophet:
     <<: *prophet-runtime
     environment:
@@ -177,7 +167,9 @@ services:
       - ./packages/common/src:/var/www/packages/common/src
       - ./packages/forecast/src:/var/www/packages/forecast/src
       - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
-    command: ["prophet", "worker"]
+    profiles: ["commands"]
+    restart: "no"
+    command: ["prophet", "--help"]
     stop_grace_period: 10m
     depends_on:
       postgres:

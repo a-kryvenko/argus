@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.services.authentication import hash_password, verify_password, current_user
-from api.db.session import get_db_session
+from api.db.session import get_request_db_session
 from api.routers.dashboard import router, users
 from api.services.monitoring.statistics import summarize, record
 
@@ -43,7 +43,7 @@ def test_users_page_loads_all_groups_in_one_query():
 def test_anonymous_cannot_access_dashboard():
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[get_db_session] = lambda: AsyncMock()
+    app.dependency_overrides[get_request_db_session] = lambda: AsyncMock()
     with TestClient(app) as client:
         for path in ['/me', '/users', '/groups', '/api-stats', '/project-monitoring', '/project-traffic']:
             assert client.get('/dashboard'+path).status_code == 401
@@ -54,7 +54,7 @@ def test_anonymous_cannot_access_dashboard():
 def test_writes_reject_missing_or_foreign_origin():
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[get_db_session] = lambda: AsyncMock()
+    app.dependency_overrides[get_request_db_session] = lambda: AsyncMock()
     with TestClient(app) as client:
         for headers in [{}, {'Origin': 'https://evil.example'}, {'Origin': 'null'}]:
             for endpoint in ['/login', '/logout', '/users']:
@@ -68,7 +68,7 @@ def test_user_without_permissions_is_forbidden():
     db = AsyncMock()
     from unittest.mock import Mock
     db.scalars.return_value = Mock(all=Mock(return_value=[]))
-    app.dependency_overrides[get_db_session] = lambda: db
+    app.dependency_overrides[get_request_db_session] = lambda: db
     app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=1, username='reader', active=True)
     with TestClient(app) as client:
         assert client.get('/dashboard/me').status_code == 200
@@ -100,6 +100,6 @@ def test_empty_origin_configuration_fails_closed(monkeypatch):
     monkeypatch.setenv('DASHBOARD_ORIGINS', '')
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[get_db_session] = lambda: AsyncMock()
+    app.dependency_overrides[get_request_db_session] = lambda: AsyncMock()
     with TestClient(app) as client:
         assert client.post('/dashboard/logout').status_code == 403

@@ -31,12 +31,13 @@ def _read_password(parser):
 
 
 async def _create(args, password):
-    from api.db.session import get_session_factory, dispose_engine
+    from common.db.session import dispose_engine
+    from api.db.session import get_db_session
     from api.schemas.dashboard import UserCreate
     from api.services.authentication import create_user
 
     try:
-        async with get_session_factory()() as db:
+        async with get_db_session() as db:
             result = await create_user(db, UserCreate(username=args.username, password=password, groups=args.group))
             print(f"Created {result['username']}; groups: {', '.join(result['groups']) or '(none)'}")
     finally:
@@ -45,12 +46,13 @@ async def _create(args, password):
 
 async def _reset_password(args, password):
     from sqlalchemy import select, delete
-    from api.db.session import get_session_factory, dispose_engine
+    from common.db.session import dispose_engine
+    from api.db.session import get_db_session
     from api.db.models.dashboard import User, Session
     from api.services.authentication import hash_password
 
     try:
-        async with get_session_factory()() as db:
+        async with get_db_session() as db:
             user = await db.scalar(select(User).where(User.username == args.username.lower()).with_for_update())
             if user is None:
                 raise ValueError('User not found')

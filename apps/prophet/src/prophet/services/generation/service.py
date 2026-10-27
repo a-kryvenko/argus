@@ -1,5 +1,6 @@
 """Manual generation use case with explicitly supplied infrastructure."""
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
+import asyncio
 from typing import Protocol, TypeVar
 
 from forecast.inputs import ForecastInputs
@@ -15,15 +16,15 @@ class Executor(Protocol):
 
 
 class GenerationRun(Protocol):
-    def prepare_calculation(self, inputs: ForecastInputs) -> CalculationRequest:
+    async def prepare_calculation(self, inputs: ForecastInputs) -> CalculationRequest:
         """Record the input snapshot, validate policy and create the request."""
         ...
 
-    def complete(self, artifacts: list[Artifact]) -> None:
+    async def complete(self, artifacts: list[Artifact]) -> None:
         """Store artifacts and transactionally publish the completed run."""
         ...
 
-    def fail(self, error: BaseException) -> None: ...
+    async def fail(self, error: BaseException) -> None: ...
 
 
 class GenerationFailed(RuntimeError):
@@ -43,7 +44,7 @@ class ForecastGenerationService:
 
     def __init__(self, *, input_loader: Callable[[], ForecastInputs],
                  calculator: Callable[[CalculationRequest], list[Artifact]],
-                 executor: Executor, run_factory: Callable[[str], GenerationRun],
+                 executor: Executor, run_factory: Callable[[str], Awaitable[GenerationRun]],
                  before_dispatch: Callable[[], None], timeout_seconds: float):
         self.input_loader = input_loader
         self.calculator = calculator
@@ -52,7 +53,7 @@ class ForecastGenerationService:
         self.before_dispatch = before_dispatch
         self.timeout_seconds = timeout_seconds
 
-    def generate(self, products: Sequence[str]) -> None:
+    async def generate(self, products: Sequence[str]) -> None:
         if not products or len(set(products)) != len(products) or any(name not in PRODUCTS for name in products):
             raise ValueError('Expected distinct supported forecast products')
         inputs = None
@@ -60,22 +61,22 @@ class ForecastGenerationService:
         failures = {}
         for product in products:
             self.before_dispatch()
-            run = self.run_factory(product)
+            run = await self.run_factory(product)
             try:
                 if inputs is None and input_error is None:
                     try:
-                        inputs = self.executor(self.input_loader, timeout_seconds=self.timeout_seconds)
+                        inputs = await asyncio.to_thread(self.executor, self.input_loader, timeout_seconds=self.timeout_seconds)
                     except Exception as exc:
                         input_error = exc
                 if input_error is not None:
                     raise input_error
                 self.before_dispatch()
-                request = run.prepare_calculation(inputs)
-                artifacts = self.executor(self.calculator, request, timeout_seconds=self.timeout_seconds)
-                run.complete(artifacts)
+                request = await run.prepare_calculation(inputs)
+                artifacts = await asyncio.to_thread(self.executor, self.calculator, request, timeout_seconds=self.timeout_seconds)
+                await run.complete(artifacts)
             except BaseException as exc:
                 # A failed writer must abort the cycle instead of starting more runs.
-                run.fail(exc)
+                await run.fail(exc)
                 if not isinstance(exc, Exception):
                     raise
                 failures[product] = exc

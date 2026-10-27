@@ -16,7 +16,7 @@ def client_with_session(monkeypatch):
     session.execute.return_value = Mock(all=lambda: [])
     app = FastAPI()
     app.include_router(routes.router)
-    app.dependency_overrides[routes.get_db_session] = lambda: session
+    app.dependency_overrides[routes.get_request_db_session] = lambda: session
     return TestClient(app), session
 
 

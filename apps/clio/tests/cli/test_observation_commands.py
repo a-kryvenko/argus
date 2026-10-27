@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, Mock
 from types import SimpleNamespace
 from clio import cli
-from clio.db import session as database
+from common.db import session as database
 
 import pandas as pd
 import pytest
@@ -13,7 +13,7 @@ def session_factory(monkeypatch, module):
     session = AsyncMock()
     context = AsyncMock()
     context.__aenter__.return_value = session
-    monkeypatch.setattr(module, 'get_session_factory', lambda: lambda: context)
+    monkeypatch.setattr(module, 'get_db_session', lambda: context)
     dispose = AsyncMock()
     monkeypatch.setattr(database, 'dispose_engine', dispose)
     return session, dispose
@@ -39,14 +39,14 @@ def test_backfill_command_uses_config_for_defaults_and_explicit_selection(monkey
     backfill = AsyncMock(return_value=expected)
     monkeypatch.setattr('clio.observations.backfill.backfill_selected', backfill)
     now = datetime(2026, 9, 28, 12, tzinfo=UTC)
-    result = cli.invoke('backfill', SimpleNamespace(metrics=selected, now=now, start=None, end=None, scheduled=True))
+    result = cli.invoke('backfill', SimpleNamespace(metrics=selected, now=now, start=None, end=None, batch=True))
     assert result == expected
     backfill.assert_awaited_once_with(session, config, selected or list(config.observations),
                                      now=now, start=None, end=None, raise_on_failure=False)
     dispose.assert_awaited_once()
 
 
-def test_live_command_returns_per_metric_failures_to_scheduler(monkeypatch):
+def test_live_command_returns_per_metric_failures(monkeypatch):
     from datetime import UTC, datetime
     from clio.commands import collect as command
     session, dispose = session_factory(monkeypatch, command)
@@ -56,13 +56,11 @@ def test_live_command_returns_per_metric_failures_to_scheduler(monkeypatch):
     collect = AsyncMock(return_value=result)
     monkeypatch.setattr('clio.observations.live.collect_live', collect)
     now = datetime(2026, 9, 28, 12, tzinfo=UTC)
-    args = SimpleNamespace(metrics=['kp'], now=now, scheduled=True)
+    args = SimpleNamespace(metrics=['kp'], now=now, batch=True)
     assert cli.invoke('collect', args) == result
     collect.assert_awaited_once_with(session, config, ['kp'], now=now)
     dispose.assert_awaited_once()
-    args.scheduled = False
-    with pytest.raises(RuntimeError, match='No live observations'):
-        cli.invoke('collect', args)
+
 
 
 @pytest.mark.parametrize('name', ['collect', 'backfill'])
@@ -72,13 +70,13 @@ def test_file_only_commands_never_open_numeric_storage(monkeypatch, name):
     from clio.ingestion import files as collection
     command = fetch_live if name == 'collect' else backfill_observations
     numeric = Mock(side_effect=AssertionError('Opened numeric session for files'))
-    monkeypatch.setattr(command, 'get_session_factory', numeric)
+    monkeypatch.setattr(command, 'get_db_session', numeric)
     monkeypatch.setattr(database, 'dispose_engine', AsyncMock())
     files = {'gong': {'received': 0, 'restored': 0, 'retained': 1}}
     collect = AsyncMock(return_value={'status': 'complete', 'failed_metrics': [], 'files': files})
     monkeypatch.setattr(collection, 'collect_file_observations', collect)
     now = datetime(2026, 9, 28, 12, tzinfo=UTC)
-    result = cli.invoke(name, SimpleNamespace(metrics=['gong'], now=now, start=None, end=None, scheduled=False))
+    result = cli.invoke(name, SimpleNamespace(metrics=['gong'], now=now, start=None, end=None, batch=False))
     assert result['files'] == files and result['downloaded_measurements'] == 0
     assert collect.call_args.args[1] == ['gong']
     assert collect.call_args.kwargs['mode'] == ('live' if name == 'collect' else 'backfill')
@@ -96,26 +94,27 @@ def test_mixed_backfill_commits_numeric_success_and_reports_file_failure(monkeyp
         'status': 'partial', 'failed_metrics': ['gong'],
         'files': {'gong': {'received': 0, 'restored': 0, 'retained': 0, 'failed': 1}}}))
     result = cli.invoke('backfill', SimpleNamespace(metrics=['v', 'gong'], now=datetime(2026, 9, 28, tzinfo=UTC),
-                                                   start=None, end=None, scheduled=True))
+                                                   start=None, end=None, batch=True))
     assert numeric.call_args.args[2] == ['v']
     assert result['failed_metrics'] == ['gong'] and result['downloaded_measurements'] == 1
 
 
 @pytest.mark.parametrize('name,mode', [('collect', 'live'), ('backfill', 'warmup')])
 @pytest.mark.parametrize('selected', [None, ['sdo']])
-def test_common_commands_include_sdo_without_numeric_storage(monkeypatch, name, mode, selected):
+@pytest.mark.parametrize('batch', [False, True])
+def test_common_commands_include_sdo_without_numeric_storage(monkeypatch, name, mode, selected, batch):
     from datetime import UTC, datetime
     from clio.commands import collect, backfill_observations, sdo_images
     from clio.config import ClioObservations
     command = collect if name == 'collect' else backfill_observations
     config = ClioObservations(observations={}, sdo_images={'enabled': True})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
-    monkeypatch.setattr(command, 'get_session_factory', Mock(side_effect=AssertionError('numeric storage')))
+    monkeypatch.setattr(command, 'get_db_session', Mock(side_effect=AssertionError('numeric storage')))
     monkeypatch.setattr(database, 'dispose_engine', AsyncMock())
     cycle = Mock(return_value={'saved': 1, 'failed': 0})
     monkeypatch.setattr(sdo_images, 'cycle', cycle)
     now = datetime(2026, 10, 4, tzinfo=UTC)
-    result = cli.invoke(name, SimpleNamespace(metrics=selected, now=now, start=None, end=None))
+    result = cli.invoke(name, SimpleNamespace(metrics=selected, now=now, start=None, end=None, batch=batch))
     assert result['sdo']['saved'] == 1
     assert cycle.call_args.args[1] == mode
-    assert cycle.call_args.kwargs['full'] is True
+    assert cycle.call_args.kwargs['full'] is (not batch)

@@ -1,3 +1,2 @@
-# Application work is owned by Compose workers (Clio and Prophet).
 # Bootstrap the external nginx proxy after host restart.
-@reboot sleep 15 && cd /var/www && ./nginx-proxy-up.sh
+@reboot sleep 15 && cd @ROOT@ && ./nginx-proxy-up.sh

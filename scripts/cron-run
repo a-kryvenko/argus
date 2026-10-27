@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+root="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)"
+service="${1:-}"
+job="${2:-}"
+case "$service" in clio|prophet|api|intelligence) ;; *) exit 2 ;; esac
+[[ "$job" =~ ^[a-z0-9][a-z0-9-]*$ && $# -ge 3 ]] || exit 2
+shift 2
+mkdir -p "$root/.cron-locks" "$root/log/$service"
+exec >>"$root/log/$service/$job.log" 2>&1
+exec 7>"$root/.cron-locks/$service-$job.lock"
+if flock -n -E 75 7; then
+    if [[ "$service" == prophet ]]; then
+        exec 8>"$root/.cron-locks/prophet-writer.lock"
+        flock 8
+    fi
+    export ARGUS_CRON_JOB="$job"
+    exec "$root/argus" "$service" "$@"
+else
+    status=$?
+    [[ $status == 75 ]] && exit 0
+    exit "$status"
+fi

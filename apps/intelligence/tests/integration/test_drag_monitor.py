@@ -1,8 +1,15 @@
 """Ownership, version races, deduplication and durable failure history on PostgreSQL."""
+from sqlalchemy import text
+
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+import asyncio
 from uuid import uuid4
 
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from common.db.session import dispose_engine
+from intelligence.db import session as db
 import pytest
 import psycopg
 from tests.support.database import database, migrate
@@ -45,158 +52,173 @@ def assessment(request, *, release):
         assumptions=['Circular orbit'], predictions=points)
 
 
-def test_owner_isolation_versions_and_durable_history(storage, monkeypatch):
-    profile = monitor.save_profile(1, body())
-    assert monitor.list_profiles(2) == []
+async def test_owner_isolation_versions_and_durable_history(storage, monkeypatch):
+    profile = await monitor.save_profile(1, body())
+    assert (await monitor.list_profiles(2)) == []
     with pytest.raises(monitor.ProfileNotFound):
-        monitor.history(2, profile.id)
+        await monitor.history(2, profile.id)
     with pytest.raises(monitor.ProfileNotFound):
-        monitor.save_profile(2, body(), profile_id=profile.id, revision=1)
+        await monitor.save_profile(2, body(), profile_id=profile.id, revision=1)
     release = SimpleNamespace(release_id=uuid4())
     monkeypatch.setattr(monitor, 'assess_drag', assessment)
-    run = monitor.assess_profile(1, profile.id, release=release)
+    run = await monitor.assess_profile(1, profile.id, release=release)
     assert len(run.modes) == 2
     assert run.modes[0].elevated_at is not None
     assert run.modes[0].high_at == run.modes[0].assessment.end_time
     monkeypatch.setattr(monitor, 'assess_drag', lambda *a, **kw: pytest.fail('Duplicate computation'))
-    assert monitor.assess_profile(1, profile.id, release=release).id == run.id
-    assert len(monitor.history(1, profile.id)) == 1
+    assert (await monitor.assess_profile(1, profile.id, release=release)).id == run.id
+    assert len((await monitor.history(1, profile.id))) == 1
     changed = body().model_copy(update={'mass_kg': 200})
-    new = monitor.save_profile(1, changed, profile_id=profile.id, revision=1)
+    new = await monitor.save_profile(1, changed, profile_id=profile.id, revision=1)
     assert new.revision == 2
-    assert monitor.list_profiles(1)[0].data_status == 'profile_changed'
-    assert monitor.history(1, profile.id)[0].profile_snapshot.mass_kg == 100
+    assert (await monitor.list_profiles(1))[0].data_status == 'profile_changed'
+    assert (await monitor.history(1, profile.id))[0].profile_snapshot.mass_kg == 100
     with pytest.raises(monitor.ProfileConflict):
-        monitor.save_profile(1, body(), profile_id=profile.id, revision=1)
+        await monitor.save_profile(1, body(), profile_id=profile.id, revision=1)
 
 
-def test_failure_supersedes_success_and_does_not_block_other_modes(storage, monkeypatch):
-    profile = monitor.save_profile(1, body())
+async def test_failure_supersedes_success_and_does_not_block_other_modes(storage, monkeypatch):
+    profile = await monitor.save_profile(1, body())
     monkeypatch.setattr(monitor, 'assess_drag', assessment)
-    monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    failed = monitor.assess_profile(1, profile.id, release=None)
+    await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    failed = await monitor.assess_profile(1, profile.id, release=None)
     assert all(mode.error == 'unavailable' for mode in failed.modes)
-    assert monitor.list_profiles(1)[0].attention == 'not_assessed'
-    assert len(monitor.history(1, profile.id)) == 2
+    assert (await monitor.list_profiles(1))[0].attention == 'not_assessed'
+    assert len((await monitor.history(1, profile.id))) == 2
     def partial(request, *, release):
         if request.effective_area_m2 == 2:
             raise DragDomainError('private backend information')
         return assessment(request, release=release)
     monkeypatch.setattr(monitor, 'assess_drag', partial)
-    partial_run = monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    partial_run = await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
     assert partial_run.modes[0].assessment is not None
     assert partial_run.modes[1].error == 'outside_model_domain'
     assert 'private backend' not in partial_run.model_dump_json()
 
 
-def test_edit_during_calculation_cannot_publish_and_lock_excludes_writer(storage, monkeypatch):
-    profile = monitor.save_profile(1, body())
-    with monitor.db.connect() as conn:
-        conn.execute('SELECT pg_advisory_lock(hashtextextended(%s, 0))', (str(profile.id),))
+async def test_edit_during_calculation_cannot_publish_and_lock_excludes_writer(storage, monkeypatch):
+    profile = await monitor.save_profile(1, body())
+    async with db.get_db_session() as session, session.begin():
+        await session.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:p0, 0))'), {'p0': str(profile.id)})
         with pytest.raises(monitor.ProfileConflict):
-            monitor.assess_profile(1, profile.id, release=None)
+            await monitor.assess_profile(1, profile.id, release=None)
     edited = False
+    loop = asyncio.get_running_loop()
     def racing(request, *, release):
         nonlocal edited
         if not edited:
-            monitor.save_profile(1, body(), profile_id=profile.id, revision=1)
+            asyncio.run_coroutine_threadsafe(monitor.save_profile(1, body(), profile_id=profile.id, revision=1), loop).result()
             edited = True
         return assessment(request, release=release)
     monkeypatch.setattr(monitor, 'assess_drag', racing)
     with pytest.raises(monitor.ProfileConflict):
-        monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    assert monitor.history(1, profile.id) == []
+        await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    assert (await monitor.history(1, profile.id)) == []
 
 
-def test_worker_new_release_retry_pause_and_shared_fetch(storage, monkeypatch):
-    profile = monitor.save_profile(1, body())
+async def test_worker_new_release_retry_pause_and_shared_fetch(storage, monkeypatch):
+    profile = await monitor.save_profile(1, body())
     release = SimpleNamespace(release_id=uuid4())
     calls = []
     monkeypatch.setattr(monitor, 'fetch_release', lambda _: calls.append(1) or release)
     monkeypatch.setattr(monitor, 'assess_drag', assessment)
-    assert monitor.refresh_profiles() == {'profiles': 1, 'failed': 0}
-    assert monitor.refresh_profiles() == {'profiles': 1, 'failed': 0}
-    assert len(monitor.history(1, profile.id)) == 1
+    assert (await monitor.refresh_profiles()) == {'profiles': 1, 'failed': 0}
+    assert (await monitor.refresh_profiles()) == {'profiles': 1, 'failed': 0}
+    assert len((await monitor.history(1, profile.id))) == 1
     release = SimpleNamespace(release_id=uuid4())
-    monitor.refresh_profiles()
-    assert len(monitor.history(1, profile.id)) == 2
+    await monitor.refresh_profiles()
+    assert len((await monitor.history(1, profile.id))) == 2
     paused = body().model_copy(update={'enabled': False})
-    monitor.save_profile(1, paused, profile_id=profile.id, revision=1)
-    assert monitor.refresh_profiles()['profiles'] == 0
+    await monitor.save_profile(1, paused, profile_id=profile.id, revision=1)
+    assert (await monitor.refresh_profiles())['profiles'] == 0
     with pytest.raises(monitor.ProfileConflict):
-        monitor.assess_profile(1, profile.id, release=release)
+        await monitor.assess_profile(1, profile.id, release=release)
     assert len(calls) == 3
 
 
-def test_operator_chart_selects_owned_snapshot_and_delegates_to_private_core(storage, monkeypatch):
+async def test_operator_chart_selects_owned_snapshot_and_delegates_to_private_core(storage, monkeypatch):
     import intelligence_core.api as backend
-    profile = monitor.save_profile(1, body())
-    other = monitor.save_profile(2, body())
+    profile = await monitor.save_profile(1, body())
+    other = await monitor.save_profile(2, body())
     with pytest.raises(monitor.ProfileNotFound):
-        monitor.operator_chart(1, profile.id)
+        await monitor.operator_chart(1, profile.id)
     monkeypatch.setattr(monitor, 'assess_drag', assessment)
-    first = monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    second = monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    foreign = monitor.assess_profile(2, other.id, release=SimpleNamespace(release_id=uuid4()))
+    first = await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    second = await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    foreign = await monitor.assess_profile(2, other.id, release=SimpleNamespace(release_id=uuid4()))
     calls = []
     sentinel = object()
     def prepare(profile, run, prior, **kwargs):
         calls.append((profile, run, prior, kwargs))
         return sentinel
     monkeypatch.setattr(backend, 'prepare_operator_chart', prepare)
-    assert monitor.operator_chart(1, profile.id) is sentinel
+    assert (await monitor.operator_chart(1, profile.id)) is sentinel
     assert calls[-1][1].id == second.id
     assert [item.id for item in calls[-1][2]] == [first.id]
-    assert monitor.operator_chart(1, profile.id, run_id=first.id) is sentinel
+    assert (await monitor.operator_chart(1, profile.id, run_id=first.id)) is sentinel
     assert calls[-1][1].id == first.id
     assert calls[-1][2] == []
     assert calls[-1][3]['latest_run_id'] == second.id
     with pytest.raises(monitor.ProfileNotFound):
-        monitor.operator_chart(2, profile.id)
+        await monitor.operator_chart(2, profile.id)
     with pytest.raises(monitor.ProfileNotFound):
-        monitor.operator_chart(1, profile.id, run_id=foreign.id)
+        await monitor.operator_chart(1, profile.id, run_id=foreign.id)
 
 
-def test_event_delivery_owner_isolation_idempotent_review_and_exact_run(storage, monkeypatch):
+async def test_event_delivery_owner_isolation_idempotent_review_and_exact_run(storage, monkeypatch):
     monkeypatch.setattr(monitor, 'assess_drag', assessment)
-    profile = monitor.save_profile(1, body())
-    other = monitor.save_profile(2, body())
-    saved = monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    monitor.assess_profile(2, other.id, release=SimpleNamespace(release_id=uuid4()))
-    feed = events.list_events(1)
+    profile = await monitor.save_profile(1, body())
+    other = await monitor.save_profile(2, body())
+    saved = await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    await monitor.assess_profile(2, other.id, release=SimpleNamespace(release_id=uuid4()))
+    feed = await events.list_events(1)
     assert feed.total == feed.unacknowledged == 1
     event = feed.items[0]
     assert event.profile_id == profile.id
     assert event.run_id == saved.id
-    events.process_events(1, profile.id)
-    assert events.list_events(1).total == 1
+    await events.process_events(1, profile.id)
+    assert (await events.list_events(1)).total == 1
     with pytest.raises(monitor.ProfileNotFound):
-        events.acknowledge(2, event.id)
+        await events.acknowledge(2, event.id)
     with pytest.raises(monitor.ProfileNotFound):
-        events.list_events(2, profile_id=profile.id)
-    reviewed = events.acknowledge(1, event.id)
+        await events.list_events(2, profile_id=profile.id)
+    reviewed = await events.acknowledge(1, event.id)
     assert reviewed.acknowledged_by == 1
-    assert events.acknowledge(1, event.id).acknowledged_at == reviewed.acknowledged_at
-    assert events.list_events(1, unacknowledged=True).total == 0
-    assert monitor.read_run(1, profile.id, saved.id).id == saved.id
+    assert (await events.acknowledge(1, event.id)).acknowledged_at == reviewed.acknowledged_at
+    assert (await events.list_events(1, unacknowledged=True)).total == 0
+    assert (await monitor.read_run(1, profile.id, saved.id)).id == saved.id
     with pytest.raises(monitor.ProfileNotFound):
-        monitor.read_run(2, profile.id, saved.id)
+        await monitor.read_run(2, profile.id, saved.id)
 
 
-def test_event_failure_rolls_back_assessment_and_transition_state(storage, monkeypatch):
+async def test_event_failure_rolls_back_assessment_and_transition_state(storage, monkeypatch):
     monkeypatch.setattr(monitor, 'assess_drag', assessment)
-    profile = monitor.save_profile(1, body())
-    with monitor.db.connect() as conn:
-        conn.execute('''CREATE FUNCTION intelligence.reject_event() RETURNS trigger LANGUAGE plpgsql AS $$
-            BEGIN RAISE EXCEPTION 'forced event write failure'; END $$''')
-        conn.execute('CREATE TRIGGER reject_event BEFORE INSERT ON intelligence.drag_event FOR EACH ROW EXECUTE FUNCTION intelligence.reject_event()')
-    with pytest.raises(psycopg.Error):
-        monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    assert monitor.history(1, profile.id) == []
-    assert events.list_events(1).total == 0
-    with monitor.db.connect() as conn:
-        assert conn.execute('SELECT count(*) AS n FROM intelligence.drag_event_state').fetchone()['n'] == 0
-        conn.execute('DROP TRIGGER reject_event ON intelligence.drag_event')
-        conn.execute('DROP FUNCTION intelligence.reject_event()')
-    monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
-    assert events.list_events(1).total == 1
+    profile = await monitor.save_profile(1, body())
+    async with db.get_db_session() as session, session.begin():
+        await session.execute(text('''CREATE FUNCTION intelligence.reject_event() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN RAISE EXCEPTION 'forced event write failure'; END $$'''))
+        await session.execute(text('CREATE TRIGGER reject_event BEFORE INSERT ON intelligence.drag_event FOR EACH ROW EXECUTE FUNCTION intelligence.reject_event()'))
+    with pytest.raises(SQLAlchemyError):
+        await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    assert (await monitor.history(1, profile.id)) == []
+    assert (await events.list_events(1)).total == 0
+    async with db.get_db_session() as session, session.begin():
+        assert (await session.execute(text('SELECT count(*) AS n FROM intelligence.drag_event_state'))).mappings().first()['n'] == 0
+        await session.execute(text('DROP TRIGGER reject_event ON intelligence.drag_event'))
+        await session.execute(text('DROP FUNCTION intelligence.reject_event()'))
+    await monitor.assess_profile(1, profile.id, release=SimpleNamespace(release_id=uuid4()))
+    assert (await events.list_events(1)).total == 1
+
+
+pytestmark = pytest.mark.anyio
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+@pytest.fixture(autouse=True)
+async def database_runtime(storage):
+    try:
+        yield
+    finally:
+        await dispose_engine()

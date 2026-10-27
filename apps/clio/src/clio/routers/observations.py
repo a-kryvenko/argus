@@ -1,4 +1,4 @@
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from common.schemas.response import error_response, success_response
 from clio.observations.normalized import load_normalized_observations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/internal/v1/observations", tags=["observations"])
 @router.get("/history")
 async def observation_history(
     limit: int = Query(default=24, ge=1, le=8784),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
     start: datetime | None = Query(default=None, alias='from'),
     end: datetime | None = Query(default=None, alias='to'),
 ):
@@ -30,7 +30,7 @@ async def observation_history(
 
 @router.get("/latest")
 async def latest_observations(
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
 ):
     observations = await load_normalized_observations(session, limit=1)
     if not observations.points:
@@ -44,7 +44,7 @@ async def latest_observations(
 
 
 @router.get('/summary')
-async def observation_summary(response: Response, session: AsyncSession = Depends(get_db_session)):
+async def observation_summary(response: Response, session: AsyncSession = Depends(get_request_db_session)):
     """Current values and observed trends with coverage; no forecast or impact score.
 
     Solar-wind changes compare available samples in two five-minute windows one hour apart.
@@ -59,7 +59,7 @@ async def observation_summary(response: Response, session: AsyncSession = Depend
 async def current_indices(
     metrics: str = Query(default='ap,f10_7,s10,m10,y10'),
     trends: bool = Query(default=False),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
 ):
     selected = list(dict.fromkeys(value.strip() for value in metrics.split(',')))
     if any(value not in ('ap', 'f10_7', 's10', 'm10', 'y10') for value in selected):

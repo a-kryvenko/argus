@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.providers.geomagnetic_loader import SOURCES, INTERVAL_SECONDS, fetch_records
 from clio.db.models.measurement import Measurement
 from clio.observations.native import geomagnetic_measurements, store_native
-from clio.db.session import get_session_factory
+from clio.db.session import get_db_session
 from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import SOURCE_SPECS, poll_seconds
 from clio.monitoring.status import track_attempt
@@ -18,12 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 async def ingest_source(metric: str) -> list[dict] | None:
-    async with get_session_factory()() as session:
+    async with get_db_session() as session:
         lock = await session.execute(text('SELECT pg_try_advisory_xact_lock(:key)'),
                                      {'key': SOURCE_LOCKS[metric]})
         if not lock.scalar_one():
             return
-        async with track_attempt(metric, session, get_session_factory()) as attempt:
+        async with track_attempt(metric, session, get_db_session) as attempt:
             records = await asyncio.to_thread(fetch_records, metric)
             # Replay the entire source window, including older revised intervals
             # and internal gaps left by downtime or late publication.

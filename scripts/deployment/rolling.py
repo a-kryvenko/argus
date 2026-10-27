@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,7 @@ from release import artifact_digest
 from backup import create_backup
 
 HTTP = {'clio': 8000, 'prophet-api': 8000, 'intelligence-api': 8000, 'api': 8000, 'frontend': 3000}
-WORKERS = ['clio-worker', 'prophet', 'intelligence', 'proswin']
+WORKERS = ['intelligence', 'proswin']
 
 
 def write_json(path, value):
@@ -269,8 +270,10 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         create_backup(self.base + ['-f', str(self.runtime), 'exec', '-T', 'postgres',
             'sh', '-c', 'pg_dumpall --username="$POSTGRES_USER"'], self.root / 'backups')
         # Readers and request writers remain online only for compatible migrations.
-        workers = {'api': [], 'clio': ['clio-worker'], 'prophet': ['prophet'], 'intelligence': ['intelligence']}
+        workers = {'api': [], 'clio': [], 'prophet': [], 'intelligence': ['intelligence']}
         for domain in self.migrations:
+            if domain == 'prophet' and self.worker_containers('prophet'):
+                workers[domain] = ['prophet']
             if workers[domain]:
                 self.state.setdefault('drained_workers', []).extend(workers[domain])
                 self.save()
@@ -283,7 +286,9 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
 
     def resume_workers(self):
         if self.state and self.state.get('drained_workers'):
-            self.compose('start', *self.state['drained_workers'])
+            workers = [name for name in self.state['drained_workers'] if name in WORKERS or name == 'prophet']
+            if workers:
+                self.compose('start', *workers)
             self.state.pop('drained_workers')
             self.save()
 
@@ -389,6 +394,30 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.run('docker', 'cp', container + ':/var/www/apps/web/.next/static/.', str(staging))
         self.run('rsync', '-a', '--ignore-existing', str(staging) + '/', str(target) + '/')
 
+    def install_crontab(self):
+        if any(char in str(self.root) for char in ('\n', '\r', '%')):
+            raise RuntimeError('Cron deployment path must not contain newlines or %')
+        paths = [self.bundle / 'apps' / service / 'cronjobs.txt'
+                 for service in ('clio', 'prophet', 'api', 'intelligence')]
+        paths.append(self.bundle / '.deploy/cronjobs.txt')
+        contents = [path.read_text().rstrip() for path in paths]
+        crontab = '\n\n'.join(contents).replace('@ROOT@', shlex.quote(str(self.root))) + '\n'
+        self.run('crontab', '-', input=crontab, text=True)
+
+    def retire_clio_worker(self):
+        self.retire_worker('clio-worker')
+
+    def worker_containers(self, service):
+        return self.capture('docker', 'ps', '-aq', '--filter',
+            f'label=com.docker.compose.project={self.desired["name"]}',
+            '--filter', f'label=com.docker.compose.service={service}').split()
+
+    def retire_worker(self, service):
+        containers = self.worker_containers(service)
+        if containers:
+            self.run('docker', 'stop', '--time', '600', *containers)
+            self.run('docker', 'rm', *containers)
+
     def apply(self):
         self.snapshot()
         self.recover()
@@ -402,7 +431,11 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         for service in HTTP:
             self.replace(service)
         self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', *WORKERS)
-        self.state.pop('drained_workers', None)
+        legacy = [name for name in self.state.get('drained_workers', []) if name == 'prophet']
+        if legacy:
+            self.state['drained_workers'] = legacy
+        else:
+            self.state.pop('drained_workers', None)
         self.save()
         # The generated HTTP template must not overwrite the live proxy configuration.
         for directory in ('nginx', 'alloy'):
@@ -414,9 +447,14 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.reload('nginx')
         if self.fingerprints['alloy'] != self.previous_fingerprints.get('alloy'):
             self.compose('restart', 'alloy')
-        for name in ('run', 'logs'):
+        for name in ('run', 'logs', 'cron-run'):
             shutil.copy2(self.bundle / 'scripts' / name, self.root / 'scripts' / name)
         shutil.copy2(self.bundle / 'argus', self.root / 'argus')
+        self.install_crontab()
+        self.retire_clio_worker()
+        self.retire_worker('prophet')
+        self.state.pop('drained_workers', None)
+        self.save()
         for name in ('fingerprints.tsv', 'release.json'):
             destination = self.root / ('.release-fingerprints.tsv' if name == 'fingerprints.tsv' else '.release.json')
             temporary = destination.with_name(destination.name + '.next')

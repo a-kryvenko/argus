@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import gzip
 import hashlib
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import joblib
 import numpy as np
@@ -50,7 +50,7 @@ def calculation_setup(tmp_path, monkeypatch):
     return config, path, inputs, bundle
 
 
-def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup, tmp_path):
+async def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup, tmp_path):
     config, path, inputs, bundle = calculation_setup
     service, metadata = load_model(DstFS, workdir=config.workdir, registry=config.models_registry['models'])
     assert metadata == {'registry_name': 'dst_quantile', 'model': 'dst',
@@ -65,12 +65,12 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
     # Reference serialization used before this refactor: DataFrame -> file -> bytes.
     reference = tmp_path / 'reference.csv'
     expected.to_csv(reference, index=False)
-    recorder = Mock()
+    recorder = Mock(snapshot=AsyncMock(), store=AsyncMock(), finish=AsyncMock())
     from prophet.services.generation.cycle import ProductRun
     from prophet.config import ProphetConfig
     run = ProductRun('dst', recorder, config, ProphetConfig())
-    from prophet.scheduling.execution import execute
-    run.complete(execute(generation.calculate_product, run.prepare_calculation(inputs)))
+    from prophet.execution import execute
+    await run.complete(execute(generation.calculate_product, await run.prepare_calculation(inputs)))
     name, content, info, rows, columns = recorder.store.call_args.args
     assert content == reference.read_bytes()
     assert info == metadata
@@ -81,18 +81,18 @@ def test_loaded_model_and_pure_calculation_match_previous_csv(calculation_setup,
     assert not (tmp_path / 'data/forecast').exists()
 
 
-def test_storage_failure_stops_run_without_touching_live_exports(calculation_setup, tmp_path):
+async def test_storage_failure_stops_run_without_touching_live_exports(calculation_setup, tmp_path):
     config, _, inputs, _ = calculation_setup
     live = tmp_path / 'data/forecast/dst.csv'
     live.parent.mkdir()
     live.write_bytes(b'previous release')
-    recorder = Mock()
+    recorder = Mock(snapshot=AsyncMock(), store=AsyncMock(), finish=AsyncMock())
     recorder.store.side_effect = RuntimeError('database unavailable')
     with pytest.raises(RuntimeError, match='database unavailable'):
         from prophet.services.generation.cycle import ProductRun
         from prophet.config import ProphetConfig
         run = ProductRun('dst', recorder, config, ProphetConfig())
-        run.complete(generation.calculate_product(run.prepare_calculation(inputs)))
+        await run.complete(generation.calculate_product(await run.prepare_calculation(inputs)))
     assert live.read_bytes() == b'previous release'
     assert list(live.parent.iterdir()) == [live]
     recorder.skip.assert_not_called()
@@ -104,30 +104,30 @@ def test_model_configuration_errors_are_explicit(tmp_path, registry):
         load_model(DstFS, workdir=tmp_path, registry=registry)
 
 
-def test_recorder_stores_exact_bytes_without_files(monkeypatch):
+async def test_recorder_stores_exact_bytes_without_files(monkeypatch):
     pytest.importorskip('psycopg')
     content = b'issue_time,value\n2026-09-18T12:00:00Z,4\n'
-    connection = Mock()
+    connection = Mock(execute=AsyncMock(return_value=Mock()))
     connect = Mock(return_value=nullcontext(connection))
     monkeypatch.setattr(ledger, 'transaction', connect)
     recorder = ledger.RunRecorder('run-id', connection)
-    recorder.store('test', content, {'sha256': 'model-hash'}, 1, ['issue_time', 'value'])
+    await recorder.store('test', content, {'sha256': 'model-hash'}, 1, ['issue_time', 'value'])
     connect.assert_called_once_with(connection)
     values = connection.execute.call_args.args[1]
-    assert values[:2] == ('run-id', 'test')
-    assert gzip.decompress(values[3]) == content
-    assert values[4] == hashlib.sha256(content).hexdigest()
-    assert values[5] == 1
-    assert values[6].obj == ['issue_time', 'value']
-    assert values[7].obj == {'sha256': 'model-hash'}
+    assert (values['run_id'], values['name']) == ('run-id', 'test')
+    assert gzip.decompress(values['csv_gzip']) == content
+    assert values['sha256'] == hashlib.sha256(content).hexdigest()
+    assert values['row_count'] == 1
+    assert values['columns'] == ['issue_time', 'value']
+    assert values['model_info'] == {'sha256': 'model-hash'}
 
 
-def test_empty_result_is_rejected_before_database_access(monkeypatch):
-    connection = Mock()
+async def test_empty_result_is_rejected_before_database_access(monkeypatch):
+    connection = Mock(execute=AsyncMock(return_value=Mock()))
     connect = Mock()
     monkeypatch.setattr(ledger, 'transaction', connect)
     with pytest.raises(ValueError, match='empty forecast'):
-        ledger.RunRecorder('run-id', connection).store('test', b'value\n', {}, 0, ['value'])
+        await ledger.RunRecorder('run-id', connection).store('test', b'value\n', {}, 0, ['value'])
     connect.assert_not_called()
 
 
@@ -192,3 +192,6 @@ def test_density_generation_passes_registry_and_records_actual_model(tmp_path, m
     artifacts = generation.calculate_product(generation.CalculationRequest('atmospheric-density', inputs, tmp_path, registry))
     assert artifacts[0].model_info['density_model'] == model
     assert artifacts[0].model_info['driver_mode'] == 'observed_persistence'
+
+
+pytestmark = pytest.mark.anyio

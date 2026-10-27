@@ -1,9 +1,4 @@
-"""Exercise real migrations and monitoring persistence in a disposable Docker DB.
-
-PYTHONPATH=apps/api/src:apps/clio/src:packages/common/src:apps/api/.venv/lib/python3.12/site-packages .venv/bin/python apps/api/tests/integration/verify_project_monitoring.py
-No existing database or container is touched. The temporary container is stopped
-in finally, including after a failed assertion.
-"""
+"""Exercise monitoring persistence in a disposable Docker database."""
 import asyncio
 import importlib.util
 import json
@@ -16,7 +11,6 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-import pandas as pd
 import psycopg
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
@@ -26,8 +20,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from api.db.models.monitoring import MonitorState, TrafficMetric
 from api.services.monitoring import edge_traffic
 from api.services.monitoring import project as project_monitoring
-from clio.observations.normalized import _upsert_measurements
-from clio.db.models.measurement import MeasurementReceipt
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -58,14 +50,11 @@ def migrate(connection, migrations, direction):
 
 async def verify(dsn):
     api = create_async_engine(dsn, connect_args={'options': '-csearch_path=api,pg_catalog,pg_temp'})
-    clio = create_async_engine(dsn, connect_args={'options': '-csearch_path=clio,pg_catalog,pg_temp'})
     api_migrations = modules(ROOT/'apps/api/src/api/db/migrations/versions')
-    clio_migrations = modules(ROOT/'apps/clio/src/clio/db/migrations/versions')
     try:
-        for name, engine, migrations in [('api', api, api_migrations), ('clio', clio, clio_migrations)]:
-            async with engine.begin() as connection:
-                await connection.execute(text(f'CREATE SCHEMA {name}'))
-                await connection.run_sync(lambda c: migrate(c, migrations, 'upgrade'))
+        async with api.begin() as connection:
+            await connection.execute(text('CREATE SCHEMA api'))
+            await connection.run_sync(lambda c: migrate(c, api_migrations, 'upgrade'))
         factory = async_sessionmaker(api, expire_on_commit=False)
         async with factory() as db:
             permissions = await db.scalar(text("SELECT permissions FROM dashboard_group WHERE name='admins'"))
@@ -77,7 +66,7 @@ async def verify(dsn):
             def record(channel='api'):
                 return json.dumps({'channel': channel, 'status': 200, 'time': now.timestamp(), 'seconds': '0.025'})+'\n'
             log.write_text(record()+record('site')+record('monitor'))
-            with patch.dict(os.environ, {'MONITORING_TRAFFIC_LOG': str(log)}), patch.object(edge_traffic, 'get_session_factory', return_value=factory):
+            with patch.dict(os.environ, {'MONITORING_TRAFFIC_LOG': str(log)}), patch.object(edge_traffic, 'get_db_session', side_effect=factory):
                 await asyncio.gather(edge_traffic.ingest(), edge_traffic.ingest())
                 async with factory() as db:
                     assert await db.scalar(select(text('sum(count)')).select_from(TrafficMetric)) == 4
@@ -104,42 +93,12 @@ async def verify(dsn):
                     await project_monitoring.save_state(db, 'project', {'status': 'degraded', 'when': now}, now)
                     await db.commit()
                     assert (await db.get(MonitorState, 'project')).payload['when']
-        clio_factory = async_sessionmaker(clio, expire_on_commit=False)
-        async with clio_factory() as db:
-            fresh = pd.DataFrame([{'metric': 'dst', 'value': -10, 'observed_at': now}])
-            await _upsert_measurements(db, fresh)
-            await db.commit()
-            receipt = await db.get(MeasurementReceipt, 'dst')
-            received = receipt.received_at
-            from clio.monitoring.measurements import monitoring_status
-            status = await monitoring_status(db)
-            dst = next(m for m in status['measurements'] if m['metric'] == 'dst')
-            assert dst['latest_observation_at'] == now and dst['received_at'] == received
-            assert dst['status'] == 'fresh'
-            assert status['sources'] and status['status'] == 'degraded'
-            old = fresh.copy()
-            old['observed_at'] = now-timedelta(days=1)
-            await _upsert_measurements(db, old)
-            await db.commit()
-            await db.refresh(receipt)
-            assert receipt.received_at == received and receipt.latest_observation_at == now
-            await _upsert_measurements(db, fresh, track_receipt=False)
-            await db.commit()
-            await db.refresh(receipt)
-            assert receipt.received_at == received
-            uncommitted = fresh.copy()
-            uncommitted['metric'] = 'v'
-            await _upsert_measurements(db, uncommitted)
-            await db.rollback()
-            assert await db.get(MeasurementReceipt, 'v') is None
-        for engine, migrations in [(clio, clio_migrations), (api, api_migrations)]:
-            async with engine.begin() as connection:
-                await connection.run_sync(lambda c: migrate(c, migrations, 'downgrade'))
-                await connection.run_sync(lambda c: migrate(c, migrations, 'upgrade'))
-        print('Monitoring integration passed: migration roundtrip, permissions, concurrent ingestion, durable cursors, rotation, snapshots, atomic receipts and older backfills.')
+        async with api.begin() as connection:
+            await connection.run_sync(lambda c: migrate(c, api_migrations, 'downgrade'))
+            await connection.run_sync(lambda c: migrate(c, api_migrations, 'upgrade'))
+        print('Monitoring integration passed: migration roundtrip, permissions, concurrent ingestion, durable cursors, rotation, snapshots.')
     finally:
         await api.dispose()
-        await clio.dispose()
 
 
 def main():

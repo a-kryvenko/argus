@@ -8,8 +8,9 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from clio.db.models.goes_snapshot import GOESSnapshot
-from clio.db.session import get_session_factory
+from clio.db.models.file_observation import FileObservation
+from clio.db.session import get_db_session
+from clio.observations.files import observation_values, snapshot_receipt
 from clio.observations.files import archive_root, store_original
 
 
@@ -54,7 +55,8 @@ def download_snapshots(start, end, historical, expected=None):
                 continue
             content = samples.to_json(orient='records', date_format='iso').encode()
             values = store_original('goes', slot, samples.timestamp.max().to_pydatetime(), source, lambda: content,
-                relative=Path(source) / f'{slot:%Y/%m/%d/%H}.json', expected=expected.get((slot, source)))
+                relative=Path(expected[(slot, source)]['raw_path']) if (slot, source) in expected else Path(source) / f'{slot:%Y/%m/%d/%H}.json',
+                expected=expected.get((slot, source)))
             records.append(values)
     return records
 
@@ -68,21 +70,23 @@ async def collect(config, *, mode, now=None, start=None, end=None):
     start = start or end - timedelta(days=config.observations['goes'].backfill.days if historical else 1)
     if start.tzinfo is None or end.tzinfo is None or not start < end <= now or end - start > timedelta(days=90):
         raise ValueError('Choose a past GOES range up to 90 days')
+    start, end = start.astimezone(UTC), end.astimezone(UTC)
     if historical and any(t.hour or t.minute or t.second or t.microsecond for t in (start, end)):
         raise ValueError('GOES archive ranges must use whole UTC days')
     report = dict(received=0, restored=0, retained=0, missing=0, rejected=0, failed=0,
                   latest_observed_at=None, source_errors=[])
     try:
-        async with get_session_factory()() as session:
-            rows = (await session.scalars(select(GOESSnapshot).where(
-                GOESSnapshot.slot_at >= start, GOESSnapshot.slot_at <= end))).all()
-        expected = {(row.slot_at, row.source_product): {key: getattr(row, key) for key in (
-            'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'raw_path')} for row in rows}
+        async with get_db_session() as session:
+            rows = (await session.scalars(select(FileObservation).where(
+                FileObservation.kind == 'goes', FileObservation.source_key >= start.isoformat(),
+                FileObservation.source_key < (end + timedelta(days=1)).isoformat()))).all()
+        receipts = await asyncio.to_thread(lambda: [snapshot_receipt(row) for row in rows])
+        expected = {(row['slot_at'], row['source_product']): row for row in receipts}
         records = await asyncio.to_thread(download_snapshots, start, end, historical, expected)
-        async with get_session_factory()() as session:
+        async with get_db_session() as session:
             for record in records:
-                inserted = (await session.execute(insert(GOESSnapshot).values(**record)
-                    .on_conflict_do_nothing(index_elements=['slot_at', 'source_product']).returning(GOESSnapshot.slot_at))).scalar_one_or_none()
+                inserted = (await session.execute(insert(FileObservation).values(**observation_values('goes', record))
+                    .on_conflict_do_nothing(index_elements=['kind', 'source_key'], index_where=FileObservation.error.is_(None)).returning(FileObservation.id))).scalar_one_or_none()
                 report['received' if inserted else 'retained'] += 1
             await session.commit()
         latest = max((r['observed_at'] for r in records), default=None)

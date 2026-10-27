@@ -2,6 +2,8 @@
 import math
 from datetime import UTC, datetime
 
+from sqlalchemy import text
+
 from forecast.observation_inputs import DENSITY_METRICS
 from common.schemas.forecast_status import ForecastStatus
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
@@ -82,34 +84,33 @@ def classify_freshness(issue_time, now, max_age_hours=None):
     return 'stale' if age > max_age_hours else 'within_age_limit'
 
 
-def product_status(product, *, now=None):
+async def product_status(product, *, now=None):
     """Read metadata without decompressing forecast payloads or running models."""
-    from psycopg.rows import dict_row
+
     from common.config import get_config
-    from prophet.db.session import connect
+    from prophet.db.session import get_db_session
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unknown forecast product')
     now = now or datetime.now(UTC)
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError('Assessment time must be timezone-aware')
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-        cursor.execute('''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
+    async with get_db_session() as session, session.begin():
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        query = await session.execute(text('''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
             f.started_at,f.provenance->'input_diagnostics' AS input_diagnostics
             FROM prophet.current_forecast c JOIN prophet.forecast_release r ON r.id=c.release_id
-            JOIN prophet.forecast_run f ON f.id=r.run_id WHERE c.product=%s''', (product,))
-        current = cursor.fetchone()
+            JOIN prophet.forecast_run f ON f.id=r.run_id WHERE c.product=:product'''), {'product': product})
+        current = query.mappings().first()
         from prophet.services.generation.products import attempt_selections
-        cursor.execute("""SELECT id AS run_id,status,started_at,finished_at,error,
+        query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,
             provenance->'input_diagnostics' AS input_diagnostics FROM prophet.forecast_run
-            WHERE product=ANY(%s) ORDER BY started_at DESC,id DESC LIMIT 1""", (attempt_selections(product),))
-        attempt = cursor.fetchone()
+            WHERE product=ANY(:products) ORDER BY started_at DESC,id DESC LIMIT 1"""), {'products': attempt_selections(product)})
+        attempt = query.mappings().first()
         artifacts = []
         if attempt:
-            cursor.execute("""SELECT name,status,error FROM prophet.forecast_artifact
-                WHERE run_id=%s AND name=ANY(%s) ORDER BY name""",
-                (attempt['run_id'], list(PRODUCT_ARTIFACTS[product])))
-            artifacts = cursor.fetchall()
+            query = await session.execute(text("""SELECT name,status,error FROM prophet.forecast_artifact
+                WHERE run_id=:run_id AND name=ANY(:names) ORDER BY name"""), {'run_id': attempt['run_id'], 'names': list(PRODUCT_ARTIFACTS[product])})
+            artifacts = query.mappings().all()
     max_age = None
     if product == 'atmospheric-density':
         max_age = get_config().models_registry['models']['atmospheric_density'].get('max_age_hours', 6)

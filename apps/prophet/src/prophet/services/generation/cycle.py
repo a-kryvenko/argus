@@ -1,5 +1,6 @@
-"""Shared product lifecycle for manual cycles and the scheduled dispatcher."""
+"""One-shot product generation and publication."""
 import logging
+import os
 from dataclasses import dataclass
 from functools import partial
 
@@ -9,7 +10,7 @@ from prophet.config import InputPolicy, ProphetConfig
 from prophet.services.generation.products import select_products, PRODUCTS
 from prophet.services.generation.calculation import CalculationRequest, calculate_serialized as calculate_product
 from prophet.services.releases.recording import RunRecorder, provenance
-from prophet.scheduling.execution import execute, before_dispatch
+from prophet.execution import execute, before_dispatch
 from prophet.services.generation.service import ForecastGenerationService, GenerationFailed
 
 logger = logging.getLogger(__name__)
@@ -23,36 +24,36 @@ class ProductRun:
     policy: ProphetConfig
 
     @classmethod
-    def begin(cls, product, trigger, runtime, policy, *, writer, scheduled_slot=None, details=None):
-        recorder = RunRecorder.begin(product, trigger, runtime,
-                                     writer=writer, scheduled_slot=scheduled_slot, details=details)
+    async def begin(cls, product, trigger, runtime, policy, *, writer, details=None):
+        recorder = await RunRecorder.begin(product, trigger, runtime,
+                                     writer=writer, details=details)
         logger.info('Prophet run %s started (%s)', recorder.run_id, product)
         return cls(product, recorder, runtime, policy)
 
-    def prepare_calculation(self, inputs: ForecastInputs) -> CalculationRequest:
+    async def prepare_calculation(self, inputs: ForecastInputs) -> CalculationRequest:
         """Persist and validate inputs before dispatching model calculation."""
-        self.recorder.snapshot(inputs)
+        await self.recorder.snapshot(inputs)
         self.policy.inputs.get(self.product, InputPolicy()).validate_inputs(inputs)
         return CalculationRequest(self.product, inputs, self.runtime.workdir, self.runtime.models_registry['models'])
 
-    def complete(self, artifacts):
+    async def complete(self, artifacts):
         for artifact in artifacts:
-            self.recorder.store(artifact.name, artifact.content, artifact.model_info,
+            await self.recorder.store(artifact.name, artifact.content, artifact.model_info,
                                 artifact.row_count, artifact.columns)
-        self.recorder.finish()
+        await self.recorder.finish()
         logger.info('Prophet run %s published (%s)', self.recorder.run_id, self.product)
 
-    def fail(self, error):
+    async def fail(self, error):
         # Failure to record the outcome is fatal: the writer may have lost its lock.
-        self.recorder.finish(error=error)
+        await self.recorder.finish(error=error)
         logger.warning('Prophet run %s failed (%s): %s', self.recorder.run_id, self.product, error)
 
 
-def generate(product: str, *, writer) -> None:
-    generate_products(select_products(product), writer=writer)
+async def generate(product: str, *, writer) -> None:
+    await generate_products(select_products(product), writer=writer)
 
 
-def generate_products(products, *, writer) -> None:
+async def generate_products(products, *, writer) -> None:
     """Composition root for manual generation; bind infrastructure to the use case."""
     from common.config import get_config
     from prophet.services.inputs.loader import load_inputs, load_event_inputs
@@ -71,9 +72,9 @@ def generate_products(products, *, writer) -> None:
         input_loader=partial(loader, **options) if options else loader,
         calculator=calculate_product,
         executor=execute,
-        run_factory=partial(ProductRun.begin, trigger='manual', runtime=runtime,
+        run_factory=partial(ProductRun.begin, trigger='scheduled' if os.getenv('ARGUS_CRON_JOB') else 'manual', runtime=runtime,
                             policy=policy, writer=writer, details=details),
         before_dispatch=before_dispatch,
         timeout_seconds=policy.calculation_timeout_seconds,
     )
-    service.generate(products)
+    await service.generate(products)

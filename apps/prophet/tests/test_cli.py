@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 import subprocess
@@ -13,7 +14,7 @@ def test_cli_help_is_available_without_loading_models():
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert 'generate' in result.stdout and 'worker' in result.stdout
+    assert 'generate' in result.stdout and 'worker' not in result.stdout
 
 
 def test_installed_environment_imports_without_observation_storage(tmp_path):
@@ -51,7 +52,7 @@ def test_removed_aliases_are_rejected_before_starting_a_run(monkeypatch):
             cli.main()
         assert error.value.code == 2
         with pytest.raises(ValueError, match='Unsupported forecast product'):
-            cycle.generate(alias, writer=None)
+            asyncio.run(cycle.generate(alias, writer=None))
     begin.assert_not_called()
 
 
@@ -68,10 +69,11 @@ def test_refresh_alias_generates_selected_product(monkeypatch):
     from contextlib import nullcontext
     from unittest.mock import Mock
     from prophet import cli
-    from prophet.scheduling import jobs as worker
+    from prophet.db import locks as worker
     from prophet.services.generation import cycle
     from common import runtime
-    generate = Mock()
+    from unittest.mock import AsyncMock
+    generate = AsyncMock()
     monkeypatch.setattr(cycle, 'generate', generate)
     monkeypatch.setattr(worker, 'generation_lock', nullcontext)
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())
@@ -86,7 +88,7 @@ def test_removed_inspection_commands_fail_before_loading_handlers(monkeypatch):
     handler = Mock()
     from common import runtime
     monkeypatch.setattr(runtime, 'run_command', handler)
-    for command in ('status', 'runs', 'show-run', 'slots', 'demo'):
+    for command in ('worker', 'status', 'runs', 'show-run', 'slots', 'demo'):
         with pytest.raises(SystemExit) as error:
             cli.main([command])
         assert error.value.code == 2

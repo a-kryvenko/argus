@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
-    domains = {'api': ['api'], 'clio': ['clio', 'clio-worker'],
+    domains = {'api': ['api'], 'clio': ['clio'],
                'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
     for domain, names in domains.items():
         for name in [*names, domain + '-migrate']:
@@ -27,12 +27,11 @@ def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
     assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
     assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
-    assert services['clio-worker']['command'] == ['clio', 'worker']
-    assert services['clio-worker']['healthcheck']['test'] == ['CMD', 'clio', 'check-health', 'worker']
+    assert 'clio-worker' not in services
     assert not {'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'} & services.keys()
 
 
-def test_no_application_jobs_remain_in_cron():
+def test_static_crontab_only_bootstraps_proxy():
     lines = [line for line in (ROOT / '.deploy/cronjobs.txt').read_text().splitlines()
              if line and not line.startswith('#')]
     assert len(lines) == 1
@@ -84,11 +83,11 @@ def test_impact_service_is_internal_and_has_scoped_database_credentials():
 @pytest.mark.parametrize('filename', ['docker-compose.yml', '.deploy/docker-compose.yml'])
 def test_runtime_storage_credentials_and_startup_boundaries(filename):
     services = yaml.safe_load((ROOT / filename).read_text())['services']
-    owners = {'clio': 'CLIO', 'clio-worker': 'CLIO', 'prophet': 'PROPHET',
+    owners = {'clio': 'CLIO', 'prophet': 'PROPHET',
               'prophet-api': 'PROPHET', 'intelligence': 'INTELLIGENCE',
               'intelligence-api': 'INTELLIGENCE', 'api': 'API'}
     allowed_data = {
-        'clio': {'observations': False}, 'clio-worker': {'observations': False},
+        'clio': {'observations': False},
         'prophet': {'models': True, 'prophet': False, 'demo': False},
         'proswin': {'models': True, 'prophet': False},
         'prophet-api': {}, 'intelligence': {}, 'intelligence-api': {},
@@ -118,3 +117,12 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
             '${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}')
 
 
+
+
+def test_prophet_generation_is_a_command_template_without_a_background_worker():
+    for filename in ('docker-compose.yml', '.deploy/docker-compose.yml'):
+        services = yaml.safe_load((ROOT / filename).read_text())['services']
+        service = services['prophet']
+        assert service['profiles'] == ['commands']
+        assert service['restart'] == 'no'
+        assert service['command'] == ['prophet', '--help']

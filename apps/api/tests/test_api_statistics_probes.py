@@ -15,7 +15,7 @@ def test_flush_batches_preserve_each_counter_and_duration(monkeypatch, size):
         (hour, f'/route{i}', 'GET', 200, 25): (i+1, i+.5) for i in range(size)})
     db = AsyncMock()
     db.__aenter__.return_value = db
-    monkeypatch.setattr(api_statistics, 'get_session_factory', lambda: lambda: db)
+    monkeypatch.setattr(api_statistics, 'get_db_session', lambda: db)
     asyncio.run(api_statistics.flush())
     inserts = [call.args[0].compile(dialect=postgresql.dialect())
                for call in db.execute.await_args_list if call.args[0].is_insert]

@@ -1,0 +1,95 @@
+import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+_session_factories: dict[
+    str,
+    async_sessionmaker[AsyncSession],
+] = {}
+
+_engines: dict[str, AsyncEngine] = {}
+
+def database_parameters(prefix: str) -> dict:
+    """An empty prefix is reserved for the administrative provisioning tool."""
+    base = f'{prefix}_DB_' if prefix else 'DB_'
+
+    required = [base + field for field in ('NAME', 'USER', 'PASSWORD')]
+    missing = [key for key in required if not os.getenv(key)]
+
+    if missing:
+        raise ValueError('Missing database settings: ' + ', '.join(missing))
+
+    host = os.getenv(base + 'HOST', 'localhost')
+    if not host:
+        raise ValueError(base + 'HOST must not be empty')
+
+    try:
+        port = int(os.getenv(base + 'PORT', '5432'))
+        if not 1 <= port <= 65535:
+            raise ValueError()
+    except ValueError:
+        raise ValueError(base + 'PORT must be an integer between 1 and 65535') from None
+
+    return {
+        'host': host,
+        'port': port,
+        'database': os.environ[base + 'NAME'],
+        'username': os.environ[base + 'USER'],
+        'password': os.environ[base + 'PASSWORD']
+    }
+
+
+def get_database_url(schema: str):
+    from sqlalchemy import URL
+
+    try:
+        parameters = database_parameters(schema)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from None
+    
+    return URL.create('postgresql+psycopg', **parameters)
+
+def _get_engine(schema: str) -> AsyncEngine:
+    if schema not in _engines:
+        _engines[schema] = create_async_engine(
+            get_database_url(schema.upper()),
+            pool_pre_ping=True,
+            connect_args={"options": f"-csearch_path={schema},pg_catalog,pg_temp"},
+        )
+
+    return _engines[schema]
+
+def _get_session_factory(schema: str) -> async_sessionmaker[AsyncSession]:
+    if schema not in _session_factories:
+        _session_factories[schema] = async_sessionmaker(
+            bind=_get_engine(schema),
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
+    return _session_factories[schema]
+
+
+@asynccontextmanager
+async def get_db_session(schema: str) -> AsyncGenerator[AsyncSession, None]:
+    # Keep one connection across commits until the session context exits.
+    async with _get_engine(schema).connect() as connection:
+        async with _get_session_factory(schema)(bind=connection) as session:
+            yield session
+
+
+async def dispose_engine() -> None:
+    global _engines, _session_factories
+
+    for _engine in _engines.values():
+        await _engine.dispose()
+
+    _engines = {}
+    _session_factories = {}

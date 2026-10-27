@@ -25,17 +25,15 @@ def test_ingestion_command_imports_as_application_module() -> None:
     assert result.returncode == 0, result.stderr
 
 
-def test_worker_and_file_command_setup_do_not_load_numeric_stack():
+def test_file_command_setup_do_not_load_numeric_stack():
     result = subprocess.run(
         [sys.executable, "-c", """
 import sys
 import clio.cli
-import clio.worker
 from clio.config import load_observation_config
 load_observation_config()
 import clio.commands.collect
 import clio.commands.backfill_observations
-import clio.commands.check_collector_health
 heavy = {'pandas', 'numpy', 'pyarrow', 'scipy', 'astropy', 'sunpy'}
 assert not heavy.intersection(sys.modules), heavy.intersection(sys.modules)
 assert 'clio.observations.live' not in sys.modules

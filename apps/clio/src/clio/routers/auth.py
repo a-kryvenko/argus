@@ -1,10 +1,10 @@
 import os
 import secrets
+
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 security = HTTPBearer(auto_error=False)
-
 
 def require_service_token(credentials: HTTPAuthorizationCredentials | None = Depends(security)):
     expected = os.getenv('OBSERVATIONS_SERVICE_TOKEN')

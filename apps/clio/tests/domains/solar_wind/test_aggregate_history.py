@@ -42,7 +42,7 @@ def test_partial_current_bucket_excluded_and_empty_history_is_missing():
 
 def test_resolution_routing_and_bounds(monkeypatch):
     app = FastAPI(); app.include_router(routes.router)
-    app.dependency_overrides[routes.get_db_session] = lambda: object()
+    app.dependency_overrides[routes.get_request_db_session] = lambda: object()
     aggregate = AsyncMock(return_value={})
     monkeypatch.setattr(routes.aggregate_history, 'history', aggregate)
     with TestClient(app) as client:
@@ -59,7 +59,7 @@ def test_resolution_routing_and_bounds(monkeypatch):
 def test_auto_resolution_bounds_keep_daily_histories_compact(monkeypatch, hours, seconds):
     app = FastAPI()
     app.include_router(routes.router)
-    app.dependency_overrides[routes.get_db_session] = lambda: object()
+    app.dependency_overrides[routes.get_request_db_session] = lambda: object()
     native = AsyncMock(return_value={'series': {}})
     aggregate = AsyncMock(return_value={'series': {}})
     monkeypatch.setattr(routes.solar_wind, 'history', native)

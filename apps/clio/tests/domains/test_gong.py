@@ -62,7 +62,7 @@ def test_original_is_archived_without_features(monkeypatch, tmp_path):
     download = Mock(return_value=original)
     monkeypatch.setattr(provider, 'download', download)
     row = gong.snapshot_values(NOW-timedelta(minutes=6), 'https://provider/file.fits.gz', 'gong.live')
-    assert (tmp_path / row['raw_path']).read_bytes() == original
+    assert gzip.decompress((tmp_path / row['raw_path']).read_bytes()) == original
     assert row['sha256'] == hashlib.sha256(original).hexdigest()
     assert row['slot_at'] == NOW-timedelta(hours=1)
     assert 'features' not in row and 'fits_gzip' not in row

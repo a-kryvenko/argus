@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
-from api.db.session import get_db_session
+from api.db.session import get_db_session, get_request_db_session
 from api.db.models.dashboard import User, Group, Membership, Session, LoginAttempt, ApiMetric
 from api.services.authentication import COOKIE, DUMMY_HASH, check_origin, current_user, digest, hash_password, verify_password, require, user_info, users_info, validate_groups, create_user
 from common.schemas.response import success_response
@@ -19,7 +19,7 @@ router = APIRouter(prefix='/dashboard', tags=['dashboard'])
 
 
 @router.post('/login', dependencies=[Depends(check_origin)])
-async def login(body: Credentials, request: Request, response: Response, db: AsyncSession = Depends(get_db_session)):
+async def login(body: Credentials, request: Request, response: Response, db: AsyncSession = Depends(get_request_db_session)):
     now = datetime.now(timezone.utc)
     window = now.replace(minute=(now.minute // 15)*15, second=0, microsecond=0)
     # Shared account counters work across workers and client IPs. The production
@@ -54,7 +54,7 @@ async def login(body: Credentials, request: Request, response: Response, db: Asy
 
 
 @router.post('/logout', dependencies=[Depends(check_origin)])
-async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db_session)):
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_request_db_session)):
     await db.execute(delete(Session).where(Session.token_hash == digest(request.cookies.get(COOKIE, ''))))
     await db.commit()
     response.delete_cookie(COOKIE, path='/')
@@ -62,29 +62,29 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
 
 
 @router.get('/me')
-async def me(user: User = Depends(current_user), db: AsyncSession = Depends(get_db_session)):
+async def me(user: User = Depends(current_user), db: AsyncSession = Depends(get_request_db_session)):
     return success_response(await user_info(db, user))
 
 
 @router.get('/groups', dependencies=[Depends(require('users.manage'))])
-async def groups(db: AsyncSession = Depends(get_db_session)):
+async def groups(db: AsyncSession = Depends(get_request_db_session)):
     rows = (await db.scalars(select(Group).order_by(Group.name))).all()
     return success_response([{'name': g.name, 'permissions': g.permissions} for g in rows])
 
 
 @router.get('/users', dependencies=[Depends(require('users.manage'))])
-async def users(page: int = Query(1, ge=1, le=100000), db: AsyncSession = Depends(get_db_session)):
+async def users(page: int = Query(1, ge=1, le=100000), db: AsyncSession = Depends(get_request_db_session)):
     rows = (await db.scalars(select(User).order_by(User.id).offset((page-1)*50).limit(50))).all()
     return success_response({'items': await users_info(db, rows), 'total': await db.scalar(select(func.count()).select_from(User))})
 
 
 @router.post('/users', dependencies=[Depends(check_origin), Depends(require('users.manage'))])
-async def add_user(body: UserCreate, db: AsyncSession = Depends(get_db_session)):
+async def add_user(body: UserCreate, db: AsyncSession = Depends(get_request_db_session)):
     return success_response(await create_user(db, body))
 
 
 @router.patch('/users/{user_id}', dependencies=[Depends(check_origin)])
-async def update_user(user_id: int, body: UserUpdate, actor: User = Depends(require('users.manage')), db: AsyncSession = Depends(get_db_session)):
+async def update_user(user_id: int, body: UserUpdate, actor: User = Depends(require('users.manage')), db: AsyncSession = Depends(get_request_db_session)):
     # Serialize membership changes to preserve at least one active administrator.
     await db.scalar(select(Group).where(Group.name == 'admins').with_for_update())
     user = await db.get(User, user_id, with_for_update=True)
@@ -113,7 +113,7 @@ async def update_user(user_id: int, body: UserUpdate, actor: User = Depends(requ
 
 
 @router.get('/api-stats', dependencies=[Depends(require('api_stats.read'))])
-async def api_stats(hours: int = Query(24, ge=1, le=720), db: AsyncSession = Depends(get_db_session)):
+async def api_stats(hours: int = Query(24, ge=1, le=720), db: AsyncSession = Depends(get_request_db_session)):
     from api.services.monitoring.statistics import summarize
     since = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours-1)
     rows = (await db.scalars(select(ApiMetric).where(ApiMetric.hour >= since))).all()
@@ -121,7 +121,7 @@ async def api_stats(hours: int = Query(24, ge=1, le=720), db: AsyncSession = Dep
 
 
 @router.get('/project-monitoring', dependencies=[Depends(require('project_monitoring.read'))])
-async def project_monitoring(db: AsyncSession = Depends(get_db_session)):
+async def project_monitoring(db: AsyncSession = Depends(get_request_db_session)):
     from api.db.models.monitoring import MonitorState
     from api.services.monitoring.project import STALE_SECONDS
     state = await db.get(MonitorState, 'project')
@@ -135,7 +135,7 @@ async def project_monitoring(db: AsyncSession = Depends(get_db_session)):
 
 
 @router.get('/project-traffic', dependencies=[Depends(require('project_monitoring.read'))])
-async def project_traffic(period: Literal['hour', 'day', 'week'] = 'day', db: AsyncSession = Depends(get_db_session)):
+async def project_traffic(period: Literal['hour', 'day', 'week'] = 'day', db: AsyncSession = Depends(get_request_db_session)):
     from api.db.models.monitoring import MonitorState, TrafficMetric
     from api.services.monitoring.edge_traffic import traffic_summary
     now = datetime.now(timezone.utc)

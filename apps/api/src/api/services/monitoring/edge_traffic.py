@@ -15,7 +15,7 @@ from pathlib import Path
 from sqlalchemy import delete, or_, and_, text
 from sqlalchemy.dialects.postgresql import insert
 from api.db.models.monitoring import MonitorState, TrafficMetric
-from api.db.session import get_session_factory
+from api.db.session import get_db_session
 from api.services.monitoring.statistics import BOUNDS, summary
 from api.services.monitoring.project import save_state
 
@@ -92,7 +92,7 @@ async def ingest():
     path = os.getenv('MONITORING_TRAFFIC_LOG')
     if not path:
         return
-    async with get_session_factory()() as db:
+    async with get_db_session() as db:
         await db.execute(text("SET LOCAL statement_timeout = '10s'"))
         if not await db.scalar(text('SELECT pg_try_advisory_xact_lock(730311)')):
             return

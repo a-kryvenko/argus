@@ -41,7 +41,7 @@ tokens. Observation, forecast and Intelligence tokens must differ.
 | Process | Data mounts |
 | --- | --- |
 | Clio HTTP/worker | `data/observations`, writable |
-| Prophet worker | `data/prophet` and `data/demo`, writable; `data/models`, read-only |
+| Prophet cron jobs | `data/prophet` and `data/demo`, writable; `data/models`, read-only |
 | PROSWIN executor | Prophet cache, writable; models, read-only |
 | API | Metrics and demo exports, read-only |
 | Prophet HTTP, Intelligence HTTP/worker | None |

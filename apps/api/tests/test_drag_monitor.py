@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from api.services.authentication import current_user
-from api.db.session import get_db_session
+from api.db.session import get_request_db_session
 from api.routers import drag_monitor
 
 
@@ -15,7 +15,7 @@ def test_session_owner_and_write_origin(monkeypatch):
     app.include_router(drag_monitor.router)
     async def no_database():
         yield None
-    app.dependency_overrides[get_db_session] = no_database
+    app.dependency_overrides[get_request_db_session] = no_database
     calls = []
     monkeypatch.setattr(drag_monitor, 'request', lambda *args, **kwargs: calls.append((args, kwargs)) or [])
     with TestClient(app) as client:

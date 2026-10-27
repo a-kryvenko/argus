@@ -17,14 +17,15 @@ def recorder_database(database, monkeypatch, tmp_path):
 
 
 @pytest.fixture
-def recorder_setup(recorder_database):
-    from prophet.scheduling.jobs import generation_lock
-    with generation_lock() as writer:
+async def recorder_setup(recorder_database):
+    from prophet.db.locks import generation_lock
+    async with generation_lock() as writer:
         yield (*recorder_database, writer)
 
 
-def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00'):
+def product_artifacts(names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00'):
     from common.schemas.forecast_release import PREDICTION_COLUMNS
+    from prophet.services.generation.calculation import Artifact
     valid = (datetime.fromisoformat(issue) + timedelta(hours=1)).isoformat()
     for name in names:
         if name == 'solar_wind_events':
@@ -37,13 +38,19 @@ def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00
             inputs = ForecastInputs(as_of=time, read_at=time, observations=Observation(points=[]),
                                     solar_wind_events=EventInputs(as_of=time, read_at=time))
             artifact = calculate_product(CalculationRequest('solar-wind-events', inputs, Path('/unused'), {}))[0]
-            run.store(name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
+            yield artifact
             content = artifact.content.decode()
             continue
         columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
         values = [issue, valid, '1', *('0' for _ in PREDICTION_COLUMNS[name])]
         content = ','.join(columns) + '\n' + ','.join(values) + '\n'
-        run.store(name, content.encode('utf-8'), {}, 1, columns)
-    return content
+        yield Artifact(name, content.encode('utf-8'), {}, 1, columns)
 
 
+
+
+
+async def store_product(run, names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00'):
+    for artifact in product_artifacts(names, issue):
+        await run.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
+    return artifact.content.decode('utf-8')

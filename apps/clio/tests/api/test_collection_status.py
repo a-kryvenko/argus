@@ -129,10 +129,22 @@ def test_success_commits_status_and_measurements_together():
 def test_api_returns_all_sources_in_empty_storage_without_fetching(monkeypatch):
     app = FastAPI(); app.include_router(routes.router)
     session = AsyncMock(); session.execute.return_value = Mock(scalars=Mock(return_value=[]))
-    app.dependency_overrides[routes.get_db_session] = lambda: session
+    app.dependency_overrides[routes.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         response = client.get('/internal/v1/observations/status')
     assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
     data = response.json()['data']
     assert data['status'] == 'degraded' and len(data['sources']) == 4
     assert all(source['status'] == 'not_started' for source in data['sources'].values())
+
+
+def test_source_monitoring_uses_configured_cron_poll_interval(monkeypatch):
+    from clio import config as observation_config
+    from clio.monitoring.specs import overdue_after, collector_sources
+    config = observation_config.load_observation_config().model_copy(deep=True)
+    config.observations['dst'].schedules.live = observation_config.Schedule(every='15m')
+    config.observations.pop('kp')
+    config.observations.pop('ap')
+    monkeypatch.setattr(observation_config, 'load_observation_config', lambda: config)
+    assert collector_sources('geomagnetic') == ['dst']
+    assert overdue_after('dst') == 1860

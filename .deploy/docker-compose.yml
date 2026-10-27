@@ -106,16 +106,6 @@ services:
       # Detect readiness promptly before starting dependent services.
       start_interval: 1s
 
-  clio-worker:
-    <<: *clio-runtime
-    command: ["clio", "worker"]
-    healthcheck:
-      test: ["CMD", "clio", "check-health", "worker"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 120s
-
   clio-migrate:
     image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
     profiles: ["maintenance"]
@@ -125,11 +115,14 @@ services:
       <<: *clio-db
     volumes:
       - ./configs:/var/www/configs:ro
+      - ./data/observations:/var/www/data/observations
     networks: [backend]
 
   prophet:
     <<: *prophet-runtime
-    command: ["prophet", "worker"]
+    profiles: ["commands"]
+    restart: "no"
+    command: ["prophet", "--help"]
     stop_grace_period: 10m
     volumes:
       - ./configs:/var/www/configs:ro

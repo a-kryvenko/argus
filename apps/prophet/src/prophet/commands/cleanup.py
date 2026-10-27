@@ -1,14 +1,19 @@
 import json
 
 
-def run(args):
+async def _run(args):
     from common.config import get_config
     from prophet.services.releases.retention import cleanup
     get_config()
     if args.apply:
-        from prophet.scheduling.jobs import retention_lock
-        with retention_lock() as writer:
-            result = cleanup(days=args.days, apply=True, writer=writer)
+        from prophet.db.locks import retention_lock
+        async with retention_lock() as writer:
+            result = await cleanup(days=args.days, apply=True, writer=writer)
     else:
-        result = cleanup(days=args.days)
+        result = await cleanup(days=args.days)
     print(json.dumps(result, indent=2))
+
+
+def run(args):
+    from prophet.commands.runner import run_async
+    return run_async(_run(args))

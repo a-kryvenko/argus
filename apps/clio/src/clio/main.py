@@ -9,19 +9,20 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from clio.config import load_observation_config
-from clio.db.session import dispose_engine, get_session_factory
-from clio.routers.auth import require_service_token
+from common.db.session import dispose_engine
+from clio.db.session import get_db_session
 from clio.routers import (
     browse,
     collection_status,
-    measurements,
     geomagnetic,
+    measurements,
     observation_files,
     observations,
     sdo_images,
     solar_wind,
     solar_wind_events,
 )
+from clio.routers.auth import require_service_token
 
 get_config()
 load_observation_config()
@@ -72,8 +73,8 @@ async def live():
 @app.get('/health/ready')
 async def ready():
     try:
-        async with get_session_factory()() as session:
-            await asyncio.wait_for(session.execute(text('SELECT 1 FROM clio.scheduled_job LIMIT 1')), timeout=5)
+        async with get_db_session() as session:
+            await asyncio.wait_for(session.execute(text('SELECT 1 FROM clio.measurement LIMIT 1')), timeout=5)
     except Exception:
         raise HTTPException(503, 'Clio storage is not ready') from None
     return {'service': 'clio', 'status': 'ok'}

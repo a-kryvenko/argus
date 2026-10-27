@@ -8,7 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.models.measurement import Measurement
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from clio.routers.auth import require_service_token
 from common.schemas.response import success_response
 
@@ -24,7 +24,7 @@ async def measurements(
     min_value: FiniteFloat | None = None,
     max_value: FiniteFloat | None = None,
     exclude_value: FiniteFloat | None = None,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
 ):
     """Read [start, end); hourly means include partial buckets, without filling gaps.
 

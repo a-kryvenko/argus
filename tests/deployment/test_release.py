@@ -71,7 +71,7 @@ def source(tmp_path):
     files = {'.gitignore': 'packages/forecast-core/\npackages/intelligence-core/\n', '.dockerignore': '**/.venv\n', 'docs/example.md': 'docs',
              'packages/common/src/common/shared.py': 'shared',
              'packages/forecast/src/forecast/example.py': 'forecast', 'apps/web/src/app/page.tsx': 'page',
-             'apps/prophet/src/prophet/worker.py': 'worker',
+             'apps/prophet/src/prophet/commands/generation.py': 'worker',
              'apps/intelligence/src/intelligence/cli.py': 'cli',
              'apps/clio/src/clio/db/migrations/versions/test.py': 'migration',
              'apps/api/src/api/db/migrations/versions/test.py': 'API migration',
@@ -98,7 +98,7 @@ def changed_components(before, after):
     ('packages/forecast-core/src/forecast_core/models/proswin.py', {'prophet', 'proswin'}),
     ('packages/forecast-core/src/forecast_core/solar_events/bundled_models/argus-cme-speed-v2.joblib', {'prophet'}),
     ('packages/intelligence-core/src/intelligence_core/api.py', {'intelligence'}),
-    ('apps/prophet/src/prophet/worker.py', {'prophet', 'proswin'}), ('configs/project.yaml', set()),
+    ('apps/prophet/src/prophet/commands/generation.py', {'prophet', 'proswin'}), ('configs/project.yaml', set()),
 ])
 def test_only_actual_consumers_rebuild(source, path, expected):
     before = release.plan(source)
@@ -140,7 +140,7 @@ def test_migrations_are_fingerprinted_separately(source):
     assert {name for name in before['migrations'] if before['migrations'][name] != after['migrations'][name]} == {'clio'}
 
 
-@pytest.mark.parametrize('domain,command', [('prophet', 'status'), ('intelligence', 'check')])
+@pytest.mark.parametrize('domain,command', [('prophet', 'generate'), ('intelligence', 'check')])
 def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domain, command):
     root = tmp_path / 'host with spaces'
     (root / 'scripts').mkdir(parents=True)
@@ -162,7 +162,8 @@ def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domai
     assert args[args.index('--project-directory') + 1] == str(root)
     assert str(root / '.release-compose.json') in args
     assert str(root / '.release-images.env') not in args
-    assert args[-7:] == ['run', '--rm', '--no-deps', domain, domain, command, 'solar-wind-speed']
+    expected = ['run', '--rm', '--no-deps', *(['-T'] if domain == 'prophet' else []), domain, domain, command, 'solar-wind-speed']
+    assert args[-len(expected):] == expected
 
 
 def test_every_docker_copy_source_participates_in_image_identity():
@@ -199,9 +200,12 @@ def test_bundle_includes_only_shared_command_scripts(tmp_path):
     destination = tmp_path / 'release'
     release.bundle(ROOT, plan_path, tmp_path, destination)
     assert not (destination / 'deploy-legacy.sh').exists()
-    assert {p.name for p in (destination / 'scripts').iterdir()} == {'run', 'logs'}
-    for name in ('run', 'logs'):
+    assert {p.name for p in (destination / 'scripts').iterdir()} == {'run', 'logs', 'cron-run'}
+    for name in ('run', 'logs', 'cron-run'):
         assert (destination / 'scripts' / name).read_bytes() == (ROOT / 'scripts' / name).read_bytes()
+    for service in ('clio', 'prophet', 'api', 'intelligence'):
+        assert (destination / 'apps' / service / 'cronjobs.txt').read_bytes() == (ROOT / 'apps' / service / 'cronjobs.txt').read_bytes()
+    assert (destination / '.deploy/cronjobs.txt').read_bytes() == (ROOT / '.deploy/cronjobs.txt').read_bytes()
 
 
 def test_packaged_api_revision_changes_migration_fingerprint(source):

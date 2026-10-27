@@ -33,15 +33,16 @@ Manual migrations do not stop writers or create backups.
 
 | Command | Purpose |
 | --- | --- |
-| `./argus clio worker` | Scheduled collection and normalization |
 | `./argus clio collect [METRIC ...]` | Collect live observations |
 | `./argus clio backfill [METRIC ...] [--from DATE --to DATE]` | Fill historical gaps |
 | `./argus clio normalize` | Normalize stored observations |
-| `./argus clio check-health <solar-wind\|geomagnetic\|worker>` | Collector/heartbeat check |
+| `./argus clio sdo-cleanup` | Prune expired SDO files |
 
 One-shot commands exit after completion. Metrics are space-separated (`v n t`);
 omitting them selects all configured observations. Empty DBs need collection
-before normalization. Manual commands share worker locks without consuming scheduled slots.
+before normalization. Deployment installs `apps/clio/cronjobs.txt`; flock prevents overlap.
+Logs are in `log/clio/`.
+Use `backfill sdo --batch` for bounded SDO warmup.
 
 ## Historical recovery
 
@@ -107,7 +108,7 @@ Internal data routes require service tokens. Reads do not collect or generate.
 ./argus logs [service] [--tail N] [-f]
 ```
 
-Default: last 100 lines; no service selects all. `clio` includes its worker;
+Default: last 100 lines; no service selects all. `clio` selects the HTTP service;
 `prophet` includes HTTP. Processes can also be selected individually.
 Production adds `frontend`, `nginx` and `alloy`.
 

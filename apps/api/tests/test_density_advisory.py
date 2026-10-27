@@ -5,7 +5,7 @@ import pytest
 from fastapi import FastAPI,HTTPException
 from fastapi.testclient import TestClient
 from api.services.authentication import current_user
-from api.db.session import get_db_session
+from api.db.session import get_request_db_session
 from api.routers import density_advisory
 from api.routers.density_advisory import request
 
@@ -14,7 +14,7 @@ def test_session_ownership_origin_and_exact_source_routes(monkeypatch):
     app=FastAPI()
     app.include_router(density_advisory.router)
     async def no_database(): yield None
-    app.dependency_overrides[get_db_session]=no_database
+    app.dependency_overrides[get_request_db_session]=no_database
     calls=[]
     monkeypatch.setattr(density_advisory,'request',lambda *a,**k:calls.append((a,k)) or [])
     base='/dashboard/density-advisory'

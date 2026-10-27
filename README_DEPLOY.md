@@ -3,7 +3,7 @@
 ## Local development
 
 Requires Docker Compose v2, Node.js 20.9+, pnpm 9, private `forecast-core` and
-`intelligence-core` checkouts, and model artifacts referenced by `configs/`.
+`intelligence-core`.
 
 Configure `.env` / `.env.local` (local values override):
 
@@ -34,16 +34,8 @@ pnpm dev
 Frontend/API/Clio/Prophet: localhost ports 3000/8000/8001/8002.
 Workers collect and generate automatically. [Manual commands](docs/commands.md).
 
-| Change | Apply with |
-| --- | --- |
-| API, Clio or Prophet HTTP source | Automatic dev reload |
-| Worker or Intelligence source | `./argus compose restart <service>` |
-| Env, mounts or Compose | `./argus compose up -d <service>` |
-| Dependencies or Dockerfile | `./argus compose up -d --build <service>` |
-
 Data mounts follow [service ownership](docs/architecture.md#runtime-ownership).
-Prophet demo caches use `data/demo`; legacy `data/raw` needs an explicit one-off mount.
-`compose down --volumes` deletes local DB and Redis data.
+Prophet demo caches use `data/demo`;
 
 ## Production setup
 
@@ -64,19 +56,15 @@ from `172.20.0.0/16`; deploy edge and API changes together.
 ## Release
 
 ```bash
-pnpm --filter web exec playwright install chromium
 ./deploy.sh                         # Checks and diagram generation
 ./deploy.sh -m "message"             # Also commits and pushes; no release
-./deploy.sh patch -m "message"       # Also uploads artifacts and tags a release
+./deploy.sh patch|minor|major -m "message"       # Also uploads artifacts and tags a release
 ```
 
 `minor`/`major` also require `-m`. Checks include web lint/types, Node, Playwright
-and Python (`uv` required). Python: `./scripts/test-python -q`; diagrams require
-Python 3.10+, Java 21+ and curl. [Diagram commands](docs/architecture/README.md).
+and Python (`uv` required).
 
-Browser tests use `.next/playwright`; failures save screenshots.
-`PLAYWRIGHT_SCREENSHOTS=1` also saves successful review screenshots.
-Optional nginx checks require Docker and `TEST_NGINX_IMAGE=nginx:stable-alpine`.
+Diagrams require Python 3.10+, Java 21+ and curl. [Diagram commands](docs/architecture/README.md).
 
 A `v*` tag deploys pinned images. Releases require existing `.rolling-state.json`
 and replace changed HTTP services individually: readiness, smoke checks, graceful routing switch, request
@@ -112,3 +100,5 @@ Use `argus` for production commands/logs; it selects active HTTP slots. Bare
 `artifacts/`, `.rolling-*` and stopped previous slots for recovery.
 
 [Commands](docs/commands.md) · [Architecture](docs/architecture.md)
+
+Deployment replaces the host crontab with `apps/{clio,prophet,api,intelligence}/cronjobs.txt` and `.deploy/cronjobs.txt`. `@ROOT@` expands to the deployment directory. Requires cron and flock; Logs: `log/clio/`, `log/prophet/`.

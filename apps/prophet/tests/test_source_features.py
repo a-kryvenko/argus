@@ -3,7 +3,7 @@ from dataclasses import asdict
 import hashlib
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pandas as pd
@@ -140,17 +140,20 @@ def test_goes_enrichment_remains_active_without_gong(calibrated_goes, tmp_path, 
     assert result.observations.points[0].s10 == 101.
 
 
-def test_legacy_snapshot_drops_gong_features_before_storage(monkeypatch):
+async def test_legacy_snapshot_drops_gong_features_before_storage(monkeypatch):
     from contextlib import nullcontext
     from prophet.services.releases import recording as runs
     payload = inputs().model_dump(mode='json')
     payload['gong'] = {'feature_version': 'gong-bands-v1', 'features': {'b_lat_old': 10.}}
     parsed = ForecastInputs.model_validate_json(json.dumps(payload))
-    connection = Mock()
+    connection = Mock(execute=AsyncMock(return_value=Mock(rowcount=1)))
     connection.execute.return_value.rowcount = 1
     monkeypatch.setattr(runs, 'transaction', lambda _: nullcontext(connection))
-    runs.RunRecorder('test-run', object()).snapshot(parsed)
+    await runs.RunRecorder('test-run', object()).snapshot(parsed)
     stored = connection.execute.call_args.args[1]
-    assert 'gong' not in stored[0].obj
-    assert 'gong' not in stored[2].obj
-    assert stored[0].obj['observations'] == payload['observations']
+    assert 'gong' not in stored['payload']
+    assert 'gong' not in stored['input_diagnostics']
+    assert stored['payload']['observations'] == payload['observations']
+
+
+pytestmark = pytest.mark.anyio

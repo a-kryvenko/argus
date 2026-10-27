@@ -21,11 +21,11 @@ graph TB
     subgraph 4 ["Argus Sunwatch"]
       style 4 fill:#ffffff,stroke:#a7acb2,color:#a7acb2
 
-      10["Prophet worker<br/>[Container: Python / scheduler]<br/>Input snapshots, product<br />calculations, publication and<br />verification"]
+      10["Prophet cron jobs<br/>[Container: cron / Python CLI]<br/>Input snapshots, product<br />calculations, publication and<br />verification"]
       style 10 fill:#eff6ff,stroke:#a7acb2,color:#172554
       11["Intelligence HTTP<br/>[Container: Python / HTTP]<br/>Spacecraft, density<br />advisories and journal using<br />intelligence-core"]
       style 11 fill:#eff6ff,stroke:#a7acb2,color:#172554
-      12["Intelligence worker<br/>[Container: Python / scheduler]<br/>Scheduled density advisories<br />and release integration"]
+      12["Intelligence worker<br/>[Container: cron / Python CLI]<br/>Scheduled density advisories<br />and release integration"]
       style 12 fill:#eff6ff,stroke:#a7acb2,color:#172554
       13[("API database<br/>[Container: PostgreSQL / argus_api]<br/>Sessions and usage statistics")]
       style 13 fill:#dbeafe,stroke:#99a3b1,color:#172554
@@ -47,7 +47,7 @@ graph TB
       style 6 fill:#eff6ff,stroke:#a7acb2,color:#172554
       7["Clio HTTP<br/>[Container: Python / HTTP]<br/>Stored observations and<br />checksum-verified original<br />files"]
       style 7 fill:#eff6ff,stroke:#a7acb2,color:#172554
-      8["Clio worker<br/>[Container: Python / scheduler]<br/>Collection, backfill,<br />aggregation and normalization"]
+      8["Clio cron jobs<br/>[Container: Host cron / one-shot Python containers]<br/>Collection, backfill and<br />normalization"]
       style 8 fill:#eff6ff,stroke:#a7acb2,color:#172554
       9["Prophet HTTP<br/>[Container: Python / HTTP]<br/>Stored releases, status and<br />verification summaries"]
       style 9 fill:#eff6ff,stroke:#a7acb2,color:#172554

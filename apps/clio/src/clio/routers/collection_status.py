@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from common.schemas.response import success_response
 from clio.monitoring.status import source_status
 
@@ -8,7 +8,7 @@ router = APIRouter(prefix='/internal/v1/observations', tags=['observations'])
 
 
 @router.get('/status')
-async def collection_status(response: Response, session: AsyncSession = Depends(get_db_session)):
+async def collection_status(response: Response, session: AsyncSession = Depends(get_request_db_session)):
     """Source diagnostics: attempts, successful responses, storage outcomes and data age.
 
     Status priority: stalled/overdue collection, errors, then delayed/missing data.
@@ -20,7 +20,7 @@ async def collection_status(response: Response, session: AsyncSession = Depends(
 
 
 @router.get('/monitoring')
-async def monitoring(response: Response, session: AsyncSession = Depends(get_db_session)):
+async def monitoring(response: Response, session: AsyncSession = Depends(get_request_db_session)):
     from clio.monitoring.measurements import monitoring_status
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await monitoring_status(session))

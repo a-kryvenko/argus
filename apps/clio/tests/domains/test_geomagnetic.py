@@ -53,7 +53,7 @@ def test_empty_database_has_no_invented_indices():
 def test_api_rejects_invalid_ranges_before_querying(monkeypatch):
     app = FastAPI()
     app.include_router(routes.router)
-    app.dependency_overrides[routes.get_db_session] = lambda: object()
+    app.dependency_overrides[routes.get_request_db_session] = lambda: object()
     history = AsyncMock(return_value={'series': {}})
     monkeypatch.setattr(service, 'history', history)
     with TestClient(app) as client:

@@ -1,3 +1,5 @@
+import asyncio
+from unittest.mock import AsyncMock
 """Public infrastructure tests use canned backend responses, not physical assertions."""
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +16,7 @@ def test_delete_uses_authenticated_owner_revision_and_reports_conflicts(monkeypa
     path = f'/internal/v1/density-advisory/7/{profile_id}'
     headers = {'Authorization': 'Bearer test-token'}
     calls = []
-    def remove(owner_id, target, *, revision):
+    async def remove(owner_id, target, *, revision):
         calls.append((owner_id, target, revision))
         return {'deleted': True}
     monkeypatch.setattr(density_monitor, 'delete_profile', remove)
@@ -34,7 +36,7 @@ def test_delete_uses_authenticated_owner_revision_and_reports_conflicts(monkeypa
 
 def test_service_auth_and_sanitized_storage_failure(monkeypatch):
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN','test-token')
-    monkeypatch.setattr(density_monitor,'list_profiles',lambda owner: [])
+    monkeypatch.setattr(density_monitor,'list_profiles',AsyncMock(return_value=[]))
     with TestClient(app) as client:
         path='/internal/v1/density-advisory/7'
         assert client.get(path).status_code==401
@@ -62,4 +64,4 @@ def test_input_retrieval_failure_does_not_discard_other_product(monkeypatch):
         if product=='atmospheric-density': raise RuntimeError('secret')
         return sentinel
     monkeypatch.setattr(density_monitor,'fetch_release',fetch)
-    assert density_monitor.retrieve_inputs()=={'atmospheric-density':None,'solar-wind-events':sentinel}
+    assert asyncio.run(density_monitor.retrieve_inputs())=={'atmospheric-density':None,'solar-wind-events':sentinel}

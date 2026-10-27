@@ -14,7 +14,7 @@ def test_readiness_checks_storage_and_returns_503_on_failure(monkeypatch, availa
     context = MagicMock()
     context.__aenter__ = AsyncMock(return_value=db)
     context.__aexit__ = AsyncMock(return_value=False)
-    monkeypatch.setattr(healthcheck, 'get_session_factory', lambda: lambda: context)
+    monkeypatch.setattr(healthcheck, 'get_db_session', lambda: context)
     if available:
         assert asyncio.run(healthcheck.ready()) == {'service': 'api', 'status': 'ok'}
     else:

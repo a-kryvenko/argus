@@ -59,10 +59,10 @@ def test_cli_failure_is_nonzero_and_does_not_leak_inputs(monkeypatch, capsys):
 
 
 def test_refresh_all_is_handled_by_service_and_stops_on_failure(monkeypatch, capsys):
-    from unittest.mock import Mock
+    from unittest.mock import AsyncMock
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
     from intelligence import worker
-    operation = Mock(side_effect=lambda product: {'product': product})
+    operation = AsyncMock(side_effect=lambda product: {'product': product})
     monkeypatch.setattr(worker, 'process_once', operation)
     cli.main(['refresh'])
     expected = [product for product in PRODUCT_ARTIFACTS if product != 'solar-radiation']
@@ -79,9 +79,9 @@ def test_refresh_all_is_handled_by_service_and_stops_on_failure(monkeypatch, cap
 
 
 def test_invalid_refresh_product_does_not_process(monkeypatch):
-    from unittest.mock import Mock
+    from unittest.mock import AsyncMock
     from intelligence import worker
-    operation = Mock()
+    operation = AsyncMock()
     monkeypatch.setattr(worker, 'process_once', operation)
     with pytest.raises(SystemExit) as result:
         cli.main(['refresh', 'unknown'])

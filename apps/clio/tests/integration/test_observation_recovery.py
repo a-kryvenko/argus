@@ -71,7 +71,7 @@ async def verify():
                             (await session.execute(select(model).where(source_filter))).scalars()}
 
             async def poll(payload):
-                with patch.object(service, 'get_session_factory', return_value=factory), \
+                with patch.object(service, 'get_db_session', side_effect=factory), \
                      patch.object(service, 'fetch_records', return_value=deepcopy(payload)):
                     await service.ingest_source(source)
 

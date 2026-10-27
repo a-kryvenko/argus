@@ -1,10 +1,9 @@
 """Backfill configured observations without changing existing records."""
 import json
 
-from clio.db.session import get_session_factory
+from clio.db.session import get_db_session
 from clio.config import load_observation_config
-from clio.ingestion.selection import partition, merge_files, available_files, merge_sdo
-
+from clio.ingestion.selection import partition, merge_files, merge_sdo
 
 
 async def run(args):
@@ -13,7 +12,7 @@ async def run(args):
     result = {'status': 'complete', 'failed_metrics': [], 'downloaded_measurements': 0}
     if numeric:
         from clio.observations.backfill import backfill_selected
-        async with get_session_factory()() as session:
+        async with get_db_session() as session:
             result = await backfill_selected(session, config, numeric, now=args.now, start=args.start, end=args.end,
                                              raise_on_failure=False)
     if files:
@@ -22,7 +21,4 @@ async def run(args):
             config, files, mode='backfill', now=args.now, start=args.start, end=args.end))
     result = await merge_sdo(result, config, args, mode='warmup')
     print(json.dumps(result, indent=2))
-    if (not getattr(args, 'scheduled', False) and result['failed_metrics']
-            and not result['downloaded_measurements'] and not available_files(result)):
-        raise RuntimeError('No gaps filled; failed observations: ' + ', '.join(result['failed_metrics']))
     return result

@@ -17,12 +17,6 @@ def merge_files(result, files):
             'failed_metrics': sorted(set(result['failed_metrics']) | set(files['failed_metrics']))}
 
 
-def available_files(result):
-    images = sum(result.get('sdo', {}).get(key, 0) for key in ('saved', 'restored', 'existing'))
-    return images + sum(f['received'] + f['restored'] + f['retained']
-                        for f in result.get('files', {}).values())
-
-
 async def merge_sdo(result, config, args, *, mode):
     if not config.sdo_images.enabled or (args.metrics is not None and 'sdo' not in args.metrics):
         return result
@@ -32,7 +26,7 @@ async def merge_sdo(result, config, args, *, mode):
     report = await asyncio.to_thread(
         cycle, archive_root(), mode,
         batch_hours=config.sdo_images.warmup_hours_per_batch,
-        full=not getattr(args, 'scheduled', False),
+        full=not getattr(args, 'batch', False),
         start=getattr(args, 'start', None), end=getattr(args, 'end', None))
     result['sdo'] = report
     if report.get('failed'):

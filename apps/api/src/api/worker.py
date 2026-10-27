@@ -2,7 +2,7 @@
 import asyncio
 import signal
 
-from api.db.session import dispose_engine
+from common.db.session import dispose_engine
 from api.services.monitoring.edge_traffic import run_traffic_loop
 from api.services.monitoring.project import run_monitor_loop
 

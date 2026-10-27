@@ -7,6 +7,7 @@ if [[ ! -f "$root/.rolling-state.json" ]]; then
     exit 1
 fi
 command -v python3 >/dev/null
+command -v crontab >/dev/null
 exec 8>"$root/.deployment.lock"
 flock -n 8
 python3 "$bundle/rolling.py" "$root" "$bundle"

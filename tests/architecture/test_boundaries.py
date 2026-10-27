@@ -48,6 +48,10 @@ def test_package_dependency_direction():
     for package, blocked in forbidden.items():
         for path in (ROOT / 'packages' / package / 'src').rglob('*.py'):
             for module in imports(path):
+                if module.split('.')[0] == 'sqlalchemy' and path.is_relative_to(
+                    ROOT / 'packages/common/src/common/db'
+                ):
+                    continue
                 if module.split('.')[0] in blocked:
                     violations.append(f'{path.relative_to(ROOT)} imports {module}')
     assert not violations, '\n'.join(violations)

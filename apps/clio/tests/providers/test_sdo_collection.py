@@ -61,23 +61,6 @@ def test_warmup_visits_entire_window_despite_missing_sources(tmp_path, monkeypat
     assert not list(tmp_path.glob('*/*.npz'))
 
 
-def test_worker_registers_independent_sdo_lanes(monkeypatch):
-    from clio import worker
-    from clio.config import ClioObservations
-    calls = []
-    monkeypatch.setattr(worker, 'invoke_isolated', lambda name, args, **kw: calls.append((name, getattr(args, 'mode', None), getattr(args, 'metrics', None))))
-    config = ClioObservations(observations={}, sdo_images={'enabled': True})
-    tasks = {t.name: t for t in worker.tasks_for(config, {}, None)}
-    for mode in ('live', 'warmup', 'cleanup'):
-        task = tasks[f'sdo-{mode}']
-        assert task.next_run == 0 and task.background == (mode == 'warmup')
-        task.run()
-    assert calls == [('collect', None, ['sdo']), ('backfill', None, ['sdo']),
-                     ('sdo-cleanup', None, None)]
-    config.sdo_images.enabled = False
-    assert not any(t.name.startswith('sdo-') for t in worker.tasks_for(config, {}, None))
-
-
 def test_lane_lock_skips_duplicate_worker_but_allows_cleanup(tmp_path):
     import fcntl
     with (tmp_path / '.warmup.lock').open('a') as lock:

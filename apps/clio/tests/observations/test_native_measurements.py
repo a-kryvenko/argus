@@ -49,7 +49,6 @@ def test_monitoring_reads_latest_measurement_and_its_receipt(monkeypatch):
     point = Measurement(metric='bz', value=-2, observed_at=NOW, received_at=NOW-timedelta(seconds=5))
     session = AsyncMock()
     session.scalars.return_value = [point]
-    session.get.return_value = None
     monkeypatch.setattr(monitoring, 'OBSERVATIONS', {metric: monitoring.OBSERVATIONS[metric] for metric in ('bz', 'v')})
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
     result = asyncio.run(monitoring.monitoring_status(session))
@@ -66,7 +65,6 @@ def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
     point = Measurement(metric='bz', value=None, observed_at=NOW, received_at=NOW, quality='missing')
     session = AsyncMock()
     session.scalars.return_value = [point]
-    session.get.return_value = None
     monkeypatch.setattr(monitoring, 'OBSERVATIONS', {'bz': monitoring.OBSERVATIONS['bz']})
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
     result = asyncio.run(monitoring.monitoring_status(session))
@@ -77,7 +75,6 @@ def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
 def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(monkeypatch):
     session = AsyncMock()
     session.scalars.return_value = []
-    session.get.return_value = None
     sources = {'solar_wind_mag': {'status': 'not_started'}}
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'degraded', 'sources': sources}))
     result = asyncio.run(monitoring.monitoring_status(session))
@@ -87,4 +84,4 @@ def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(m
     assert all(point['status'] == 'unavailable' for point in result['measurements'])
     assert result['sources'] == sources
     assert result['status'] == 'degraded'
-    assert result['last_refresh_completed_at'] is None
+    assert 'last_refresh_completed_at' not in result

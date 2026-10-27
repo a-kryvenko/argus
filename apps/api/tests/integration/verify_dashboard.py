@@ -21,7 +21,7 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy import text, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from api.db.session import get_db_session
+from api.db.session import get_request_db_session
 from api.db.models.dashboard import Session, LoginAttempt
 from api.services.authentication import digest
 from api.routers.dashboard import router
@@ -44,7 +44,7 @@ import uvicorn
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from clio.main import app
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from clio.db.models.measurement import Measurement
 url = make_url(os.environ['TEST_DATABASE_ADMIN_DSN']).set(drivername='postgresql+psycopg')
 engine = create_async_engine(url, execution_options={'schema_translate_map': {'clio': os.environ['TEST_DASHBOARD_SCHEMA']}})
@@ -52,7 +52,7 @@ factory = async_sessionmaker(engine)
 async def session():
     async with factory() as db:
         yield db
-app.dependency_overrides[get_db_session] = session
+app.dependency_overrides[get_request_db_session] = session
 async def serve():
     try:
         async with engine.begin() as connection:
@@ -142,7 +142,7 @@ async def verify():
         async def session():
             async with factory() as db:
                 yield db
-        app.dependency_overrides[get_db_session] = session
+        app.dependency_overrides[get_request_db_session] = session
         transport = ASGITransport(app=app)
         headers = {'Origin': 'https://dashboard.test'}
         with clio_server(root, schema) as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
@@ -213,7 +213,7 @@ async def verify():
                 assert (await login(client)).status_code == 200
                 api_statistics.record('/dashboard/users/{user_id}', 'PATCH', 200, 42)
                 api_statistics.record('__unmatched__', 'GET', 404, 9)
-                with patch.object(api_statistics, 'get_session_factory', return_value=factory):
+                with patch.object(api_statistics, 'get_db_session', side_effect=factory):
                     await api_statistics.flush()
                 stats = (await client.get('/dashboard/api-stats')).json()['data']
                 assert stats['summary']['requests'] == 2 and stats['summary']['errors_4xx'] == 1

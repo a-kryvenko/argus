@@ -20,7 +20,7 @@ def test_history_returns_points_and_passes_limit(monkeypatch):
     app = FastAPI()
     app.include_router(observations.router)
     session = object()
-    app.dependency_overrides[observations.get_db_session] = lambda: session
+    app.dependency_overrides[observations.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         response = client.get('/internal/v1/observations/history?limit=12')
         assert response.status_code == 200
@@ -48,7 +48,7 @@ def test_history_applies_exclusive_utc_bounds(monkeypatch):
     app = FastAPI()
     app.include_router(observations.router)
     session = object()
-    app.dependency_overrides[observations.get_db_session] = lambda: session
+    app.dependency_overrides[observations.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         result = client.get('/internal/v1/observations/history', params={
             'from': '2026-09-01T00:00:00Z', 'to': '2026-09-02T00:00:00Z'})
@@ -73,7 +73,7 @@ def test_current_indices_keep_independent_source_times(monkeypatch):
     monkeypatch.setattr(observations, 'load_normalized_observations', loader)
     app = FastAPI()
     app.include_router(observations.router)
-    app.dependency_overrides[observations.get_db_session] = lambda: session
+    app.dependency_overrides[observations.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         result = client.get('/internal/v1/observations/current-indices')
         assert result.status_code == 200
@@ -96,7 +96,7 @@ def test_current_indices_preserve_missing_values_and_validate_selection():
     session.execute.return_value = Mock(scalars=lambda: Mock(all=lambda: []))
     app = FastAPI()
     app.include_router(observations.router)
-    app.dependency_overrides[observations.get_db_session] = lambda: session
+    app.dependency_overrides[observations.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         result = client.get('/internal/v1/observations/current-indices?metrics=f10_7,s10,f10_7')
         assert result.status_code == 200
@@ -123,7 +123,7 @@ def test_current_indices_can_include_changes_against_last_hour():
     ]
     app = FastAPI()
     app.include_router(observations.router)
-    app.dependency_overrides[observations.get_db_session] = lambda: session
+    app.dependency_overrides[observations.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         response = client.get('/internal/v1/observations/current-indices?trends=true')
         assert response.status_code == 200

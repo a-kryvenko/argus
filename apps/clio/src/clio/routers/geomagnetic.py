@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from common.schemas.response import success_response
 from clio.domains import geomagnetic
 
@@ -10,7 +10,7 @@ router = APIRouter(prefix='/internal/v1/observations/geomagnetic', tags=['observ
 
 
 @router.get('/latest')
-async def latest(response: Response, session: AsyncSession = Depends(get_db_session)):
+async def latest(response: Response, session: AsyncSession = Depends(get_request_db_session)):
     """Latest native Kp/Dst intervals, with independent quality and publication lag."""
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await geomagnetic.latest(session))
@@ -20,7 +20,7 @@ async def latest(response: Response, session: AsyncSession = Depends(get_db_sess
 async def history(response: Response,
                   start: AwareDatetime | None = Query(default=None, alias='from'),
                   end: AwareDatetime | None = Query(default=None, alias='to'),
-                  session: AsyncSession = Depends(get_db_session)):
+                  session: AsyncSession = Depends(get_request_db_session)):
     """Native intervals overlapping [from,to); default 24h, maximum 31 days.
 
     Intervals are not clipped, rounded, interpolated or expanded into hourly Kp.

@@ -1,3 +1,5 @@
+import asyncio
+from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 from common.schemas.drag_monitor import DragProfileInput
@@ -23,7 +25,7 @@ def test_mode_and_threshold_validation():
 
 def test_monitor_routes_require_service_auth_and_sanitize_storage_errors(monkeypatch):
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
-    monkeypatch.setattr(monitor, 'list_profiles', lambda owner: [])
+    monkeypatch.setattr(monitor, 'list_profiles', AsyncMock(return_value=[]))
     with TestClient(app) as client:
         path = '/internal/v1/drag-monitor/7'
         assert client.get(path).status_code == 401

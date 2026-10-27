@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from common.schemas.response import success_response
 from clio.domains.solar_wind import observations as solar_wind
 from clio.domains.solar_wind import history as aggregate_history
@@ -24,7 +24,7 @@ def selected_metrics(metrics: str | None = Query(default=None, description="Comm
 async def latest(
     response: Response,
     metrics: list[str] = Depends(selected_metrics),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
 ):
     """Latest active-source samples; freshness is based on measurement time.
 
@@ -42,7 +42,7 @@ async def history(
     end: AwareDatetime | None = Query(default=None, alias="to", description="Exclusive UTC timestamp; default now"),
     resolution: Literal["1m", "5m", "1h", "auto"] = Query(default="1m"),
     metrics: list[str] = Depends(selected_metrics),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession = Depends(get_request_db_session),
 ):
     """Native measurements, optionally summarized into closed UTC windows.
 

@@ -44,14 +44,15 @@ def test_unrecognized_records_cannot_silently_become_a_quiet_feed(row):
         donki.validate('CME', [row])
 
 
-def test_collection_retains_exact_bytes_empty_success_and_failure_independently(monkeypatch):
+def test_collection_retains_exact_bytes_empty_success_and_failure_independently(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARGUS_DONKI_ARCHIVE", str(tmp_path))
     import asyncio
     from clio.commands import collect_events
     saved = []
     session = AsyncMock()
     session.add = lambda row: saved.append(row)
     session.__aenter__.return_value = session
-    monkeypatch.setattr(collect_events, 'get_session_factory', lambda: lambda: session)
+    monkeypatch.setattr(collect_events, 'get_db_session', lambda: session)
     monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
         solar_wind_events=SimpleNamespace(lookback_days=30)))
     raw = b'[ {"activityID": "cme1"} ]'
@@ -65,8 +66,8 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
         asyncio.run(collect_events.run(SimpleNamespace()))
     assert len(saved) == 4 and session.commit.await_count == 4
     cme = saved[0]
-    assert gzip.decompress(cme.raw_gzip) == raw
+    assert gzip.decompress((tmp_path / cme.raw_path).read_bytes()) == raw
     assert cme.sha256 == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
-    assert saved[1].payload == [] and saved[1].error is None
-    assert saved[-1].payload is None and saved[-1].error == 'Timeout'
+    assert gzip.decompress((tmp_path / saved[1].raw_path).read_bytes()) == b'[]' and saved[1].error is None
+    assert saved[-1].raw_path is None and saved[-1].error == 'Timeout'
 

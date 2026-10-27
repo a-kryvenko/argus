@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+import gzip
 import json
 from unittest.mock import Mock
 
@@ -19,7 +20,7 @@ def test_live_archives_source_columns_without_calibration(monkeypatch, tmp_path)
     records = goes.download_snapshots(NOW-timedelta(days=1), NOW, False)
     assert len(records) == 1
     row = records[0]
-    samples = json.loads((tmp_path / row['raw_path']).read_text())
+    samples = json.loads(gzip.decompress((tmp_path / row['raw_path']).read_bytes()))
     assert samples[0]['goes_euv_256'] == 2.5
     assert not {'s10', 'm10', 'y10'} & samples[0].keys()
     monkeypatch.setattr(goes, 'source_frames', Mock(side_effect=AssertionError('Fetched retained snapshot')))
@@ -39,7 +40,7 @@ def test_archive_preserves_daily_receipts_and_rejects_revised_recovery(monkeypat
     row = records[0]
     path = tmp_path / row['raw_path']
     path.unlink()
-    path.with_suffix('.json.receipt.json').unlink()
+    path.with_suffix(path.suffix + '.receipt.json').unlink()
     frame['goes_euv_256'] = 3.5
     with pytest.raises(ValueError, match='SHA256'):
         goes.download_snapshots(start, end, True, expected)

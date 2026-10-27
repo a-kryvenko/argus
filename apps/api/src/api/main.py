@@ -13,7 +13,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.services.monitoring.statistics import record, run_flush_loop, flush
 from api.routers.dashboard import router as dashboard_router
-from api.db.session import dispose_engine
+from common.db.session import dispose_engine
 from api.routers.forecasts import router as forecasts_router
 from api.routers.atmospheric_density import router as atmospheric_density_router
 from api.routers.leo_drag import router as leo_drag_router

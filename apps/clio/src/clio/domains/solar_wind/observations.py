@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.providers.solar_wind_loader import FIELDS, SOURCES, fetch_records
 from clio.db.models.measurement import Measurement
 from clio.observations.native import wind_measurements, store_native
-from clio.db.session import get_session_factory
+from clio.db.session import get_db_session
 from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
 from clio.monitoring.status import track_attempt
@@ -28,14 +28,14 @@ METADATA = {
 
 
 async def ingest_source(kind: str) -> None:
-    async with get_session_factory()() as session:
+    async with get_db_session() as session:
         # Transaction-scoped lock also prevents duplicate collectors on multiple hosts.
         lock = await session.execute(text("SELECT pg_try_advisory_xact_lock(:key)"),
                                      {"key": SOURCE_LOCKS[f"solar_wind_{kind}"]})
         if not lock.scalar_one():
             logger.info("Solar wind %s ingestion is already running", kind)
             return
-        async with track_attempt(f'solar_wind_{kind}', session, get_session_factory()) as attempt:
+        async with track_attempt(f'solar_wind_{kind}', session, get_db_session) as attempt:
             records = await asyncio.to_thread(fetch_records, kind)
             # Replay the entire source window: a latest-time cursor would miss
             # internal gaps, late publications and revisions after downtime.

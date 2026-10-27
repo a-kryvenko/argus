@@ -1,25 +1,5 @@
 """Operational limits; model mathematics and bundle horizons remain in backends."""
-from datetime import UTC, datetime, timedelta
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-
-class ProductSchedule(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    every_minutes: int = Field(default=60, ge=1, le=10080)
-    offset_minutes: int = Field(default=10, ge=0)
-
-    @model_validator(mode='after')
-    def valid_offset(self):
-        if self.offset_minutes >= self.every_minutes:
-            raise ValueError('Schedule offset must be less than its interval')
-        return self
-
-    def due_slot(self, now):
-        if now.tzinfo is None or now.utcoffset() is None:
-            raise ValueError('Scheduler time must be timezone-aware')
-        epoch = datetime(1970, 1, 1, tzinfo=UTC)
-        interval = timedelta(minutes=self.every_minutes)
-        return epoch + ((now.astimezone(UTC)-timedelta(minutes=self.offset_minutes)-epoch)//interval)*interval
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class InputPolicy(BaseModel):
@@ -38,24 +18,14 @@ class InputPolicy(BaseModel):
                 raise ValueError('Normalized input age exceeds configured policy')
 
 
-class VerificationSchedule(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    enabled: bool = False
-    every_hours: int = Field(default=6, ge=1, le=168)
-    days: int = Field(default=7, ge=1, le=25)
-    timeout_seconds: int = Field(default=300, ge=1, le=540)
-
-
 class ProphetConfig(BaseModel):
     model_config = ConfigDict(extra='forbid')
     calculation_timeout_seconds: int = Field(default=540, ge=1)
     shutdown_grace_seconds: int = Field(default=570, ge=1, le=570)
     inputs: dict[str, InputPolicy] = Field(default_factory=dict)
-    verification: VerificationSchedule = Field(default_factory=VerificationSchedule)
-    max_parallel_products: int = Field(default=1, ge=1, le=16)
-    schedules: dict[str, ProductSchedule] = Field(default_factory=dict)
+    verification_timeout_seconds: int = Field(default=300, ge=1, le=540)
 
-    @field_validator('inputs', 'schedules')
+    @field_validator('inputs')
     @classmethod
     def known_products(cls, policies):
         from prophet.services.generation.products import PRODUCTS

@@ -1,13 +1,13 @@
-"""Record every DONKI request independently; failed requests preserve prior versions."""
+"""Record DONKI receipts independently; failed requests preserve prior versions."""
 import asyncio
-import gzip
-import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from clio.config import load_observation_config
-from clio.db.models.donki_poll import DonkiPoll
-from clio.db.session import get_session_factory
+from clio.db.models.file_observation import FileObservation
+from clio.db.session import get_db_session
+from clio.observations.files import store_receipt
 from clio.providers import donki
 
 logger = logging.getLogger(__name__)
@@ -20,20 +20,19 @@ async def run(args):
     end = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     failed = []
     for endpoint in donki.ENDPOINTS:
-        values = dict(endpoint=endpoint, request_start=start, request_end=end,
-                      source_url=donki.BASE_URL + endpoint)
+        raw, error = None, None
         try:
-            raw, payload = await asyncio.to_thread(donki.fetch, endpoint, start, now)
-            values.update(sha256=hashlib.sha256(raw).hexdigest(),
-                          raw_gzip=gzip.compress(raw, mtime=0), payload=payload)
+            raw, _ = await asyncio.to_thread(donki.fetch, endpoint, start, now)
         except (OSError, ValueError, donki.requests.RequestException) as exc:
             failed.append(endpoint)
-            values['error'] = type(exc).__name__
-            logger.warning('DONKI %s failed: %s', endpoint, type(exc).__name__)
-        # Actual local receipt, never the historical event or model completion time.
-        values['received_at'] = datetime.now(UTC)
-        async with get_session_factory()() as session:
-            session.add(DonkiPoll(**values))
+            error = type(exc).__name__
+            logger.warning('DONKI %s failed: %s', endpoint, error)
+        receipt_id = uuid4()
+        values = await asyncio.to_thread(store_receipt, 'donki', endpoint, str(receipt_id),
+            id=receipt_id, raw=raw, error=error, metadata=dict(request_start=start, request_end=end,
+                source_url=donki.BASE_URL + endpoint))
+        async with get_db_session() as session:
+            session.add(FileObservation(**values))
             await session.commit()
     if failed:
         raise RuntimeError('DONKI collection failed: ' + ', '.join(failed))

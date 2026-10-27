@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock
 import hashlib
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -41,7 +42,7 @@ def test_internal_reads_require_auth_and_return_exact_release(monkeypatch):
     expected = release()
     monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
     calls = []
-    def read(product, release_id=None):
+    async def read(product, release_id=None):
         calls.append((product, release_id))
         return expected
     monkeypatch.setattr(main, 'read_release', read)
@@ -90,9 +91,9 @@ def test_missing_prediction_columns_are_rejected():
 def test_status_contract_requires_auth_and_does_not_change_latest_reads(monkeypatch):
     from prophet.services.releases import status as readiness
     monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    monkeypatch.setattr(readiness, 'product_status', lambda product: dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
+    monkeypatch.setattr(readiness, 'product_status', AsyncMock(side_effect=lambda product: dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
         release_age_hours=None, existing_public_max_age_hours=None, freshness='unavailable',
-        latest_attempt=None, latest_attempt_artifacts=[]))
+        latest_attempt=None, latest_attempt_artifacts=[])))
     with TestClient(main.app) as client:
         path = '/internal/v1/forecasts/dst/status'
         assert client.get(path).status_code == 401

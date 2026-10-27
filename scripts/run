@@ -108,6 +108,11 @@ case "${1:-}" in
             esac
         else
             lock s
+            if [[ "$domain" == clio || "$domain" == prophet ]]; then
+                cron_options=()
+                if [[ -n "${ARGUS_CRON_JOB:-}" ]]; then cron_options+=(-e "ARGUS_CRON_JOB=$ARGUS_CRON_JOB"); fi
+                exec "${templates[@]}" run --rm --no-deps -T "${cron_options[@]}" "$domain" "$domain" "$@"
+            fi
             exec "${templates[@]}" run --rm --no-deps "$domain" "$domain" "$@"
         fi
         ;;

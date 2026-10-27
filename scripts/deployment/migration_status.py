@@ -22,11 +22,11 @@ def revision_status(scripts, current, *, online=False):
 
 
 def pending(domain, *, online=False):
-    getter = {'api': 'get_database_url', 'clio': 'get_database_url',
-              'prophet': 'get_database_url', 'intelligence': 'database_url'}[domain]
+    from common.db.session import get_database_url
+
     directory = Path(importlib.import_module(domain).__file__).parent / 'db' / 'migrations'
     scripts = ScriptDirectory(str(directory))
-    engine = create_engine(getattr(importlib.import_module(f'{domain}.db.session'), getter)(),
+    engine = create_engine(get_database_url(domain.upper()),
                            connect_args={'connect_timeout': 5, 'options': '-cstatement_timeout=5000'})
     try:
         with engine.connect() as connection:

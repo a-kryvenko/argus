@@ -26,7 +26,7 @@ def harness(tmp_path):
     deployment.minimum_available = 0
     previous = {'image': 'example@sha256:old', 'networks': {'observations': {}}, 'environment': {}}
     desired = {**previous, 'image': 'example@sha256:new'}
-    deployment.desired = {'services': {'clio': desired}, 'networks': {'observations': {}}}
+    deployment.desired = {'name': 'argus-test', 'services': {'clio': desired}, 'networks': {'observations': {}}}
     deployment.state = {'active': {'clio': {'slot': 'blue', 'spec': previous}}}
     deployment.credentials = {'DEPLOY_SMOKE_USERNAME': 'test', 'DEPLOY_SMOKE_PASSWORD': 'secret'}
     deployment.calls = []
@@ -301,11 +301,19 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
     (deployment.bundle / 'argus').write_bytes((ROOT / 'argus').read_bytes())
     (deployment.bundle / 'scripts').mkdir()
     (tmp_path / 'scripts').mkdir()
-    for name in ('run', 'logs'):
+    for name in ('run', 'logs', 'cron-run'):
         (deployment.bundle / 'scripts' / name).write_bytes((ROOT / 'scripts' / name).read_bytes())
     for name in ('configs', 'nginx', 'alloy'):
         (deployment.bundle / name).mkdir()
+    for service in ('clio', 'prophet', 'api', 'intelligence'):
+        path = deployment.bundle / 'apps' / service
+        path.mkdir(parents=True)
+        (path / 'cronjobs.txt').write_bytes((ROOT / 'apps' / service / 'cronjobs.txt').read_bytes())
+    (deployment.bundle / '.deploy').mkdir()
+    (deployment.bundle / '.deploy/cronjobs.txt').write_bytes((ROOT / '.deploy/cronjobs.txt').read_bytes())
     deployment.snapshot = lambda: None
+    deployment.base = ['docker', 'compose']
+    deployment.capture = lambda *args, **kwargs: deployment.calls.append(args) or ('' if args[:2] == ('docker', 'ps') else '* * * * * clio-command\n')
     deployment.run = lambda *args, **kwargs: deployment.calls.append(args)
     deployment.apply()
     assert (tmp_path / '.release.json').read_text() == json.dumps(deployment.manifest)
@@ -316,6 +324,7 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
     assert all('--no-deps' in call for call in starts)
     assert not any(service in call for call in starts for service in rolling.HTTP)
     assert sum('clio-green' in call for call in starts) == 1
+    assert ('crontab', '-') in deployment.calls
     deployment.calls.clear()
     deployment.apply()
     assert not any(call[0] == 'smoke' for call in deployment.calls)
@@ -394,7 +403,7 @@ def test_python_entrypoint_requires_existing_complete_state(tmp_path, monkeypatc
 def test_backup_precedes_worker_drain_and_failure_preserves_or_resumes_workers(tmp_path, monkeypatch, failure):
     deployment = harness(tmp_path)
     deployment.base = ['docker', 'compose']
-    deployment.migrations = ['clio']
+    deployment.migrations = ['intelligence']
     def backup(*args):
         deployment.calls.append(('backup',))
         if failure == 'backup':
@@ -415,10 +424,10 @@ def test_backup_precedes_worker_drain_and_failure_preserves_or_resumes_workers(t
     if failure == 'backup':
         assert deployment.calls == [('backup',)]
     else:
-        assert deployment.calls[1] == ('stop', 'clio-worker')
-        assert deployment.calls[2] == ('run', '--rm', '--no-deps', 'clio-migrate')
+        assert deployment.calls[1] == ('stop', 'intelligence')
+        assert deployment.calls[2] == ('run', '--rm', '--no-deps', 'intelligence-migrate')
     if failure == 'migration':
-        assert deployment.calls[-1] == ('start', 'clio-worker')
+        assert deployment.calls[-1] == ('start', 'intelligence')
     if failure:
         assert not deployment.state.get('drained_workers')
 
@@ -462,3 +471,95 @@ def test_production_cli_never_falls_back_to_old_files(tmp_path, missing):
     result = subprocess.run(['bash', str(root / 'scripts/run'), 'compose', 'ps'], capture_output=True, text=True)
     assert result.returncode == 2
     assert f'Missing production deployment file: {missing}' in result.stderr
+
+
+@pytest.mark.parametrize('containers', ['', 'old-clio-worker\n'])
+def test_retired_clio_worker_is_stopped_only_in_current_project(tmp_path, containers):
+    deployment = harness(tmp_path)
+    calls = []
+    deployment.capture = lambda *args: calls.append(args) or containers
+    deployment.run = lambda *args: calls.append(args)
+    deployment.retire_clio_worker()
+    assert calls[0] == ('docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project=argus-test',
+                        '--filter', 'label=com.docker.compose.service=clio-worker')
+    assert calls[1:] == ([('docker', 'stop', '--time', '600', 'old-clio-worker'),
+                         ('docker', 'rm', 'old-clio-worker')] if containers else [])
+
+
+@pytest.fixture
+def cron_deployment(tmp_path, monkeypatch):
+    deployment = harness(tmp_path / 'host with spaces')
+    deployment.bundle = tmp_path / 'bundle'
+    files = [deployment.bundle / 'apps' / service / 'cronjobs.txt'
+             for service in ('clio', 'prophet', 'api', 'intelligence')]
+    files.append(deployment.bundle / '.deploy/cronjobs.txt')
+    for index, path in enumerate(files):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f'# source {index}\n* * * * * @ROOT@/argus job-{index}\n')
+    state = tmp_path / 'installed-crontab'
+    state.write_text('old crontab\n')
+    tool = tmp_path / 'bin/crontab'
+    tool.parent.mkdir()
+    tool.write_text(f'#!{sys.executable}\n' + '''import os, sys
+from pathlib import Path
+assert sys.argv[1:] == ['-']
+Path(os.environ['CRON_TEST_STATE']).write_text(sys.stdin.read())
+''')
+    tool.chmod(0o755)
+    import os
+    monkeypatch.setenv('PATH', str(tool.parent) + ':' + os.environ['PATH'])
+    monkeypatch.setenv('CRON_TEST_STATE', str(state))
+    return deployment, files, state
+
+
+def test_deployment_replaces_crontab_with_all_sources_in_order(cron_deployment):
+    import shlex
+    deployment, files, state = cron_deployment
+    expected = '\n\n'.join(path.read_text().rstrip() for path in files).replace(
+        '@ROOT@', shlex.quote(str(deployment.root))) + '\n'
+    for _ in range(2):
+        deployment.install_crontab()
+        assert state.read_text() == expected
+    assert 'old crontab' not in state.read_text()
+    command = next(line for line in state.read_text().splitlines() if not line.startswith('#') and line)
+    assert shlex.split(command.split(maxsplit=5)[5])[0] == str(deployment.root / 'argus')
+
+
+def test_missing_cron_source_does_not_replace_host_crontab(cron_deployment):
+    deployment, files, state = cron_deployment
+    files[-1].unlink()
+    with pytest.raises(FileNotFoundError):
+        deployment.install_crontab()
+    assert state.read_text() == 'old crontab\n'
+
+
+def test_retired_prophet_worker_is_removed_only_from_current_project(tmp_path):
+    deployment = harness(tmp_path)
+    calls = []
+    deployment.capture = lambda *args: calls.append(args) or 'old-prophet\n'
+    deployment.run = lambda *args: calls.append(args)
+    deployment.retire_worker('prophet')
+    assert calls[0] == ('docker', 'ps', '-aq', '--filter',
+                        'label=com.docker.compose.project=argus-test',
+                        '--filter', 'label=com.docker.compose.service=prophet')
+    assert calls[1:] == [('docker', 'stop', '--time', '600', 'old-prophet'), ('docker', 'rm', 'old-prophet')]
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+def test_prophet_migration_only_drains_existing_legacy_worker(tmp_path, monkeypatch, legacy):
+    deployment = harness(tmp_path)
+    deployment.base = ['docker', 'compose']
+    deployment.migrations = ['prophet']
+    deployment.worker_containers = lambda service: ['old-prophet'] if legacy else []
+    monkeypatch.setattr(rolling, 'create_backup', lambda *args: None)
+    original = deployment.compose
+    def compose(*args, **kwargs):
+        original(*args, **kwargs)
+        if args[0] == 'run':
+            raise RuntimeError('migration failed')
+    deployment.compose = compose
+    with pytest.raises(RuntimeError, match='migration failed'):
+        deployment.backup_and_migrate()
+    assert ('stop', 'prophet') in deployment.calls if legacy else ('stop', 'prophet') not in deployment.calls
+    assert ('start', 'prophet') in deployment.calls if legacy else ('start', 'prophet') not in deployment.calls
+    assert not deployment.state.get('drained_workers')

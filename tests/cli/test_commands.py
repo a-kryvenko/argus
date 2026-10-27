@@ -44,8 +44,8 @@ if os.getenv('FAIL_CLIO') and any('clio' in arg for arg in sys.argv[1:]):
 ''')
         executable.chmod(0o755)
     environment = {**os.environ, 'PATH': str(bindir) + ':' + os.environ['PATH'], 'CALL_LOG': str(log)}
-    def run(*args, fail=False, fail_postgres=False, running=False):
-        result = subprocess.run([str(wrapper), *args], cwd=tmp_path, env={**environment, 'FAIL_CLIO': '1' if fail else '', 'FAIL_POSTGRES': '1' if fail_postgres else '', 'POSTGRES_RUNNING': '1' if running else ''}, capture_output=True, text=True)
+    def run(*args, fail=False, fail_postgres=False, running=False, env=None):
+        result = subprocess.run([str(wrapper), *args], cwd=tmp_path, env={**environment, **(env or {}), 'FAIL_CLIO': '1' if fail else '', 'FAIL_POSTGRES': '1' if fail_postgres else '', 'POSTGRES_RUNNING': '1' if running else ''}, capture_output=True, text=True)
         calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         return result, calls
     return request.param, root, run
@@ -180,3 +180,22 @@ def test_existing_database_is_left_running(cli, fail):
     assert result.returncode == (7 if fail else 0)
     assert calls[0]['args'][-5:] == ['ps', '--status', 'running', '-q', 'postgres']
     assert not any('up' in call['args'] or 'stop' in call['args'] for call in calls)
+
+
+@pytest.mark.parametrize('domain,command', [('clio', ('backfill', 'sdo', '--batch')), ('prophet', ('generate', 'dst'))])
+def test_jobs_do_not_require_interactive_input(cli, domain, command):
+    _, _, run = cli
+    result, calls = run(domain, *command)
+    assert result.returncode == 0, result.stderr
+    args = calls[0]['args']
+    assert '-T' in args
+    assert args[-len(command)-2:] == [domain, domain, *command]
+
+
+def test_prophet_cron_origin_is_forwarded_into_the_container(cli):
+    _, _, run = cli
+    result, calls = run('prophet', 'generate', 'dst', env={'ARGUS_CRON_JOB': 'generate-dst'})
+    assert result.returncode == 0, result.stderr
+    args = calls[0]['args']
+    assert args[args.index('-e')+1] == 'ARGUS_CRON_JOB=generate-dst'
+    assert args[-4:] == ['prophet', 'prophet', 'generate', 'dst']

@@ -1,7 +1,9 @@
 """Dashboard identities and bounded, anonymous API metric buckets."""
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Float, JSON
+
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from api.db.base import Base
 
 

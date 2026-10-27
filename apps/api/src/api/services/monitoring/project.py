@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 from common.schemas.forecast_status import ForecastStatus
 from api.db.models.monitoring import MonitorState
-from api.db.session import get_session_factory
+from api.db.session import get_db_session
 
 logger = logging.getLogger(__name__)
 INTERVAL = 30
@@ -174,7 +174,7 @@ async def collect(previous=None):
 
 
 async def refresh():
-    async with get_session_factory()() as db:
+    async with get_db_session() as db:
         await db.execute(text("SET LOCAL statement_timeout = '10s'"))
         if not await db.scalar(text('SELECT pg_try_advisory_xact_lock(730310)')):
             return

@@ -29,7 +29,8 @@ def test_raw_passwords_and_domain_settings_are_isolated(domain, monkeypatch):
     spec = importlib.util.spec_from_file_location('storage_' + domain, ROOT / PATHS[domain])
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    get_url = getattr(module, 'get_database_url', None) or module.database_url
+    from common.db.session import get_database_url
+    get_url = lambda: get_database_url(domain.upper())
     prefix = domain.upper() + '_DB_'
     for field in ('NAME', 'USER', 'PASSWORD', 'HOST', 'PORT'):
         monkeypatch.delenv(prefix + field, raising=False)
@@ -71,10 +72,7 @@ def test_provisioning_rejects_shared_databases_before_connecting(monkeypatch):
         module.provision(admin, {'api': 'postgresql://api:pass@other-server/api'}, apply=True)
 
 
-@pytest.mark.parametrize('domain', PATHS)
-def test_full_migration_chain_compiles_for_a_single_owner(domain, tmp_path):
-    import os
-    import subprocess
+def migration_sql(domain, revision, tmp_path):
     (tmp_path / 'configs').mkdir()
     (tmp_path / 'configs/project.yaml').write_text('project: {name: test}\n')
     (tmp_path / 'configs/models_registry.yaml').write_text('models: {}\n')
@@ -85,10 +83,26 @@ def test_full_migration_chain_compiles_for_a_single_owner(domain, tmp_path):
     python = str(ROOT / 'apps' / domain / '.venv/bin/python')
     module = domain
     command = [python, '-c', f'from {module}.cli import main; main()', 'migrate']
-    result = subprocess.run([*command, 'upgrade', 'head', '--sql'], env=environment,
-                            capture_output=True, text=True)
+    return subprocess.run([*command, 'upgrade', revision, '--sql'], env=environment,
+                          capture_output=True, text=True)
+
+
+@pytest.mark.parametrize('domain', PATHS)
+def test_schema_migrations_compile_for_a_single_owner(domain, tmp_path):
+    revision = '20261014_enlil_profile' if domain == 'clio' else 'head'
+    result = migration_sql(domain, revision, tmp_path)
     assert result.returncode == 0, result.stderr
     assert f'CREATE SCHEMA IF NOT EXISTS {domain}' in result.stdout
     assert f'{domain}.alembic_version' in result.stdout
     assert 'argus_' + domain + '_migrator' not in result.stdout
     assert 'REVOKE' not in result.stdout
+
+
+def test_file_observation_migration_requires_online_execution(tmp_path):
+    result = migration_sql('clio', '20261014_enlil_profile:head', tmp_path)
+    assert result.returncode != 0
+    assert 'requires an online database connection' in result.stdout + result.stderr
+    assert '--sql is not supported' in result.stdout + result.stderr
+    assert 'CREATE TABLE file_observation' not in result.stdout
+    assert 'DROP TABLE' not in result.stdout
+    assert 'UPDATE clio.alembic_version' not in result.stdout

@@ -1,6 +1,6 @@
 # Prophet
 
-Publishes forecasts from saved Clio inputs. Worker calculates; HTTP serves stored releases.
+Publishes forecasts from saved Clio inputs. Cron commands calculate; HTTP serves stored releases.
 
 ## Dataflow
 
@@ -25,10 +25,10 @@ Publishes forecasts from saved Clio inputs. Worker calculates; HTTP serves store
 Generation requires private `forecast-core` and configured models.
 `cme_arrival.model` selects the shared arrival adapter for event and speed forecasts. `argus-cme-arrival-enlil-v1` passes through ENLIL arrival times; it is not a locally trained arrival model. Clio supplies external predictions; Prophet selects versions and forms forecast statuses.
 `solar-radiation` has a read contract but no supported generator.
-[Registry](../../configs/models_registry.yaml) · [Schedules](../../configs/project.yaml).
+[Registry](../../configs/models_registry.yaml) · [Schedules](cronjobs.txt).
 
 Products publish independently; failures retain the previous release.
-Default schedule: hourly at :10 UTC, two concurrent calculations.
+Cron: events every five minutes; other products hourly at :10. Jobs run sequentially.
 Verification runs every six hours over seven days; atmospheric density is excluded.
 
 Prophet prepares calibrated GOES indices and reads PROSWIN predictions before freezing the

@@ -1,0 +1,19 @@
+# Live observations
+* * * * * @ROOT@/scripts/cron-run clio live-numeric-60 collect ap bx by bz kp n t v
+*/5 * * * * @ROOT@/scripts/cron-run clio live-numeric-300 collect dst
+0 * * * * @ROOT@/scripts/cron-run clio live-numeric-3600 collect f10_7
+0 * * * * @ROOT@/scripts/cron-run clio live-file-3600 collect goes gong
+
+# Historical recovery and normalization
+0 */6 * * * @ROOT@/scripts/cron-run clio backfill-numeric-21600 backfill ap bx by bz dst kp n t v
+0 0 * * * @ROOT@/scripts/cron-run clio backfill-numeric-86400 backfill f10_7
+0 */6 * * * @ROOT@/scripts/cron-run clio backfill-file-21600 backfill gong
+0 0 * * * @ROOT@/scripts/cron-run clio backfill-file-86400 backfill goes
+0 * * * * @ROOT@/scripts/cron-run clio normalize normalize
+
+# Event catalogs and SDO archives
+*/15 * * * * @ROOT@/scripts/cron-run clio collect-events collect-events
+*/15 * * * * @ROOT@/scripts/cron-run clio collect-enlil collect-enlil
+*/5 * * * * @ROOT@/scripts/cron-run clio sdo-live collect sdo
+* * * * * @ROOT@/scripts/cron-run clio sdo-warmup backfill sdo --batch
+0 * * * * @ROOT@/scripts/cron-run clio sdo-cleanup sdo-cleanup

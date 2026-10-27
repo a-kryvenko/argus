@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from clio.db.session import get_db_session
+from clio.db.session import get_request_db_session
 from clio.db.models.measurement import Measurement
 from clio.db.models.normalized_observation import NormalizedObservation
 from common.schemas.response import success_response
@@ -15,7 +15,7 @@ router = APIRouter(prefix='/internal/v1/observations')
 async def observations(kind: Literal['raw', 'normalized'] = 'raw', page: int = Query(1, ge=1, le=100000),
     page_size: int = Query(50, ge=1, le=200), order: Literal['asc', 'desc'] = 'desc',
     start: datetime | None = None, end: datetime | None = None,
-    metric: str | None = Query(None, max_length=16), db: AsyncSession = Depends(get_db_session)):
+    metric: str | None = Query(None, max_length=16), db: AsyncSession = Depends(get_request_db_session)):
     for value in [start, end]:
         if value is not None and value.tzinfo is None:
             raise HTTPException(422, 'Dates must include a timezone')

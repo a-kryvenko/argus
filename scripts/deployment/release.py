@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build identities depend on actual image inputs, not the previous git tag."""
+
 import argparse
 import hashlib
 import json
@@ -9,22 +10,66 @@ from pathlib import Path
 import shutil
 import subprocess
 
-IMAGES = {'proswin': 'argus-proswin', 'frontend': 'argus-frontend', 'api': 'argus-forecast', 'clio': 'argus-clio', 'prophet': 'argus-prophet', 'intelligence': 'argus-intelligence'}
-INPUTS = {
-    'proswin': ['apps/prophet/src', 'packages/common', 'packages/forecast'],
-    'intelligence': ['apps/intelligence/pyproject.toml', 'apps/intelligence/uv.lock', 'apps/intelligence/src', 'packages/common'],
-    'frontend': ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/web'],
-    'api': ['apps/api/pyproject.toml', 'apps/api/uv.lock', 'apps/api/src', 'packages/common', 'scripts/db/provision.py'],
-    'clio': ['apps/clio/pyproject.toml', 'apps/clio/uv.lock', 'apps/clio/src', 'packages/common'],
-    'prophet': ['apps/prophet/pyproject.toml', 'apps/prophet/uv.lock', 'apps/prophet/src',
-                'packages/common', 'packages/forecast'],
+IMAGES = {
+    'proswin': 'argus-proswin',
+    'frontend': 'argus-frontend',
+    'api': 'argus-forecast',
+    'clio': 'argus-clio',
+    'prophet': 'argus-prophet',
+    'intelligence': 'argus-intelligence'
 }
-MIGRATIONS = {'intelligence': ['apps/intelligence/src/intelligence/db/migrations'],
-              'api': ['apps/api/src/api/db/migrations'],
-              'clio': ['apps/clio/src/clio/db/migrations'],
-              'prophet': ['apps/prophet/src/prophet/db/migrations']}
-IGNORED = {'.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.next',
-           '.turbo', 'dist', 'build', 'coverage', 'test-results', 'playwright-report'}
+
+INPUTS = {
+    'proswin': [
+        'apps/prophet/src',
+        'packages/common',
+        'packages/forecast'
+    ],
+    'intelligence': [
+        'apps/intelligence/pyproject.toml',
+        'apps/intelligence/uv.lock',
+        'apps/intelligence/src',
+        'packages/common'
+    ],
+    'frontend': [
+        'package.json',
+        'pnpm-lock.yaml',
+        'pnpm-workspace.yaml',
+        'apps/web'
+    ],
+    'api': [
+        'apps/api/pyproject.toml',
+        'apps/api/uv.lock',
+        'apps/api/src',
+        'packages/common',
+        'scripts/db/provision.py'
+    ],
+    'clio': [
+        'apps/clio/pyproject.toml',
+        'apps/clio/uv.lock',
+        'apps/clio/src',
+        'packages/common'
+    ],
+    'prophet': [
+        'apps/prophet/pyproject.toml',
+        'apps/prophet/uv.lock',
+        'apps/prophet/src',
+        'packages/common',
+        'packages/forecast'
+    ],
+}
+
+MIGRATIONS = {
+    'intelligence': ['apps/intelligence/src/intelligence/db/migrations'],
+    'api': ['apps/api/src/api/db/migrations'],
+    'clio': ['apps/clio/src/clio/db/migrations'],
+    'prophet': ['apps/prophet/src/prophet/db/migrations']
+}
+
+IGNORED = {
+    '.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.next',
+    '.turbo', 'dist', 'build', 'coverage', 'test-results', 'playwright-report'
+}
 
 
 def artifact_digest(root):
@@ -120,8 +165,14 @@ def bundle(root, plan_path, images_path, destination):
         shutil.copy2(root / 'scripts/deployment' / name, destination / name)
     shutil.copy2(root / 'argus', destination / 'argus')
     (destination / 'scripts').mkdir(exist_ok=True)
-    for name in ('run', 'logs'):
+    for name in ('run', 'logs', 'cron-run'):
         shutil.copy2(root / 'scripts' / name, destination / 'scripts' / name)
+    for service in ('clio', 'prophet', 'api', 'intelligence'):
+        target = destination / 'apps' / service
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / 'apps' / service / 'cronjobs.txt', target / 'cronjobs.txt')
+    (destination / '.deploy').mkdir(exist_ok=True)
+    shutil.copy2(root / '.deploy/cronjobs.txt', destination / '.deploy/cronjobs.txt')
     (destination / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     fingerprints = {**manifest['migrations'], 'configs': manifest['config_hash'],
                     'nginx': digest(root, ['.deploy/nginx']), 'alloy': digest(root, ['.deploy/alloy'])}

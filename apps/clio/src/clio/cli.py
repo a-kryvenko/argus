@@ -7,14 +7,6 @@ from clio.commands._arguments import boundary
 from clio.commands.runner import invoke
 from clio.ingestion.products import OBSERVATIONS
 
-COMMAND_JOBS = {
-    'backfill': 'refresh',
-    'collect': 'live',
-    'normalize': 'refresh',
-    'collect-events': 'events',
-    'collect-enlil': 'enlil-profiles',
-}
-
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
@@ -35,10 +27,10 @@ def main(argv=None):
     backfill.add_argument('--to', dest='end', type=boundary)
     backfill.add_argument('metrics', nargs='*',
                           help='Fill configured gaps; sdo selects retained AIA/HMI images (default: all)')
-    
-    commands.add_parser('check-health').add_argument('collector', choices=['solar-wind', 'geomagnetic', 'worker'])
+
+    backfill.add_argument('--batch', action='store_true', help='Bound SDO warmup to one configured batch')
+    commands.add_parser('sdo-cleanup')
     commands.add_parser('migrate', add_help=False)
-    commands.add_parser('worker')
 
     args, remainder = parser.parse_known_args(argv)
 
@@ -51,15 +43,15 @@ def main(argv=None):
         if any(m not in OBSERVATIONS and m != 'sdo' for m in args.metrics):
             parser.error('Unknown observation metric')
         args.metrics = args.metrics or None
-    
+
     if args.command == 'backfill':
         if (args.start is None) != (args.end is None):
             parser.error('--from and --to must be specified together')
-    
+
     if args.command == 'backfill' and args.start is not None:
         if not timedelta(0) < args.end - args.start <= timedelta(days=31) or args.end > args.now:
             parser.error('Choose a past range of at most 31 days, with --from before --to')
-    
+
     from common.runtime import run_command
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     result = run_command(lambda: dispatch(args, remainder))
@@ -68,30 +60,20 @@ def main(argv=None):
 
 
 def dispatch(args, remainder):
-    if args.command not in ('migrate', 'check-health'):
+    if args.command != 'migrate':
         from clio.config import load_observation_config
         load_observation_config()
-    if args.command == 'check-health':
-        return invoke('check-health', args)
     if args.command == 'serve':
         import uvicorn
         uvicorn.run('clio.main:app', host=args.host, port=args.port)
     elif args.command == 'migrate':
         from clio.commands.migrate import run
         return run(remainder)
-    elif args.command == 'worker':
-        from clio.worker import work
-        work()
     else:
-        from clio.scheduling.jobs import execute as locked
-        name = args.command
-        job = COMMAND_JOBS.get(name)
-        if name in ('backfill', 'collect') and args.metrics and all(m == 'sdo' or OBSERVATIONS[m].kind == 'file' for m in args.metrics):
-            job = 'files-backfill' if name == 'backfill' else 'files-live'
-        if job:
-            locked(job, lambda: invoke(name, args))
-            return
-        return invoke(name, args)
+        result = invoke(args.command, args)
+        if isinstance(result, dict):
+            return int(bool(result.get('failed_metrics') or result.get('failed')))
+        return result
 
 
 if __name__ == '__main__':

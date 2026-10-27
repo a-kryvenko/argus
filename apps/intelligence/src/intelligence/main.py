@@ -1,6 +1,11 @@
 """Authenticated on-demand impact calculations; no forecast generation."""
 import os
 import secrets
+from contextlib import asynccontextmanager
+
+from common.db.session import dispose_engine
+from intelligence.db.session import get_db_session
+from sqlalchemy import text
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,7 +14,16 @@ from intelligence.drag import assess_drag, DragDomainError, DragNotReadyError
 from intelligence.monitor_routes import router as monitor_router
 from intelligence.density_routes import router as density_router
 
-app = FastAPI(title='Intelligence impact service', version='1')
+
+@asynccontextmanager
+async def lifespan(_):
+    try:
+        yield
+    finally:
+        await dispose_engine()
+
+
+app = FastAPI(title='Intelligence impact service', version='1', lifespan=lifespan)
 security = HTTPBearer(auto_error=False)
 
 
@@ -42,7 +56,7 @@ def live():
 
 
 @app.get('/health/ready')
-def ready():
+async def ready():
     if not all(os.getenv(key) for key in ('INTELLIGENCE_SERVICE_TOKEN', 'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN')):
         raise HTTPException(503, 'Impact service is not configured')
     try:
@@ -50,10 +64,9 @@ def ready():
     except ImportError:
         raise HTTPException(503, 'Impact backend is not installed') from None
     try:
-        from intelligence.db.session import connect
-        with connect() as conn:
-            conn.execute('SET statement_timeout=3000')
-            conn.execute('SELECT id FROM intelligence.drag_profile LIMIT 1')
+        async with get_db_session() as session:
+            await session.execute(text('SET LOCAL statement_timeout=3000'))
+            await session.execute(text('SELECT id FROM intelligence.drag_profile LIMIT 1'))
     except Exception:
         raise HTTPException(503, 'Impact storage is not ready') from None
     return {'service': 'intelligence', 'status': 'ok', 'density_readiness': 'checked_per_request'}

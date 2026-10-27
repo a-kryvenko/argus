@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from prophet.scheduling.execution import execute, supervise, before_dispatch, ShutdownRequested
+from prophet.execution import execute, supervise, before_dispatch, ShutdownRequested
 
 
 def test_spawn_does_not_inherit_writer_and_is_reaped():
@@ -61,7 +61,7 @@ def test_shutdown_deadline_terminates_active_process():
 
 def test_explicit_control_cancels_executor_thread_process():
     from concurrent.futures import ThreadPoolExecutor
-    from prophet.scheduling.execution import ExecutionControl
+    from prophet.execution import ExecutionControl
     before = {child.pid for child in multiprocessing.active_children()}
     control = ExecutionControl()
     with ThreadPoolExecutor(max_workers=1) as pool:

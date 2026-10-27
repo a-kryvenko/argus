@@ -1,13 +1,17 @@
 """Prophet-owned publication pointers. Call writers under the database generation_lock."""
+import asyncio
 import gzip
 import io
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import JSONB
+
 from common.schemas.forecast_release import (
     ForecastArtifact, ForecastRelease, MAX_ARTIFACT_BYTES, PRODUCT_ARTIFACTS,
 )
-from prophet.db.session import connect
+from prophet.db.session import get_db_session
 
 
 class ReleaseNotFound(LookupError):
@@ -24,63 +28,63 @@ def _artifact(row):
                             columns=row['columns'], csv_text=content.decode('utf-8'), model_info=row['model_info'])
 
 
-def publish_run(conn, run_id):
+async def publish_run(session, run_id):
     """Publish one complete product in the caller's run-completion transaction."""
-    from psycopg.rows import dict_row
-    from psycopg.types.json import Jsonb
-    with conn.cursor(row_factory=dict_row) as cursor:
-        # Serializes pointer decisions, including repeatable historical promotion.
-        cursor.execute("SELECT pg_advisory_xact_lock(736218, 1)")
-        cursor.execute("SELECT status,started_at,product FROM prophet.forecast_run WHERE id=%s", (run_id,))
-        run = cursor.fetchone()
-        if run is None or run['status'] != 'succeeded' or run['product'] == 'all':
-            return None
-        cursor.execute("SELECT * FROM prophet.forecast_artifact WHERE run_id=%s AND status='stored'", (run_id,))
-        rows = {row['name']: row for row in cursor.fetchall()}
-        product = run['product']
-        names = PRODUCT_ARTIFACTS[product]
-        if not set(names).issubset(rows):
-            raise ValueError(f'Incomplete artifacts for {product}')
-        cursor.execute('''SELECT r.issue_time, f.started_at, r.run_id FROM prophet.current_forecast c
-            JOIN prophet.forecast_release r ON r.id=c.release_id
-            JOIN prophet.forecast_run f ON f.id=r.run_id WHERE c.product=%s''', (product,))
-        current = cursor.fetchone()
-        if current and (current['run_id'] == run_id or current['started_at'] >= run['started_at']):
-            return None
-        artifacts = [_artifact(rows[name]) for name in names]
-        release = ForecastRelease(release_id=uuid4(), run_id=run_id, product=product,
-                                  published_at=datetime.now(UTC), issue_time=artifacts[0].issue_time(),
-                                  artifacts=artifacts)
-        if current and current['issue_time'] > release.issue_time:
-            return None
-        cursor.execute('''INSERT INTO prophet.forecast_release
-            (id,product,run_id,published_at,issue_time,artifact_names) VALUES (%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (product,run_id) DO NOTHING RETURNING id''',
-            (release.release_id, product, run_id, release.published_at, release.issue_time, Jsonb(list(names))))
-        inserted = cursor.fetchone()
-        if inserted is None:
-            return None
-        cursor.execute('''INSERT INTO prophet.current_forecast(product,release_id) VALUES (%s,%s)
-            ON CONFLICT(product) DO UPDATE SET release_id=excluded.release_id''', (product, release.release_id))
-        return release.release_id
+    # Serializes pointer decisions, including repeatable historical promotion.
+    await session.execute(text("SELECT pg_advisory_xact_lock(736218, 1)"))
+    query = await session.execute(text("SELECT status,started_at,product FROM prophet.forecast_run WHERE id=:run_id"), {'run_id': run_id})
+    run = query.mappings().first()
+    if run is None or run['status'] != 'succeeded' or run['product'] == 'all':
+        return None
+    query = await session.execute(text("SELECT * FROM prophet.forecast_artifact WHERE run_id=:run_id AND status='stored'"), {'run_id': run_id})
+    rows = {row['name']: row for row in query.mappings().all()}
+    product = run['product']
+    names = PRODUCT_ARTIFACTS[product]
+    if not set(names).issubset(rows):
+        raise ValueError(f'Incomplete artifacts for {product}')
+    query = await session.execute(text('''SELECT r.issue_time, f.started_at, r.run_id FROM prophet.current_forecast c
+        JOIN prophet.forecast_release r ON r.id=c.release_id
+        JOIN prophet.forecast_run f ON f.id=r.run_id WHERE c.product=:product'''), {'product': product})
+    current = query.mappings().first()
+    if current and (current['run_id'] == run_id or current['started_at'] >= run['started_at']):
+        return None
+    release = await asyncio.to_thread(_release_from_artifacts, {
+        'id': uuid4(), 'run_id': run_id, 'product': product, 'published_at': datetime.now(UTC),
+    }, [rows[name] for name in names])
+    if current and current['issue_time'] > release.issue_time:
+        return None
+    query = await session.execute(text('''INSERT INTO prophet.forecast_release
+        (id,product,run_id,published_at,issue_time,artifact_names) VALUES (:release_id,:product,:run_id,:published_at,:issue_time,:artifact_names)
+        ON CONFLICT (product,run_id) DO NOTHING RETURNING id''').bindparams(bindparam('artifact_names', type_=JSONB)), {'release_id': release.release_id, 'product': product, 'run_id': run_id, 'published_at': release.published_at, 'issue_time': release.issue_time, 'artifact_names': list(names)})
+    inserted = query.mappings().first()
+    if inserted is None:
+        return None
+    await session.execute(text('''INSERT INTO prophet.current_forecast(product,release_id) VALUES (:product,:release_id)
+        ON CONFLICT(product) DO UPDATE SET release_id=excluded.release_id'''), {'product': product, 'release_id': release.release_id})
+    return release.release_id
 
 
-def read_release(product, release_id=None):
-    from psycopg.rows import dict_row
+async def read_release(product, release_id=None):
     if product not in PRODUCT_ARTIFACTS:
         raise ReleaseNotFound(product)
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    async with get_db_session() as session, session.begin():
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         if release_id is None:
-            cursor.execute('''SELECT r.* FROM prophet.current_forecast c
-                JOIN prophet.forecast_release r ON r.id=c.release_id WHERE c.product=%s''', (product,))
+            query = await session.execute(text('''SELECT r.* FROM prophet.current_forecast c
+                JOIN prophet.forecast_release r ON r.id=c.release_id WHERE c.product=:product'''), {'product': product})
         else:
-            cursor.execute('SELECT * FROM prophet.forecast_release WHERE product=%s AND id=%s', (product, release_id))
-        row = cursor.fetchone()
+            query = await session.execute(text('SELECT * FROM prophet.forecast_release WHERE product=:product AND id=:release_id'), {'product': product, 'release_id': release_id})
+        row = query.mappings().first()
         if row is None:
             raise ReleaseNotFound(product)
-        cursor.execute('''SELECT * FROM prophet.forecast_artifact
-            WHERE run_id=%s AND name=ANY(%s) AND status='stored' ORDER BY name''', (row['run_id'], row['artifact_names']))
-        return ForecastRelease(release_id=row['id'], product=product, run_id=row['run_id'],
-                               published_at=row['published_at'], issue_time=row['issue_time'],
-                               artifacts=[_artifact(artifact) for artifact in cursor.fetchall()])
+        query = await session.execute(text('''SELECT * FROM prophet.forecast_artifact
+            WHERE run_id=:run_id AND name=ANY(:artifact_names) AND status='stored' ORDER BY name'''), {'run_id': row['run_id'], 'artifact_names': row['artifact_names']})
+        artifacts = query.mappings().all()
+    return await asyncio.to_thread(_release_from_artifacts, row, artifacts)
+
+
+def _release_from_artifacts(row, artifacts):
+    artifacts = [_artifact(artifact) for artifact in artifacts]
+    return ForecastRelease(release_id=row['id'], product=row['product'], run_id=row['run_id'],
+                           published_at=row['published_at'],
+                           issue_time=row.get('issue_time') or artifacts[0].issue_time(), artifacts=artifacts)

@@ -68,7 +68,7 @@ def test_api_validates_ranges_and_metrics_without_querying_database(monkeypatch)
     app = FastAPI()
     app.include_router(routes.router)
     session = object()
-    app.dependency_overrides[routes.get_db_session] = lambda: session
+    app.dependency_overrides[routes.get_request_db_session] = lambda: session
     latest, history = AsyncMock(return_value={'series': {}}), AsyncMock(return_value={'series': {}})
     monkeypatch.setattr(routes.solar_wind, 'latest', latest)
     monkeypatch.setattr(routes.solar_wind, 'history', history)
@@ -95,7 +95,7 @@ def test_locked_collector_does_not_fetch_or_commit(monkeypatch):
     session.execute.return_value = Mock(scalar_one=Mock(return_value=False))
     context = AsyncMock()
     context.__aenter__.return_value = session
-    monkeypatch.setattr(service, 'get_session_factory', lambda: lambda: context)
+    monkeypatch.setattr(service, 'get_db_session', lambda: context)
     fetch = Mock(side_effect=AssertionError('must not fetch'))
     monkeypatch.setattr(service, 'fetch_records', fetch)
     asyncio.run(service.ingest_source('mag'))

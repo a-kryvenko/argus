@@ -1,4 +1,4 @@
-"""Clio parses once, validates before work and owns the manual-job locks."""
+"""Clio parses one-shot commands and reports collection failures."""
 import sys
 from types import SimpleNamespace
 from unittest.mock import Mock, AsyncMock
@@ -7,12 +7,11 @@ import pytest
 
 from clio import cli
 from clio.commands import runner
-from clio.scheduling import jobs as scheduler
 from common import runtime
 
 
 def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
-    from clio.db import session
+    from common.db import session
     original = sys.argv
     args = SimpleNamespace(limit=12)
     command = AsyncMock(side_effect=ValueError('command failed'))
@@ -27,32 +26,29 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
     assert sys.argv is original
 
 
-@pytest.mark.parametrize(('argv', 'job', 'command'), [
-    (['collect-events'], 'events', 'collect-events'),
-    (['backfill', '--from', '2026-08-31', '--to', '2026-09-01'], 'refresh', 'backfill'),
-    (['normalize'], 'refresh', 'normalize'),
-    (['collect', 'kp', 'dst'], 'live', 'collect'),
-    (['collect', 'gong'], 'files-live', 'collect'),
-    (['collect', 'sdo'], 'files-live', 'collect'),
-    (['backfill', 'sdo'], 'files-backfill', 'backfill'),
-    (['backfill', 'gong'], 'files-backfill', 'backfill'),
+@pytest.mark.parametrize(('argv', 'command'), [
+    (['collect-events'], 'collect-events'),
+    (['backfill', '--from', '2026-08-31', '--to', '2026-09-01'], 'backfill'),
+    (['normalize'], 'normalize'),
+    (['collect', 'kp', 'dst'], 'collect'),
+    (['collect', 'gong'], 'collect'),
+    (['collect', 'sdo'], 'collect'),
+    (['backfill', 'sdo'], 'backfill'),
+    (['backfill', 'gong'], 'backfill'),
 ])
-def test_manual_commands_keep_their_job_lock(monkeypatch, argv, job, command):
+def test_manual_commands_invoke_operation_directly(monkeypatch, argv, command):
     invoke = Mock(return_value=None)
-    execute = Mock(side_effect=lambda name, run: run())
     monkeypatch.setattr(cli, 'invoke', invoke)
-    monkeypatch.setattr(scheduler, 'execute', execute)
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())
     cli.main(argv)
-    assert execute.call_args.args[0] == job
     assert invoke.call_args.args[0] == command
 
 
 @pytest.mark.parametrize('argv', [['collect', '--help'], ['refresh', 'solar-wind', '--watch'],
                                   ['sdo-images', 'live'], ['schedule', 'live'], ['schedule', 'normalize'],
                                   ['status'], ['aggregate', '--limit', '0'], ['collect', 'files-backfill', '--unknown'],
-                                  ['backfill', '--from', '2026-08-01', '--to', '2026-09-09']])
-def test_help_and_invalid_arguments_do_not_run_or_lock(monkeypatch, argv):
+                                  ['backfill', '--from', '2026-08-01', '--to', '2026-09-09'], ['worker'], ['check-health', 'worker'], ['crontab'], ['cron', 'install']])
+def test_help_and_invalid_arguments_do_not_run(monkeypatch, argv):
     execute = Mock()
     monkeypatch.setattr(runtime, 'run_command', execute)
     with pytest.raises(SystemExit) as result:
@@ -61,23 +57,11 @@ def test_help_and_invalid_arguments_do_not_run_or_lock(monkeypatch, argv):
     execute.assert_not_called()
 
 
-@pytest.mark.parametrize('command', ['check-health'])
-def test_diagnostic_exit_status_is_preserved(monkeypatch, command):
-    monkeypatch.setattr(cli, 'invoke', lambda name, args: 1)
-    monkeypatch.setattr(runtime, 'run_command', lambda run: run())
-    with pytest.raises(SystemExit) as error:
-        cli.main([command, 'worker'] if command == 'check-health' else [command])
-    assert error.value.code == 1
-
-
-def test_configured_backfill_accepts_default_depth_and_keeps_lock(monkeypatch):
+def test_configured_backfill_accepts_default_depth(monkeypatch):
     invoke = Mock(return_value=None)
-    execute = Mock(side_effect=lambda name, run: run())
     monkeypatch.setattr(cli, 'invoke', invoke)
-    monkeypatch.setattr(scheduler, 'execute', execute)
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())
     cli.main(['backfill', 'v', 'n', 't'])
-    assert execute.call_args.args[0] == 'refresh'
     args = invoke.call_args.args[1]
     assert args.metrics == ['v', 'n', 't']
     assert args.start is None and args.end is None
@@ -99,8 +83,19 @@ def test_incomplete_backfill_arguments_fail_before_work(monkeypatch, argv):
 def test_backfill_without_arguments_uses_configured_observations(monkeypatch):
     invoke = Mock(return_value=None)
     monkeypatch.setattr(cli, 'invoke', invoke)
-    monkeypatch.setattr(scheduler, 'execute', lambda name, run: run())
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())
     cli.main(['backfill'])
     args = invoke.call_args.args[1]
     assert args.metrics is None and args.start is None and args.end is None
+
+
+@pytest.mark.parametrize('failed', [[], ['dst']])
+def test_collection_exit_status_reflects_partial_failures(monkeypatch, failed):
+    monkeypatch.setattr(cli, 'invoke', lambda *args: {'failed_metrics': failed, 'downloaded_measurements': 1})
+    monkeypatch.setattr(runtime, 'run_command', lambda run: run())
+    if failed:
+        with pytest.raises(SystemExit) as result:
+            cli.main(['collect', 'dst'])
+        assert result.value.code == 1
+    else:
+        cli.main(['collect', 'dst'])

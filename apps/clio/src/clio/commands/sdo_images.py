@@ -89,7 +89,7 @@ def cycle(root, mode, *, batch_hours=6, clock=lambda: datetime.now(UTC),
 
 
 async def run(args):
-    """Internal worker entry point for retention; collection uses collect/backfill."""
+    """Prune expired SDO observations; collection uses collect/backfill."""
     policy = load_observation_config().sdo_images
     if not policy.enabled:
         return {'disabled': True}

@@ -1,8 +1,11 @@
 """Shared project state and anonymous traffic aggregates."""
 from datetime import datetime
-from sqlalchemy import DateTime, String, Integer, Float, JSON, BigInteger
+
+from sqlalchemy import JSON, BigInteger, DateTime, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from api.db.base import Base
+
 
 class MonitorState(Base):
     __tablename__ = 'monitor_state'

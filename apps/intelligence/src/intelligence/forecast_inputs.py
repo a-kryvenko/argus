@@ -4,11 +4,13 @@ import hashlib
 import io
 import json
 
+from sqlalchemy import text
+
 from common.schemas.forecast_release import ForecastRelease
 from intelligence.cli import MAX_RESPONSE_BYTES
 
 
-def retain(conn, run_id, inputs, *, captured_at):
+async def retain(session, run_id, inputs, *, captured_at):
     """Called within the assessment transaction. Deduplicate immutable releases."""
     for product, release in inputs.items():
         if release is None:
@@ -20,20 +22,18 @@ def retain(conn, run_id, inputs, *, captured_at):
         if len(content) > MAX_RESPONSE_BYTES:
             raise ValueError('Forecast input too large')
         checksum = hashlib.sha256(content).hexdigest()
-        stored = conn.execute('''SELECT product,sha256 FROM intelligence.forecast_input
-            WHERE release_id=%s''', (release.release_id,)).fetchone()
+        stored = (await session.execute(text('''SELECT product,sha256 FROM intelligence.forecast_input
+            WHERE release_id=:release_id'''), {'release_id': release.release_id})).mappings().first()
         if stored is None:
-            conn.execute('''INSERT INTO intelligence.forecast_input
-                (release_id,product,sha256,content_gzip,captured_at) VALUES (%s,%s,%s,%s,%s)
-                ON CONFLICT (release_id) DO NOTHING''',
-                (release.release_id, product, checksum,
-                 gzip.compress(content, compresslevel=3, mtime=0), captured_at))
-            stored = conn.execute('''SELECT product,sha256 FROM intelligence.forecast_input
-                WHERE release_id=%s''', (release.release_id,)).fetchone()
+            await session.execute(text('''INSERT INTO intelligence.forecast_input
+                (release_id,product,sha256,content_gzip,captured_at) VALUES (:release_id,:product,:sha256,:content_gzip,:captured_at)
+                ON CONFLICT (release_id) DO NOTHING'''), {'release_id': release.release_id, 'product': product, 'sha256': checksum, 'content_gzip': gzip.compress(content, compresslevel=3, mtime=0), 'captured_at': captured_at})
+            stored = (await session.execute(text('''SELECT product,sha256 FROM intelligence.forecast_input
+                WHERE release_id=:release_id'''), {'release_id': release.release_id})).mappings().first()
         if stored['product'] != product or stored['sha256'] != checksum:
             raise ValueError('Published release changed under the same ID')
-        conn.execute('''INSERT INTO intelligence.density_run_input(run_id,product,release_id)
-            VALUES (%s,%s,%s)''', (run_id, product, release.release_id))
+        await session.execute(text('''INSERT INTO intelligence.density_run_input(run_id,product,release_id)
+            VALUES (:run_id,:product,:release_id)'''), {'run_id': run_id, 'product': product, 'release_id': release.release_id})
 
 
 def decode(row):

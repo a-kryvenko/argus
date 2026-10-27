@@ -84,7 +84,6 @@ type Project = {
     sources: Record<string, Source>;
     measurements: Measurement[];
     error?: string;
-    last_refresh_completed_at?: string | null;
   } | null;
   forecasts: Forecast[];
   host: {
@@ -530,8 +529,6 @@ export default function ProjectOverview() {
               Clio · Model input observations
             </h2>
             <p className="text-xs text-muted-foreground">
-              Last scheduled refresh completed:{" "}
-              <Stamp value={project.observations?.last_refresh_completed_at} />.
               Receipt times are recorded from the monitoring rollout onward.
             </p>
             <Card className="overflow-hidden">

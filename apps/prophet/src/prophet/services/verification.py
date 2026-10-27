@@ -1,39 +1,43 @@
 """Score actual published releases; never regenerate historical forecasts."""
+import asyncio
 import hashlib
 import io
 import json
 import os
 from datetime import UTC, datetime, timedelta
-from threading import Lock
 from time import monotonic
 
 import httpx
 import numpy as np
 import pandas as pd
 
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import JSONB
+
 from forecast.evaluation import TARGETS, match_observations, score, validate_predictions
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
-from prophet.db.session import connect, transaction
+from prophet.db.session import get_db_session
+from prophet.db.locks import transaction
 from prophet.services.releases.publication import read_release
 
 from prophet.services.generation.products import VERIFIED_PRODUCTS as PRODUCTS
-from prophet.scheduling.execution import before_dispatch
+from prophet.execution import before_dispatch
 
 
 MONTHLY_CACHE_SECONDS = 300
 _monthly_cache = {}
-_monthly_locks = {product: Lock() for product in PRODUCT_ARTIFACTS}
+_monthly_locks = {product: asyncio.Lock() for product in PRODUCT_ARTIFACTS}
 
 
-def cached_monthly_accuracy(product):
+async def cached_monthly_accuracy(product):
     """Reuse a rolling summary for five minutes; coalesce concurrent reads."""
     if product not in _monthly_locks:
         raise ValueError('Unknown forecast product')
-    with _monthly_locks[product]:
+    async with _monthly_locks[product]:
         cached = _monthly_cache.get(product)
         if cached is not None and monotonic() < cached[0]:
             return cached[1]
-        result = monthly_accuracy(product)
+        result = await monthly_accuracy(product)
         _monthly_cache[product] = (monotonic() + MONTHLY_CACHE_SECONDS, result)
         return result
 
@@ -102,8 +106,7 @@ def read_targets(start, end, *, deadline=None):
             'points': targets(frame, start, end)}
 
 
-def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=None):
-    from psycopg.types.json import Jsonb
+async def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=None):
     if selection not in (*PRODUCTS, 'all') or not 1 <= days <= 25:
         raise ValueError('Select a supported product and 1..25 days')
     now = now or datetime.now(UTC)
@@ -112,19 +115,19 @@ def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=N
     products = PRODUCTS if selection == 'all' else (selection,)
     start = (now - timedelta(days=days)).replace(minute=0, second=0, microsecond=0)
     end = now.replace(minute=0, second=0, microsecond=0)
-    with connect() as conn:
-        releases = conn.execute('''SELECT product,id FROM prophet.forecast_release
-            WHERE product=ANY(%s) AND issue_time >= %s AND issue_time <= %s
-            ORDER BY issue_time,id''', (list(products), start, now)).fetchall()
+    async with get_db_session() as session, session.begin():
+        releases = (await session.execute(text('''SELECT product,id FROM prophet.forecast_release
+            WHERE product=ANY(:products) AND issue_time >= :start AND issue_time <= :now
+            ORDER BY issue_time,id'''), {'products': list(products), 'start': start, 'now': now})).all()
     if not releases:
         return {'status': 'no_releases', 'releases': 0, 'from': start.isoformat(), 'products': list(products)}
-    observed = read_targets(start, end) if deadline is None else read_targets(start, end, deadline=deadline)
+    observed = await asyncio.to_thread(read_targets, start, end, **({} if deadline is None else {"deadline": deadline}))
     truth = pd.DataFrame(observed['points'], columns=['valid_time', 'metric', 'value', 'sample_count'])
     summary = {'status': 'ok', 'releases': len(releases), 'from': start.isoformat(),
                'source': observed['source'], 'products': {}, 'evaluated_at': now.isoformat()}
     for product, release_id in releases:
         check_progress(deadline)
-        release = read_release(product, release_id)
+        release = await read_release(product, release_id)
         for artifact in release.artifacts:
             check_progress(deadline)
             if artifact.name not in TARGETS:
@@ -140,12 +143,11 @@ def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=N
                       'forecast_sha256': artifact.sha256, 'model_info': artifact.model_info,
                       'evidence_sha256': hashlib.sha256(evidence).hexdigest(),
                       **score(matched, artifact.name), 'pairs': records}
-            with transaction(writer) as conn:
-                conn.execute('''INSERT INTO prophet.forecast_verification
-                    (release_id,artifact,evaluated_at,report) VALUES (%s,%s,%s,%s)
+            async with transaction(writer) as session:
+                await session.execute(text('''INSERT INTO prophet.forecast_verification
+                    (release_id,artifact,evaluated_at,report) VALUES (:release_id,:name,:now,:report)
                     ON CONFLICT (release_id,artifact) DO UPDATE
-                    SET evaluated_at=EXCLUDED.evaluated_at,report=EXCLUDED.report''',
-                    (release_id, artifact.name, now, Jsonb(report)))
+                    SET evaluated_at=EXCLUDED.evaluated_at,report=EXCLUDED.report''').bindparams(bindparam('report', type_=JSONB)), {'release_id': release_id, 'name': artifact.name, 'now': now, 'report': report})
             totals = summary['products'].setdefault(product, {}).setdefault(
                 artifact.name, dict.fromkeys(('total', 'verified', 'missing', 'pending'), 0))
             for key, value in report['counts'].items():
@@ -153,18 +155,20 @@ def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=N
     return summary
 
 
-def verification_report(product, *, days=7):
+async def verification_report(product, *, days=7):
     """Separate model hashes: an operational change must not blend model scores."""
-    from psycopg.rows import dict_row
     if product not in (*PRODUCTS, 'all') or not 1 <= days <= 25:
         raise ValueError('Select a supported product and 1..25 days')
     products = PRODUCTS if product == 'all' else (product,)
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('''SELECT r.product,v.artifact,v.evaluated_at,v.report
+    async with get_db_session() as session, session.begin():
+        query = await session.execute(text('''SELECT r.product,v.artifact,v.evaluated_at,v.report
             FROM prophet.forecast_verification v JOIN prophet.forecast_release r ON r.id=v.release_id
-            WHERE r.product=ANY(%s) AND r.issue_time >= %s ORDER BY r.issue_time,r.id''',
-            (list(products), datetime.now(UTC) - timedelta(days=days)))
-        rows = cursor.fetchall()
+            WHERE r.product=ANY(:products) AND r.issue_time >= :start ORDER BY r.issue_time,r.id'''), {'products': list(products), 'start': datetime.now(UTC) - timedelta(days=days)})
+        rows = query.mappings().all()
+    return await asyncio.to_thread(_verification_summary, rows, days)
+
+
+def _verification_summary(rows, days):
     groups = {}
     for row in rows:
         info = row['report']['model_info']
@@ -179,23 +183,26 @@ def verification_report(product, *, days=7):
     return {'protocol': 'published-hourly-v1', 'days': days, 'groups': result}
 
 
-def monthly_accuracy(product, *, now=None):
+async def monthly_accuracy(product, *, now=None):
     """Score each model version over valid times in the trailing 30 days."""
-    from psycopg.rows import dict_row
-    from common.schemas.forecast_verification import ForecastVerification, VerificationGroup, VerificationLead
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unknown forecast product')
     now = now or datetime.now(UTC)
     start = now - timedelta(days=30)
-    with connect() as conn, conn.cursor(row_factory=dict_row) as cursor:
-        cursor.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-        cursor.execute('SET LOCAL statement_timeout=10000')
+    async with get_db_session() as session, session.begin():
+        query = await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        query = await session.execute(text('SET LOCAL statement_timeout=10000'))
         # Include releases before the window whose forecast horizons enter it.
-        cursor.execute("""SELECT v.artifact,v.evaluated_at,v.report,r.issue_time
+        query = await session.execute(text("""SELECT v.artifact,v.evaluated_at,v.report,r.issue_time
             FROM prophet.forecast_verification v JOIN prophet.forecast_release r ON r.id=v.release_id
-            WHERE r.product=%s AND r.issue_time >= %s AND r.issue_time <= %s
-            ORDER BY r.issue_time,r.id""", (product, start-timedelta(hours=96), now))
-        rows = cursor.fetchall()
+            WHERE r.product=:product AND r.issue_time >= :start AND r.issue_time <= :now
+            ORDER BY r.issue_time,r.id"""), {'product': product, 'start': start-timedelta(hours=96), 'now': now})
+        rows = query.mappings().all()
+    return await asyncio.to_thread(_monthly_summary, rows, product, start, now)
+
+
+def _monthly_summary(rows, product, start, now):
+    from common.schemas.forecast_verification import ForecastVerification, VerificationGroup, VerificationLead
     groups = {}
     for row in rows:
         info = row['report'].get('model_info') or {}

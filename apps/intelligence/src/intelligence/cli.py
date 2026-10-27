@@ -1,5 +1,6 @@
 """Validate Prophet releases and manage Intelligence processing and migrations."""
 import argparse
+import asyncio
 from datetime import UTC, datetime
 import json
 import os
@@ -88,8 +89,14 @@ def main(argv=None):
                 worker.worker(args.product)
                 return
             operation = worker.status if args.command == 'status' else worker.process_once
-            result = ([operation(product) for product in PROCESS_PRODUCTS]
-                      if args.product == 'all' else operation(args.product))
+            async def execute():
+                from common.db.session import dispose_engine
+                try:
+                    return ([await operation(product) for product in PROCESS_PRODUCTS]
+                            if args.product == 'all' else await operation(args.product))
+                finally:
+                    await dispose_engine()
+            result = asyncio.run(execute())
         except Exception:
             print(json.dumps({'service': 'intelligence', 'status': 'error', 'error': 'Database or release processing unavailable'}))
             raise SystemExit(1) from None

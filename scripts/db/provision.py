@@ -76,15 +76,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
+
+    from common.db.session import database_parameters
     from dotenv import load_dotenv
-    from common.database import database_parameters
-    root = Path(os.getenv('ARGUS_WORKDIR', Path(__file__).resolve().parents[2]))
+
+    root = Path(__file__).resolve().parents[2]
+    
     load_dotenv(root / '.env')
     load_dotenv(root / '.env.local', override=True)
+
     try:
-        provision(URL.create('postgresql', **database_parameters('')),
-                  {d: URL.create('postgresql', **database_parameters(d.upper())) for d in DOMAINS},
-                  apply=args.apply)
+        provision(
+            URL.create('postgresql', **database_parameters('')),
+            {d: URL.create('postgresql', **database_parameters(d.upper())) for d in DOMAINS},
+            apply=args.apply
+        )
     except ValueError as exc:
         # These are our fixed validation messages, never the original URL parser error.
         parser.exit(1, str(exc) + '\n')

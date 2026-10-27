@@ -29,7 +29,7 @@ Generation requires private `forecast-core` and configured models.
 
 Products publish independently; failures retain the previous release.
 Cron: events every five minutes; other products hourly at :10. Jobs run sequentially.
-Verification runs every six hours over seven days; atmospheric density is excluded.
+Verification runs every six hours; window: `prophet.verification_days` (30 days).
 
 Prophet prepares calibrated GOES indices and reads PROSWIN predictions before freezing the
 input snapshot. Derivative cache: `data/prophet/source-cache`

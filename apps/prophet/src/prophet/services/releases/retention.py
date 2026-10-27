@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from prophet.db.session import get_db_session
 from prophet.db.locks import transaction
+from prophet.services.releases.queries import LATEST_RELEASES
 
 
 async def cleanup(*, days=90, apply=False, now=None, writer=None):
@@ -17,10 +18,12 @@ async def cleanup(*, days=90, apply=False, now=None, writer=None):
     async with (transaction(writer) if apply else get_db_session()) as session:
         if not apply:
             await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        ids = [row[0] for row in (await session.execute(text('''SELECT f.id FROM forecast_run f
+        # Retain legacy pointers as well while the previous version can serve reads.
+        ids = [row[0] for row in (await session.execute(text(f'''SELECT f.id FROM forecast_run f
             WHERE f.status <> 'running' AND f.finished_at < :cutoff
             AND EXISTS (SELECT 1 FROM forecast_run newer
                         WHERE newer.product=f.product AND (newer.started_at,newer.id) > (f.started_at,f.id))
+            AND NOT EXISTS (SELECT 1 FROM ({LATEST_RELEASES}) latest WHERE latest.run_id=f.id)
             AND NOT EXISTS (SELECT 1 FROM forecast_release r
                 JOIN current_forecast c ON c.release_id=r.id WHERE r.run_id=f.id)
             ORDER BY f.finished_at,f.id LIMIT 1000'''), {'cutoff': cutoff})).all()]

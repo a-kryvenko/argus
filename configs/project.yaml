@@ -4,6 +4,7 @@ project:
 prophet:
   calculation_timeout_seconds: 540
   shutdown_grace_seconds: 570
+  verification_days: 30
 
 # Observation sources and historical horizons.
 clio:

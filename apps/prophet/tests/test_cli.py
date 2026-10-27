@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 PROPHET = ROOT / 'apps/prophet'
 
@@ -14,7 +16,7 @@ def test_cli_help_is_available_without_loading_models():
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert 'generate' in result.stdout and 'worker' not in result.stdout
+    assert '{serve,generation,verification,cleanup}' in result.stdout
 
 
 def test_installed_environment_imports_without_observation_storage(tmp_path):
@@ -47,7 +49,7 @@ def test_removed_aliases_are_rejected_before_starting_a_run(monkeypatch):
     begin = Mock()
     monkeypatch.setattr(ledger.RunRecorder, 'begin', begin)
     for alias in ('wind', 'kp', 'density'):
-        monkeypatch.setattr(sys, 'argv', ['prophet', 'generate', alias])
+        monkeypatch.setattr(sys, 'argv', ['prophet', 'generation', alias])
         with pytest.raises(SystemExit) as error:
             cli.main()
         assert error.value.code == 2
@@ -65,7 +67,7 @@ def test_removed_export_command_is_rejected(monkeypatch):
     assert error.value.code == 2
 
 
-def test_refresh_alias_generates_selected_product(monkeypatch):
+def test_generation_generates_selected_product(monkeypatch):
     from contextlib import nullcontext
     from unittest.mock import Mock
     from prophet import cli
@@ -77,7 +79,7 @@ def test_refresh_alias_generates_selected_product(monkeypatch):
     monkeypatch.setattr(cycle, 'generate', generate)
     monkeypatch.setattr(worker, 'generation_lock', nullcontext)
     monkeypatch.setattr(runtime, 'run_command', lambda run: run())
-    cli.main(['refresh', 'solar-wind-speed'])
+    cli.main(['generation', 'solar-wind-speed'])
     generate.assert_called_once_with('solar-wind-speed', writer=None)
 
 
@@ -88,8 +90,45 @@ def test_removed_inspection_commands_fail_before_loading_handlers(monkeypatch):
     handler = Mock()
     from common import runtime
     monkeypatch.setattr(runtime, 'run_command', handler)
-    for command in ('worker', 'status', 'runs', 'show-run', 'slots', 'demo'):
+    for command in ('worker', 'status', 'runs', 'show-run', 'slots', 'demo',
+                    'generate', 'refresh', 'verify', 'verification-report'):
         with pytest.raises(SystemExit) as error:
             cli.main([command])
         assert error.value.code == 2
     handler.assert_not_called()
+
+
+@pytest.mark.parametrize('failure', [None, RuntimeError('failed'), SystemExit(130)])
+def test_invoke_disposes_database_after_command(monkeypatch, failure):
+    from argparse import Namespace
+    from unittest.mock import AsyncMock
+    from common.db import session
+    from prophet import cli
+    from prophet.commands import cleanup
+
+    run = AsyncMock(return_value=None, side_effect=failure)
+    dispose = AsyncMock()
+    monkeypatch.setattr(cleanup, 'run', run)
+    monkeypatch.setattr(session, 'dispose_engine', dispose)
+    args = Namespace(days=90, apply=False)
+    if failure is None:
+        cli.invoke('cleanup', args)
+    else:
+        with pytest.raises(type(failure)):
+            cli.invoke('cleanup', args)
+    run.assert_awaited_once_with(args)
+    dispose.assert_awaited_once()
+
+
+@pytest.mark.parametrize('arguments', [['--days', '7'], ['--report']])
+def test_verification_rejects_removed_options(monkeypatch, arguments):
+    from unittest.mock import Mock
+    from common import runtime
+    from prophet import cli
+
+    run = Mock()
+    monkeypatch.setattr(runtime, 'run_command', run)
+    with pytest.raises(SystemExit) as error:
+        cli.main(['verification', *arguments])
+    assert error.value.code == 2
+    run.assert_not_called()

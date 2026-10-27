@@ -91,7 +91,7 @@ async def ready():
     try:
         async with get_db_session() as session:
             await session.execute(text('SET LOCAL statement_timeout=3000'))
-            await session.execute(text('SELECT release_id FROM current_forecast LIMIT 1'))
+            await session.execute(text('SELECT id FROM forecast_release LIMIT 1'))
     except Exception:
         raise HTTPException(503, 'Forecast storage is not ready') from None
     return {'service': 'prophet', 'status': 'ok'}

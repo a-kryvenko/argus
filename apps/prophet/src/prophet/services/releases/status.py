@@ -7,6 +7,7 @@ from sqlalchemy import text
 from forecast.observation_inputs import DENSITY_METRICS
 from common.schemas.forecast_status import ForecastStatus
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
+from prophet.services.releases.queries import LATEST_RELEASES
 
 
 NORMALIZED_FIELDS = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', 'ap', 'f10_7', 's10', 'm10', 'y10')
@@ -96,10 +97,10 @@ async def product_status(product, *, now=None):
         raise ValueError('Assessment time must be timezone-aware')
     async with get_db_session() as session, session.begin():
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        query = await session.execute(text('''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
+        query = await session.execute(text(f'''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
             f.started_at,f.provenance->'input_diagnostics' AS input_diagnostics
-            FROM current_forecast c JOIN forecast_release r ON r.id=c.release_id
-            JOIN forecast_run f ON f.id=r.run_id WHERE c.product=:product'''), {'product': product})
+            FROM ({LATEST_RELEASES}) r
+            JOIN forecast_run f ON f.id=r.run_id WHERE r.product=:product'''), {'product': product})
         current = query.mappings().first()
         from prophet.services.generation.products import attempt_selections
         query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,

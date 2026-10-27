@@ -20,9 +20,11 @@ Usage: ./argus <command> (environment: $mode)
   clio collect donki | clio collect enlil
   clio backfill [METRIC ...] [--from DATE --to DATE]
   clio sdo-cleanup
-  prophet refresh [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|atmospheric-density]
+  prophet generation [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (dev only; default: january-2026)
-  prophet verify [PRODUCT] [--days 7] | prophet verification-report [PRODUCT] [--days 7]
+  prophet verification [PRODUCT]
+  prophet cleanup [--days 90] [--apply]
+  prophet serve [--host HOST] [--port 8000]
   intelligence refresh [PRODUCT] | intelligence status [PRODUCT]
   api user <arguments>
   logs [SERVICE] [--tail N] [-f]

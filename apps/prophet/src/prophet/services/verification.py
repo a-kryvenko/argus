@@ -16,6 +16,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from forecast.evaluation import TARGETS, match_observations, score, validate_predictions
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
+from prophet.config import load_config
 from prophet.db.session import get_db_session
 from prophet.db.locks import transaction
 from prophet.services.releases.publication import read_release
@@ -106,9 +107,10 @@ def read_targets(start, end, *, deadline=None):
             'points': targets(frame, start, end)}
 
 
-async def verify(selection='solar-wind-speed', *, writer, days=7, now=None, deadline=None):
-    if selection not in (*PRODUCTS, 'all') or not 1 <= days <= 25:
-        raise ValueError('Select a supported product and 1..25 days')
+async def verify(selection='solar-wind-speed', *, writer, now=None, deadline=None):
+    if selection not in (*PRODUCTS, 'all'):
+        raise ValueError('Select a supported product')
+    days = load_config().verification_days
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError('now must include timezone')
@@ -155,10 +157,11 @@ async def verify(selection='solar-wind-speed', *, writer, days=7, now=None, dead
     return summary
 
 
-async def verification_report(product, *, days=7):
+async def verification_report(product):
     """Separate model hashes: an operational change must not blend model scores."""
-    if product not in (*PRODUCTS, 'all') or not 1 <= days <= 25:
-        raise ValueError('Select a supported product and 1..25 days')
+    if product not in (*PRODUCTS, 'all'):
+        raise ValueError('Select a supported product')
+    days = load_config().verification_days
     products = PRODUCTS if product == 'all' else (product,)
     async with get_db_session() as session, session.begin():
         query = await session.execute(text('''SELECT r.product,v.artifact,v.evaluated_at,v.report
@@ -184,11 +187,11 @@ def _verification_summary(rows, days):
 
 
 async def monthly_accuracy(product, *, now=None):
-    """Score each model version over valid times in the trailing 30 days."""
+    """Score each model version over valid times in the configured window."""
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unknown forecast product')
     now = now or datetime.now(UTC)
-    start = now - timedelta(days=30)
+    start = now - timedelta(days=load_config().verification_days)
     async with get_db_session() as session, session.begin():
         query = await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         query = await session.execute(text('SET LOCAL statement_timeout=10000'))

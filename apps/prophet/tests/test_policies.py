@@ -17,6 +17,7 @@ def test_default_policy_accepts_inputs_without_retired_gong_features():
 @pytest.mark.parametrize('settings', [
     {'calculation_timeout_seconds': 0}, {'shutdown_grace_seconds': 600},
     {'inputs': {'unknown': {}}}, {'inputs': {'dst': {'max_normalized_age_hours': float('nan')}}},
+    {'verification_days': 0},
     {'verification_timeout_seconds': 0}, {'verification_timeout_seconds': 541},
     {'inputs': {'hmf': {'max_gong_age_hours': 3}}},
 ])

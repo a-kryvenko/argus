@@ -1,4 +1,4 @@
-"""Prophet-owned publication pointers. Call writers under the database generation_lock."""
+"""Publish and read releases under the database generation_lock for writers."""
 import asyncio
 import gzip
 import io
@@ -12,6 +12,7 @@ from common.schemas.forecast_release import (
     ForecastArtifact, ForecastRelease, MAX_ARTIFACT_BYTES, PRODUCT_ARTIFACTS,
 )
 from prophet.db.session import get_db_session
+from prophet.services.releases.queries import LATEST_RELEASES
 
 
 class ReleaseNotFound(LookupError):
@@ -30,7 +31,7 @@ def _artifact(row):
 
 async def publish_run(session, run_id):
     """Publish one complete product in the caller's run-completion transaction."""
-    # Serializes pointer decisions, including repeatable historical promotion.
+    # Serializes publication decisions across old and new application versions.
     await session.execute(text("SELECT pg_advisory_xact_lock(736218, 1)"))
     query = await session.execute(text("SELECT status,started_at,product FROM forecast_run WHERE id=:run_id"), {'run_id': run_id})
     run = query.mappings().first()
@@ -42,9 +43,9 @@ async def publish_run(session, run_id):
     names = PRODUCT_ARTIFACTS[product]
     if not set(names).issubset(rows):
         raise ValueError(f'Incomplete artifacts for {product}')
-    query = await session.execute(text('''SELECT r.issue_time, f.started_at, r.run_id FROM current_forecast c
-        JOIN forecast_release r ON r.id=c.release_id
-        JOIN forecast_run f ON f.id=r.run_id WHERE c.product=:product'''), {'product': product})
+    query = await session.execute(text(f'''SELECT r.issue_time, f.started_at, r.run_id
+        FROM ({LATEST_RELEASES}) r
+        JOIN forecast_run f ON f.id=r.run_id WHERE r.product=:product'''), {'product': product})
     current = query.mappings().first()
     if current and (current['run_id'] == run_id or current['started_at'] >= run['started_at']):
         return None
@@ -59,6 +60,7 @@ async def publish_run(session, run_id):
     inserted = query.mappings().first()
     if inserted is None:
         return None
+    # Compatibility write for the previous version during blue-green deployment.
     await session.execute(text('''INSERT INTO current_forecast(product,release_id) VALUES (:product,:release_id)
         ON CONFLICT(product) DO UPDATE SET release_id=excluded.release_id'''), {'product': product, 'release_id': release.release_id})
     return release.release_id
@@ -70,8 +72,8 @@ async def read_release(product, release_id=None):
     async with get_db_session() as session, session.begin():
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         if release_id is None:
-            query = await session.execute(text('''SELECT r.* FROM current_forecast c
-                JOIN forecast_release r ON r.id=c.release_id WHERE c.product=:product'''), {'product': product})
+            query = await session.execute(text(f'''SELECT r.* FROM ({LATEST_RELEASES}) r
+                WHERE r.product=:product'''), {'product': product})
         else:
             query = await session.execute(text('SELECT * FROM forecast_release WHERE product=:product AND id=:release_id'), {'product': product, 'release_id': release_id})
         row = query.mappings().first()

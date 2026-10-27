@@ -124,5 +124,9 @@ def test_prophet_cleanup_preserves_forecast_history(tmp_path):
     result = migration_sql('prophet', '20260929_prophet_product_slots:head', tmp_path)
     assert result.returncode == 0, result.stderr
     dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
-    assert dropped == ['DROP TABLE prophet.scheduled_job;']
-    assert 'DROP COLUMN' not in result.stdout
+    assert dropped == ['DROP TABLE prophet.scheduled_job;', 'DROP TABLE prophet.forecast_slot;']
+    dropped_columns = [line.strip() for line in result.stdout.splitlines() if 'DROP COLUMN' in line]
+    assert dropped_columns == [
+        'ALTER TABLE prophet.forecast_run DROP COLUMN scheduled_slot;',
+        'ALTER TABLE prophet.forecast_run DROP COLUMN scheduled_product;',
+    ]

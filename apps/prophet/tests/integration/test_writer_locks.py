@@ -162,8 +162,11 @@ async def test_cron_runs_publish_without_scheduler_slots_and_recover_crashes(rec
         pass
     assert await read_release('dst') == release
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT trigger,status,scheduled_slot,scheduled_product FROM prophet.forecast_run WHERE id=%s',
-                            (completed.run_id,)).fetchone() == ('scheduled', 'succeeded', None, None)
+        assert conn.execute('SELECT trigger,status FROM prophet.forecast_run WHERE id=%s',
+                            (completed.run_id,)).fetchone() == ('scheduled', 'succeeded')
         assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s', (interrupted.run_id,)).fetchone()[0] == 'interrupted'
-        assert conn.execute('SELECT count(*) FROM prophet.forecast_slot').fetchone()[0] == 0
+        assert conn.execute("SELECT to_regclass('prophet.forecast_slot')").fetchone()[0] is None
+        assert conn.execute("""SELECT column_name FROM information_schema.columns
+            WHERE table_schema='prophet' AND table_name='forecast_run'
+            AND column_name IN ('scheduled_slot','scheduled_product')""").fetchall() == []
         assert conn.execute("SELECT to_regclass('prophet.scheduled_job')").fetchone()[0] is None

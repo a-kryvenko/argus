@@ -23,6 +23,7 @@ class ProphetConfig(BaseModel):
     calculation_timeout_seconds: int = Field(default=540, ge=1)
     shutdown_grace_seconds: int = Field(default=570, ge=1, le=570)
     inputs: dict[str, InputPolicy] = Field(default_factory=dict)
+    verification_days: int = Field(default=30, ge=1)
     verification_timeout_seconds: int = Field(default=300, ge=1, le=540)
 
     @field_validator('inputs')

@@ -1,7 +1,7 @@
 import json
 
 
-async def _run(args):
+async def run(args):
     from common.config import get_config
     from prophet.services.releases.retention import cleanup
     get_config()
@@ -12,8 +12,3 @@ async def _run(args):
     else:
         result = await cleanup(days=args.days)
     print(json.dumps(result, indent=2))
-
-
-def run(args):
-    from prophet.commands.runner import run_async
-    return run_async(_run(args))

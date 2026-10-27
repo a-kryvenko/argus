@@ -49,14 +49,14 @@ Cron: `apps/clio/cronjobs.txt`. Logs: `log/clio/`.
 
 | Command | Purpose |
 | --- | --- |
-| `./argus prophet generate [product]` | Generate/publish; `refresh` alias; default all |
-| `./argus prophet verify [product] [--days 7]` | Verify saved releases against observations |
-| `./argus prophet verification-report [product] [--days 7]` | Scores by artifact/model hash |
+| `./argus prophet serve [--host HOST] [--port 8000]` | Serve published forecasts |
+| `./argus prophet generation [product]` | Generate/publish; default all |
+| `./argus prophet verification [product]` | Verify saved releases against observations |
 | `./argus prophet cleanup [--days 90] [--apply]` | Preview/delete eligible history |
 
 Generation products: [catalog](../apps/prophet/README.md#products).
 Successes publish independently; any selected failure produces a nonzero exit.
-Verify/report exclude atmospheric density, default to speed and accept 1–25 days.
+Verification defaults to speed; window: `prophet.verification_days` (30 days).
 Cleanup preserves current releases and latest attempts.
 
 ## Intelligence

@@ -1,12 +1,12 @@
 # Forecast generation
-*/5 * * * * @ROOT@/scripts/cron-run prophet generate-events generate solar-wind-events
-10 * * * * @ROOT@/scripts/cron-run prophet generate-geomagnetic generate geomagnetic-activity
-10 * * * * @ROOT@/scripts/cron-run prophet generate-dst generate dst
-10 * * * * @ROOT@/scripts/cron-run prophet generate-speed generate solar-wind-speed
-10 * * * * @ROOT@/scripts/cron-run prophet generate-density generate solar-wind-density
-10 * * * * @ROOT@/scripts/cron-run prophet generate-temperature generate solar-wind-temperature
-10 * * * * @ROOT@/scripts/cron-run prophet generate-hmf generate hmf
-10 * * * * @ROOT@/scripts/cron-run prophet generate-atmosphere generate atmospheric-density
+*/5 * * * * @ROOT@/scripts/cron-run prophet generate-events generation solar-wind-events
+10 * * * * @ROOT@/scripts/cron-run prophet generate-geomagnetic generation geomagnetic-activity
+10 * * * * @ROOT@/scripts/cron-run prophet generate-dst generation dst
+10 * * * * @ROOT@/scripts/cron-run prophet generate-speed generation solar-wind-speed
+10 * * * * @ROOT@/scripts/cron-run prophet generate-density generation solar-wind-density
+10 * * * * @ROOT@/scripts/cron-run prophet generate-temperature generation solar-wind-temperature
+10 * * * * @ROOT@/scripts/cron-run prophet generate-hmf generation hmf
+10 * * * * @ROOT@/scripts/cron-run prophet generate-atmosphere generation atmospheric-density
 
 # Score published forecasts against later observations
-30 */6 * * * @ROOT@/scripts/cron-run prophet verify verify all --days 7
+30 */6 * * * @ROOT@/scripts/cron-run prophet verification verification all

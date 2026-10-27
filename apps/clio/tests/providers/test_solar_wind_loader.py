@@ -21,7 +21,7 @@ def test_native_samples_keep_spacecraft_selection_time_and_flags():
     assert result[0]['received_at'] == NOW
     assert result[0]['values'] == {'bx': -1.2, 'by': 2.3, 'bz': -4.5, 'bt': 5.2}
     assert result[0]['raw']['max_data_flag'] == -9999
-    assert result[1]['spacecraft'] == 'ACE'
+    assert 'spacecraft' not in result[1]
     assert result[1]['active'] is False
 
 

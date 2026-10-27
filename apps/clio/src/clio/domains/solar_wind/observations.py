@@ -55,8 +55,7 @@ def metadata(metric: str) -> dict:
 
 def sample(record: Measurement, metric: str) -> dict:
     return {"observed_at": record.observed_at, "received_at": record.received_at,
-            "value": record.value, "spacecraft": record.spacecraft, "quality": record.quality,
-            "provider_quality": record.provider_quality}
+            "value": record.value, "quality": record.quality}
 
 
 async def latest(session: AsyncSession, metrics: list[str], now: datetime | None = None) -> dict:

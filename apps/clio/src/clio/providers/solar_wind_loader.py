@@ -44,7 +44,7 @@ def parse_records(kind: str, payload: object, received_at: datetime) -> list[dic
                 value = None
             values[metric] = value
         record = {
-            "kind": kind, "observed_at": observed_at, "spacecraft": row["source"],
+            "kind": kind, "observed_at": observed_at,
             "active": row["active"], "received_at": received_at,
             "values": values, "raw": row,
         }

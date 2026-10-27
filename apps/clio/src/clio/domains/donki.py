@@ -4,7 +4,6 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from clio.config import load_observation_config
 from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_db_session
 from clio.observations.files import store_receipt
@@ -13,9 +12,8 @@ from clio.providers import donki
 logger = logging.getLogger(__name__)
 
 
-async def run(args):
-    policy = load_observation_config().solar_wind_events
-    now = datetime.now(UTC)
+async def collect(policy, *, now=None):
+    now = now or datetime.now(UTC)
     start = (now - timedelta(days=policy.lookback_days)).replace(hour=0, minute=0, second=0, microsecond=0)
     end = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     failed = []

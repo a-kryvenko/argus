@@ -43,6 +43,7 @@ omitting them selects all configured observations. Empty DBs need collection
 before normalization. Deployment installs `apps/clio/cronjobs.txt`; flock prevents overlap.
 Logs are in `log/clio/`.
 Use `backfill sdo --batch` for bounded SDO warmup.
+`collect donki` collects DONKI catalogs; `collect enlil` collects NOAA ENLIL profiles. Both are included in `collect` without arguments.
 
 ## Historical recovery
 

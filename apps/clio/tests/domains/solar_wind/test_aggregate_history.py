@@ -12,14 +12,14 @@ START = datetime(2026, 9, 1, tzinfo=UTC)
 
 def test_statistics_include_missing_windows_in_coverage():
     row = dict(metric='bz', bucket=START, received_at=START, samples=4, count=3,
-               mean=-2, min=-8, max=3, negative_count=2, spacecraft='A', last_spacecraft='B', source_changes=1)
+               mean=-2, min=-8, max=3, negative_count=2)
     session = AsyncMock()
     session.execute.return_value = Mock(mappings=lambda: Mock(all=lambda: [row]))
     data = asyncio.run(history(session, ['bz'], START, START+timedelta(minutes=10), 300))
     series = data['series']['bz']
     assert series['points'][0]['min'] == -8
     assert series['points'][0]['received_at'] == START
-    assert series['points'][0]['source_changes'] == 1
+    assert 'source_changes' not in series['points'][0]
     assert series['coverage']['percent'] == 30
     assert series['coverage']['expected_slots'] == 10
     assert series['coverage']['missing_slots'] == 6

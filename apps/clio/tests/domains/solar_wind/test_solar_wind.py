@@ -16,8 +16,8 @@ NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
 
 def observation(metric='bz', minutes=1, value=-4, **overrides):
     return Measurement(metric=metric, observed_at=NOW - timedelta(minutes=minutes),
-                       received_at=NOW, spacecraft='SOLAR1', value=value,
-                       provider_quality=0, quality='unverified', **overrides)
+                       received_at=NOW, value=value,
+                       quality='unverified', **overrides)
 
 
 def test_latest_has_independent_freshness_and_does_not_hide_missing_values():
@@ -41,7 +41,6 @@ def test_latest_has_independent_freshness_and_does_not_hide_missing_values():
 
 def test_history_preserves_gaps_and_flagged_values():
     rows = [observation(minutes=20), observation(minutes=1)]
-    rows[1].provider_quality = 2
     rows[1].quality = 'flagged'
     session = AsyncMock()
     session.execute.return_value = Mock(scalars=Mock(return_value=rows))
@@ -51,7 +50,7 @@ def test_history_preserves_gaps_and_flagged_values():
     assert points[1]['quality'] == 'flagged'
     assert points[1]['value'] == -4
     assert result['gap_filling'] == 'none'
-    assert points[1]['spacecraft'] == 'SOLAR1'
+    assert 'spacecraft' not in points[1] and 'provider_quality' not in points[1]
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
     assert 'measurement' in sql and 'source_product' in sql
 

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select, tuple_
 from clio.db.models.measurement import Measurement
 from clio.observations.summary import summary, value_change
+from clio.observations.intervals import interval_end
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/internal/v1/observations", tags=["observations"])
@@ -49,7 +50,7 @@ async def observation_summary(response: Response, session: AsyncSession = Depend
 
     Solar-wind changes compare available samples in two five-minute windows one hour apart.
     Indices compare the last available values now and one hour ago.
-    Source changes and stale inputs suppress trends.
+    Stale inputs suppress trends.
     """
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await summary(session))
@@ -78,8 +79,9 @@ async def current_indices(
     for record in records:
         point = {'observed_at': record.observed_at, 'value': record.value,
                  'quality': record.quality or ('missing' if record.value is None else None)}
-        if record.interval_end is not None:
-            point['interval_end'] = record.interval_end
+        end = interval_end(record.metric, record.observed_at)
+        if end is not None:
+            point['interval_end'] = end
         series[record.metric] = point
     data = {'series': series}
     if trends:

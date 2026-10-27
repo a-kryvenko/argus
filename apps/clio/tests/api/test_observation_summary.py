@@ -7,7 +7,7 @@ NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 
 def points(count=65):
     return [{'observed_at': NOW-timedelta(minutes=count-1-i), 'value': float(i),
-             'quality': 'unverified', 'spacecraft': 'SOLAR1'} for i in range(count)]
+             'quality': 'unverified'} for i in range(count)]
 
 
 def test_change_compares_five_minute_means_an_hour_apart():
@@ -41,10 +41,10 @@ def test_stale_and_missing_latest_are_not_reported_as_current():
     assert change_one_hour([], NOW)['reason'] == 'missing_latest'
 
 
-def test_source_switch_suppresses_trend():
+def test_source_switch_does_not_suppress_trend():
     rows = points()
     rows[10]['spacecraft'] = 'ACE'
-    assert change_one_hour(rows, NOW)['reason'] == 'source_changed'
+    assert change_one_hour(rows, NOW)['value'] == 60
 
 
 def test_flagged_samples_do_not_count_as_coverage():

@@ -53,7 +53,6 @@ class SolarSample(BaseModel):
     observed_at: datetime
     received_at: datetime
     value: float | None
-    spacecraft: str
     quality: Quality = optional_field()
     interval_end: datetime | None = optional_field()
     min: float | None = optional_field()
@@ -62,8 +61,6 @@ class SolarSample(BaseModel):
     expected_count: int | None = optional_field()
     coverage_percent: float | None = optional_field()
     recalculation_pending: bool | None = optional_field()
-    last_spacecraft: str | None = optional_field()
-    source_changes: int | None = optional_field()
 
 
 class IndexSample(BaseModel):
@@ -73,7 +70,6 @@ class IndexSample(BaseModel):
     value: float | None
     quality: Quality = optional_field()
     received_at: datetime
-    station_count: int | None
 
 
 class SolarLatestSeries(BaseModel):

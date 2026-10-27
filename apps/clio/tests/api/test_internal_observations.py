@@ -42,9 +42,9 @@ def test_measurement_selection_and_aggregation_are_requested_by_caller(monkeypat
     assert response.status_code == 200, response.text
     assert response.json()['data'] == {'schema_version': 1, 'items': []}
     query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
-    assert query.params['metric_1'] == ['bx', 't']
-    assert query.params['observed_at_1'] == NOW-timedelta(days=3)
-    assert query.params['observed_at_2'] == NOW
+    assert ['bx', 't'] in query.params.values()
+    assert NOW-timedelta(days=3) in query.params.values()
+    assert NOW in query.params.values()
     assert 'avg(measurement.value)' in str(query)
     assert 'GROUP BY' in str(query)
     assert 'measurement.observed_at < ' in str(query)

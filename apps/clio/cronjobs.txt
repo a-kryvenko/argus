@@ -12,8 +12,8 @@
 0 * * * * @ROOT@/scripts/cron-run clio normalize normalize
 
 # Event catalogs and SDO archives
-*/15 * * * * @ROOT@/scripts/cron-run clio collect-events collect-events
-*/15 * * * * @ROOT@/scripts/cron-run clio collect-enlil collect-enlil
+*/15 * * * * @ROOT@/scripts/cron-run clio collect-events collect donki
+*/15 * * * * @ROOT@/scripts/cron-run clio collect-enlil collect enlil
 */5 * * * * @ROOT@/scripts/cron-run clio sdo-live collect sdo
 * * * * * @ROOT@/scripts/cron-run clio sdo-warmup backfill sdo --batch
 0 * * * * @ROOT@/scripts/cron-run clio sdo-cleanup sdo-cleanup

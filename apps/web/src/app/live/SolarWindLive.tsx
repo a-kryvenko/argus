@@ -72,6 +72,6 @@ export default function SolarWindLive({ hours, history }: {
         </details>
       </section>)}
     </div>
-    <p className={styles.sectionNote}>{aggregated ? 'Closed UTC windows · min/max and coverage in tooltips · coverage includes all expected minutes.' : 'Native L1 measurements · no Earth-arrival time shift · gaps and spacecraft changes break lines.'}</p>
+    <p className={styles.sectionNote}>{aggregated ? 'Closed UTC windows · min/max and coverage in tooltips · coverage includes all expected minutes.' : 'Native L1 measurements · no Earth-arrival time shift · gaps break lines.'}</p>
   </section>;
 }

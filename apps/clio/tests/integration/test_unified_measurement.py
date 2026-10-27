@@ -64,15 +64,14 @@ def test_migration_transfers_selected_values_before_removing_tables(database_url
         for statement in seed.split(';'):
             if statement.strip():
                 conn.execute(sa.text(statement), {'at': NOW})
-        migrate(conn, 'head', '20260929_gong_snapshot')
+        migrate(conn, '20261003_unified_measurement', '20260929_gong_snapshot')
         tables = set(sa.inspect(conn).get_table_names(schema='clio'))
         assert not tables.intersection({'measurement_receipt', 'solar_wind_observation', 'geomagnetic_observation',
                                        'solar_wind_aggregate', 'solar_wind_retired_hour', 'solar_wind_aggregate_pending'})
         rows = {r.metric: r for r in conn.execute(sa.text('SELECT * FROM measurement'))}
-        assert rows['bz'].value == -4 and rows['bz'].spacecraft == 'A'
+        assert rows['bz'].value == -4
         assert rows['bx'].value is None and rows['bx'].quality == 'missing'
         assert rows['kp'].value == 3.33 and rows['ap'].value == 18
-        assert rows['kp'].interval_end == NOW+timedelta(hours=3)
         assert rows['dst'].value is None and rows['dst'].quality == 'missing'
         assert rows['f10_7'].received_at == NOW
     engine.dispose()
@@ -108,12 +107,22 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 point = series['points'][0]
                 assert point['value'] == pytest.approx(-8/3)
                 assert point['min'] == -8 and point['max'] == 2 and point['negative_count'] == 2
-                assert point['count'] == 3 and point['source_changes'] == 1
+                assert point['count'] == 3 and 'source_changes' not in point
                 assert series['coverage']['expected_slots'] == 10
                 assert series['coverage']['invalid_slots'] == 2 and series['coverage']['missing_slots'] == 5
                 assert series['coverage']['percent'] == 30
                 frame = await load_measurements(session, NOW)
                 assert frame.loc[frame.metric == 'bz', 'value'].tolist() == [-8, 2, -2]
+                session.add_all([Measurement(metric=metric, value=2, observed_at=NOW,
+                    received_at=NOW+timedelta(minutes=5), quality='unverified', source_product=source)
+                    for metric, source in [('kp', 'swpc.kp'), ('ap', 'swpc.kp'), ('dst', 'swpc.dst')]])
+                await session.commit()
+                from clio.routers.measurements import measurements
+                result = await measurements(start=NOW, end=NOW+timedelta(hours=4), metrics='kp,ap,dst',
+                    aggregation='raw', min_value=None, max_value=None, exclude_value=None, session=session)
+                available = {row['metric']: row['available_at'] for row in result.data['items']}
+                assert available == {'kp': NOW+timedelta(hours=3), 'ap': NOW+timedelta(hours=3),
+                                     'dst': NOW+timedelta(hours=1)}
                 payload[0]['values']['bz'] = -10
                 await store_native(session, wind_measurements('mag', payload))
                 await session.commit()

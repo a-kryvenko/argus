@@ -11,7 +11,6 @@ export type IndexSample = {
   value: number | null;
   quality?: 'missing' | 'flagged';
   received_at: string;
-  station_count: number | null;
 };
 export type IndexLatest = {
   generated_at: string;

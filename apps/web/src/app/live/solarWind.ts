@@ -7,10 +7,9 @@ export type Sample = {
   observed_at: string;
   received_at: string;
   value: number | null;
-  spacecraft: string;
   quality?: 'missing' | 'flagged';
   min?: number; max?: number; count?: number; expected_count?: number;
-  coverage_percent?: number; source_changes?: number; last_spacecraft?: string;
+  coverage_percent?: number;
 };
 export type Latest = {
   generated_at: string;
@@ -29,7 +28,7 @@ export type History = {
 };
 export type ChartPoint = { time: number } & Partial<Record<Metric, number | null>>;
 
-// Null rows break lines across omitted minutes and spacecraft changes.
+// Null rows break lines across omitted minutes.
 // Neither this presentation layer nor the API interpolates measurements.
 export function chartPoints(history: History, metrics?: Metric[]): ChartPoint[] {
   if ((history.resolution_seconds ?? 60) > 60) {
@@ -42,9 +41,7 @@ export function chartPoints(history: History, metrics?: Metric[]): ChartPoint[] 
         const time = Date.parse(point.observed_at);
         if (previous) {
           const before = Date.parse(previous.observed_at);
-          if (time - before > history.resolution_seconds! * 1000 ||
-              (previous.last_spacecraft ?? previous.spacecraft) !== point.spacecraft ||
-              previous.source_changes || point.source_changes) {
+          if (time - before > history.resolution_seconds! * 1000) {
             rows.set(before + (time-before)/2, { time: before + (time-before)/2 });
           }
         }
@@ -68,7 +65,7 @@ export function chartPoints(history: History, metrics?: Metric[]): ChartPoint[] 
       const time = Date.parse(point.observed_at);
       if (previous) {
         const before = Date.parse(previous.observed_at);
-        if (time - before > 90_000 || point.spacecraft !== previous.spacecraft) {
+        if (time - before > 90_000) {
           breaks.add(before + Math.min(60_000, (time - before) / 2));
         }
       }

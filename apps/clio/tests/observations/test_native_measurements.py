@@ -17,9 +17,8 @@ def wind(source, value, active=True):
 
 
 def test_wind_selects_one_active_spacecraft_and_preserves_missing_metrics():
-    rows = wind_measurements('mag', [wind('B', -3), wind('A', -2), wind('C', 99, False)])
+    rows = wind_measurements('mag', [wind('A', -2), wind('B', -3), wind('C', 99, False)])
     assert len(rows) == 4
-    assert {row['spacecraft'] for row in rows} == {'A'}
     assert next(row for row in rows if row['metric'] == 'bz')['value'] == -2
     assert next(row for row in rows if row['metric'] == 'bx')['quality'] == 'missing'
     assert wind_measurements('mag', [wind('C', 99, False)]) == []
@@ -30,7 +29,8 @@ def test_geomagnetic_ap_is_a_measurement_with_the_native_interval():
                  quality='unverified', received_at=NOW, raw={'a_running': '18', 'station_count': 8})
     rows = geomagnetic_measurements('kp', [point])
     assert [(r['metric'], r['value']) for r in rows] == [('kp', 3.33), ('ap', 18.)]
-    assert all(r['interval_end'] == NOW+timedelta(hours=3) for r in rows)
+    assert all(r['observed_at'] == NOW for r in rows)
+    assert all(not {'interval_end', 'spacecraft', 'provider_quality', 'station_count'} & r.keys() for r in rows)
     point['raw']['a_running'] = float('inf')
     assert geomagnetic_measurements('kp', [point])[1]['quality'] == 'missing'
 

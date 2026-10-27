@@ -52,10 +52,6 @@ def change_one_hour(points: list[dict], now: datetime) -> dict:
     if any(not window for window in windows):
         return unavailable('missing_comparison', **info)
     
-    relevant = [point for point in points if end-timedelta(minutes=64) <= point['observed_at'] <= end]
-    if any(point['spacecraft'] != last['spacecraft'] for point in relevant):
-        return unavailable('source_changed', **info)
-    
     recent, previous = (mean(point['value'] for point in window if point is not None) for window in windows)
     return {
         'status': 'available',

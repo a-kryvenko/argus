@@ -8,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.models.measurement import Measurement
+from clio.observations.intervals import interval_end_expression
 from clio.db.session import get_request_db_session
 from clio.routers.auth import require_service_token
 from common.schemas.response import success_response
@@ -39,7 +40,7 @@ async def measurements(
     if min_value is not None and max_value is not None and min_value >= max_value:
         raise HTTPException(422, 'min_value must be less than max_value')
     timestamp = Measurement.observed_at
-    available = func.greatest(timestamp, Measurement.received_at, Measurement.interval_end)
+    available = func.greatest(timestamp, Measurement.received_at, interval_end_expression())
     if aggregation == 'hourly':
         timestamp = func.date_trunc('hour', timestamp)
         statement = select(Measurement.metric, func.avg(Measurement.value).label('value'),

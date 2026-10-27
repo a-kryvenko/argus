@@ -3,11 +3,7 @@ import asyncio
 
 
 def invoke(name, args):
-    if name == 'collect-enlil':
-        from clio.commands.collect_enlil import run
-    elif name == 'collect-events':
-        from clio.commands.collect_events import run
-    elif name == 'sdo-cleanup':
+    if name == 'sdo-cleanup':
         from clio.commands.sdo_images import run
     elif name == 'backfill':
         from clio.commands.backfill_observations import run

@@ -32,12 +32,12 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
   const requests: URL[] = [];
   const values = { bx: 1.4, by: 2.1, bz: -3.6, bt: 5.8, v: 420, n: 6.2, t: 108000 };
   const solarWind = Object.fromEntries(Object.entries(values).map(([metric, value]) => [metric, {
-    latest: { observed_at: now, received_at: now, value, spacecraft: 'DSCOVR', quality: metric === 'by' ? 'flagged' : undefined },
+    latest: { observed_at: now, received_at: now, value, quality: metric === 'by' ? 'flagged' : undefined },
     age_seconds: options.stale ? 900 : 0, status: options.stale ? 'stale' : 'fresh', stale_after_seconds: 600,
   }]));
   const geomagnetic = Object.fromEntries(['kp', 'dst'].map(metric => [metric, {
     latest: { interval_start: before, interval_end: now, interval_status: 'completed', value: metric === 'kp' ? 3 : -20,
-      quality: undefined, received_at: now, station_count: null },
+      quality: undefined, received_at: now },
     lag_seconds: 0, status: 'fresh', stale_after_seconds: metric === 'kp' ? 14400 : 7200, data_status: metric === 'kp' ? 'estimated' : 'realtime',
   }]));
   await page.route('**/api/v1/observations**', async route => {
@@ -76,7 +76,7 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
           const value = series.latest.value + amplitude * (Math.sin(i / 64) + .18 * Math.sin(i / 8));
           return { ...series.latest, quality: undefined, observed_at: new Date(start + (i + 2) * resolution * 1000).toISOString(),
             value, ...(resolution > 60 ? { min: value - amplitude * .3, max: value + amplitude * .3, count: resolution / 60,
-              expected_count: resolution / 60, coverage_percent: 100, recalculation_pending: false, source_changes: 0, last_spacecraft: 'DSCOVR' } : {}) };
+              expected_count: resolution / 60, coverage_percent: 100, recalculation_pending: false } : {}) };
         }), coverage,
       }]));
       const indexSeries = Object.fromEntries(Object.entries(geomagnetic).map(([metric, series]) => {

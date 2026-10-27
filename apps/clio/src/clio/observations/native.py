@@ -10,15 +10,13 @@ from clio.providers.solar_wind_loader import FIELDS
 
 def wind_measurements(kind, records):
     selected = {}
-    for record in sorted(sorted(records, key=lambda r: r['spacecraft']), key=lambda r: r['received_at'], reverse=True):
+    for record in sorted(records, key=lambda r: r['received_at'], reverse=True):
         if record['active']:
             selected.setdefault(record['observed_at'], record)
     return [dict(metric=metric, observed_at=at, value=record['values'].get(metric),
                  received_at=record['received_at'], source_product=f'swpc.rtsw_{kind}',
-                 spacecraft=record['spacecraft'], provider_quality=record['raw'].get('overall_quality'),
                  quality='missing' if record['values'].get(metric) is None else
-                         'flagged' if record['raw'].get('overall_quality') not in (None, 0) else 'unverified',
-                 interval_end=None, station_count=None)
+                         'flagged' if record['raw'].get('overall_quality') not in (None, 0) else 'unverified')
             for at, record in selected.items() for metric in FIELDS[kind]]
 
 
@@ -37,17 +35,14 @@ def geomagnetic_measurements(metric, records):
             values['ap'] = value
         for name, value in values.items():
             rows.append(dict(metric=name, value=value, observed_at=record['interval_start'],
-                             interval_end=record['interval_end'], received_at=record['received_at'],
-                             source_product=f'swpc.{metric}', station_count=record['raw'].get('station_count'),
-                             quality='missing' if value is None else record['quality'],
-                             spacecraft=None, provider_quality=None))
+                             received_at=record['received_at'], source_product=f'swpc.{metric}',
+                             quality='missing' if value is None else record['quality']))
     return rows
 
 
 async def store_native(session, records):
     # New polling timestamps alone do not revise an observation's receipt.
-    fields = ('value', 'source_product', 'interval_end', 'quality', 'spacecraft',
-              'provider_quality', 'station_count')
+    fields = ('value', 'source_product', 'quality')
     for offset in range(0, len(records), 1000):
         statement = insert(Measurement).values(records[offset:offset + 1000])
         await session.execute(statement.on_conflict_do_update(

@@ -51,7 +51,7 @@ def samples():
         values = dict(v=500 if minute >= 0 else 400, n=10 if minute >= 0 else 4,
                       bx=8 if minute >= 0 else 3, by=0, bz=-2)
         rows.extend(L1Sample(observed_at=time, available_at=time+timedelta(seconds=30),
-            metric=m, value=v, quality='unverified', spacecraft='ACE') for m, v in values.items())
+            metric=m, value=v, quality='unverified') for m, v in values.items())
     return onset, rows
 
 
@@ -73,8 +73,8 @@ def test_l1_can_associate_own_ensemble_without_enlil_prediction():
     assert result[0].candidate_event_ids == ['cme1'] and result[0].attribution == 'unresolved'
 
 
-@pytest.mark.parametrize('failure', ['spike', 'gap', 'flagged', 'late_receipt', 'source_switch', 'missing_vector'])
-def test_l1_rejects_spikes_gaps_unavailable_and_switched_sources(failure):
+@pytest.mark.parametrize('failure', ['spike', 'gap', 'flagged', 'late_receipt', 'missing_vector'])
+def test_l1_rejects_spikes_gaps_and_unavailable_samples(failure):
     onset, rows = samples()
     if failure == 'gap':
         rows = [r for r in rows if not onset-timedelta(minutes=10) <= r.observed_at < onset]
@@ -83,8 +83,6 @@ def test_l1_rejects_spikes_gaps_unavailable_and_switched_sources(failure):
     else:
         for row in rows:
             if row.observed_at >= onset:
-                if failure == 'source_switch':
-                    row.spacecraft = 'DSCOVR'
                 if failure == 'flagged':
                     row.quality = 'flagged'
                 if failure == 'late_receipt':

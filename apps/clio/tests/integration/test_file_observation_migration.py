@@ -96,11 +96,7 @@ def archive_stage1(settings):
 def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_data(database, monkeypatch, tmp_path):
     settings = seed_legacy(database, monkeypatch, tmp_path)
     dsns, urls, environment, roots, _ = settings
-    status = subprocess.run([sys.executable,
-        str(Path(__file__).resolve().parents[4] / 'scripts/deployment/migration_status.py'),
-        'clio', '--online'], env=environment, capture_output=True, text=True)
-    assert status.returncode == 0 and status.stdout.strip() == 'pending', status.stderr
-    result = upgrade(environment, 'head')
+    result = upgrade(environment, '20261027_file_cutover')
     assert result.returncode != 0 and 'unarchived or conflicting receipts' in result.stderr
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
@@ -119,7 +115,7 @@ def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_d
     with runtime(dsns, 'clio', urls) as conn:
         before = conn.execute('SELECT id,kind,raw_path,sha256 FROM clio.file_observation ORDER BY id').fetchall()
     originals = {(kind, path): (roots[kind] / path).read_bytes() for _, kind, path, _ in before if path}
-    result = upgrade(environment, 'head')
+    result = upgrade(environment, '20261027_drop_legacy_files')
     assert result.returncode == 0, result.stderr
     with runtime(dsns, 'clio', urls) as conn:
         for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
@@ -145,7 +141,7 @@ def test_cutover_refuses_corrupt_archive_before_advancing_revision(database, mon
         metadata = json.loads(receipt.read_text())
         metadata['available_at'] = datetime.now(UTC).isoformat()
         receipt.write_text(json.dumps(metadata))
-    result = upgrade(environment, 'head')
+    result = upgrade(environment, '20261027_file_cutover')
     assert result.returncode != 0 and 'cutover blocked' in result.stderr
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'

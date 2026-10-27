@@ -17,7 +17,7 @@ async def history(session, metrics, start, end, seconds, now=None):
     rows = (await session.execute(text("""
         WITH minutes AS (
             SELECT DISTINCT ON (metric, date_trunc('minute', observed_at))
-                metric, observed_at, received_at, value, quality, spacecraft,
+                metric, observed_at, received_at, value, quality,
                 to_timestamp(floor(extract(epoch FROM observed_at) / :seconds) * :seconds) AS bucket
             FROM measurement
             WHERE metric = ANY(:metrics)
@@ -26,8 +26,7 @@ async def history(session, metrics, start, end, seconds, now=None):
             ORDER BY metric, date_trunc('minute', observed_at), observed_at DESC
         ), samples AS (
             SELECT *, value IS NOT NULL AND quality IS DISTINCT FROM 'flagged'
-                      AND quality IS DISTINCT FROM 'missing' AS usable,
-                   lag(spacecraft) OVER (PARTITION BY metric, bucket ORDER BY observed_at) AS previous_spacecraft
+                      AND quality IS DISTINCT FROM 'missing' AS usable
             FROM minutes
         )
         SELECT metric, bucket, max(received_at) AS received_at,
@@ -35,11 +34,7 @@ async def history(session, metrics, start, end, seconds, now=None):
                avg(value) FILTER (WHERE usable) AS mean,
                min(value) FILTER (WHERE usable) AS min,
                max(value) FILTER (WHERE usable) AS max,
-               count(*) FILTER (WHERE usable AND value < 0) AS negative_count,
-               (array_agg(spacecraft ORDER BY observed_at))[1] AS spacecraft,
-               (array_agg(spacecraft ORDER BY observed_at DESC))[1] AS last_spacecraft,
-               count(*) FILTER (WHERE previous_spacecraft IS NOT NULL
-                                 AND previous_spacecraft IS DISTINCT FROM spacecraft) AS source_changes
+               count(*) FILTER (WHERE usable AND value < 0) AS negative_count
         FROM samples GROUP BY metric, bucket ORDER BY bucket, metric
     """), {'metrics': metrics, 'seconds': seconds, 'start': left, 'end': right})).mappings().all()
     saved = {(row['metric'], row['bucket']): row for row in rows}
@@ -59,8 +54,7 @@ async def history(session, metrics, start, end, seconds, now=None):
                 points.append(dict(observed_at=cursor, interval_end=cursor+timedelta(seconds=seconds),
                     received_at=row['received_at'], value=row['mean'], min=row['min'], max=row['max'],
                     count=count, expected_count=seconds//60, coverage_percent=round(100*count/(seconds//60), 2),
-                    spacecraft=row['spacecraft'] or '', last_spacecraft=row['last_spacecraft'] or '',
-                    source_changes=row['source_changes'], quality='unverified', provider_quality=None,
+                    quality='unverified',
                     negative_count=row['negative_count'] if metric == 'bz' else None))
             if count < seconds//60:
                 reason = 'partial' if present else 'missing'

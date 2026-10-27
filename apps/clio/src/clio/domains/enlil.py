@@ -18,9 +18,9 @@ async def store(values):
         await session.commit()
 
 
-async def run(args):
+async def collect(*, now=None):
     try:
-        objects = await asyncio.to_thread(enlil.discover, datetime.now(UTC))
+        objects = await asyncio.to_thread(enlil.discover, now or datetime.now(UTC))
         if not objects:
             raise ValueError('No recent compact NOAA ENLIL L1 profiles')
     except (OSError, ValueError, enlil.requests.RequestException) as exc:

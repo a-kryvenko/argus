@@ -67,13 +67,11 @@ with tempfile.TemporaryDirectory() as directory:
     with provisioned_database(Path(directory)) as (_, _, environment):
         migrate(environment)
 """)
-        print('Domain storage, ownership, scheduling and verification', flush=True)
-        python(*pytest_args, *discovery_args, 'tests', *sys.argv[1:])
+        print('Domain integration tests', flush=True)
+        python(*pytest_args, *discovery_args, 'tests/integration', *sys.argv[1:])
         for domain in ('clio', 'prophet', 'intelligence'):
             python(*pytest_args, *discovery_args,
                    f'apps/{domain}/tests/integration', *sys.argv[1:], domain=domain)
-        python(str(ROOT / 'apps/clio/tests/integration/test_observation_recovery.py'), domain='clio')
-        python(*pytest_args, 'apps/prophet/tests/test_observations.py', '-k', 'verification', *sys.argv[1:], domain='prophet')
         python('apps/api/tests/integration/verify_dashboard.py', domain='api')
 
 

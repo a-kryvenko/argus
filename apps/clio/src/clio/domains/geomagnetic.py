@@ -13,6 +13,7 @@ from clio.db.locks import SOURCE_LOCKS
 from clio.monitoring.specs import SOURCE_SPECS, poll_seconds
 from clio.monitoring.status import track_attempt
 from clio.observations.coverage import coverage
+from clio.observations.intervals import interval_end, interval_end_expression
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,10 @@ def metadata(metric: str) -> dict:
 
 
 def sample(record: Measurement, now: datetime) -> dict:
-    return {'interval_start': record.observed_at, 'interval_end': record.interval_end,
-            'interval_status': 'in_progress' if record.interval_end > now else 'completed',
-            'value': record.value, 'quality': record.quality, 'received_at': record.received_at,
-            'station_count': record.station_count}
+    end = interval_end(record.metric, record.observed_at)
+    return {'interval_start': record.observed_at, 'interval_end': end,
+            'interval_status': 'in_progress' if end > now else 'completed',
+            'value': record.value, 'quality': record.quality, 'received_at': record.received_at}
 
 
 async def latest(session: AsyncSession, now: datetime | None = None) -> dict:
@@ -56,10 +57,10 @@ async def latest(session: AsyncSession, now: datetime | None = None) -> dict:
     series = {}
     for metric in SOURCES:
         statement = (select(Measurement)
-                     .where(Measurement.metric == metric, Measurement.interval_end.is_not(None), Measurement.observed_at <= now)
+                     .where(Measurement.metric == metric, Measurement.observed_at <= now)
                      .order_by(Measurement.observed_at.desc()).limit(1))
         record = (await session.execute(statement)).scalars().first()
-        lag = max(0, int((now-record.interval_end).total_seconds())) if record is not None else None
+        lag = max(0, int((now-interval_end(record.metric, record.observed_at)).total_seconds())) if record is not None else None
         series[metric] = {**metadata(metric), 'latest': sample(record, now) if record is not None else None,
                           'lag_seconds': lag,
                           'status': 'missing' if record is None or record.value is None else
@@ -75,7 +76,7 @@ async def history(session: AsyncSession, start: datetime, end: datetime, now: da
                         Measurement.observed_at >= start - timedelta(hours=3),
                         Measurement.observed_at < end,
                         Measurement.observed_at <= now,
-                        Measurement.interval_end > start)
+                        interval_end_expression() > start)
                  .order_by(Measurement.observed_at))
     series = {metric: {**metadata(metric), 'points': []} for metric in SOURCES}
     for record in (await session.execute(statement)).scalars():

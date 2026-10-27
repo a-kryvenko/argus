@@ -47,14 +47,13 @@ def test_unrecognized_records_cannot_silently_become_a_quiet_feed(row):
 def test_collection_retains_exact_bytes_empty_success_and_failure_independently(monkeypatch, tmp_path):
     monkeypatch.setenv("ARGUS_DONKI_ARCHIVE", str(tmp_path))
     import asyncio
-    from clio.commands import collect_events
+    from clio.domains import donki as collector
     saved = []
     session = AsyncMock()
     session.add = lambda row: saved.append(row)
     session.__aenter__.return_value = session
-    monkeypatch.setattr(collect_events, 'get_db_session', lambda: session)
-    monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
-        solar_wind_events=SimpleNamespace(lookback_days=30)))
+    monkeypatch.setattr(collector, 'get_db_session', lambda: session)
+    policy = SimpleNamespace(lookback_days=30)
     raw = b'[ {"activityID": "cme1"} ]'
     def fetch(endpoint, *_):
         if endpoint == 'IPS':
@@ -63,7 +62,7 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
     monkeypatch.setattr(donki, 'fetch', fetch)
     before = datetime.now(UTC)
     with pytest.raises(RuntimeError, match='IPS'):
-        asyncio.run(collect_events.run(SimpleNamespace()))
+        asyncio.run(collector.collect(policy))
     assert len(saved) == 4 and session.commit.await_count == 4
     cme = saved[0]
     assert gzip.decompress((tmp_path / cme.raw_path).read_bytes()) == raw

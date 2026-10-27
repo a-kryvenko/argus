@@ -63,13 +63,13 @@ async def serve():
                 source = 'mag' if metric in ('bx', 'by', 'bz', 'bt') else 'plasma'
                 for minutes in (60, 0):
                     db.add(Measurement(metric=metric, value=value, observed_at=now-timedelta(minutes=minutes),
-                                       received_at=now, source_product=f'swpc.rtsw_{source}', spacecraft='DSCOVR'))
+                                       received_at=now, source_product=f'swpc.rtsw_{source}'))
             for metric, value, hours, source in (
                 ('kp', 2, 3, 'swpc.kp'), ('dst', -10, 1, 'swpc.dst'),
                 ('ap', 7, 3, 'swpc.kp'), ('f10_7', 145, 24, 'swpc.f107'),
             ):
                 db.add(Measurement(metric=metric, value=value, observed_at=now-timedelta(hours=hours),
-                                   interval_end=now, received_at=now, source_product=source))
+                                   received_at=now, source_product=source))
             await db.commit()
         config = uvicorn.Config(app, host='127.0.0.1', port=int(os.environ['TEST_DASHBOARD_PORT']), log_level='error')
         await uvicorn.Server(config).serve()

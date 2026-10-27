@@ -17,9 +17,9 @@ Usage: ./argus <command> (environment: $mode)
   <service> migration create -m MESSAGE [--autogenerate] (dev only)
   <service> migration current | history | downgrade REVISION
   clio collect [METRIC ...] | clio normalize
-  clio collect-events
+  clio collect donki | clio collect enlil
   clio backfill [METRIC ...] [--from DATE --to DATE]
-  clio collect-enlil | clio sdo-cleanup
+  clio sdo-cleanup
   prophet refresh [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (dev only; default: january-2026)
   prophet verify [PRODUCT] [--days 7] | prophet verification-report [PRODUCT] [--days 7]

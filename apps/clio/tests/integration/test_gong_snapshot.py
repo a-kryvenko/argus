@@ -112,11 +112,10 @@ def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, t
         conn.execute('''INSERT INTO clio.aia_snapshot
             (slot_at,observed_at,available_at,sha256,raw_path)
             VALUES (%s,%s,%s,%s,%s)''', (now, now, now, 'a'*64, str(original)))
-    subprocess.run([*command, 'head'], env=environment, check=True, capture_output=True)
+    subprocess.run([*command, '20261004_drop_aia_snapshot'], env=environment, check=True, capture_output=True)
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute("SELECT to_regclass('clio.aia_snapshot')").fetchone()[0] is None
-        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_drop_legacy_files'
-        assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (False, False)
+        assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (True, True)
     assert original.read_bytes() == b'retained SDO original'
     from clio.db.base import Base
     assert 'aia_snapshot' not in Base.metadata.tables

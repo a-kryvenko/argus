@@ -18,7 +18,7 @@ Clio stores versioned DONKI/ENLIL receipts, hashes and normalized causal event i
 Prophet freezes inputs and publishes releases. Runtime algorithms and bundled CME
 models live in private `forecast-core`; training/validation live in private notebooks.
 
-Clio's independent `collect-enlil` job archives compact NOAA NetCDF L1 profiles
+Clio's `collect enlil` job archives compact NOAA NetCDF L1 profiles
 from `noaa-wsa-enlil-pds.s3.amazonaws.com`, retaining creation, modification and local
 receipt times. Discovery covers three days; stale/missing profiles remain explicit.
 NOAA profiles are distinct from DONKI simulations and do not replace the speed model.

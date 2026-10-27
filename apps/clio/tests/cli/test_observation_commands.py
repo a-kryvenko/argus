@@ -105,12 +105,16 @@ def test_mixed_backfill_commits_numeric_success_and_reports_file_failure(monkeyp
 def test_common_commands_include_sdo_without_numeric_storage(monkeypatch, name, mode, selected, batch):
     from datetime import UTC, datetime
     from clio.commands import collect, backfill_observations, sdo_images
+    from clio.domains import donki, enlil
     from clio.config import ClioObservations
     command = collect if name == 'collect' else backfill_observations
     config = ClioObservations(observations={}, sdo_images={'enabled': True})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
     monkeypatch.setattr(command, 'get_db_session', Mock(side_effect=AssertionError('numeric storage')))
     monkeypatch.setattr(database, 'dispose_engine', AsyncMock())
+    donki_collect, enlil_collect = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(donki, 'collect', donki_collect)
+    monkeypatch.setattr(enlil, 'collect', enlil_collect)
     cycle = Mock(return_value={'saved': 1, 'failed': 0})
     monkeypatch.setattr(sdo_images, 'cycle', cycle)
     now = datetime(2026, 10, 4, tzinfo=UTC)
@@ -118,3 +122,35 @@ def test_common_commands_include_sdo_without_numeric_storage(monkeypatch, name, 
     assert result['sdo']['saved'] == 1
     assert cycle.call_args.args[1] == mode
     assert cycle.call_args.kwargs['full'] is (not batch)
+    assert donki_collect.await_count == enlil_collect.await_count == int(name == 'collect' and selected is None)
+
+
+@pytest.mark.parametrize('selected', [None, ['donki'], ['enlil'], ['donki', 'enlil', 'donki']])
+@pytest.mark.parametrize('failed', [False, True])
+def test_catalog_collection_selection_and_independent_failures(monkeypatch, selected, failed):
+    from datetime import UTC, datetime
+    from clio.commands import collect
+    from clio.domains import donki, enlil
+    config = SimpleNamespace(observations={}, sdo_images=SimpleNamespace(enabled=False),
+                             solar_wind_events=SimpleNamespace(lookback_days=30))
+    monkeypatch.setattr(collect, 'load_observation_config', lambda: config)
+    monkeypatch.setattr(collect, 'get_db_session', Mock(side_effect=AssertionError('numeric storage')))
+    monkeypatch.setattr(database, 'dispose_engine', AsyncMock())
+    donki_collect = AsyncMock(side_effect=RuntimeError('DONKI failed') if failed else None)
+    enlil_collect = AsyncMock()
+    monkeypatch.setattr(donki, 'collect', donki_collect)
+    monkeypatch.setattr(enlil, 'collect', enlil_collect)
+    now = datetime(2026, 10, 27, tzinfo=UTC)
+    result = cli.invoke('collect', SimpleNamespace(metrics=selected, now=now))
+    chosen = {'donki', 'enlil'} if selected is None else set(selected)
+    if 'donki' in chosen:
+        donki_collect.assert_awaited_once_with(config.solar_wind_events, now=now)
+    else:
+        donki_collect.assert_not_awaited()
+    if 'enlil' in chosen:
+        enlil_collect.assert_awaited_once_with(now=now)
+        assert result['enlil']['status'] == 'complete'
+    else:
+        enlil_collect.assert_not_awaited()
+    assert result['failed_metrics'] == (['donki'] if failed and 'donki' in chosen else [])
+    assert result['status'] == ('partial' if result['failed_metrics'] else 'complete')

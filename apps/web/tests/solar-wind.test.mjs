@@ -18,10 +18,9 @@ test('omitted minutes break a line instead of interpolating', () => {
   assert.equal(rows[1].bz, undefined);
 });
 
-test('a spacecraft change breaks the line, including adjacent minutes', () => {
+test('a spacecraft change keeps adjacent minutes connected', () => {
   const rows = chartPoints({ series: { bz: { points: [point(0, -2), point(60000, -4, 'B')] } } });
-  assert.equal(rows.length, 3);
-  assert.equal(rows[1].bz, undefined);
+  assert.deepEqual(rows.map(row => row.bz), [-2, -4]);
 });
 
 test('provider-flagged numeric samples are excluded from lines', () => {
@@ -53,11 +52,11 @@ test('aggregate chart preserves tooltip statistics and breaks missing buckets', 
   assert.equal(rows[0].bz_coverage, 60);
 });
 
-test('adjacent aggregate means form a line until the spacecraft changes', () => {
+test('adjacent aggregate means stay connected across spacecraft changes', () => {
   const samples = [0, 300000, 600000].map((time, index) => ({
     ...point(time, index, index === 2 ? 'B' : 'A'),
     source_changes: 0,
   }));
   const rows = chartPoints({ resolution_seconds: 300, series: { bz: { points: samples } } }, ['bz']);
-  assert.deepEqual(rows.map(row => row.bz), [0, 1, undefined, 2]);
+  assert.deepEqual(rows.map(row => row.bz), [0, 1, 2]);
 });

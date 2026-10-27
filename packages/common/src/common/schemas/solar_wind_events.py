@@ -23,7 +23,6 @@ class L1Sample(BaseModel):
     metric: Literal['bx', 'by', 'bz', 'v', 'n', 't']
     value: FiniteFloat | None = None
     quality: str | None = None
-    spacecraft: str | None = None
 
 
 class HourlyWindSpeed(BaseModel):
@@ -200,7 +199,6 @@ class L1Detection(BaseModel):
     kind: Literal['compression_candidate'] = 'compression_candidate'
     onset_at: AwareDatetime
     detected_at: AwareDatetime
-    spacecraft: dict[str, str]
     evidence: dict[str, FiniteFloat]
     candidate_event_ids: list[str] = Field(default_factory=list)
     attribution: Literal['unresolved'] = 'unresolved'

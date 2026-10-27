@@ -15,7 +15,7 @@ def test_input_reads_gate_native_samples_and_forward_cutoff_to_file_readers(monk
     poll = SimpleNamespace(endpoint='CME', id=uuid4(), received_at=NOW, sha256='a'*64,
         request_start=NOW-timedelta(days=30), request_end=NOW+timedelta(days=1), payload=[])
     sample = SimpleNamespace(observed_at=NOW-timedelta(minutes=1), received_at=NOW,
-        interval_end=None, metric='v', value=500, quality='unverified', spacecraft='ACE')
+        metric='v', value=500, quality='unverified')
     result = lambda rows: Mock(scalars=lambda: Mock(all=lambda: rows))
     session = AsyncMock()
     polls = AsyncMock(return_value=([SourcePoll(endpoint=poll.endpoint, poll_id=poll.id,

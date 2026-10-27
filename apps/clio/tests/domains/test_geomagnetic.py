@@ -16,8 +16,7 @@ NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 
 def record(metric, start, value):
     return Measurement(metric=metric, observed_at=start,
-        interval_end=start+timedelta(seconds=service.INTERVAL_SECONDS[metric]),
-        value=value, quality='unverified' if value is not None else 'missing', received_at=NOW, station_count=8)
+        value=value, quality='unverified' if value is not None else 'missing', received_at=NOW)
 
 
 def test_freshness_uses_end_of_each_native_interval():
@@ -39,7 +38,8 @@ def test_history_queries_overlapping_intervals_without_expanding_them():
     assert len(result['series']['kp']['points']) == 1
     assert result['series']['kp']['points'][0]['interval_start'] == NOW-timedelta(hours=4)
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'interval_end >' in sql and 'observed_at <' in sql
+    assert 'CASE WHEN' in sql and 'observed_at <' in sql
+    assert 'measurement.interval_end' not in sql
 
 
 def test_empty_database_has_no_invented_indices():

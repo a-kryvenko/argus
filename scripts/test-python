@@ -5,10 +5,10 @@ unset PYTHONPATH UV_PROJECT_ENVIRONMENT
 pytest_args=(-m pytest --rootdir=. --confcutdir=. --import-mode=importlib -rs)
 for app in api clio prophet intelligence; do
     uv sync --locked --project "apps/$app" --group test
-    "apps/$app/.venv/bin/python" "${pytest_args[@]}" -n 8 "apps/$app/tests" "$@"
+    "apps/$app/.venv/bin/python" "${pytest_args[@]}" -n 8 "apps/$app/tests" --ignore="apps/$app/tests/integration" "$@"
 done
 uv sync --locked --project tests/runtime
-tests/runtime/.venv/bin/python "${pytest_args[@]}" -n 8 tests "$@"
+tests/runtime/.venv/bin/python "${pytest_args[@]}" -n 8 tests --ignore=tests/integration "$@"
 for package in common forecast forecast-core intelligence-core; do
     extras=()
     if [[ "$package" == forecast-core ]]; then extras=(--extra models --extra datasets); fi

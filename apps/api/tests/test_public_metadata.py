@@ -90,7 +90,7 @@ def test_observation_metadata_is_opt_in_and_data_does_not_change(monkeypatch, ki
     assert all('meta' not in (call.args[1] if len(call.args) > 1 and call.args[1] else {}) for call in read.await_args_list)
 
 
-def test_aggregate_history_keeps_completeness_and_source_changes(monkeypatch):
+def test_aggregate_history_keeps_completeness(monkeypatch):
     payload = observation_payload('solar-wind/history')
     payload.update(resolution_seconds=300, evaluated_from=TIME, evaluated_to=END, aggregation_version=1)
     series = payload['series']['bz']
@@ -111,8 +111,9 @@ def test_aggregate_history_keeps_completeness_and_source_changes(monkeypatch):
     assert compact['resolution_seconds'] == 300
     point = compact['series']['bz']['points'][0]
     assert point['value'] == -2 and point['min'] == -5 and point['max'] == 1
-    assert point['recalculation_pending'] is True and point['source_changes'] == 1
-    assert point['coverage_percent'] == 60 and point['last_spacecraft'] == 'ACE'
+    assert point['recalculation_pending'] is True and 'source_changes' not in point
+    assert point['coverage_percent'] == 60 and 'last_spacecraft' not in point
+    assert 'spacecraft' not in point
     assert compact['series']['bz']['processing']['unavailable_buckets'] == 2
 
 

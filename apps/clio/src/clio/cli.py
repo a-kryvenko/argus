@@ -17,10 +17,8 @@ def main(argv=None):
     serve.add_argument('--port', type=int, default=8000)
 
     commands.add_parser('collect').add_argument(
-        'metrics', nargs='*', help='Configured observations; sdo selects AIA/HMI images (default: all)')
+        'metrics', nargs='*', help='Configured observations, sdo, donki or enlil (default: all)')
     commands.add_parser('normalize')
-    commands.add_parser('collect-events', help='Collect and version DONKI CME/ENLIL/HSS/IPS responses')
-    commands.add_parser('collect-enlil', help='Collect and version compact NOAA ENLIL L1 profiles')
 
     backfill = commands.add_parser('backfill')
     backfill.add_argument('--from', dest='start', type=boundary)
@@ -40,7 +38,8 @@ def main(argv=None):
     args.now = datetime.now(UTC)
 
     if args.command in ('collect', 'backfill'):
-        if any(m not in OBSERVATIONS and m != 'sdo' for m in args.metrics):
+        additional = {'sdo', 'donki', 'enlil'} if args.command == 'collect' else {'sdo'}
+        if any(m not in OBSERVATIONS and m not in additional for m in args.metrics):
             parser.error('Unknown observation metric')
         args.metrics = args.metrics or None
 

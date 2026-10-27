@@ -183,19 +183,18 @@ def test_event_inputs_use_only_file_receipts_and_preserve_cutoffs(database, monk
                 late = await load_event_inputs(session, base+timedelta(minutes=45), datetime.now(UTC))
                 assert late.polls[0].poll_id == latest
                 assert late.latest_attempts['CME']['error'] == 'Timeout'
-            from clio.commands import collect_enlil
-            monkeypatch.setattr(collect_enlil.enlil, 'discover', lambda now: [dict(
+            from clio.domains import enlil as enlil_collection
+            monkeypatch.setattr(enlil_collection.enlil, 'discover', lambda now: [dict(
                 key='run', size=6, last_modified=base.isoformat())])
-            monkeypatch.setattr(collect_enlil.enlil, 'download', lambda url: pytest.fail('Known ENLIL run downloaded again'))
-            await collect_enlil.run(SimpleNamespace())
+            monkeypatch.setattr(enlil_collection.enlil, 'download', lambda url: pytest.fail('Known ENLIL run downloaded again'))
+            await enlil_collection.collect()
             # The same application must keep reading and collecting after stage 3.
             migrate(environment, 'head')
-            from clio.commands import collect_events
-            monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
-                solar_wind_events=SimpleNamespace(lookback_days=30)))
-            monkeypatch.setattr(collect_events.donki, 'fetch', lambda *args: (b'[]', []))
-            await collect_events.run(SimpleNamespace())
-            await collect_enlil.store(store_receipt('enlil', 'noaa.enlil', 'discovery', error='Timeout'))
+            from clio.domains import donki as donki_collection
+            policy = SimpleNamespace(lookback_days=30)
+            monkeypatch.setattr(donki_collection.donki, 'fetch', lambda *args: (b'[]', []))
+            await donki_collection.collect(policy)
+            await enlil_collection.store(store_receipt('enlil', 'noaa.enlil', 'discovery', error='Timeout'))
             async with get_db_session() as session:
                 inputs = await load_event_inputs(session, datetime.now(UTC), datetime.now(UTC))
                 assert len(inputs.polls) == 4

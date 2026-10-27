@@ -27,7 +27,9 @@ def test_invoke_cleans_up_on_failure_without_changing_process_argv(monkeypatch):
 
 
 @pytest.mark.parametrize(('argv', 'command'), [
-    (['collect-events'], 'collect-events'),
+    (['collect', 'donki'], 'collect'),
+    (['collect', 'enlil'], 'collect'),
+    (['collect', 'donki', 'enlil', 'gong'], 'collect'),
     (['backfill', '--from', '2026-08-31', '--to', '2026-09-01'], 'backfill'),
     (['normalize'], 'normalize'),
     (['collect', 'kp', 'dst'], 'collect'),
@@ -46,6 +48,7 @@ def test_manual_commands_invoke_operation_directly(monkeypatch, argv, command):
 
 @pytest.mark.parametrize('argv', [['collect', '--help'], ['refresh', 'solar-wind', '--watch'],
                                   ['sdo-images', 'live'], ['schedule', 'live'], ['schedule', 'normalize'],
+                                  ['collect-events'], ['collect-enlil'], ['backfill', 'donki'], ['backfill', 'enlil'],
                                   ['status'], ['aggregate', '--limit', '0'], ['collect', 'files-backfill', '--unknown'],
                                   ['backfill', '--from', '2026-08-01', '--to', '2026-09-09'], ['worker'], ['check-health', 'worker'], ['crontab'], ['cron', 'install']])
 def test_help_and_invalid_arguments_do_not_run(monkeypatch, argv):

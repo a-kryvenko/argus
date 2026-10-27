@@ -60,9 +60,6 @@ async def publish_run(session, run_id):
     inserted = query.mappings().first()
     if inserted is None:
         return None
-    # Compatibility write for the previous version during blue-green deployment.
-    await session.execute(text('''INSERT INTO current_forecast(product,release_id) VALUES (:product,:release_id)
-        ON CONFLICT(product) DO UPDATE SET release_id=excluded.release_id'''), {'product': product, 'release_id': release.release_id})
     return release.release_id
 
 

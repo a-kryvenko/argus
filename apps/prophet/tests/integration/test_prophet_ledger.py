@@ -199,22 +199,18 @@ async def test_only_completed_products_publish_and_history_survives(recorder_set
         (await read_release('solar-wind-speed'))
 
 
-async def test_latest_reads_and_publication_ignore_stale_legacy_pointer(recorder_setup):
+async def test_latest_reads_and_publication_reject_delayed_run(recorder_setup):
     from prophet.services.releases.status import product_status
     dsn, passwords, config, writer = recorder_setup
     first = await RunRecorder.begin('dst', 'manual', config, writer=writer)
     await store_product(first)
     await first.finish()
-    first_release = await read_release('dst')
     delayed = await RunRecorder.begin('dst', 'manual', config, writer=writer)
     await store_product(delayed)
     current = await RunRecorder.begin('dst', 'manual', config, writer=writer)
     await store_product(current)
     await current.finish()
     current_release = await read_release('dst')
-    with runtime(dsn, 'prophet', passwords) as conn:
-        conn.execute('UPDATE prophet.current_forecast SET release_id=%s WHERE product=%s',
-                     (first_release.release_id, 'dst'))
     assert (await read_release('dst')) == current_release
     assert (await product_status('dst')).current_release.release_id == current_release.release_id
     await delayed.finish()
@@ -227,13 +223,11 @@ async def test_latest_reads_and_publication_ignore_stale_legacy_pointer(recorder
     await next_run.finish()
     newest = await read_release('dst')
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('''SELECT r.id FROM prophet.current_forecast c
-            JOIN prophet.forecast_release r ON r.id=c.release_id WHERE c.product=%s''',
-                            ('dst',)).fetchone()[0] == newest.release_id
+        assert conn.execute("SELECT to_regclass('prophet.current_forecast')").fetchone()[0] is None
     assert newest.run_id == next_run.run_id
 
 
-async def test_cleanup_preserves_latest_release_and_legacy_pointer(recorder_setup):
+async def test_cleanup_removes_old_release_and_preserves_latest_published_release(recorder_setup):
     from prophet.services.releases.retention import cleanup
     dsn, passwords, config, writer = recorder_setup
     first = await RunRecorder.begin('dst', 'manual', config, writer=writer)
@@ -247,15 +241,14 @@ async def test_cleanup_preserves_latest_release_and_legacy_pointer(recorder_setu
     await latest.finish(error=ValueError('test failure'))
     old = datetime.now(UTC) - timedelta(days=100)
     with runtime(dsn, 'prophet', passwords) as conn:
-        conn.execute('UPDATE prophet.current_forecast SET release_id=%s WHERE product=%s',
-                     (first_release.release_id, 'dst'))
         for index, run in enumerate((first, current, latest)):
             conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
                          (old + timedelta(seconds=index), old, run.run_id))
-    assert (await cleanup())['runs'] == 0
-    assert (await cleanup(apply=True, writer=writer))['runs'] == 0
+    assert (await cleanup())['runs'] == 1
+    assert (await cleanup(apply=True, writer=writer))['runs'] == 1
     assert (await read_release('dst')).run_id == current.run_id
-    assert (await read_release('dst', first_release.release_id)).run_id == first.run_id
+    with pytest.raises(ReleaseNotFound):
+        await read_release('dst', first_release.release_id)
 
 
 async def test_publication_failure_does_not_roll_back_another_product(recorder_setup):

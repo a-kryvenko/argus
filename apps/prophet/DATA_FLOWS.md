@@ -11,12 +11,11 @@ flowchart TD
     forecast_run -->|Успешное завершение запуска| publication[Публикация полного продукта]
     forecast_artifact --> publication
     publication --> forecast_release
-    forecast_release -->|Указатель текущего релиза продукта| current_forecast
-    current_forecast --> api[HTTP API прогнозов]
+    forecast_release -->|Последний опубликованный релиз продукта| api[HTTP API прогнозов]
     forecast_release -->|Исторические релизы| api
     forecast_artifact -->|Содержимое прогнозов| api
     forecast_run --> status[API статуса и диагностики входов]
-    current_forecast --> status
+    forecast_release --> status
     forecast_release --> verification[Проверка опубликованных прогнозов]
     forecast_artifact --> verification
     observations[HTTP API Clio: исходные наблюдения] -->|Часовые средние фактических значений| verification

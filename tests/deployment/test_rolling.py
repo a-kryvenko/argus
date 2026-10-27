@@ -254,6 +254,8 @@ def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path, monkeypatch, exi
         current.parent.mkdir(parents=True)
         current.write_text('{"version":"old"}')
     old_content = current.read_bytes() if existing_demo else None
+    cli = tmp_path / '.release-compose.json'
+    cli.write_text('{"previous": true}')
 
     def interrupted_copy(source, output):
         output.write(b'{"partial":')
@@ -272,13 +274,14 @@ def test_artifacts_are_verified_and_mounts_are_frozen(tmp_path, monkeypatch, exi
     assert mounts[2]['source'] == str(target / 'metrics')
     assert current.read_text() == new_demo
     assert current.stat().st_mode & 0o777 == 0o644
+    assert json.loads(cli.read_text()) == {'previous': True}
     (target / 'models/model.bin').write_bytes(b'corrupt')
     with pytest.raises(RuntimeError, match='missing or corrupt'):
         deployment.snapshot()
     assert current.read_text() == new_demo
 
 
-def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tmp_path):
+def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tmp_path, monkeypatch):
     deployment = harness(tmp_path)
     for service in rolling.HTTP:
         if service == 'clio':
@@ -315,7 +318,17 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
     deployment.base = ['docker', 'compose']
     deployment.capture = lambda *args, **kwargs: deployment.calls.append(args) or ('' if args[:2] == ('docker', 'ps') else '* * * * * clio-command\n')
     deployment.run = lambda *args, **kwargs: deployment.calls.append(args)
+    cli = tmp_path / '.release-compose.json'
+    cli.write_text('{"stage": 1}')
+    def reject_cutover():
+        raise RuntimeError('Incomplete file archive')
+    with monkeypatch.context() as patch:
+        patch.setattr(deployment, 'check_pending_migrations', reject_cutover)
+        with pytest.raises(RuntimeError, match='Incomplete file archive'):
+            deployment.apply()
+    assert json.loads(cli.read_text()) == {'stage': 1}
     deployment.apply()
+    assert json.loads(cli.read_text()) == deployment.desired
     assert (tmp_path / '.release.json').read_text() == json.dumps(deployment.manifest)
     assert not (tmp_path / '.release-images.env').exists()
     assert not (tmp_path / 'docker-compose.yml').exists()

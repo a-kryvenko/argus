@@ -1,4 +1,5 @@
-"""Expand and backfill while old readers and writers remain online."""
+"""Cutover is read-only and refuses incomplete or corrupt stage 1 archives."""
+import asyncio
 from datetime import UTC, datetime, timedelta
 import gzip
 import hashlib
@@ -18,15 +19,14 @@ def upgrade(environment, revision):
 
 
 
-def export(environment, *args):
-    return subprocess.run([sys.executable, '-c', 'from clio.cli import main; main()',
-        'backfill-files', *args], env=environment, capture_output=True, text=True)
-
-def test_expansion_preserves_old_readers_and_resumable_backfill_copies_all_sources(database, tmp_path):
+def seed_legacy(database, monkeypatch, tmp_path):
     dsns, urls, environment = database
     roots = {kind: tmp_path / kind for kind in ('goes', 'gong', 'donki', 'enlil')}
     environment.update({f'ARGUS_{kind.upper()}_ARCHIVE': str(root) for kind, root in roots.items()})
-    assert upgrade(environment, '20261014_enlil_profile').returncode == 0
+    assert upgrade(environment, '20261027_file_observation').returncode == 0
+    for key, value in environment.items():
+        if key.startswith('CLIO_DB_') or key.startswith('ARGUS_'):
+            monkeypatch.setenv(key, value)
     now = datetime.now(UTC)
     raw = {'goes': b'[{"timestamp":"2026-10-27T00:00Z"}]', 'gong': b'original FITS',
            'donki': b'[ {"activityID": "first"} ]', 'enlil': b'original NetCDF'}
@@ -54,120 +54,89 @@ def test_expansion_preserves_old_readers_and_resumable_backfill_copies_all_sourc
         conn.execute('''INSERT INTO clio.enlil_profile_receipt
             SELECT %s,received_at,source_url,source_key,source_modified_at,model_created_at,sha256,raw_gzip,payload,error
             FROM clio.enlil_profile_receipt WHERE id=%s''', (duplicate_id, profile_id))
+    return dsns, urls, environment, roots, raw
+
+
+def archive_stage1(settings):
+    """Prepare the on-disk format and identities produced by the stage 1 release."""
+    from psycopg.rows import dict_row
+    from clio.db.models.file_observation import FileObservation
+    from clio.db.session import get_db_session
+    from clio.observations.files import observation_values, store_original, store_receipt
+    from common.db.session import dispose_engine
+
+    dsns, urls, _, _, raw = settings
+    values = []
+    for kind, table in (('gong', 'gong_snapshot'), ('goes', 'goes_snapshot'),
+                        ('donki', 'donki_poll'), ('enlil', 'enlil_profile_receipt')):
+        with runtime(dsns, 'clio', urls) as conn:
+            rows = conn.cursor(row_factory=dict_row).execute('SELECT * FROM clio.' + table).fetchall()
+        for row in rows:
+            if kind in ('gong', 'goes'):
+                metadata = {k: v for k, v in row.items() if k not in ('fits_gzip', 'raw_path')}
+                receipt = store_original(kind, row['slot_at'], row['observed_at'], row['source_product'],
+                    lambda: raw[kind], expected=metadata, relative=Path('migrated') / (kind + '.gz'))
+                values.append(observation_values(kind, receipt))
+            else:
+                metadata = {k: v for k, v in row.items() if k not in ('id', 'raw_gzip', 'sha256', 'error')}
+                values.append(store_receipt(kind, row['endpoint'] if kind == 'donki' else 'noaa.enlil',
+                    str(row['id']), id=row['id'], raw=raw[kind] if row['raw_gzip'] is not None else None,
+                    metadata=metadata, received_at=row['received_at'], error=row['error']))
+
+    async def save():
+        try:
+            async with get_db_session() as session:
+                session.add_all([FileObservation(**record) for record in values])
+                await session.commit()
+        finally:
+            await dispose_engine()
+    asyncio.run(save())
+
+
+def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_data(database, monkeypatch, tmp_path):
+    settings = seed_legacy(database, monkeypatch, tmp_path)
+    dsns, urls, environment, roots, _ = settings
     status = subprocess.run([sys.executable,
         str(Path(__file__).resolve().parents[4] / 'scripts/deployment/migration_status.py'),
         'clio', '--online'], env=environment, capture_output=True, text=True)
-    assert status.returncode == 0, status.stderr
-    assert status.stdout.strip() == 'pending'
+    assert status.returncode == 0 and status.stdout.strip() == 'pending', status.stderr
+    result = upgrade(environment, 'head')
+    assert result.returncode != 0 and 'unarchived or conflicting receipts' in result.stderr
+    with runtime(dsns, 'clio', urls) as conn:
+        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
+    archive_stage1(settings)
     result = upgrade(environment, 'head')
     assert result.returncode == 0, result.stderr
-    with runtime(dsns, 'clio', urls) as conn:
-        assert conn.execute('SELECT count(*) FROM clio.file_observation').fetchone()[0] == 0
-        assert conn.execute('SELECT raw_gzip FROM clio.donki_poll WHERE id=%s', (poll_id,)).fetchone()[0]
-    assert export(environment, '--check').returncode == 1
-    for _ in range(4):
-        result = export(environment, '--batch-size', '1')
-        assert result.returncode == 0, result.stderr
-    result = export(environment, '--check')
-    assert result.returncode == 0, result.stderr
-    with runtime(dsns, 'clio', urls) as conn:
-        rows = conn.execute('SELECT id,kind,received_at,raw_path,sha256,error FROM clio.file_observation').fetchall()
-        assert len(rows) == 6
-        for id, kind, received_at, path, sha256, error in rows:
-            assert received_at == now
-            if error:
-                assert id == failed_id and path is sha256 is None
-                continue
-            assert gzip.decompress((roots[kind] / path).read_bytes()) == raw[kind]
-            assert hashlib.sha256(raw[kind]).hexdigest() == sha256
-            receipt = json.loads((roots[kind] / path).with_suffix('.gz.receipt.json').read_text())
-            assert receipt['sha256'] == sha256
-            if kind == 'donki':
-                assert id == poll_id and datetime.fromisoformat(receipt['request_start']) == now-timedelta(days=30)
-            if kind == 'enlil':
-                assert id in (profile_id, duplicate_id) and receipt['payload']['model_version'] == '2.9'
-        columns = {row[0] for row in conn.execute("SELECT column_name FROM information_schema.columns WHERE table_schema='clio' AND table_name='file_observation'")}
-        assert columns == {'id', 'kind', 'source_product', 'source_key', 'received_at', 'raw_path', 'sha256', 'error'}
-        for table in ('goes_snapshot', 'gong_snapshot', 'donki_poll', 'enlil_profile_receipt'):
-            assert conn.execute('SELECT to_regclass(%s)', ('clio.'+table,)).fetchone()[0] is not None
-
-    # An old writer can commit an earlier receipt after the first pass.
-    late_id = uuid4()
-    with runtime(dsns, 'clio', urls) as conn:
-        conn.execute('''INSERT INTO clio.donki_poll
-            (id,endpoint,received_at,request_start,request_end,source_url,error)
-            VALUES (%s,'IPS',%s,%s,%s,'https://test/IPS','Timeout')''', (late_id, now-timedelta(days=1), now, now))
-    assert export(environment, '--check').returncode == 1
-    assert export(environment).returncode == 0
-    assert export(environment, '--check').returncode == 0
-    with runtime(dsns, 'clio', urls) as conn:
-        assert conn.execute('SELECT count(*) FROM clio.file_observation').fetchone()[0] == 7
-        assert conn.execute('SELECT count(*) FROM clio.donki_poll').fetchone()[0] == 3
-    # Verification must fail if files are lost after a successful transfer.
-    (roots['donki'] / next(r[3] for r in rows if r[1] == 'donki' and r[3])).unlink()
-    assert export(environment, '--check').returncode == 1
-
-
-def test_corrupt_original_aborts_backfill_without_changing_legacy_receipts(database, tmp_path):
-    dsns, urls, environment = database
-    environment['ARGUS_GONG_ARCHIVE'] = str(tmp_path)
-    assert upgrade(environment, '20261014_enlil_profile').returncode == 0
-    now = datetime.now(UTC)
-    with runtime(dsns, 'clio', urls) as conn:
-        conn.execute('''INSERT INTO clio.gong_snapshot
-            (slot_at,observed_at,available_at,sha256,source_product,source_url,fits_gzip)
-            VALUES (%s,%s,%s,%s,'gong.live','https://test/gong',%s)''', (now, now, now, '0'*64, gzip.compress(b'wrong bytes')))
-    result = upgrade(environment, 'head')
-    assert result.returncode == 0, result.stderr
-    result = export(environment)
-    assert result.returncode != 0 and 'checksum differs' in result.stderr
-    with runtime(dsns, 'clio', urls) as conn:
-        assert conn.execute('SELECT count(*) FROM clio.gong_snapshot').fetchone()[0] == 1
-        assert conn.execute('SELECT count(*) FROM clio.file_observation').fetchone()[0] == 0
-
-
-def test_event_writers_mirror_atomically_and_keep_legacy_readers_working(database, monkeypatch, tmp_path):
-    import asyncio
-    from types import SimpleNamespace
-    from clio.commands import collect_enlil, collect_events
-    from clio.db.models.donki_poll import DonkiPoll
-    from clio.db.session import get_db_session
-    from clio.observations.transition import mirror_observation
-    from common.db.session import dispose_engine
-
-    dsns, urls, environment = database
     assert upgrade(environment, 'head').returncode == 0
-    for key, value in environment.items():
-        if key.startswith('CLIO_DB_'):
-            monkeypatch.setenv(key, value)
-    for kind in ('donki', 'enlil'):
-        monkeypatch.setenv(f'ARGUS_{kind.upper()}_ARCHIVE', str(tmp_path / kind))
-    monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
-        solar_wind_events=SimpleNamespace(lookback_days=30)))
-    monkeypatch.setattr(collect_events.donki, 'fetch', lambda *args: (b'[]', []))
-    now = datetime.now(UTC)
-    rejected_id = uuid4()
-
-    async def check():
-        try:
-            await collect_events.run(SimpleNamespace())
-            await collect_enlil.store(dict(source_url='https://test/enlil', error='Timeout'))
-            async with get_db_session() as session:
-                # Mirroring failures roll back the original receipt as well.
-                session.add(DonkiPoll(id=rejected_id, endpoint='CME', received_at=now,
-                    request_start=now, request_end=now, source_url='https://test/CME',
-                    sha256='0'*64, raw_gzip=gzip.compress(b'wrong bytes'), payload=[]))
-                await session.flush()
-                with pytest.raises(ValueError, match='checksum differs'):
-                    await mirror_observation(session, 'donki', id=rejected_id)
-                await session.rollback()
-        finally:
-            await dispose_engine()
-    asyncio.run(check())
     with runtime(dsns, 'clio', urls) as conn:
-        assert conn.execute('SELECT count(*) FROM clio.donki_poll').fetchone()[0] == 4
-        assert conn.execute("SELECT count(*) FROM clio.file_observation WHERE kind='donki'").fetchone()[0] == 4
-        assert conn.execute('SELECT count(*) FROM clio.donki_poll WHERE id=%s', (rejected_id,)).fetchone()[0] == 0
-        assert conn.execute('SELECT count(*) FROM clio.file_observation WHERE id=%s', (rejected_id,)).fetchone()[0] == 0
-        assert conn.execute('SELECT count(*) FROM clio.enlil_profile_receipt').fetchone()[0] == 1
-        assert conn.execute("SELECT count(*) FROM clio.file_observation WHERE kind='enlil' AND error='Timeout'").fetchone()[0] == 1
+        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_cutover'
+        assert conn.execute('SELECT count(*) FROM clio.file_observation').fetchone()[0] == 6
+        assert conn.execute('SELECT count(*) FROM clio.donki_poll').fetchone()[0] == 2
+        assert conn.execute('SELECT count(*) FROM clio.enlil_profile_receipt').fetchone()[0] == 2
+        assert conn.execute('SELECT fits_gzip FROM clio.gong_snapshot').fetchone()[0]
+        assert conn.execute('SELECT raw_path FROM clio.goes_snapshot').fetchone()[0] == 'old.json'
+    assert (roots['goes'] / 'old.json').exists()
+
+
+@pytest.mark.parametrize('damage', ['gzip', 'missing', 'sidecar', 'time'])
+def test_cutover_refuses_corrupt_archive_before_advancing_revision(database, monkeypatch, tmp_path, damage):
+    settings = seed_legacy(database, monkeypatch, tmp_path)
+    dsns, urls, environment, roots, _ = settings
+    archive_stage1(settings)
+    path = roots['gong'] / 'migrated/gong.gz'
+    if damage == 'gzip':
+        path.write_bytes(gzip.compress(b'wrong original'))
+    elif damage == 'missing':
+        path.unlink()
+    elif damage == 'sidecar':
+        path.with_suffix('.gz.receipt.json').unlink()
+    else:
+        receipt = path.with_suffix('.gz.receipt.json')
+        metadata = json.loads(receipt.read_text())
+        metadata['available_at'] = datetime.now(UTC).isoformat()
+        receipt.write_text(json.dumps(metadata))
+    result = upgrade(environment, 'head')
+    assert result.returncode != 0 and 'cutover blocked' in result.stderr
+    with runtime(dsns, 'clio', urls) as conn:
+        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
+        assert conn.execute('SELECT count(*) FROM clio.gong_snapshot').fetchone()[0] == 1

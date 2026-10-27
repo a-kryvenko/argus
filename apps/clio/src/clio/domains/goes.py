@@ -7,9 +7,9 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy.dialects.postgresql import insert
 
-from clio.db.models.goes_snapshot import GOESSnapshot
+from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_db_session
-from clio.observations.transition import mirror_observation
+from clio.observations.files import observation_values
 from clio.observations.reading import snapshots
 from clio.observations.files import archive_root, store_original
 
@@ -39,8 +39,8 @@ def download_snapshots(start, end, historical, expected=None):
         saved = expected.get((slot, source))
         if saved and (archive_root('goes') / saved['raw_path']).is_file():
             record = store_original('goes', slot, saved['observed_at'], source,
-                lambda: None, relative=Path(saved['raw_path']), expected=saved, compressed=saved.get('archived', False))
-            records.append({**record, 'archived': saved.get('archived', False)})
+                lambda: None, relative=Path(saved['raw_path']), expected=saved)
+            records.append(record)
         else:
             pending.add(slot)
     if not pending:
@@ -58,8 +58,8 @@ def download_snapshots(start, end, historical, expected=None):
             saved = expected.get((slot, source))
             values = store_original('goes', slot, samples.timestamp.max().to_pydatetime(), source, lambda: content,
                 relative=Path(saved['raw_path']) if saved else Path(source) / f'{slot:%Y/%m/%d/%H}.json',
-                expected=saved, compressed=saved.get('archived', False) if saved else False)
-            records.append({**values, 'archived': saved.get('archived', False) if saved else False})
+                expected=saved)
+            records.append(values)
     return records
 
 
@@ -81,16 +81,12 @@ async def collect(config, *, mode, now=None, start=None, end=None):
         async with get_db_session() as session:
             rows = await snapshots(session, 'goes', start=start, end=end+timedelta(microseconds=1))
         expected = {(row.slot_at, row.source_product): {key: getattr(row, key) for key in (
-            'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'raw_path', 'archived')} for row in rows}
+            'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'raw_path')} for row in rows}
         records = await asyncio.to_thread(download_snapshots, start, end, historical, expected)
         async with get_db_session() as session:
             for record in records:
-                if record.pop('archived', False):
-                    report['retained'] += 1
-                    continue
-                inserted = (await session.execute(insert(GOESSnapshot).values(**record)
-                    .on_conflict_do_nothing(index_elements=['slot_at', 'source_product']).returning(GOESSnapshot.slot_at))).scalar_one_or_none()
-                await mirror_observation(session, 'goes', slot_at=record['slot_at'], source_product=record['source_product'])
+                inserted = (await session.execute(insert(FileObservation).values(**observation_values('goes', record))
+                    .on_conflict_do_nothing(index_elements=['kind', 'source_key'], index_where=FileObservation.error.is_(None)).returning(FileObservation.id))).scalar_one_or_none()
                 report['received' if inserted else 'retained'] += 1
             await session.commit()
         latest = max((r['observed_at'] for r in records), default=None)

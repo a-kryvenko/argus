@@ -17,6 +17,3 @@
 */5 * * * * @ROOT@/scripts/cron-run clio sdo-live collect sdo
 * * * * * @ROOT@/scripts/cron-run clio sdo-warmup backfill sdo --batch
 0 * * * * @ROOT@/scripts/cron-run clio sdo-cleanup sdo-cleanup
-
-# Repeat until all legacy receipts have been archived.
-* * * * * @ROOT@/scripts/cron-run clio backfill-files backfill-files

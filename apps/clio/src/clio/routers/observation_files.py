@@ -1,6 +1,5 @@
 """Authenticated access to immutable originals, never computed model features."""
 import asyncio
-import gzip
 import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -13,16 +12,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_request_db_session
-from clio.db.models.gong_snapshot import GONGSnapshot
-from clio.db.models.goes_snapshot import GOESSnapshot
 from clio.db.models.file_observation import FileObservation
-from clio.observations.files import archive_root, read_original
+from clio.observations.files import read_original
 from clio.observations.reading import snapshots
 from clio.routers.auth import require_service_token
 from common.schemas.observation_files import RawObservationFile
 from common.schemas.response import success_response
 
-MODELS = {'gong': GONGSnapshot, 'goes': GOESSnapshot}
+FILE_KINDS = ('gong', 'goes')
 router = APIRouter(prefix='/internal/v1/observations', dependencies=[Depends(require_service_token)])
 
 
@@ -30,7 +27,7 @@ async def load_observation_files(session, as_of: datetime, *, start=None, end=No
     start = start or datetime.min.replace(tzinfo=UTC)
     end = end or datetime.max.replace(tzinfo=UTC)
     files = []
-    for kind, model in MODELS.items():
+    for kind in FILE_KINDS:
         if kind not in kinds:
             continue
         try:
@@ -116,31 +113,10 @@ async def original_file(kind: Literal['aia', 'gong', 'goes'],
         return Response(content, media_type='application/fits', headers={'ETag': f'"{sha256}"'})
     archived = (await session.scalars(select(FileObservation).where(
         FileObservation.kind == kind, FileObservation.sha256 == sha256).limit(1))).first()
-    if archived is not None:
-        try:
-            content = await asyncio.to_thread(read_original, kind, archived.raw_path, sha256)
-        except (OSError, ValueError, TypeError):
-            raise HTTPException(503, 'Observation original is unavailable or corrupt') from None
-        return Response(content, media_type='application/json' if kind == 'goes' else 'application/fits',
-                        headers={'ETag': f'"{sha256}"'})
-    model = MODELS[kind]
-    row = (await session.scalars(select(model).where(model.sha256 == sha256).limit(1))).first()
-    if row is None:
+    if archived is None:
         raise HTTPException(404, 'Observation original not found')
     try:
-        if row.raw_path:
-            root = archive_root(kind).resolve()
-            path = (root / row.raw_path).resolve()
-            if not path.is_relative_to(root):
-                raise ValueError('Original path is outside its archive')
-            content = await asyncio.to_thread(path.read_bytes)
-        elif kind == 'gong':
-            compressed = await session.scalar(select(GONGSnapshot.fits_gzip).where(GONGSnapshot.slot_at == row.slot_at))
-            content = await asyncio.to_thread(gzip.decompress, compressed)
-        else:
-            raise FileNotFoundError()
-        if hashlib.sha256(content).hexdigest() != sha256:
-            raise ValueError('Original checksum differs from receipt')
+        content = await asyncio.to_thread(read_original, kind, archived.raw_path, sha256)
     except (OSError, ValueError, TypeError):
         raise HTTPException(503, 'Observation original is unavailable or corrupt') from None
     return Response(content, media_type='application/json' if kind == 'goes' else 'application/fits',

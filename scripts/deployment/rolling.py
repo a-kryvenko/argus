@@ -242,8 +242,6 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
                         if not target.is_dir():
                             raise RuntimeError(f'Missing release artifacts: {target}')
                         volume['source'] = str(target)
-        # CLI one-off commands use the same versioned configuration as workers.
-        write_json(self.root / '.release-compose.json', self.desired)
         demo = self.root / 'data/demo/current.json'
         demo.parent.mkdir(parents=True, exist_ok=True)
         output = tempfile.NamedTemporaryFile(dir=demo.parent, delete=False)
@@ -455,6 +453,8 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.retire_worker('prophet')
         self.state.pop('drained_workers', None)
         self.save()
+        # Keep the previous CLI usable when preflight, migration or replacement fails.
+        write_json(self.root / '.release-compose.json', self.desired)
         for name in ('fingerprints.tsv', 'release.json'):
             destination = self.root / ('.release-fingerprints.tsv' if name == 'fingerprints.tsv' else '.release.json')
             temporary = destination.with_name(destination.name + '.next')

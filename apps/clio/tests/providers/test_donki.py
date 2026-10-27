@@ -53,7 +53,6 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
     session.add = lambda row: saved.append(row)
     session.__aenter__.return_value = session
     monkeypatch.setattr(collect_events, 'get_db_session', lambda: session)
-    monkeypatch.setattr(collect_events, 'mirror_observation', AsyncMock())
     monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
         solar_wind_events=SimpleNamespace(lookback_days=30)))
     raw = b'[ {"activityID": "cme1"} ]'
@@ -67,8 +66,8 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
         asyncio.run(collect_events.run(SimpleNamespace()))
     assert len(saved) == 4 and session.commit.await_count == 4
     cme = saved[0]
-    assert gzip.decompress(cme.raw_gzip) == raw
+    assert gzip.decompress((tmp_path / cme.raw_path).read_bytes()) == raw
     assert cme.sha256 == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
-    assert gzip.decompress(saved[1].raw_gzip) == b'[]' and saved[1].error is None
-    assert saved[-1].raw_gzip is None and saved[-1].error == 'Timeout'
+    assert gzip.decompress((tmp_path / saved[1].raw_path).read_bytes()) == b'[]' and saved[1].error is None
+    assert saved[-1].raw_path is None and saved[-1].error == 'Timeout'
 

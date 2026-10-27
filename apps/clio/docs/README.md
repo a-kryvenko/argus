@@ -36,11 +36,11 @@ Deployment installs [cronjobs.txt](../cronjobs.txt) with the other services and 
 
 Release separately, in order:
 
-1. Current: add `file_observation`; prefer file receipts, include legacy-only records, write both schemas. Cron copies missing history in batches.
-2. After old writers finish and `./argus clio backfill-files --check` succeeds: read and write only file storage; remove the backfill cron job.
-3. After every process runs stage 2: drop legacy tables and compatibility code. This removes rollback support for stage 1 and earlier.
+1. Previous release: add `file_observation`, read both schemas, write both, backfill history.
+2. Current: read and write only file storage. Cutover migration verifies archive coverage and checksums; legacy tables remain.
+3. After every process runs stage 2: drop legacy tables and model definitions. This removes rollback support for stage 1 and earlier.
 
 Do not ship later stages as pending migrations in the current release.
-Retry a batch manually: `./argus clio backfill-files --batch-size 32`.
+Before deploying stage 2, finish backfill and run `./argus clio backfill-files --check` on stage 1. Pre-stage-1 writers must have finished.
 
 [Setup](../../../README_DEPLOY.md#local-development) · [Commands](../../../docs/commands.md#clio)

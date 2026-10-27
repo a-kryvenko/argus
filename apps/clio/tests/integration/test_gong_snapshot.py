@@ -58,51 +58,11 @@ def test_gong_collection_archives_without_features_and_reads_are_causal(database
             await dispose_engine()
     asyncio.run(check())
     with runtime(dsns, 'clio', urls) as conn:
-        row = conn.execute('SELECT raw_path,features,fits_gzip FROM clio.gong_snapshot').fetchone()
-        assert (tmp_path / 'gong' / row[0]).read_bytes() == original
-        assert row[1:] == (None, None)
+        assert conn.execute('SELECT count(*) FROM clio.gong_snapshot').fetchone()[0] == 0
         archived = conn.execute("SELECT raw_path,sha256,received_at FROM clio.file_observation WHERE kind='gong'").fetchone()
         assert gzip.decompress((tmp_path / 'gong' / archived[0]).read_bytes()) == original
         assert archived[1] == hashlib.sha256(original).hexdigest()
 
-
-def test_migration_preserves_legacy_original_and_first_receipt(database, monkeypatch, tmp_path):
-    dsns, urls, environment = database
-    configure(environment, monkeypatch, tmp_path)
-    command = [sys.executable, '-c', 'from clio.cli import main; main()', 'migrate', 'upgrade']
-    subprocess.run([*command, '20261003_unified_measurement'], env=environment, check=True, capture_output=True)
-    now = datetime.now(UTC)
-    observed, received = now-timedelta(minutes=30), now-timedelta(minutes=20)
-    slot = observed.replace(minute=0, second=0, microsecond=0)
-    content = b'legacy original'
-    digest = hashlib.sha256(content).hexdigest()
-    with runtime(dsns, 'clio', urls) as conn:
-        conn.execute('''INSERT INTO clio.gong_snapshot
-            (slot_at,observed_at,available_at,sha256,source_product,source_url,feature_version,features,fits_gzip)
-            VALUES (%s,%s,%s,%s,'gong.live','https://test/legacy.fits.gz','gong-bands-v1','{"field":1}',%s)''',
-            (slot, observed, received, digest, gzip.compress(content)))
-    subprocess.run([*command, 'head'], env=environment, check=True, capture_output=True)
-    from clio.domains import gong
-    from clio.providers import gong as provider
-    from clio.routers.observation_files import original_file
-    from clio.db.session import get_db_session
-    from common.db.session import dispose_engine
-    monkeypatch.setattr(provider, 'candidates', lambda *args, **kwargs: [])
-    monkeypatch.setattr(provider, 'download', Mock(side_effect=AssertionError('Legacy original must not be downloaded')))
-
-    async def check():
-        try:
-            async with get_db_session() as session:
-                assert (await original_file('gong', digest, session)).body == content
-            result = await gong.collect(policy(), mode='live', now=now)
-            assert result['files']['gong']['restored'] == 1
-        finally:
-            await dispose_engine()
-    asyncio.run(check())
-    with runtime(dsns, 'clio', urls) as conn:
-        row = conn.execute('SELECT raw_path,available_at,sha256 FROM clio.gong_snapshot').fetchone()
-        assert (tmp_path / 'gong' / row[0]).read_bytes() == content
-        assert row[1:] == (received, digest)
 
 
 def test_goes_source_files_are_persisted_and_served_without_calibration(database, monkeypatch, tmp_path):
@@ -155,7 +115,7 @@ def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, t
     subprocess.run([*command, 'head'], env=environment, check=True, capture_output=True)
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute("SELECT to_regclass('clio.aia_snapshot')").fetchone()[0] is None
-        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
+        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_cutover'
         assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (True, True)
     assert original.read_bytes() == b'retained SDO original'
     from clio.db.base import Base

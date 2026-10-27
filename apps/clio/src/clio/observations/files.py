@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import tempfile
+from uuid import UUID
 
 
 def archive_root(kind):
@@ -52,12 +53,11 @@ def atomic_write(path, content):
         temporary.unlink(missing_ok=True)
 
 
-def store_original(kind, slot, observed, source, download, *, expected=None, root=None, relative=None, metadata=None, compressed=False):
+def store_original(kind, slot, observed, source, download, *, expected=None, root=None, relative=None, metadata=None):
     """Recover files only if their checksum agrees with the first receipt."""
     root = root or archive_root(kind)
     relative = relative or raw_path(kind, slot)
-    if compressed:
-        relative = Path(str(relative) if str(relative).endswith('.gz') else str(relative) + '.gz')
+    relative = Path(str(relative) if str(relative).endswith('.gz') else str(relative) + '.gz')
     path = archive_path(kind, relative, root=root)
     receipt = path.with_suffix(path.suffix + '.receipt.json')
     with file_lock(path):
@@ -71,7 +71,7 @@ def store_original(kind, slot, observed, source, download, *, expected=None, roo
             if expected and any(datetime.fromisoformat(str(record[k])) != datetime.fromisoformat(str(expected[k]))
                                 for k in ('observed_at', 'available_at')):
                 raise ValueError('File receipt conflicts with the stored time')
-        content = (read_gzip(path) if compressed else path.read_bytes()) if path.exists() else download()
+        content = read_gzip(path) if path.exists() else download()
         if content is None:
             return None
         if len(content) > MAX_ORIGINAL_BYTES:
@@ -86,7 +86,7 @@ def store_original(kind, slot, observed, source, download, *, expected=None, roo
             record.update(metadata)
         record['raw_path'] = str(relative)
         if not path.exists():
-            atomic_write(path, gzip.compress(content, mtime=0) if compressed else content)
+            atomic_write(path, gzip.compress(content, mtime=0))
         if not receipt.exists():
             serializable = {k: v.isoformat() if isinstance(v, datetime) else v for k, v in record.items()}
             atomic_write(receipt, json.dumps(serializable).encode())
@@ -132,7 +132,10 @@ def source_key(slot, source):
 
 
 def observation_values(kind, record):
-    return dict(kind=kind, source_product=record['source_product'],
+    # Match the expand release's legacy-to-file identity during rolling writes.
+    identity = f'{kind}:{record["slot_at"].astimezone(UTC):%Y-%m-%dT%H:%M:%S.%f}:{record["source_product"]}'
+    id = UUID(hashlib.md5(identity.encode(), usedforsecurity=False).hexdigest())
+    return dict(id=id, kind=kind, source_product=record['source_product'],
         source_key=source_key(record['slot_at'], record['source_product']),
         received_at=record['available_at'], raw_path=record['raw_path'], sha256=record['sha256'])
 

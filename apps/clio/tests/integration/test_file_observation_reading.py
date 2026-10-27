@@ -1,4 +1,4 @@
-"""Mixed storage stays readable throughout both sides of a rolling deployment."""
+"""Stage 2 uses only file storage and is ready for legacy table removal."""
 import asyncio
 from datetime import UTC, datetime, timedelta
 import gzip
@@ -13,11 +13,10 @@ from tests.support.database import database, migrate, runtime
 
 
 @pytest.mark.parametrize('kind', ['gong', 'goes'])
-def test_snapshot_readers_and_collectors_include_new_only_and_late_legacy_records(database, monkeypatch, tmp_path, kind):
+def test_snapshot_readers_and_collectors_ignore_legacy_and_work_after_its_removal(database, monkeypatch, tmp_path, kind):
     from clio.db.models.file_observation import FileObservation
     from clio.db.session import get_db_session
     from clio.observations.files import store_original, observation_values
-    from clio.observations.transition import backfill
     from clio.routers.observation_files import load_observation_files, original_file
     from common.db.session import dispose_engine
 
@@ -34,13 +33,13 @@ def test_snapshot_readers_and_collectors_include_new_only_and_late_legacy_record
     content = b'original observation'
     digest = hashlib.sha256(content).hexdigest()
 
-    def record(hour, *, compressed=False):
+    def record(hour):
         slot = base + timedelta(hours=hour)
         expected = dict(slot_at=slot, observed_at=slot+timedelta(minutes=10),
             available_at=slot+timedelta(minutes=20), sha256=digest, source_product=source,
             source_url='https://test/observation')
         return store_original(kind, slot, expected['observed_at'], source, lambda: content,
-            expected=expected, compressed=compressed)
+            expected=expected)
 
     def legacy(values):
         with runtime(dsns, 'clio', urls) as conn:
@@ -58,24 +57,34 @@ def test_snapshot_readers_and_collectors_include_new_only_and_late_legacy_record
 
     async def check():
         try:
-            await backfill()
-            legacy(record(1))  # Old writer commits after the backfill pass.
-            newest = record(2, compressed=True)
+            duplicate = record(1)
+            legacy(duplicate)
+            newest = record(2)
             async with get_db_session() as session:
-                session.add(FileObservation(**observation_values(kind, newest)))
-                await session.commit()  # Simulate the next release writing only the new schema.
-            # The duplicate must be served from its archived copy.
+                session.add_all([FileObservation(**observation_values(kind, r)) for r in (duplicate, newest)])
+                await session.commit()
+            # A legacy-only receipt with a missing original must not be read.
             (root / first['raw_path']).unlink()
             async with get_db_session() as session:
                 refs = await load_observation_files(session, now, kinds=(kind,))
-                assert len(refs) == 3 and len({r.slot_at for r in refs}) == 3
-                assert len(await load_observation_files(session, base+timedelta(hours=1, minutes=50), kinds=(kind,))) == 2
+                assert len(refs) == 2 and len({r.slot_at for r in refs}) == 2
+                assert len(await load_observation_files(session, base+timedelta(hours=1, minutes=50), kinds=(kind,))) == 1
                 assert not await load_observation_files(session, base, kinds=(kind,))
                 assert (await original_file(kind, digest, session)).body == content
                 # File-only records retain their compressed original.
                 archived = await session.scalar(select(FileObservation).where(
                     FileObservation.kind == kind, FileObservation.source_key == observation_values(kind, newest)['source_key']))
                 assert (root / archived.raw_path).read_bytes().startswith(b'\x1f\x8b')
+            with runtime(dsns, 'clio', urls) as conn:
+                assert conn.execute('SELECT count(*) FROM clio.' + kind + '_snapshot').fetchone()[0] == 2
+                same_id = conn.execute("SELECT f.id = md5(%s || to_char(legacy.slot_at AT TIME ZONE 'UTC', "
+                    "'YYYY-MM-DD\"T\"HH24:MI:SS.US') || ':' || legacy.source_product)::uuid "
+                    "FROM clio." + kind + "_snapshot legacy JOIN clio.file_observation f ON f.kind=%s "
+                    "WHERE legacy.slot_at=%s AND f.id=%s", (kind + ':', kind, duplicate['slot_at'],
+                        observation_values(kind, duplicate)['id'])).fetchone()[0]
+                assert same_id  # Stage 1 ON CONFLICT(id) remains safe during rolling writes.
+                for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
+                    conn.execute('DROP TABLE clio.' + table)
             if kind == 'gong':
                 from clio.domains import gong
                 from clio.providers import gong as provider
@@ -96,14 +105,13 @@ def test_snapshot_readers_and_collectors_include_new_only_and_late_legacy_record
             await dispose_engine()
     asyncio.run(check())
     with runtime(dsns, 'clio', urls) as conn:
-        assert conn.execute('SELECT count(*) FROM clio.' + kind + '_snapshot').fetchone()[0] == 2
+        assert conn.execute("SELECT to_regclass(%s)", ('clio.' + kind + '_snapshot',)).fetchone()[0] is None
 
 
-def test_event_inputs_merge_both_schemas_by_receipt_and_preserve_cutoffs(database, monkeypatch, tmp_path):
+def test_event_inputs_use_only_file_receipts_and_preserve_cutoffs(database, monkeypatch, tmp_path):
     from clio.db.models.file_observation import FileObservation
     from clio.db.session import get_db_session
     from clio.observations.files import store_receipt
-    from clio.observations.transition import backfill
     from clio.routers.solar_wind_events import load_event_inputs
     from common.db.session import dispose_engine
 
@@ -127,8 +135,9 @@ def test_event_inputs_merge_both_schemas_by_receipt_and_preserve_cutoffs(databas
 
     async def check():
         try:
-            await backfill()  # Duplicate exists in both stores.
             async with get_db_session() as session:
+                session.add(FileObservation(**store_receipt('donki', 'CME', str(duplicate), id=duplicate,
+                    received_at=base, raw=original_poll, metadata=dict(request_start=base-timedelta(days=30), request_end=base))))
                 for id, at, error in ((latest, base+timedelta(minutes=20), None), (failed, base+timedelta(minutes=30), 'Timeout')):
                     session.add(FileObservation(**store_receipt('donki', 'CME', str(id), id=id,
                         received_at=at, raw=b'[]' if error is None else None, error=error,
@@ -148,7 +157,7 @@ def test_event_inputs_merge_both_schemas_by_receipt_and_preserve_cutoffs(databas
                     (uuid4(), base+timedelta(minutes=30), base-timedelta(minutes=10), base-timedelta(hours=1),
                         hashlib.sha256(b'old netcdf').hexdigest(), gzip.compress(b'old netcdf'),
                         json.dumps(dict(model_version='2.8', target='L1', density_kind='proton_equivalent', points=[]))))
-                # A late legacy-only empty response supersedes the new receipt.
+                # A late legacy-only response is ignored by the cutover application.
                 conn.execute('''INSERT INTO clio.donki_poll
                     (id,endpoint,received_at,request_start,request_end,source_url,sha256,raw_gzip,payload)
                     VALUES (%s,'CME',%s,%s,%s,'https://test/CME',%s,%s,'[]')''',
@@ -163,15 +172,30 @@ def test_event_inputs_merge_both_schemas_by_receipt_and_preserve_cutoffs(databas
                 assert current.polls[0].records == []
                 assert current.latest_attempts['CME']['error'] == 'Timeout'
                 assert current.enlil_profiles[0].receipt_id == profile_id
-                assert current.enlil_profile_status['latest_attempt']['received_at'] == (base+timedelta(minutes=30)).isoformat()
+                assert current.enlil_profile_status['latest_attempt']['received_at'] == (base+timedelta(minutes=20)).isoformat()
                 late = await load_event_inputs(session, base+timedelta(minutes=45), datetime.now(UTC))
-                assert late.polls[0].poll_id not in (duplicate, latest)
-                assert late.latest_attempts['CME']['error'] is None
+                assert late.polls[0].poll_id == latest
+                assert late.latest_attempts['CME']['error'] == 'Timeout'
             from clio.commands import collect_enlil
             monkeypatch.setattr(collect_enlil.enlil, 'discover', lambda now: [dict(
                 key='run', size=6, last_modified=base.isoformat())])
             monkeypatch.setattr(collect_enlil.enlil, 'download', lambda url: pytest.fail('Known ENLIL run downloaded again'))
             await collect_enlil.run(SimpleNamespace())
+            # The same application must keep reading and collecting after stage 3.
+            with runtime(dsns, 'clio', urls) as conn:
+                for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
+                    conn.execute('DROP TABLE clio.' + table)
+            from clio.commands import collect_events
+            monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
+                solar_wind_events=SimpleNamespace(lookback_days=30)))
+            monkeypatch.setattr(collect_events.donki, 'fetch', lambda *args: (b'[]', []))
+            await collect_events.run(SimpleNamespace())
+            await collect_enlil.store(store_receipt('enlil', 'noaa.enlil', 'discovery', error='Timeout'))
+            async with get_db_session() as session:
+                inputs = await load_event_inputs(session, datetime.now(UTC), datetime.now(UTC))
+                assert len(inputs.polls) == 4
+                assert inputs.enlil_profiles[0].receipt_id == profile_id
+                assert inputs.enlil_profile_status['latest_attempt']['error'] == 'Timeout'
         finally:
             await dispose_engine()
     asyncio.run(check())

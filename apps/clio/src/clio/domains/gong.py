@@ -2,12 +2,11 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
-from clio.db.models.gong_snapshot import GONGSnapshot
+from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_db_session
-from clio.observations.transition import mirror_observation
+from clio.observations.files import observation_values
 from clio.observations.reading import snapshots
 
 
@@ -40,30 +39,17 @@ async def collect(config, *, mode, now=None, start=None, end=None):
         records = await snapshots(session, 'gong', start=start, end=end+timedelta(microseconds=1))
     existing = {row.observed_at for row in records}
     usable = set()
-    # Restore missing files using their original URL and checksum. Legacy rows
-    # still carry the original compressed bytes until they are archived on disk.
     from clio.observations.files import archive_root, store_original
-    import gzip
     for row in records:
         try:
             expected = {k: getattr(row, k) for k in ('slot_at', 'observed_at', 'available_at', 'sha256', 'source_product')}
             if row.raw_path and (archive_root('gong') / row.raw_path).is_file():
                 await asyncio.to_thread(store_original, 'gong', row.slot_at, row.observed_at,
-                    row.source_product, lambda: None, expected=expected, relative=row.raw_path, compressed=row.archived)
+                    row.source_product, lambda: None, expected=expected, relative=row.raw_path)
                 usable.add(row.observed_at)
                 continue
-            original = None
-            if not row.archived:
-                async with get_db_session() as session:
-                    original = await session.scalar(select(GONGSnapshot.fits_gzip).where(GONGSnapshot.slot_at == row.slot_at))
-            values = await asyncio.to_thread(store_original, 'gong', row.slot_at, row.observed_at,
-                row.source_product, lambda: gzip.decompress(original) if original else provider.download(row.source_url), expected=expected,
-                relative=row.raw_path, compressed=row.archived)
-            if not row.archived:
-                from sqlalchemy import update
-                async with get_db_session() as session:
-                    await session.execute(update(GONGSnapshot).where(GONGSnapshot.slot_at == row.slot_at).values(raw_path=values['raw_path']))
-                    await session.commit()
+            await asyncio.to_thread(store_original, 'gong', row.slot_at, row.observed_at,
+                row.source_product, lambda: provider.download(row.source_url), expected=expected, relative=row.raw_path)
             report['restored'] += 1
             usable.add(row.observed_at)
         except Exception as exc:
@@ -83,10 +69,9 @@ async def collect(config, *, mode, now=None, start=None, end=None):
             try:
                 values = await asyncio.to_thread(snapshot_values, observed, url, source)
                 async with get_db_session() as session:
-                    statement = insert(GONGSnapshot).values(**values).on_conflict_do_nothing(
-                        index_elements=['slot_at']).returning(GONGSnapshot.observed_at)
+                    statement = insert(FileObservation).values(**observation_values('gong', values)).on_conflict_do_nothing(
+                        index_elements=['kind', 'source_key'], index_where=FileObservation.error.is_(None)).returning(FileObservation.id)
                     inserted = (await session.execute(statement)).scalar_one_or_none()
-                    await mirror_observation(session, 'gong', slot_at=values['slot_at'])
                     await session.commit()
                 report['received' if inserted else 'retained'] += 1
                 hours.add(hour)

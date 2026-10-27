@@ -21,9 +21,6 @@ def main(argv=None):
     commands.add_parser('normalize')
     commands.add_parser('collect-events', help='Collect and version DONKI CME/ENLIL/HSS/IPS responses')
     commands.add_parser('collect-enlil', help='Collect and version compact NOAA ENLIL L1 profiles')
-    archive = commands.add_parser('backfill-files', help='Copy legacy receipts into file storage')
-    archive.add_argument('--batch-size', type=int, default=32, choices=range(1, 257), metavar='1..256')
-    archive.add_argument('--check', action='store_true', help='Verify coverage and archived checksums without writing')
 
     backfill = commands.add_parser('backfill')
     backfill.add_argument('--from', dest='start', type=boundary)

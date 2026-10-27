@@ -57,7 +57,8 @@ def test_discovery_never_fetches_full3d_and_prefers_l1(monkeypatch):
     assert not any('tar' in p or p.endswith('evo.earth.nc') for p in calls)
 
 
-def test_collection_preserves_raw_rejections_and_success_independently(monkeypatch):
+def test_collection_preserves_raw_rejections_and_success_independently(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARGUS_ENLIL_ARCHIVE", str(tmp_path))
     import asyncio
     from unittest.mock import AsyncMock
     from types import SimpleNamespace
@@ -77,5 +78,8 @@ def test_collection_preserves_raw_rejections_and_success_independently(monkeypat
     monkeypatch.setattr(collect_enlil, 'store', store)
     with pytest.raises(RuntimeError, match='1 profiles'):
         asyncio.run(collect_enlil.run(SimpleNamespace()))
-    assert saved[0]['payload']['points'][0]['speed_km_s'] == 400
-    assert saved[1]['error'] and saved[1]['raw_gzip'] and saved[1]['sha256']
+    from clio.observations.files import read_receipt, read_original
+    row = SimpleNamespace(**saved[0])
+    assert read_receipt(row)['payload']['points'][0]['speed_km_s'] == 400
+    assert read_original(row.kind, row.raw_path, row.sha256) == good
+    assert saved[1]['error'] and saved[1]['raw_path'] and saved[1]['sha256']

@@ -12,9 +12,10 @@ def test_donki_versions_are_causal_and_empty_responses_replace_old_events(databa
     migrate(environment)
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    from clio.db.models.donki_poll import DonkiPoll
-    from clio.db.session import get_db_session
+    from clio.db.models.file_observation import FileObservation
+    from clio.observations.files import store_receipt
     from common.db.session import dispose_engine
+    from clio.db.session import get_db_session
     from clio.routers.solar_wind_events import load_event_inputs
     now = datetime.now(UTC)
     raw = b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'
@@ -25,12 +26,11 @@ def test_donki_versions_are_causal_and_empty_responses_replace_old_events(databa
                 for minute, payload, error in ((0, [{'activityID': 'cme1', 'startTime': '2026-01-01T00:00Z'}], None),
                                                (1, [], None), (2, None, 'Timeout')):
                     content = raw if payload else b'[]'
-                    session.add(DonkiPoll(endpoint='CME', received_at=now+timedelta(minutes=minute),
-                        request_start=now-timedelta(days=30), request_end=now+timedelta(days=1),
-                        source_url='https://ccmc.gsfc.nasa.gov/DONKI-API/get/CME',
-                        payload=payload, error=error,
-                        sha256=hashlib.sha256(content).hexdigest() if payload is not None else None,
-                        raw_gzip=gzip.compress(content) if payload is not None else None))
+                    values = store_receipt('donki', 'CME', str(minute),
+                        received_at=now+timedelta(minutes=minute), raw=content if payload is not None else None,
+                        error=error, metadata=dict(request_start=now-timedelta(days=30), request_end=now+timedelta(days=1),
+                            source_url='https://ccmc.gsfc.nasa.gov/DONKI-API/get/CME'))
+                    session.add(FileObservation(**values))
                 await session.commit()
             async with get_db_session() as session:
                 assert not (await load_event_inputs(session, now-timedelta(seconds=1), now)).polls
@@ -52,9 +52,10 @@ def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypa
     migrate(environment)
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    from clio.db.models.enlil_profile import EnlilProfileReceipt
-    from clio.db.session import get_db_session
+    from clio.db.models.file_observation import FileObservation
+    from clio.observations.files import store_receipt
     from common.db.session import dispose_engine
+    from clio.db.session import get_db_session
     from clio.routers.solar_wind_events import load_event_inputs
     now = datetime.now(UTC).replace(microsecond=0)
 
@@ -62,13 +63,14 @@ def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypa
         try:
             async with get_db_session() as session:
                 for minute, speed in ((0, 500), (2, 900)):
-                    session.add(EnlilProfileReceipt(received_at=now+timedelta(minutes=minute),
-                        source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/run/evo.l1.nc', source_key='run/evo.l1.nc',
-                        source_modified_at=now-timedelta(minutes=1), model_created_at=now-timedelta(hours=1),
-                        sha256=str(minute)*64, payload=dict(model_version='2.9', target='L1', density_kind='proton_equivalent',
-                            points=[dict(valid_time=(now+timedelta(hours=1)).isoformat(), speed_km_s=speed, density_cm3=5)])))
-                session.add(EnlilProfileReceipt(received_at=now+timedelta(minutes=3),
-                    source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/', error='Timeout'))
+                    metadata = dict(source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/run/evo.l1.nc',
+                        source_key='run/evo.l1.nc', source_modified_at=now-timedelta(minutes=1), model_created_at=now-timedelta(hours=1),
+                        payload=dict(model_version='2.9', target='L1', density_kind='proton_equivalent',
+                            points=[dict(valid_time=(now+timedelta(hours=1)).isoformat(), speed_km_s=speed, density_cm3=5)]))
+                    session.add(FileObservation(**store_receipt('enlil', 'noaa.enlil', str(minute),
+                        received_at=now+timedelta(minutes=minute), raw=str(speed).encode(), metadata=metadata)))
+                session.add(FileObservation(**store_receipt('enlil', 'noaa.enlil', 'discovery',
+                    received_at=now+timedelta(minutes=3), error='Timeout')))
                 await session.commit()
             async with get_db_session() as session:
                 assert not (await load_event_inputs(session, now-timedelta(seconds=1), now)).enlil_profiles
@@ -91,8 +93,8 @@ def test_closed_hourly_speed_history_prefers_covered_native_data_and_gates_recei
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     from clio.db.models.measurement import Measurement
-    from clio.db.session import get_db_session
     from common.db.session import dispose_engine
+    from clio.db.session import get_db_session
     from clio.routers.solar_wind_events import hourly_speeds
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     first = now-timedelta(days=27)

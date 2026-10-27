@@ -1,1 +1,1 @@
-"""Model input observations: normalization, persistence and historical recovery."""
+"""Storage, queries and read models for observations."""

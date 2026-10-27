@@ -131,3 +131,30 @@ def test_current_indices_can_include_changes_against_last_hour():
     previous = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
     from datetime import timedelta
     assert (previous.params['observed_at_1'] - previous.params['observed_at_2']) == timedelta(hours=1)
+
+
+def test_browse_keeps_pagination_and_rejects_naive_dates():
+    from unittest.mock import Mock
+    from sqlalchemy.dialects import postgresql
+    from clio.db.models.measurement import Measurement
+    from clio.routers import browse
+
+    session = AsyncMock()
+    session.scalars.return_value = Mock(all=lambda: [Measurement(id=1, metric='bz', value=-4.)])
+    session.scalar.return_value = 1
+    app = FastAPI()
+    app.include_router(browse.router)
+    app.dependency_overrides[browse.get_request_db_session] = lambda: session
+    with TestClient(app) as client:
+        result = client.get('/internal/v1/observations/browse', params={'metric': 'bz', 'page': 2, 'page_size': 10})
+        assert result.status_code == 200
+        data = result.json()['data']
+        assert data['items'][0]['value'] == -4.
+        assert data['total'] == 1 and data['page'] == 2 and data['page_size'] == 10
+        query = session.scalars.call_args.args[0].compile(dialect=postgresql.dialect())
+        assert query.params['metric_1'] == 'bz'
+        assert query.params['param_1'] == 10 and query.params['param_2'] == 10
+        session.scalars.reset_mock()
+        for key in ('start', 'end'):
+            assert client.get('/internal/v1/observations/browse', params={key: '2026-09-01T00:00:00'}).status_code == 422
+        session.scalars.assert_not_awaited()

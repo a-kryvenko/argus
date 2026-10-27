@@ -1,9 +1,9 @@
-"""Dispatch file observations to their owning domains."""
+"""Collect or backfill configured file observations."""
 
 
 async def collect_file_observations(config, metrics, **kwargs):
-    from clio.domains.gong import collect as collect_gong
-    from clio.domains.goes import collect as collect_goes
+    from clio.ingestion.gong import collect as collect_gong
+    from clio.ingestion.goes import collect as collect_goes
     result = {'status': 'complete', 'failed_metrics': [], 'files': {}}
     for metric in metrics:
         if metric == 'goes':

@@ -62,7 +62,7 @@ def test_collection_preserves_raw_rejections_and_success_independently(monkeypat
     import asyncio
     from unittest.mock import AsyncMock
     from types import SimpleNamespace
-    from clio.domains import enlil as collector
+    from clio.ingestion import enlil as collector
     good, bad = profile(), b'invalid NetCDF'
     objects = [dict(key=key, size=len(raw), last_modified='2026-01-01T00:15Z')
                for key, raw in [('good', good), ('bad', bad)]]
@@ -78,7 +78,7 @@ def test_collection_preserves_raw_rejections_and_success_independently(monkeypat
     monkeypatch.setattr(collector, 'store', store)
     with pytest.raises(RuntimeError, match='1 profiles'):
         asyncio.run(collector.collect())
-    from clio.observations.files import read_receipt, read_original
+    from clio.observations.archive import read_receipt, read_original
     row = SimpleNamespace(**saved[0])
     assert read_receipt(row)['payload']['points'][0]['speed_km_s'] == 400
     assert read_original(row.kind, row.raw_path, row.sha256) == good

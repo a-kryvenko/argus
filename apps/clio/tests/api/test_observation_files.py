@@ -6,18 +6,20 @@ import hashlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
 from clio.routers import observation_files as routes
+from clio.routers.auth import require_service_token
+from clio.observations import file_catalog
 
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 
 
 def test_archive_override_does_not_load_project_environment(tmp_path, monkeypatch):
     from common import config
-    from clio.observations.files import archive_root
+    from clio.observations.archive import archive_root
     monkeypatch.setenv('ARGUS_GONG_ARCHIVE', str(tmp_path))
     configure = Mock(side_effect=AssertionError('Archive override must not load project environment'))
     monkeypatch.setattr(config, 'get_config', configure)
@@ -26,14 +28,14 @@ def test_archive_override_does_not_load_project_environment(tmp_path, monkeypatc
 
 
 def test_catalog_reads_causal_metadata_without_features_or_blobs(monkeypatch):
-    monkeypatch.setattr(routes, 'aia_files', lambda *args, **kwargs: [])
+    monkeypatch.setattr(file_catalog, 'aia_files', lambda *args, **kwargs: [])
     session = AsyncMock()
-    from clio.observations import reading
+    from clio.observations import file_catalog as reading
     row = SimpleNamespace(slot_at=NOW, observed_at=NOW, available_at=NOW, sha256='a'*64,
         source_product='gong.live', raw_path='original.gz')
     monkeypatch.setattr(reading, 'snapshot_receipt', lambda row: vars(row))
     session.scalars.side_effect = [Mock(all=lambda: [row]), Mock(all=lambda: [])]
-    files = asyncio.run(routes.load_observation_files(session, NOW))
+    files = asyncio.run(file_catalog.load_observation_files(session, NOW))
     assert len(files) == 1 and files[0].kind == 'gong'
     assert 'features' not in files[0].model_dump()
     for call in session.scalars.call_args_list:
@@ -48,7 +50,7 @@ def client(monkeypatch, row):
     session = AsyncMock()
     session.scalars.return_value = Mock(first=lambda: row)
     app = FastAPI()
-    app.include_router(routes.router)
+    app.include_router(routes.router, dependencies=[Depends(require_service_token)])
     app.dependency_overrides[routes.get_request_db_session] = lambda: session
     return TestClient(app), session
 
@@ -111,11 +113,11 @@ def test_aia_uses_shared_sdo_original_and_receipt_without_database(tmp_path, mon
                     preprocessing='sdo-area-mean-unregistered-v1', units='DN', sha256=digest)
     monkeypatch.setenv('ARGUS_SDO_ARCHIVE', str(tmp_path))
     save_image(tmp_path, slot, 'aia193', np.ones((512, 512), np.float32), metadata, now=now)
-    assert routes.aia_files(now) == []  # A reduced image cannot stand in for native FITS.
+    assert file_catalog.aia_files(now) == []  # A reduced image cannot stand in for native FITS.
     save_original(tmp_path, slot, 'aia193', content, now=now)
-    refs = routes.aia_files(now)
+    refs = file_catalog.aia_files(now)
     assert len(refs) == 1 and refs[0].sha256 == digest and refs[0].available_at == now
-    assert routes.aia_files(slot) == []
+    assert file_catalog.aia_files(slot) == []
     http, session = client(monkeypatch, None)
     response = http.get('/internal/v1/observations/files/aia/' + digest,
                         headers={'Authorization': 'Bearer secret'})

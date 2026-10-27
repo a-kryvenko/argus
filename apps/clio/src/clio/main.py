@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from common.config import get_config
+from common.db.session import dispose_engine
 from common.schemas.response import error_response
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -9,7 +10,6 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from clio.config import load_observation_config
-from common.db.session import dispose_engine
 from clio.db.session import get_db_session
 from clio.routers import (
     browse,

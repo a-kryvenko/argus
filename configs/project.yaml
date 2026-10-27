@@ -5,109 +5,75 @@ prophet:
   calculation_timeout_seconds: 540
   shutdown_grace_seconds: 570
 
-# Numeric and file observations use these sources, schedules and backfill depths.
-# Native RTSW remains a separate product; AIA uses file adapters.
+# Observation sources and historical horizons.
 clio:
+  retention:
+    live_days: 6
+    normalized_days: 60
   solar_wind_events:
     enabled: true
-    every_seconds: 900
     lookback_days: 30
   sdo_images:
     enabled: true
+    backfill_days: 45
   observations:
     gong:
       sources:
         live: [gong.live]
         historical: [gong.archive]
-      schedules:
-        live: {every: 1h}
-        backfill: {every: 6h}
-      backfill: {days: 2}
+      backfill_days: 2
     bx:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     by:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     bz:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     v:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     n:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     t:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     kp:
       sources:
         live: [swpc.kp]
         historical: [omni.hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     ap:
       sources:
         live: [swpc.kp]
         historical: [omni.hourly]
-      schedules:
-        live: {every: 1m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     dst:
       sources:
         live: [swpc.dst]
         historical: [omni.hourly]
-      schedules:
-        live: {every: 5m}
-        backfill: {every: 6h}
-      backfill: {days: 60}
+      backfill_days: 60
     f10_7:
       sources:
         live: [swpc.f107]
         historical: [gfz.f107, omni.hourly]
-      schedules:
-        live: {every: 1h}
-        backfill: {every: 1d}
-      backfill: {days: 88}
+      backfill_days: 88
     goes:
       sources:
         live: [goes.live]
         historical: [goes.archive]
-      schedules:
-        live: {every: 1h}
-        backfill: {every: 1d}
-      backfill: {days: 88}
+      backfill_days: 88

@@ -1,10 +1,9 @@
 """Clio command parsing and execution; handlers only perform their operation."""
 import argparse
+import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-from clio.commands._arguments import boundary
-from clio.commands.runner import invoke
 from clio.ingestion.products import OBSERVATIONS
 
 
@@ -17,54 +16,64 @@ def main(argv=None):
     serve.add_argument('--port', type=int, default=8000)
 
     commands.add_parser('collect').add_argument(
-        'metrics', nargs='*', help='Configured observations, sdo, donki or enlil (default: all)')
+        'metrics', nargs='*', help='Configured observations, sdo, donki or enlil (default: all)'
+    )
+    
     commands.add_parser('normalize')
 
-    backfill = commands.add_parser('backfill')
-    backfill.add_argument('--from', dest='start', type=boundary)
-    backfill.add_argument('--to', dest='end', type=boundary)
-    backfill.add_argument('metrics', nargs='*',
-                          help='Fill configured gaps; sdo selects retained AIA/HMI images (default: all)')
+    commands.add_parser('backfill')
 
-    backfill.add_argument('--batch', action='store_true', help='Bound SDO warmup to one configured batch')
-    commands.add_parser('sdo-cleanup')
+    commands.add_parser('cleanup')
 
     args = parser.parse_args(argv)
 
     args.now = datetime.now(UTC)
 
-    if args.command in ('collect', 'backfill'):
-        additional = {'sdo', 'donki', 'enlil'} if args.command == 'collect' else {'sdo'}
-        if any(m not in OBSERVATIONS and m not in additional for m in args.metrics):
+    if args.command == 'collect':
+        if any(m not in OBSERVATIONS and m not in {'sdo', 'donki', 'enlil'} for m in args.metrics):
             parser.error('Unknown observation metric')
         args.metrics = args.metrics or None
 
-    if args.command == 'backfill':
-        if (args.start is None) != (args.end is None):
-            parser.error('--from and --to must be specified together')
-
-    if args.command == 'backfill' and args.start is not None:
-        if not timedelta(0) < args.end - args.start <= timedelta(days=31) or args.end > args.now:
-            parser.error('Choose a past range of at most 31 days, with --from before --to')
-
     from common.runtime import run_command
+
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
-    result = run_command(lambda: dispatch(args))
+    
+    result = run_command(lambda: invoke(args.command, args))
+    
+    if isinstance(result, dict):
+        incomplete = result.get('status') in ('partial', 'failed')
+        has_failures = bool(result.get('failed_metrics') or result.get('failed'))
+        result = 1 if incomplete or has_failures else 0
+        
     if result:
         raise SystemExit(result)
 
 
-def dispatch(args):
-    from clio.config import load_observation_config
-    load_observation_config()
-    if args.command == 'serve':
+def invoke(name, args):
+    if name == 'serve':
         import uvicorn
         uvicorn.run('clio.main:app', host=args.host, port=args.port)
+        return
+    if name == 'collect':
+        from clio.commands.collect import run
+    elif name == 'backfill':
+        from clio.commands.backfill import run
+    elif name == 'normalize':
+        from clio.commands.normalize import run
+    elif name == 'cleanup':
+        from clio.commands.cleanup import run
     else:
-        result = invoke(args.command, args)
-        if isinstance(result, dict):
-            return int(bool(result.get('failed_metrics') or result.get('failed')))
-        return result
+        raise ValueError(f'Unknown Clio command: {name}')
+    
+    from common.db.session import dispose_engine
+
+    async def execute():
+        try:
+            return await run(args)
+        finally:
+            await dispose_engine()
+
+    return asyncio.run(execute())
 
 
 if __name__ == '__main__':

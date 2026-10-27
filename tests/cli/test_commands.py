@@ -182,7 +182,7 @@ def test_existing_database_is_left_running(cli, fail):
     assert not any('up' in call['args'] or 'stop' in call['args'] for call in calls)
 
 
-@pytest.mark.parametrize('domain,command', [('clio', ('backfill', 'sdo', '--batch')), ('prophet', ('generate', 'dst'))])
+@pytest.mark.parametrize('domain,command', [('clio', ('backfill',)), ('prophet', ('generate', 'dst'))])
 def test_jobs_do_not_require_interactive_input(cli, domain, command):
     _, _, run = cli
     result, calls = run(domain, *command)

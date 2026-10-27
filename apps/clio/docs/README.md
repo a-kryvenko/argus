@@ -15,7 +15,8 @@ Event inputs contain catalog observations and external ENLIL predictions with re
 
 [project.yaml](../../../configs/project.yaml) defines sources, priorities and backfill.
 Polling frequency differs from provider publication cadence.
-Backfill preserves existing values/first receipts; file recovery requires matching SHA256.
+Backfill fills configured historical horizons and missing hourly rows; file recovery requires matching SHA256.
+`normalize` writes hourly rows from live data. `cleanup` uses `clio.retention` (live: 6 days; hourly: 60 days).
 [Model input requirements](../../../docs/observation-requirements.md).
 
 ## Operation
@@ -24,6 +25,7 @@ Backfill preserves existing values/first receipts; file recovery requires matchi
 ./argus clio collect
 ./argus clio backfill
 ./argus clio normalize
+./argus clio cleanup
 ```
 
 Authenticated status: `/internal/v1/observations/status` and `/monitoring`.

@@ -71,7 +71,7 @@ def test_summary_includes_all_wind_variables_and_geomagnetic_changes(monkeypatch
     import asyncio
     from unittest.mock import AsyncMock
     from clio.observations import summary as service
-    from clio.domains.solar_wind.observations import METADATA
+    from clio.observations.solar_wind import METADATA
 
     wind = {metric: {'points': points(), 'unit': 'unit'} for metric in METADATA}
     wind_history = AsyncMock(return_value={'series': wind})

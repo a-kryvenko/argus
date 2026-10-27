@@ -1,14 +1,13 @@
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
+from common.schemas.response import success_response
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_request_db_session
-from common.schemas.response import success_response
-from clio.domains.solar_wind import observations as solar_wind
-from clio.domains.solar_wind import history as aggregate_history
-from typing import Literal
+from clio.observations import solar_wind
 
 router = APIRouter(prefix="/internal/v1/observations/solar-wind", tags=["observations"])
 
@@ -60,7 +59,7 @@ async def history(
     if not timedelta(0) < end - start <= timedelta(days=days):
         raise HTTPException(422, f"History interval must be positive and at most {days} days for {resolution}")
     if resolution != '1m':
-        data = await aggregate_history.history(session, metrics, start, end, 300 if resolution == '5m' else 3600)
+        data = await solar_wind.aggregated_history(session, metrics, start, end, 300 if resolution == '5m' else 3600)
     else:
         data = await solar_wind.history(session, metrics, start, end)
         data['resolution_seconds'] = 60

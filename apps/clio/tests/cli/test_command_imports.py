@@ -33,11 +33,11 @@ import clio.cli
 from clio.config import load_observation_config
 load_observation_config()
 import clio.commands.collect
-import clio.commands.backfill_observations
+import clio.commands.backfill
 heavy = {'pandas', 'numpy', 'pyarrow', 'scipy', 'astropy', 'sunpy'}
 assert not heavy.intersection(sys.modules), heavy.intersection(sys.modules)
-assert 'clio.observations.live' not in sys.modules
-assert 'clio.observations.backfill' not in sys.modules
+assert 'clio.ingestion.numeric_live' not in sys.modules
+assert 'clio.ingestion.numeric_backfill' not in sys.modules
 """],
         capture_output=True, text=True, timeout=30,
     )

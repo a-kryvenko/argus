@@ -1,7 +1,4 @@
-"""Validated observation policies for the incremental ingestion migration."""
-from datetime import timedelta
-from typing import Annotated
-
+"""Validated Clio sources, collection horizons and retention."""
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from clio.ingestion.products import OBSERVATIONS, PRODUCTS
@@ -23,48 +20,28 @@ class Sources(StrictModel):
         return values
 
 
-class Schedule(StrictModel):
-    every: Annotated[timedelta, Field(gt=timedelta(0))]
-
-    @field_validator('every', mode='before')
-    @classmethod
-    def duration(cls, value):
-        import re
-        if not isinstance(value, str) or not re.fullmatch(r'[1-9][0-9]*[smhd]', value):
-            raise ValueError('Use a positive duration such as 60s, 5m, 6h or 1d')
-        return timedelta(seconds=int(value[:-1]) * {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}[value[-1]])
-
-
-class Schedules(StrictModel):
-    live: Schedule
-    backfill: Schedule
-
-
-class Backfill(StrictModel):
-    days: Annotated[int, Field(strict=True, gt=0)]
-
-
 class ObservationPolicy(StrictModel):
     sources: Sources
-    schedules: Schedules
-    backfill: Backfill
+    backfill_days: int = Field(strict=True, gt=0)
 
 
 class SDOImages(StrictModel):
     enabled: bool = False
-    live_seconds: int = Field(default=300, ge=60)
-    warmup_seconds: int = Field(default=60, ge=10)
-    cleanup_seconds: int = Field(default=3600, ge=60, le=3600)
-    warmup_hours_per_batch: int = Field(default=6, ge=1, le=24)
+    backfill_days: int = Field(default=45, strict=True, ge=1, le=45)
 
 
 class SolarWindEvents(StrictModel):
     enabled: bool = False
-    every_seconds: int = Field(default=900, ge=300, le=3600)
-    lookback_days: int = Field(default=30, ge=7, le=90)
+    lookback_days: int = Field(default=30, strict=True, ge=7, le=90)
+
+
+class Retention(StrictModel):
+    live_days: int = Field(default=6, strict=True, gt=0)
+    normalized_days: int = Field(default=60, strict=True, gt=0)
 
 
 class ClioObservations(StrictModel):
+    retention: Retention = Field(default_factory=Retention)
     solar_wind_events: SolarWindEvents = Field(default_factory=SolarWindEvents)
     sdo_images: SDOImages = Field(default_factory=SDOImages)
     observations: dict[str, ObservationPolicy]
@@ -75,7 +52,7 @@ class ClioObservations(StrictModel):
             if metric not in OBSERVATIONS:
                 raise ValueError(f'{metric}: unknown observation; supported: {", ".join(OBSERVATIONS)}')
             limit = 90 if metric == 'goes' else 60
-            if OBSERVATIONS[metric].kind == 'file' and policy.backfill.days > limit:
+            if OBSERVATIONS[metric].kind == 'file' and policy.backfill_days > limit:
                 raise ValueError(f'{metric}: file backfill is bounded to {limit} days')
             for mode in ('live', 'historical'):
                 sources = getattr(policy.sources, mode)

@@ -47,7 +47,7 @@ def test_unrecognized_records_cannot_silently_become_a_quiet_feed(row):
 def test_collection_retains_exact_bytes_empty_success_and_failure_independently(monkeypatch, tmp_path):
     monkeypatch.setenv("ARGUS_DONKI_ARCHIVE", str(tmp_path))
     import asyncio
-    from clio.domains import donki as collector
+    from clio.ingestion import donki as collector
     saved = []
     session = AsyncMock()
     session.add = lambda row: saved.append(row)

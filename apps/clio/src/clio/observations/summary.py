@@ -5,8 +5,8 @@ from statistics import mean
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.domains import geomagnetic
-from clio.domains.solar_wind import observations as solar_wind
+from clio.observations import geomagnetic
+from clio.observations import solar_wind as solar_wind
 from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
 
 LOOKBACK_MINUTES = 75

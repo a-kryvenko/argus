@@ -23,16 +23,16 @@ def configure(environment, monkeypatch, tmp_path):
 
 def policy():
     return SimpleNamespace(observations={'gong': SimpleNamespace(
-        backfill=SimpleNamespace(days=2), sources=SimpleNamespace(live=['gong.live'], historical=['gong.archive']))})
+        backfill_days=2, sources=SimpleNamespace(live=['gong.live'], historical=['gong.archive']))})
 
 
 def test_gong_collection_archives_without_features_and_reads_are_causal(database, monkeypatch, tmp_path):
     dsns, urls, environment = database
     migrate(environment)
     configure(environment, monkeypatch, tmp_path)
-    from clio.domains import gong
+    from clio.ingestion import gong
     from clio.providers import gong as provider
-    from clio.routers.observation_files import load_observation_files
+    from clio.observations.file_catalog import load_observation_files
     from clio.db.session import get_db_session
     from common.db.session import dispose_engine
     now = datetime.now(UTC)
@@ -71,8 +71,9 @@ def test_goes_source_files_are_persisted_and_served_without_calibration(database
     migrate(environment)
     configure(environment, monkeypatch, tmp_path)
     monkeypatch.setenv('ARGUS_GOES_ARCHIVE', str(tmp_path / 'goes'))
-    from clio.domains import goes
-    from clio.routers.observation_files import load_observation_files, original_file
+    from clio.ingestion import goes
+    from clio.observations.file_catalog import load_observation_files
+    from clio.routers.observation_files import original_file
     from clio.db.session import get_db_session
     from common.db.session import dispose_engine
     now = datetime.now(UTC)
@@ -80,7 +81,7 @@ def test_goes_source_files_are_persisted_and_served_without_calibration(database
                                 goes_euv_256=2.5, goes_euvs_quality_valid=True)])
     source = Mock(return_value=[samples])
     monkeypatch.setattr(goes, 'source_frames', source)
-    config = SimpleNamespace(observations={'goes': SimpleNamespace(backfill=SimpleNamespace(days=88))})
+    config = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=88)})
 
     async def check():
         try:

@@ -1,4 +1,4 @@
-"""Scheduling and freshness contracts shared by status and collector probes."""
+"""Expected polling intervals and freshness thresholds for source diagnostics."""
 from clio.providers.solar_wind_loader import SOURCES as WIND_SOURCES
 from clio.providers.geomagnetic_loader import SOURCES as INDEX_SOURCES, INTERVAL_SECONDS, POLL_SECONDS
 
@@ -23,37 +23,16 @@ def overdue_after(source_id: str) -> int:
     return 2 * poll_seconds(source_id) + 60
 
 
-def configured_geomagnetic_polls() -> dict[str, float]:
-    from clio.config import load_observation_config
-    config = load_observation_config()
-    polls = {}
-    for source in INDEX_SOURCES:
-        intervals = [policy.schedules.live.every.total_seconds() for policy in config.observations.values()
-                     if f'swpc.{source}' in policy.sources.live]
-        if intervals:
-            polls[source] = min(intervals)
-    return polls
-
-
-def configured_wind_polls() -> dict[str, float]:
-    from clio.config import load_observation_config
-    config = load_observation_config()
-    polls = {}
-    for kind in ('mag', 'plasma'):
-        intervals = [policy.schedules.live.every.total_seconds() for policy in config.observations.values()
-                     if f'swpc.rtsw_{kind}' in policy.sources.live]
-        if intervals:
-            polls[f'solar_wind_{kind}'] = min(intervals)
-    return polls
-
-
 def poll_seconds(source_id: str) -> float:
-    if source_id in INDEX_SOURCES:
-        return configured_geomagnetic_polls().get(source_id, POLL_SECONDS[source_id])
-    return configured_wind_polls().get(source_id, SOURCE_SPECS[source_id]['poll_seconds'])
+    return SOURCE_SPECS[source_id]['poll_seconds']
 
 
 def collector_sources(collector: str) -> list[str]:
+    from clio.config import load_observation_config
+    config = load_observation_config()
+    products = {product for policy in config.observations.values() for product in policy.sources.live}
     if collector == 'geomagnetic':
-        return list(configured_geomagnetic_polls())
-    return list(configured_wind_polls()) if collector == 'solar-wind' else []
+        return [source for source in INDEX_SOURCES if f'swpc.{source}' in products]
+    if collector == 'solar-wind':
+        return [f'solar_wind_{kind}' for kind in ('mag', 'plasma') if f'swpc.rtsw_{kind}' in products]
+    return []

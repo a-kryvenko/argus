@@ -1,4 +1,6 @@
 """Select observation kinds and combine independent numeric/file reports."""
+from datetime import timedelta
+
 from clio.ingestion.products import OBSERVATIONS
 
 
@@ -17,17 +19,17 @@ def merge_files(result, files):
             'failed_metrics': sorted(set(result['failed_metrics']) | set(files['failed_metrics']))}
 
 
-async def merge_sdo(result, config, args, *, mode):
-    if not config.sdo_images.enabled or (args.metrics is not None and 'sdo' not in args.metrics):
+async def merge_sdo(result, config, *, now, mode, metrics=None):
+    if not config.sdo_images.enabled or (metrics is not None and 'sdo' not in metrics):
         return result
     import asyncio
-    from clio.commands.sdo_images import cycle
+    from clio.ingestion.sdo_images import cycle
     from common.sdo_images import archive_root
     report = await asyncio.to_thread(
         cycle, archive_root(), mode,
-        batch_hours=config.sdo_images.warmup_hours_per_batch,
-        full=not getattr(args, 'batch', False),
-        start=getattr(args, 'start', None), end=getattr(args, 'end', None))
+        full=True, clock=lambda: now,
+        start=now - timedelta(days=config.sdo_images.backfill_days) if mode == 'warmup' else None,
+        end=now if mode == 'warmup' else None)
     result['sdo'] = report
     if report.get('failed'):
         result['status'] = 'partial'

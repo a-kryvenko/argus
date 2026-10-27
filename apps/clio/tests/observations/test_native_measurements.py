@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, Mock
 
 from sqlalchemy.dialects import postgresql
 
-from clio.observations.native import wind_measurements, geomagnetic_measurements, store_native
+from clio.ingestion.conversion import wind_measurements, geomagnetic_measurements
+from clio.observations.measurements import store_native
 from clio.monitoring import measurements as monitoring
 from clio.db.models.measurement import Measurement
 

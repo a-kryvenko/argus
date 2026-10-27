@@ -33,34 +33,17 @@ Manual migrations do not stop writers or create backups.
 
 | Command | Purpose |
 | --- | --- |
-| `./argus clio collect [METRIC ...]` | Collect live observations |
-| `./argus clio backfill [METRIC ...] [--from DATE --to DATE]` | Fill historical gaps |
-| `./argus clio normalize` | Normalize stored observations |
-| `./argus clio sdo-cleanup` | Prune expired SDO files |
+| `./argus clio serve` | Run the observation API |
+| `./argus clio collect [METRIC ...]` | Collect live observations; default: all |
+| `./argus clio backfill` | Check and fill configured historical horizons |
+| `./argus clio normalize` | Write hourly rows from live observations |
+| `./argus clio cleanup` | Remove expired live observations, hourly rows and SDO files |
 
-One-shot commands exit after completion. Metrics are space-separated (`v n t`);
-omitting them selects all configured observations. Empty DBs need collection
-before normalization. Deployment installs `apps/clio/cronjobs.txt`; flock prevents overlap.
-Logs are in `log/clio/`.
-Use `backfill sdo --batch` for bounded SDO warmup.
-`collect donki` collects DONKI catalogs; `collect enlil` collects NOAA ENLIL profiles. Both are included in `collect` without arguments.
-
-## Historical recovery
-
-```bash
-./argus clio backfill
-./argus clio backfill v n t --from 2026-08-31 --to 2026-09-09
-./argus clio backfill sdo
-./argus clio backfill gong goes
-```
-
-Supply both dates; end is exclusive, not future, range ≤31 days. Dates mean UTC
-midnight; timestamps require a timezone and whole UTC hour. Without dates, use
-configured `backfill.days`. SDO is limited to 45-day retention.
-
-Existing values/first receipts remain unchanged; restored files must match saved
-SHA256. Prophet rebuilds derivative caches from originals. Output reports source
-failures and missing closed slots at each metric's cadence.
+Backfill takes no arguments; horizons come from `clio.observations.*.backfill_days`.
+Cleanup uses `clio.retention.live_days` and `normalized_days` (6 and 60).
+Restored originals must match their recorded SHA256.
+Partial results and reported failures exit with code 1.
+Cron: `apps/clio/cronjobs.txt`. Logs: `log/clio/`.
 
 ## Prophet
 

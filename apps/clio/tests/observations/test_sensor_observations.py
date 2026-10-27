@@ -14,10 +14,10 @@ from clio.observations.schema import (
     REQUIRED_METRICS,
     SOLAR_INDEX_METRICS,
 )
-from clio.observations import normalized as service
-from clio.observations import derived as processing
-from clio.observations.derived import normalize_measurements
-from clio.observations.store import upsert_normalized_observations
+from clio.ingestion import normalize as service
+from clio.ingestion import normalize as processing
+from clio.ingestion.normalize import normalize_measurements
+from clio.observations.normalized import upsert_normalized_observations
 
 
 def _measurement_rows(timestamp: datetime, offset: float = 0) -> list[dict]:
@@ -110,7 +110,8 @@ def test_refresh_reads_stored_values_without_fetching(monkeypatch):
     fetch = Mock(side_effect=AssertionError("refresh must not fetch"))
     monkeypatch.setattr('requests.sessions.Session.request', fetch)
     result = asyncio.run(service.refresh_normalized_observations(session, now))
-    load.assert_awaited_once_with(session, now - timedelta(days=60), until=now + timedelta(microseconds=1))
+    load.assert_awaited_once_with(session, now - timedelta(days=6), until=now + timedelta(microseconds=1),
+                                 source_products=['swpc.rtsw_plasma', 'swpc.rtsw_mag', 'swpc.kp', 'swpc.dst', 'swpc.f107'])
     assert len(result.points) == 1
     assert result.points[0].s10 is None
     fetch.assert_not_called()
@@ -121,7 +122,7 @@ def test_empty_refresh_fails_without_bootstrap_or_raw_writes(monkeypatch):
     monkeypatch.setattr(service, 'load_measurements', AsyncMock(return_value=pd.DataFrame(
         columns=['metric', 'value', 'observed_at'])))
     session = AsyncMock()
-    with pytest.raises(RuntimeError, match='collect and backfill'):
+    with pytest.raises(RuntimeError, match='collect first'):
         asyncio.run(service.refresh_normalized_observations(session))
     session.execute.assert_not_called()
     session.commit.assert_not_called()
@@ -136,3 +137,16 @@ def test_normalized_upsert_writes_sql_null_for_missing_indices():
     statement = session.execute.call_args.args[0]
     parameters = statement.compile().params
     assert all(parameters[f"{name}_m0"] is None for name in SOLAR_INDEX_METRICS)
+
+
+def test_live_normalization_uses_configured_retention(monkeypatch):
+    from clio.config import ClioObservations
+    now = datetime(2026, 10, 27, tzinfo=UTC)
+    config = ClioObservations(observations={}, retention={'live_days': 8})
+    monkeypatch.setattr(service, 'load_observation_config', lambda: config)
+    load = AsyncMock(return_value=pd.DataFrame(columns=['metric', 'value', 'observed_at']))
+    monkeypatch.setattr(service, 'load_measurements', load)
+    with pytest.raises(RuntimeError, match='collect first'):
+        asyncio.run(service.refresh_normalized_observations(AsyncMock(), now))
+    assert load.call_args.args[1] == now - timedelta(days=8)
+    assert 'omni.hourly' not in load.call_args.kwargs['source_products']

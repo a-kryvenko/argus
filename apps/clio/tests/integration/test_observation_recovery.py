@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from clio.db.models.measurement import Measurement
 from clio.db.models.observation_source_status import ObservationSourceStatus
-from clio.domains.solar_wind import observations as solar_wind
-from clio.domains import geomagnetic
+from clio.ingestion import numeric_live as live
+from clio.providers import solar_wind_loader as solar_wind, geomagnetic_loader as geomagnetic
 
 
 
@@ -45,7 +45,8 @@ async def verify():
                 await connection.run_sync(model.__table__.create)
         for source in ('mag', 'plasma', 'kp', 'dst'):
             solar = source in ('mag', 'plasma')
-            service = solar_wind if solar else geomagnetic
+            provider = solar_wind if solar else geomagnetic
+            product = f'swpc.rtsw_{source}' if solar else f'swpc.{source}'
             model = Measurement
             step = timedelta(seconds=60 if solar else geomagnetic.INTERVAL_SECONDS[source])
             # More than one SQL batch for solar wind, eight hours of downtime.
@@ -71,9 +72,10 @@ async def verify():
                             (await session.execute(select(model).where(source_filter))).scalars()}
 
             async def poll(payload):
-                with patch.object(service, 'get_db_session', side_effect=factory), \
-                     patch.object(service, 'fetch_records', return_value=deepcopy(payload)):
-                    await service.ingest_source(source)
+                with patch.object(live, 'get_db_session', side_effect=factory), \
+                     patch.object(provider, 'fetch_records', return_value=deepcopy(payload)):
+                    metrics = list(solar_wind.FIELDS[source]) if solar else ['kp', 'ap'] if source == 'kp' else ['dst']
+                    await live.collect_product(product, {metric: [product] for metric in metrics}, start, receipt)
 
             # Existing prefix plus a newer point: recovery must fill internal holes too.
             await poll(records[:2] + records[-1:])

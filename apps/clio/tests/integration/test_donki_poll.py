@@ -13,10 +13,10 @@ def test_donki_versions_are_causal_and_empty_responses_replace_old_events(databa
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     from clio.db.models.file_observation import FileObservation
-    from clio.observations.files import store_receipt
+    from clio.observations.archive import store_receipt
     from common.db.session import dispose_engine
     from clio.db.session import get_db_session
-    from clio.routers.solar_wind_events import load_event_inputs
+    from clio.observations.solar_wind_events import load_event_inputs
     now = datetime.now(UTC)
     raw = b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'
 
@@ -53,10 +53,10 @@ def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypa
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     from clio.db.models.file_observation import FileObservation
-    from clio.observations.files import store_receipt
+    from clio.observations.archive import store_receipt
     from common.db.session import dispose_engine
     from clio.db.session import get_db_session
-    from clio.routers.solar_wind_events import load_event_inputs
+    from clio.observations.solar_wind_events import load_event_inputs
     now = datetime.now(UTC).replace(microsecond=0)
 
     async def check():
@@ -95,7 +95,7 @@ def test_closed_hourly_speed_history_prefers_covered_native_data_and_gates_recei
     from clio.db.models.measurement import Measurement
     from common.db.session import dispose_engine
     from clio.db.session import get_db_session
-    from clio.routers.solar_wind_events import hourly_speeds
+    from clio.observations.solar_wind_events import hourly_speeds
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     first = now-timedelta(days=27)
     second = first+timedelta(hours=1)

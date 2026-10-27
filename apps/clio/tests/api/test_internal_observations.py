@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
 from clio.routers import measurements as routes
+from clio.routers.auth import require_service_token
 
 NOW = datetime(2026, 9, 12, tzinfo=UTC)
 
@@ -15,7 +16,7 @@ def client_with_session(monkeypatch):
     session = AsyncMock()
     session.execute.return_value = Mock(all=lambda: [])
     app = FastAPI()
-    app.include_router(routes.router)
+    app.include_router(routes.router, dependencies=[Depends(require_service_token)])
     app.dependency_overrides[routes.get_request_db_session] = lambda: session
     return TestClient(app), session
 

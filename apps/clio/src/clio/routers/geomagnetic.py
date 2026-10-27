@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
+
+from common.schemas.response import success_response
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from clio.db.session import get_request_db_session
-from common.schemas.response import success_response
-from clio.domains import geomagnetic
+from clio.observations import geomagnetic
 
 router = APIRouter(prefix='/internal/v1/observations/geomagnetic', tags=['observations'])
 

@@ -13,9 +13,10 @@ from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from clio.db.models.measurement import Measurement
-from clio.observations.native import wind_measurements, store_native
-from clio.domains.solar_wind.history import history
-from clio.observations.store import load_measurements
+from clio.ingestion.conversion import wind_measurements
+from clio.observations.measurements import store_native
+from clio.observations.solar_wind import aggregated_history as history
+from clio.observations.measurements import load_measurements
 
 pytestmark = pytest.mark.skipif(not os.getenv('TEST_DATABASE_ADMIN_DSN'), reason='Disposable PostgreSQL required')
 NOW = datetime(2026, 9, 1, tzinfo=UTC)
@@ -129,6 +130,96 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(
                     Measurement.metric == 'bz', Measurement.observed_at == NOW))
                 assert receipt == NOW+timedelta(hours=2)
+        finally:
+            await engine.dispose()
+    asyncio.run(verify())
+
+
+def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import pandas as pd
+
+    from clio.commands import cleanup
+    from clio.config import load_observation_config
+    from clio.db.models.normalized_observation import NormalizedObservation
+    from clio.ingestion import numeric_backfill as backfill
+    from clio.ingestion import normalize as normalized
+    from clio.observations.schema import REQUIRED_METRICS
+
+    config = load_observation_config().model_copy(deep=True)
+    config.sdo_images.enabled = False
+    config.observations = {m: config.observations[m] for m in REQUIRED_METRICS}
+    for policy in config.observations.values():
+        policy.backfill_days = 2
+        policy.sources.historical = ['omni.hourly']
+    now = NOW + timedelta(days=100)
+    start = now - timedelta(days=2)
+    archived = pd.DataFrame([dict(metric=metric, observed_at=start+timedelta(hours=h), value=2.)
+                             for h in range(48) for metric in REQUIRED_METRICS])
+    provider = Mock()
+    provider.fetch.return_value = archived
+    monkeypatch.setattr(backfill, 'historical_adapters', lambda: {'omni.hourly': provider})
+    monkeypatch.setattr(normalized, 'load_observation_config', lambda: config)
+    monkeypatch.setattr(cleanup, 'load_observation_config', lambda: config)
+
+    async def verify():
+        engine = create_async_engine(database_url)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        monkeypatch.setattr(cleanup, 'get_db_session', factory)
+        try:
+            async with engine.begin() as conn:
+                for model in (Measurement, NormalizedObservation):
+                    await conn.run_sync(model.__table__.create)
+            existing = start + timedelta(hours=3)
+            async with factory() as session:
+                session.add(NormalizedObservation(observed_at=existing, **{m: 7. for m in REQUIRED_METRICS}))
+                await session.commit()
+                report = await backfill.backfill_numeric(session, config, list(REQUIRED_METRICS), now=now)
+                assert report['status'] == 'complete'
+                assert report['normalized_hours'] == 48
+                assert await session.scalar(sa.select(sa.func.count()).select_from(NormalizedObservation)) == 48
+                assert await session.scalar(sa.select(NormalizedObservation.bz).where(
+                    NormalizedObservation.observed_at == existing)) == 7.
+                # Filling a missing hourly row must also work when all raw history is already stored.
+                await session.execute(sa.delete(NormalizedObservation).where(NormalizedObservation.observed_at == start))
+                await session.commit()
+                await backfill.backfill_numeric(session, config, list(REQUIRED_METRICS), now=now)
+                provider.fetch.assert_called_once()
+                assert await session.scalar(sa.select(NormalizedObservation.bz).where(
+                    NormalizedObservation.observed_at == start)) == 2.
+                live_hour = now - timedelta(hours=1)
+                session.add_all([Measurement(metric=m, value=5., observed_at=live_hour+timedelta(minutes=15),
+                    source_product=config.observations[m].sources.live[0], received_at=now, quality='unverified')
+                    for m in REQUIRED_METRICS])
+                await session.commit()
+                await normalized.refresh_normalized_observations(session, now)
+                assert await session.scalar(sa.select(NormalizedObservation.bz).where(
+                    NormalizedObservation.observed_at == live_hour)) == 5.
+                assert await session.scalar(sa.select(NormalizedObservation.bz).where(
+                    NormalizedObservation.observed_at == existing)) == 7.
+                assert await session.scalar(sa.select(Measurement.value).where(
+                    Measurement.metric == 'bz', Measurement.observed_at == live_hour)) == 2.
+                boundary = now - timedelta(days=6)
+                old = now - timedelta(days=7)
+                ancient = now - timedelta(days=90)
+                session.add_all([
+                    Measurement(metric='bz', value=1., observed_at=old, source_product='swpc.rtsw_mag'),
+                    Measurement(metric='bz', value=1., observed_at=boundary, source_product='swpc.rtsw_mag'),
+                    Measurement(metric='bz', value=2., observed_at=ancient, source_product='omni.hourly'),
+                    Measurement(metric='v', value=3., observed_at=ancient, source_product=None),
+                    NormalizedObservation(observed_at=now-timedelta(days=61), **{m: 2. for m in REQUIRED_METRICS}),
+                    NormalizedObservation(observed_at=now-timedelta(days=60), **{m: 2. for m in REQUIRED_METRICS}),
+                ])
+                await session.commit()
+            report = await cleanup.run(SimpleNamespace(now=now))
+            assert report == {'live_removed': 1, 'normalized_removed': 1}
+            async with factory() as session:
+                rows = (await session.scalars(sa.select(Measurement).where(Measurement.observed_at <= boundary))).all()
+                assert {(r.metric, r.observed_at) for r in rows} == {('bz', boundary), ('bz', ancient), ('v', ancient)}
+                assert await session.scalar(sa.select(NormalizedObservation.observed_at).order_by(
+                    NormalizedObservation.observed_at).limit(1)) == now-timedelta(days=60)
         finally:
             await engine.dispose()
     asyncio.run(verify())

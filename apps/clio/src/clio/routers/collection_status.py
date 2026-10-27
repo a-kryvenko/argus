@@ -1,7 +1,8 @@
+from common.schemas.response import success_response
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from clio.db.session import get_request_db_session
-from common.schemas.response import success_response
 from clio.monitoring.status import source_status
 
 router = APIRouter(prefix='/internal/v1/observations', tags=['observations'])

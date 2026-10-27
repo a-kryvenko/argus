@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pandas as pd
 
-from clio.observations.schema import wide_to_measurements
+from clio.ingestion.conversion import wide_to_measurements
 from clio.ingestion.products import OBSERVATIONS, PRODUCTS
 
 

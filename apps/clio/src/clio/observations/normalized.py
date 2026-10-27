@@ -1,38 +1,14 @@
-from __future__ import annotations
+"""Read and persist hourly observations."""
+from datetime import datetime
 
-from datetime import UTC, datetime, timedelta
-
-from clio.db.models.normalized_observation import NormalizedObservation
-from common.schemas.observation import Observation, ObservationPoint
-from clio.observations.schema import HISTORY_DAYS
-from clio.observations.derived import normalize_measurements
+import pandas as pd
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.observations.store import (
-    load_measurements, upsert_normalized_observations,
-)
-
-
-async def refresh_normalized_observations(
-    session: AsyncSession,
-    now: datetime | None = None,
-) -> Observation:
-    """Rebuild normalized history from persisted observations."""
-
-    now = now or datetime.now(UTC)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=UTC)
-
-    since = now - timedelta(days=HISTORY_DAYS)
-    measurements = await load_measurements(session, since, until=now + timedelta(microseconds=1))
-    normalized = normalize_measurements(measurements)
-    if normalized.empty:
-        raise RuntimeError("No complete normalized observations could be built; run collect and backfill first")
-
-    await upsert_normalized_observations(session, normalized)
-    await session.commit()
-    return await load_normalized_observations(session, since=since, until=now)
+from clio.db.models.normalized_observation import NormalizedObservation
+from clio.observations.schema import OBSERVATION_METRICS
+from common.schemas.observation import Observation, ObservationPoint
 
 
 async def load_normalized_observations(
@@ -72,3 +48,32 @@ async def load_normalized_observations(
         )
         for record in records
     ])
+
+
+async def upsert_normalized_observations(
+    session: AsyncSession,
+    observations: pd.DataFrame,
+    *, replace_existing: bool = True,
+) -> None:
+    if observations.empty:
+        return
+
+    records = []
+    for row in observations.itertuples(index=False):
+        record = {"observed_at": row.observed_at.to_pydatetime()}
+        record.update({
+            metric: float(value) if pd.notna(value) else None
+            for metric in OBSERVATION_METRICS
+            for value in [getattr(row, metric)]
+        })
+        records.append(record)
+
+    statement = insert(NormalizedObservation).values(records)
+    if replace_existing:
+        statement = statement.on_conflict_do_update(
+            index_elements=[NormalizedObservation.observed_at],
+            set_={metric: getattr(statement.excluded, metric) for metric in OBSERVATION_METRICS},
+        )
+    else:
+        statement = statement.on_conflict_do_nothing(index_elements=[NormalizedObservation.observed_at])
+    await session.execute(statement)

@@ -116,7 +116,7 @@ def test_success_commits_status_and_measurements_together():
     context = AsyncMock(); context.__aenter__.return_value = marker
     async def succeed():
         async with service.track_attempt('kp', observations, lambda: context) as attempt:
-            attempt.received([{'interval_start': NOW-timedelta(hours=3), 'interval_end': NOW,
+            attempt.received([{'metric': 'kp', 'observed_at': NOW-timedelta(hours=3),
                                'value': 3.33, 'quality': 'unverified'}])
             observations.commit.assert_not_awaited()
     asyncio.run(succeed())
@@ -138,13 +138,14 @@ def test_api_returns_all_sources_in_empty_storage_without_fetching(monkeypatch):
     assert all(source['status'] == 'not_started' for source in data['sources'].values())
 
 
-def test_source_monitoring_uses_configured_cron_poll_interval(monkeypatch):
+def test_source_monitoring_uses_expected_poll_intervals_for_enabled_sources(monkeypatch):
     from clio import config as observation_config
     from clio.monitoring.specs import overdue_after, collector_sources
     config = observation_config.load_observation_config().model_copy(deep=True)
-    config.observations['dst'].schedules.live = observation_config.Schedule(every='15m')
     config.observations.pop('kp')
     config.observations.pop('ap')
     monkeypatch.setattr(observation_config, 'load_observation_config', lambda: config)
     assert collector_sources('geomagnetic') == ['dst']
-    assert overdue_after('dst') == 1860
+    assert overdue_after('dst') == 660
+    assert overdue_after('solar_wind_mag') == 180
+    assert overdue_after('kp') == 180

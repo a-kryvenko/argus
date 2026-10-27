@@ -25,8 +25,9 @@ def migrate(environment, revision='20261027_file_cutover'):
 def test_snapshot_readers_and_collectors_ignore_legacy_and_work_after_its_removal(database, monkeypatch, tmp_path, kind):
     from clio.db.models.file_observation import FileObservation
     from clio.db.session import get_db_session
-    from clio.observations.files import store_original, observation_values
-    from clio.routers.observation_files import load_observation_files, original_file
+    from clio.observations.archive import store_original, observation_values
+    from clio.observations.file_catalog import load_observation_files
+    from clio.routers.observation_files import original_file
     from common.db.session import dispose_engine
 
     dsns, urls, environment = database
@@ -94,17 +95,17 @@ def test_snapshot_readers_and_collectors_ignore_legacy_and_work_after_its_remova
                 assert same_id  # Stage 1 ON CONFLICT(id) remains safe during rolling writes.
             migrate(environment, 'head')
             if kind == 'gong':
-                from clio.domains import gong
+                from clio.ingestion import gong
                 from clio.providers import gong as provider
                 monkeypatch.setattr(provider, 'candidates', lambda *a, **kw: [(newest['observed_at'], 'https://test/observation')])
                 monkeypatch.setattr(provider, 'download', lambda *a: pytest.fail('Known observation downloaded again'))
-                policy = SimpleNamespace(observations={'gong': SimpleNamespace(backfill=SimpleNamespace(days=2),
+                policy = SimpleNamespace(observations={'gong': SimpleNamespace(backfill_days=2,
                     sources=SimpleNamespace(live=[source], historical=['gong.archive']))})
                 report = await gong.collect(policy, mode='live', now=now)
             else:
-                from clio.domains import goes
+                from clio.ingestion import goes
                 monkeypatch.setattr(goes, 'source_frames', lambda *a: pytest.fail('Known observation downloaded again'))
-                policy = SimpleNamespace(observations={'goes': SimpleNamespace(backfill=SimpleNamespace(days=2))})
+                policy = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=2)})
                 report = await goes.collect(policy, mode='live', now=now)
             assert report['files'][kind]['failed'] == 0
             assert report['files'][kind]['received'] == 0
@@ -119,8 +120,8 @@ def test_snapshot_readers_and_collectors_ignore_legacy_and_work_after_its_remova
 def test_event_inputs_use_only_file_receipts_and_preserve_cutoffs(database, monkeypatch, tmp_path):
     from clio.db.models.file_observation import FileObservation
     from clio.db.session import get_db_session
-    from clio.observations.files import store_receipt
-    from clio.routers.solar_wind_events import load_event_inputs
+    from clio.observations.archive import store_receipt
+    from clio.observations.solar_wind_events import load_event_inputs
     from common.db.session import dispose_engine
 
     dsns, urls, environment = database
@@ -184,14 +185,14 @@ def test_event_inputs_use_only_file_receipts_and_preserve_cutoffs(database, monk
                 late = await load_event_inputs(session, base+timedelta(minutes=45), datetime.now(UTC))
                 assert late.polls[0].poll_id == latest
                 assert late.latest_attempts['CME']['error'] == 'Timeout'
-            from clio.domains import enlil as enlil_collection
+            from clio.ingestion import enlil as enlil_collection
             monkeypatch.setattr(enlil_collection.enlil, 'discover', lambda now: [dict(
                 key='run', size=6, last_modified=base.isoformat())])
             monkeypatch.setattr(enlil_collection.enlil, 'download', lambda url: pytest.fail('Known ENLIL run downloaded again'))
             await enlil_collection.collect()
             # The same application must keep reading and collecting after stage 3.
             migrate(environment, 'head')
-            from clio.domains import donki as donki_collection
+            from clio.ingestion import donki as donki_collection
             policy = SimpleNamespace(lookback_days=30)
             monkeypatch.setattr(donki_collection.donki, 'fetch', lambda *args: (b'[]', []))
             await donki_collection.collect(policy)

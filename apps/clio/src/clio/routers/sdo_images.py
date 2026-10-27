@@ -1,18 +1,16 @@
 """JSON catalog of individual observations; image bytes stay on shared disk."""
 from datetime import UTC, datetime, timedelta
-import logging
-from zipfile import BadZipFile
 
-from fastapi import APIRouter, Depends, HTTPException
+from common.schemas.response import ApiResponse, success_response
+from common.schemas.sdo_images import SDOImageCatalog
+from common.sdo_images import OBSERVED_CHANNELS, RETENTION_HOURS, utc
+from fastapi import APIRouter, HTTPException
 from pydantic import AwareDatetime
 
-from clio.routers.auth import require_service_token
-from common.schemas.response import ApiResponse, success_response
-from common.schemas.sdo_images import MissingSDOImage, SDOImageCatalog, SDOImageReference
-from common.sdo_images import OBSERVED_CHANNELS, RETENTION_HOURS, archive_root, image_path, read_metadata, utc
+from clio.observations.errors import ObservationUnavailable
+from clio.observations.file_catalog import read_image_catalog
 
-logger = logging.getLogger(__name__)
-router = APIRouter(prefix='/internal/v1/observations', dependencies=[Depends(require_service_token)])
+router = APIRouter(prefix='/internal/v1/observations')
 
 
 @router.get('/sdo-images', response_model=ApiResponse[SDOImageCatalog])
@@ -37,22 +35,8 @@ def sdo_images(start: AwareDatetime | None = None, end: AwareDatetime | None = N
     if channel is not None and channel not in OBSERVED_CHANNELS:
         raise HTTPException(422, 'Unknown SDO observation channel')
     channels = (channel,) if channel is not None else OBSERVED_CHANNELS
-    root = archive_root().resolve()
-    items, missing = [], []
-    for offset in range(int((end - start).total_seconds() // 3600)):
-        slot = start + timedelta(hours=offset)
-        for name in channels:
-            try:
-                metadata = read_metadata(root, slot, name)
-            except FileNotFoundError:
-                missing.append(MissingSDOImage(slot_at=slot, channel=name))
-                continue
-            except (OSError, ValueError, KeyError, TypeError, EOFError, BadZipFile):
-                logger.exception('Cannot read SDO observation %s at %s', name, slot)
-                raise HTTPException(503, 'SDO observation storage is not readable') from None
-            if utc(metadata['available_at']) > as_of or utc(metadata['observed_at']) > as_of:
-                missing.append(MissingSDOImage(slot_at=slot, channel=name))
-                continue
-            items.append(SDOImageReference(path=str(image_path(root, slot, name)), metadata=metadata))
-    return success_response(SDOImageCatalog(start=start, end=end, as_of=as_of, read_at=now,
-                                           items=items, missing=missing))
+    try:
+        catalog = read_image_catalog(start, end, as_of, now, channels)
+    except ObservationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
+    return success_response(catalog)

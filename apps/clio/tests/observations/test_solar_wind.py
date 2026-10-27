@@ -1,0 +1,88 @@
+import asyncio
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy.dialects import postgresql
+
+from clio.db.models.measurement import Measurement
+from clio.routers import solar_wind as routes
+from clio.observations import solar_wind as service
+
+NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
+
+
+def observation(metric='bz', minutes=1, value=-4, **overrides):
+    return Measurement(metric=metric, observed_at=NOW - timedelta(minutes=minutes),
+                       received_at=NOW, value=value,
+                       quality='unverified', **overrides)
+
+
+def test_latest_has_independent_freshness_and_does_not_hide_missing_values():
+    session = AsyncMock()
+    session.execute.side_effect = [Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation())))),
+                                   Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation('v', 20, 420))))),
+                                   Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=observation('n', 20, None)))))]
+    result = asyncio.run(service.latest(session, ['bz', 'v', 'n'], NOW))['series']
+    assert result['bz']['status'] == 'fresh'
+    assert result['bz']['age_seconds'] == 60
+    assert result['v']['status'] == 'stale'
+    assert result['v']['age_seconds'] == 1200
+    assert result['n']['status'] == 'missing'
+    assert result['n']['latest']['value'] is None
+    assert result['bz']['coordinate_system'] == 'GSM'
+    assert result['bz']['propagated'] is False
+    for call in session.execute.call_args_list:
+        sql = str(call.args[0].compile(dialect=postgresql.dialect()))
+        assert 'LIMIT' in sql and 'source_product' in sql
+
+
+def test_history_preserves_gaps_and_flagged_values():
+    rows = [observation(minutes=20), observation(minutes=1)]
+    rows[1].quality = 'flagged'
+    session = AsyncMock()
+    session.execute.return_value = Mock(scalars=Mock(return_value=rows))
+    result = asyncio.run(service.history(session, ['bz'], NOW-timedelta(hours=1), NOW))
+    points = result['series']['bz']['points']
+    assert len(points) == 2
+    assert points[1]['quality'] == 'flagged'
+    assert points[1]['value'] == -4
+    assert result['gap_filling'] == 'none'
+    assert 'spacecraft' not in points[1] and 'provider_quality' not in points[1]
+    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
+    assert 'measurement' in sql and 'source_product' in sql
+
+
+def test_empty_database_has_explicit_missing_series():
+    session = AsyncMock()
+    session.execute.return_value = Mock(scalars=Mock(return_value=Mock(first=Mock(return_value=None))))
+    series = asyncio.run(service.latest(session, ['bz'], NOW))['series']['bz']
+    assert series['latest'] is None and series['age_seconds'] is None
+    assert series['status'] == 'missing'
+
+
+def test_api_validates_ranges_and_metrics_without_querying_database(monkeypatch):
+    app = FastAPI()
+    app.include_router(routes.router)
+    session = object()
+    app.dependency_overrides[routes.get_request_db_session] = lambda: session
+    latest, history = AsyncMock(return_value={'series': {}}), AsyncMock(return_value={'series': {}})
+    monkeypatch.setattr(routes.solar_wind, 'latest', latest)
+    monkeypatch.setattr(routes.solar_wind, 'history', history)
+    prefix = '/internal/v1/observations/solar-wind'
+    with TestClient(app) as client:
+        for query in ['metrics=unknown', 'metrics=', 'from=2026-09-01T00:00:00',
+                      'from=2026-09-01T00:00:00Z&to=2026-09-09T00:00:00Z',
+                      'from=2026-09-02T00:00:00Z&to=2026-09-01T00:00:00Z',
+                      'from=bad']:
+            assert client.get(f'{prefix}/history?{query}').status_code == 422
+        history.assert_not_called()
+        response = client.get(f'{prefix}/history?from=2026-09-01T00:00:00Z&to=2026-09-08T00:00:00Z&metrics=bz,bz,v')
+        assert response.status_code == 200
+        assert response.headers['cache-control'] == 'no-store'
+        assert history.call_args.args[1] == ['bz', 'v']
+        response = client.get(f'{prefix}/latest?metrics=bz')
+        assert response.status_code == 200
+        latest.assert_awaited_once_with(session, ['bz'])

@@ -10,8 +10,8 @@ from sqlalchemy.dialects import postgresql
 from clio.config import ClioObservations
 from clio.ingestion.adapters import WideHistoryAdapter, historical_adapters
 from clio.ingestion.products import PRODUCTS
-from clio.observations import backfill as service
-from clio.observations.store import upsert_measurements
+from clio.ingestion import numeric_backfill as service
+from clio.observations.measurements import upsert_measurements
 from clio.providers.spdf_loader import SPDF_Loader
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
@@ -26,8 +26,7 @@ def config(metrics=('v', 'n', 't')):
         return {'live': live, 'historical': historical}
     return ClioObservations.model_validate({'observations': {
         metric: {'sources': sources(metric),
-                 'schedules': {'live': {'every': '1h'}, 'backfill': {'every': '6h'}},
-                 'backfill': {'days': 2}}
+                 'backfill_days': 2}
         for metric in metrics}})
 
 
@@ -40,16 +39,16 @@ def frame(*rows):
     lambda p: p['sources'].update(historical=['swpc.rtsw_plasma']),
     lambda p: p['sources'].update(historical=['omni.hourly', 'omni.hourly']),
     lambda p: p['sources'].update(historical=[]),
-    lambda p: p['schedules']['live'].update(every='0s'),
-    lambda p: p['schedules']['live'].update(every='whenever'),
-    lambda p: p['backfill'].update(days=0),
-    lambda p: p['backfill'].update(days=True),
+    lambda p: p.update(backfill_days=0),
+    lambda p: p.update(backfill_days=True),
+    lambda p: p.update(backfill_days='60'),
+    lambda p: p.update(schedules={'live': {'every': '1m'}}),
+    lambda p: p.update(backfill={'days': 60}),
     lambda p: p.update(unknown=True),
 ])
 def test_invalid_policy_rejected(change):
     policy = {'sources': {'live': ['swpc.rtsw_plasma'], 'historical': ['omni.hourly']},
-              'schedules': {'live': {'every': '60s'}, 'backfill': {'every': '1d'}},
-              'backfill': {'days': 60}}
+              'backfill_days': 60}
     change(policy)
     with pytest.raises(ValidationError):
         ClioObservations.model_validate({'observations': {'v': policy}})
@@ -130,7 +129,7 @@ def test_complete_history_is_noop_without_provider_requests(monkeypatch):
     adapters = {'omni.hourly': Mock(), 'ace.plasma_hourly': Mock()}
     monkeypatch.setattr(service, 'historical_adapters', lambda: adapters)
     session = AsyncMock()
-    result = asyncio.run(service.backfill_selected(session, cfg, ['v'], now=START + timedelta(days=2)))
+    result = asyncio.run(service.backfill_numeric(session, cfg, ['v'], now=START + timedelta(days=2)))
     assert result['status'] == 'complete'
     assert result['downloaded_measurements'] == 0
     for adapter in adapters.values():
@@ -140,19 +139,18 @@ def test_complete_history_is_noop_without_provider_requests(monkeypatch):
 
 def test_backfill_preserves_concurrent_values_and_uses_metric_depth(monkeypatch):
     cfg = config(('v', 'n'))
-    cfg.observations['n'].backfill.days = 1
+    cfg.observations['n'].backfill_days = 1
     reads = AsyncMock(side_effect=[frame(), frame(('v', 450., START))])
     monkeypatch.setattr(service, 'load_measurements', reads)
     fetch = Mock(return_value=(frame(('v', 400., START)), []))
     monkeypatch.setattr(service, 'fetch_missing', fetch)
     insert = AsyncMock()
     monkeypatch.setattr(service, 'upsert_measurements', insert)
-    from clio.observations import derived
-    normalize = Mock(return_value=pd.DataFrame())
-    monkeypatch.setattr(derived, 'normalize_measurements', normalize)
+    normalize = Mock(return_value=pd.DataFrame(columns=['observed_at']))
+    monkeypatch.setattr(service, 'normalize_measurements', normalize)
     monkeypatch.setattr(service, 'upsert_normalized_observations', AsyncMock())
     session = AsyncMock()
-    result = asyncio.run(service.backfill_selected(session, cfg, ['v', 'n'], now=START + timedelta(days=2)))
+    result = asyncio.run(service.backfill_numeric(session, cfg, ['v', 'n'], now=START + timedelta(days=2)))
     pending = fetch.call_args.args[0]
     assert len(pending['v']) == 48 and len(pending['n']) == 24
     assert normalize.call_args.args[0].value.tolist() == [450.]
@@ -191,7 +189,7 @@ def test_all_sources_failing_does_not_commit(monkeypatch):
     monkeypatch.setattr(service, 'historical_adapters', lambda: adapters)
     session = AsyncMock()
     with pytest.raises(RuntimeError, match='No gaps filled'):
-        asyncio.run(service.backfill_selected(session, config(('v',)), ['v'], start=START, end=END))
+        asyncio.run(service.backfill_numeric(session, config(('v',)), ['v'], now=START + timedelta(days=2)))
     session.commit.assert_not_awaited()
     session.execute.assert_not_called()
 
@@ -241,23 +239,35 @@ def test_three_hour_coverage_stores_one_original_per_missing_slot():
 
 
 def test_numeric_ingestion_does_not_register_calibration_products():
-    from clio.ingestion.live_adapters import live_adapters
+    from clio.ingestion.live import LIVE_LOADERS
     assert not any('calibrated' in name for name in historical_adapters())
-    assert not any('calibrated' in name for name in live_adapters())
+    assert not any('calibrated' in name for name in LIVE_LOADERS)
 
 
-def test_partial_explicit_day_does_not_fetch_daily_observation(monkeypatch):
+def test_daily_backfill_uses_configured_closed_days(monkeypatch):
     monkeypatch.setattr(service, 'load_measurements', AsyncMock(return_value=frame()))
-    adapters = {'gfz.f107': Mock(), 'omni.hourly': Mock()}
-    monkeypatch.setattr(service, 'historical_adapters', lambda: adapters)
-    result = asyncio.run(service.backfill_selected(AsyncMock(), config(('f10_7',)), ['f10_7'], start=START, end=END))
-    assert result['status'] == 'complete'
-    for adapter in adapters.values():
-        adapter.fetch.assert_not_called()
+    fetch = Mock(return_value=(frame(), []))
+    monkeypatch.setattr(service, 'fetch_missing', fetch)
+    result = asyncio.run(service.backfill_numeric(
+        AsyncMock(), config(('f10_7',)), ['f10_7'], now=START + timedelta(days=2, hours=3)))
+    assert fetch.call_args.args[0] == {'f10_7': {pd.Timestamp(START), pd.Timestamp(START + timedelta(days=1))}}
+    assert result['missing_observed_slots'] == {'f10_7': 2}
 
 
 def test_magnetic_config_cannot_use_ace_gse_as_gsm_fallback():
     policy = {'sources': {'live': ['swpc.rtsw_mag'], 'historical': ['ace.plasma_hourly']},
-              'schedules': {'live': {'every': '1h'}, 'backfill': {'every': '1d'}}, 'backfill': {'days': 60}}
+              'backfill_days': 60}
     with pytest.raises(ValidationError, match='incompatible'):
         ClioObservations.model_validate({'observations': {'bz': policy}})
+
+
+@pytest.mark.parametrize('section, obsolete', [
+    ('sdo_images', {'live_seconds': 300}),
+    ('sdo_images', {'warmup_seconds': 60}),
+    ('sdo_images', {'cleanup_seconds': 3600}),
+    ('sdo_images', {'warmup_hours_per_batch': 6}),
+    ('solar_wind_events', {'every_seconds': 900}),
+])
+def test_removed_configuration_fields_are_rejected(section, obsolete):
+    with pytest.raises(ValidationError, match='Extra inputs are not permitted'):
+        ClioObservations.model_validate({'observations': {}, section: obsolete})

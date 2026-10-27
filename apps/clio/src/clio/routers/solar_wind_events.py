@@ -1,90 +1,16 @@
-"""Replay only receipts that existed at the requested cutoff; no forecasting here."""
-from datetime import UTC, datetime, timedelta
+"""HTTP reads of event observations available at the requested cutoff."""
+from datetime import UTC, datetime
 
+from common.schemas.solar_wind_events import EventInputs
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AwareDatetime
-from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_request_db_session
-from clio.normalization.solar_wind_events import normalize_event_inputs
-from clio.db.models.measurement import Measurement
-from clio.observations.reading import donki_inputs, enlil_input
-from common.schemas.solar_wind_events import EventInputs, HourlyWindSpeed, L1Sample
+from clio.observations.errors import ObservationUnavailable
+from clio.observations.solar_wind_events import read_event_inputs
 
 router = APIRouter(prefix='/internal/v1/observations/solar-wind-events', tags=['observations'])
-
-
-async def hourly_speeds(session, as_of):
-    """Closed causal hours; prefer >=30 native minutes, otherwise observed hourly sources."""
-    rows = (await session.execute(text("""
-        WITH eligible AS (
-            SELECT observed_at, received_at, value, source_product,
-                   date_trunc('hour', observed_at) AS bucket,
-                   source_product = 'swpc.rtsw_plasma' AS native
-            FROM measurement
-            WHERE metric='v' AND observed_at >= :start
-              AND observed_at < date_trunc('hour', CAST(:cutoff AS timestamptz))
-              AND received_at <= :cutoff
-              AND quality IS DISTINCT FROM 'flagged' AND quality IS DISTINCT FROM 'missing'
-              AND value > 0 AND value < 3000
-              AND source_product IN ('swpc.rtsw_plasma','omni.hourly','ace.plasma_hourly','soho.plasma_hourly')
-        ), native AS (
-            SELECT bucket, avg(value) AS value, max(received_at) AS received_at,
-                   count(DISTINCT date_trunc('minute', observed_at)) AS sample_count,
-                   'swpc.rtsw_plasma' AS source_product
-            FROM eligible WHERE native GROUP BY bucket
-            HAVING count(DISTINCT date_trunc('minute', observed_at)) >= 30
-        ), historical AS (
-            SELECT DISTINCT ON (bucket) bucket, value, received_at, 1 AS sample_count, source_product
-            FROM eligible WHERE NOT native AND observed_at = bucket
-            ORDER BY bucket, received_at DESC, source_product
-        )
-        SELECT * FROM native UNION ALL
-        SELECT * FROM historical WHERE bucket NOT IN (SELECT bucket FROM native)
-        ORDER BY bucket
-    """), {'start': as_of-timedelta(days=40), 'cutoff': as_of})).mappings().all()
-    return [HourlyWindSpeed(observed_at=r['bucket'], interval_end=r['bucket']+timedelta(hours=1),
-        available_at=max(r['received_at'], r['bucket']+timedelta(hours=1)),
-        value=r['value'], source_product=r['source_product'], sample_count=r['sample_count']) for r in rows]
-
-
-async def load_event_inputs(session, as_of, now):
-    # Latest *full response* per endpoint handles deletions, corrections and empty feeds.
-    try:
-        polls, attempts = await donki_inputs(session, as_of)
-    except (OSError, ValueError, KeyError):
-        raise HTTPException(503, 'DONKI original or receipt is unavailable or corrupt') from None
-    rows = (await session.execute(select(Measurement)
-        .where(Measurement.metric.in_(['bx', 'by', 'bz', 'v', 'n', 't']),
-               Measurement.source_product.in_(['swpc.rtsw_mag', 'swpc.rtsw_plasma']),
-               Measurement.observed_at >= as_of - timedelta(hours=6),
-               Measurement.observed_at <= as_of, Measurement.received_at <= as_of)
-        .order_by(Measurement.observed_at, Measurement.metric).limit(25001))).scalars().all()
-    if len(rows) > 25000:
-        raise HTTPException(503, 'L1 input range exceeds supported size')
-    speed_hourly = await hourly_speeds(session, as_of)
-    result = EventInputs(schema_version=2, as_of=as_of, read_at=now,
-        speed_hourly=speed_hourly,
-        polls=polls, latest_attempts=attempts,
-        l1_samples=[L1Sample(observed_at=p.observed_at,
-            available_at=max(p.observed_at, p.received_at),
-            metric=p.metric, value=p.value, quality=p.quality)
-            for p in rows])
-
-    result.events, result.enlil_arrivals = normalize_event_inputs(result)
-    try:
-        profile, attempt = await enlil_input(session, as_of)
-    except (OSError, ValueError, KeyError):
-        raise HTTPException(503, 'ENLIL original or receipt is unavailable or corrupt') from None
-    if profile:
-        result.enlil_profiles = [profile]
-    future = profile and any(p.valid_time > as_of for p in result.enlil_profiles[0].points)
-    result.enlil_profile_status = dict(state='available' if future else 'stale' if profile else 'unavailable',
-        model_created_at=profile.model_created_at.isoformat() if profile else None,
-        latest_attempt=attempt,
-        provider='NOAA/SWPC ENLIL', linked_to_donki=False)
-    return result
 
 
 @router.get('/inputs', response_model=EventInputs)
@@ -93,8 +19,6 @@ async def inputs(as_of: AwareDatetime, session: AsyncSession = Depends(get_reque
     if as_of > now:
         raise HTTPException(422, 'as_of must not be in the future')
     try:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        await session.execute(text("SET LOCAL statement_timeout = '30s'"))
-        return await load_event_inputs(session, as_of, now)
-    finally:
-        await session.rollback()
+        return await read_event_inputs(session, as_of, now)
+    except ObservationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None

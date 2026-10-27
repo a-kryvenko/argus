@@ -2,18 +2,16 @@
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from common.schemas.response import success_response
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import AwareDatetime, FiniteFloat
-from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.db.models.measurement import Measurement
-from clio.observations.intervals import interval_end_expression
 from clio.db.session import get_request_db_session
-from clio.routers.auth import require_service_token
-from common.schemas.response import success_response
+from clio.observations.errors import ObservationUnavailable
+from clio.observations.measurements import read_measurements
 
-router = APIRouter(prefix='/internal/v1/observations', dependencies=[Depends(require_service_token)])
+router = APIRouter(prefix='/internal/v1/observations')
 
 
 @router.get('/measurements')
@@ -39,28 +37,9 @@ async def measurements(
         raise HTTPException(422, 'Invalid metric')
     if min_value is not None and max_value is not None and min_value >= max_value:
         raise HTTPException(422, 'min_value must be less than max_value')
-    timestamp = Measurement.observed_at
-    available = func.greatest(timestamp, Measurement.received_at, interval_end_expression())
-    if aggregation == 'hourly':
-        timestamp = func.date_trunc('hour', timestamp)
-        statement = select(Measurement.metric, func.avg(Measurement.value).label('value'),
-                           timestamp.label('observed_at'), func.max(available).label('available_at'))
-        statement = statement.group_by(Measurement.metric, timestamp)
-    else:
-        statement = select(Measurement.metric, Measurement.value, timestamp,
-                           available.label('available_at'))
-    statement = statement.where(
-        Measurement.metric.in_(selected), Measurement.observed_at >= start, Measurement.observed_at < end,
-        or_(Measurement.quality.is_(None), Measurement.quality.not_in(['flagged', 'missing'])),
-        Measurement.value > float('-inf'), Measurement.value < float('inf'),
-    )
-    if min_value is not None:
-        statement = statement.where(Measurement.value >= min_value)
-    if max_value is not None:
-        statement = statement.where(Measurement.value < max_value)
-    if exclude_value is not None:
-        statement = statement.where(Measurement.value != exclude_value)
-    rows = (await session.execute(statement.order_by(timestamp, Measurement.metric).limit(250_001))).all()
-    if len(rows) > 250_000:
-        raise HTTPException(503, 'Measurement range exceeds the supported batch size; request a smaller interval')
-    return success_response({'schema_version': 1, 'items': [dict(row._mapping) for row in rows]})
+    try:
+        data = await read_measurements(session, start=start, end=end, metrics=selected, aggregation=aggregation,
+                                       min_value=min_value, max_value=max_value, exclude_value=exclude_value)
+    except ObservationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
+    return success_response(data)

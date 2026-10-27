@@ -43,21 +43,15 @@ class Attempt:
 
     def received(self, records: list[dict]) -> None:
         self.response_at = datetime.now(UTC)
-        if self.source_id.startswith('solar_wind_'):
-            point = max((row for row in records if row['active']), key=lambda row: row['observed_at'], default=None)
-            if point is not None:
-                self.observation_at = point['observed_at']
-                usable = sum(value is not None for value in point['values'].values())
-                self.quality = ('unavailable' if usable == 0 or point['raw'].get('overall_quality') not in (None, 0)
-                                else 'complete' if usable == len(point['values']) else 'partial')
-        else:
-            point = max(records, key=lambda row: row['interval_start'], default=None)
-            if point is not None:
-                self.observation_at = point['interval_start']
-                self.interval_end = point['interval_end']
-                self.quality = 'complete' if point['value'] is not None and point['quality'] != 'flagged' else 'unavailable'
-        if point is None:
-            self.quality = 'unavailable'
+        primary = records if self.source_id.startswith('solar_wind_') else [
+            row for row in records if row['metric'] == self.source_id]
+        self.observation_at = max((row['observed_at'] for row in primary), default=None)
+        latest = [row for row in primary if row['observed_at'] == self.observation_at]
+        usable = sum(row['value'] is not None and row['quality'] not in ('missing', 'flagged') for row in latest)
+        self.quality = ('unavailable' if not usable else 'complete' if usable == len(latest) else 'partial')
+        if self.observation_at is not None and not self.source_id.startswith('solar_wind_'):
+            from clio.observations.intervals import interval_end
+            self.interval_end = interval_end(self.source_id, self.observation_at)
 
     def response_values(self) -> dict:
         return {'last_response_at': self.response_at, 'latest_observation_at': self.observation_at,

@@ -62,7 +62,7 @@ def archive_stage1(settings):
     from psycopg.rows import dict_row
     from clio.db.models.file_observation import FileObservation
     from clio.db.session import get_db_session
-    from clio.observations.files import observation_values, store_original, store_receipt
+    from clio.observations.archive import observation_values, store_original, store_receipt
     from common.db.session import dispose_engine
 
     dsns, urls, _, _, raw = settings

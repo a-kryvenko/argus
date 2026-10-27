@@ -1,18 +1,19 @@
 from datetime import UTC, datetime, timedelta
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 import numpy as np
 import pytest
 
 from clio.routers import sdo_images as routes
+from clio.routers.auth import require_service_token
 from common.sdo_images import image_path, save_image
 
 
 @pytest.fixture
 def catalog(tmp_path, monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
-    monkeypatch.setattr(routes, 'archive_root', lambda: tmp_path)
+    monkeypatch.setattr('common.sdo_images.archive_root', lambda: tmp_path)
     slot = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
     now = slot + timedelta(minutes=30)
     metadata = dict(observed_at=slot.isoformat(), available_at=(slot + timedelta(minutes=20)).isoformat(),
@@ -20,7 +21,7 @@ def catalog(tmp_path, monkeypatch):
                     units='DN', preprocessing='test-observation-v1')
     save_image(tmp_path, slot, 'aia1600', np.full((512, 512), 3, np.float32), metadata, now=now)
     app = FastAPI()
-    app.include_router(routes.router)
+    app.include_router(routes.router, dependencies=[Depends(require_service_token)])
     with TestClient(app) as client:
         yield client, tmp_path, slot, now
 
@@ -89,11 +90,11 @@ def test_catalog_validates_channel_and_bounded_aware_hourly_ranges(catalog):
 def test_empty_catalog_does_not_create_storage_and_corruption_is_not_a_gap(catalog, monkeypatch):
     client, root, slot, now = catalog
     absent = root / 'absent'
-    monkeypatch.setattr(routes, 'archive_root', lambda: absent)
+    monkeypatch.setattr('common.sdo_images.archive_root', lambda: absent)
     response = request(client, slot, now, channel='hmi_m')
     assert response.status_code == 200 and not response.json()['data']['items']
     assert not absent.exists()
-    monkeypatch.setattr(routes, 'archive_root', lambda: root)
+    monkeypatch.setattr('common.sdo_images.archive_root', lambda: root)
     image_path(root, slot, 'aia1600').write_bytes(b'broken archive')
     assert request(client, slot, now).status_code == 503
 

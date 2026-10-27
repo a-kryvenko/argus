@@ -43,7 +43,7 @@ async def transaction(writer: Writer | None) -> AsyncGenerator[AsyncSession, Non
 async def recover_interrupted(writer):
     # Owning the global writer lock means no previous DB writer remains active.
     async with transaction(writer) as session:
-        await session.execute(text("""UPDATE prophet.forecast_run SET status='interrupted',finished_at=:now,
+        await session.execute(text("""UPDATE forecast_run SET status='interrupted',finished_at=:now,
             error='Previous writer ended without recording completion' WHERE status='running'"""),
             {'now': datetime.now(UTC)})
 

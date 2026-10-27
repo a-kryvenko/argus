@@ -52,7 +52,7 @@ class RunRecorder:
         scope = str(config.workdir.resolve())
         details = provenance(config) if details is None else details
         async with transaction(writer) as session:
-            await session.execute(text("""INSERT INTO prophet.forecast_run
+            await session.execute(text("""INSERT INTO forecast_run
                 (id,scope,product,trigger,started_at,status,provenance)
                 VALUES (:run_id,:scope,:product,:trigger,:now,'running',:provenance)""").bindparams(bindparam('provenance', type_=JSONB)), {'run_id': run_id, 'scope': scope, 'product': product, 'trigger': trigger, 'now': datetime.now(UTC), 'provenance': details})
         return cls(run_id, writer)
@@ -62,7 +62,7 @@ class RunRecorder:
         from prophet.services.releases.status import input_diagnostics
         diagnostics = input_diagnostics(inputs)
         async with transaction(self.writer) as session:
-            result = await session.execute(text("""UPDATE prophet.forecast_run SET input_snapshot=:payload,input_sha256=:input_sha256,
+            result = await session.execute(text("""UPDATE forecast_run SET input_snapshot=:payload,input_sha256=:input_sha256,
                 provenance=jsonb_set(provenance,'{input_diagnostics}',:input_diagnostics)
                 WHERE id=:run_id AND status='running' AND input_snapshot IS NULL""").bindparams(bindparam('payload', type_=JSONB), bindparam('input_diagnostics', type_=JSONB)), {'payload': payload, 'input_sha256': fingerprint(payload), 'input_diagnostics': diagnostics, 'run_id': self.run_id})
             if result.rowcount != 1:
@@ -75,7 +75,7 @@ class RunRecorder:
         compressed = gzip.compress(content, mtime=0)
         digest = hashlib.sha256(content).hexdigest()
         async with transaction(self.writer) as session:
-            await session.execute(text("""INSERT INTO prophet.forecast_artifact
+            await session.execute(text("""INSERT INTO forecast_artifact
                 (run_id,name,status,created_at,csv_gzip,sha256,row_count,columns,model_info)
                 VALUES (:run_id,:name,'stored',:now,:csv_gzip,:sha256,:row_count,:columns,:model_info)""").bindparams(bindparam('columns', type_=JSONB), bindparam('model_info', type_=JSONB)), {'run_id': self.run_id, 'name': name, 'now': datetime.now(UTC), 'csv_gzip': compressed, 'sha256': digest, 'row_count': row_count, 'columns': list(columns), 'model_info': model_info})
 
@@ -84,7 +84,7 @@ class RunRecorder:
                   'failed' if isinstance(error, Exception) else 'interrupted')
         message = f'{type(error).__name__}: {error}'[:2000] if error is not None else None
         async with transaction(self.writer) as session:
-            result = await session.execute(text("""UPDATE prophet.forecast_run SET status=:status,finished_at=:now,error=:error
+            result = await session.execute(text("""UPDATE forecast_run SET status=:status,finished_at=:now,error=:error
                 WHERE id=:run_id AND status='running' AND product<>'all' RETURNING id"""), {'status': status, 'now': datetime.now(UTC), 'error': message, 'run_id': self.run_id})
             if result.rowcount != 1:
                 raise RuntimeError("Run is no longer running")

@@ -166,4 +166,4 @@ async def test_cron_runs_publish_without_scheduler_slots_and_recover_crashes(rec
                             (completed.run_id,)).fetchone() == ('scheduled', 'succeeded', None, None)
         assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s', (interrupted.run_id,)).fetchone()[0] == 'interrupted'
         assert conn.execute('SELECT count(*) FROM prophet.forecast_slot').fetchone()[0] == 0
-        assert conn.execute('SELECT count(*) FROM prophet.scheduled_job').fetchone()[0] == 0
+        assert conn.execute("SELECT to_regclass('prophet.scheduled_job')").fetchone()[0] is None

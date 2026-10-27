@@ -58,7 +58,7 @@ def test_gong_collection_archives_without_features_and_reads_are_causal(database
             await dispose_engine()
     asyncio.run(check())
     with runtime(dsns, 'clio', urls) as conn:
-        assert conn.execute('SELECT count(*) FROM clio.gong_snapshot').fetchone()[0] == 0
+        assert conn.execute("SELECT to_regclass('clio.gong_snapshot')").fetchone()[0] is None
         archived = conn.execute("SELECT raw_path,sha256,received_at FROM clio.file_observation WHERE kind='gong'").fetchone()
         assert gzip.decompress((tmp_path / 'gong' / archived[0]).read_bytes()) == original
         assert archived[1] == hashlib.sha256(original).hexdigest()
@@ -115,8 +115,8 @@ def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, t
     subprocess.run([*command, 'head'], env=environment, check=True, capture_output=True)
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute("SELECT to_regclass('clio.aia_snapshot')").fetchone()[0] is None
-        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_cutover'
-        assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (True, True)
+        assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_drop_legacy_files'
+        assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (False, False)
     assert original.read_bytes() == b'retained SDO original'
     from clio.db.base import Base
-    assert 'clio.aia_snapshot' not in Base.metadata.tables
+    assert 'aia_snapshot' not in Base.metadata.tables

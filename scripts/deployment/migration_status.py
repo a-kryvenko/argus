@@ -27,13 +27,14 @@ def pending(domain, *, online=False):
     directory = Path(importlib.import_module(domain).__file__).parent / 'db' / 'migrations'
     scripts = ScriptDirectory(str(directory))
     engine = create_engine(get_database_url(domain.upper()),
-                           connect_args={'connect_timeout': 5, 'options': '-cstatement_timeout=5000'})
+                           connect_args={'connect_timeout': 5,
+                                         'options': f'-csearch_path={domain},public,pg_catalog,pg_temp -cstatement_timeout=5000'})
     try:
         with engine.connect() as connection:
-            if not inspect(connection).has_table('alembic_version', schema=domain):
+            if not inspect(connection).has_table('alembic_version'):
                 current = set()
             else:
-                current = set(connection.scalars(text(f'SELECT version_num FROM {domain}.alembic_version')))
+                current = set(connection.scalars(text('SELECT version_num FROM alembic_version')))
         return revision_status(scripts, current, online=online)
     finally:
         engine.dispose()

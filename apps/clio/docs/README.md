@@ -32,15 +32,10 @@ Cron uses the host timezone and `flock`; logs: `log/clio/`.
 The host needs Docker Compose, cron, flock and Python 3.
 Deployment installs [cronjobs.txt](../cronjobs.txt) with the other services and deploy jobs.
 
-## File storage rollout
+## File storage
 
-Release separately, in order:
-
-1. Previous release: add `file_observation`, read both schemas, write both, backfill history.
-2. Current: read and write only file storage. Cutover migration verifies archive coverage and checksums; legacy tables remain.
-3. After every process runs stage 2: drop legacy tables and model definitions. This removes rollback support for stage 1 and earlier.
-
-Do not ship later stages as pending migrations in the current release.
-Before deploying stage 2, finish backfill and run `./argus clio backfill-files --check` on stage 1. Pre-stage-1 writers must have finished.
+`file_observation` stores receipt times, paths and SHA256; gzip originals and receipt metadata live in `data/observations/`.
+Before deploying the legacy-table cleanup, every process must run the file-only release (`20261027_file_cutover`).
+Rollback to the earlier dual-storage release requires restoring a backup.
 
 [Setup](../../../README_DEPLOY.md#local-development) · [Commands](../../../docs/commands.md#clio)

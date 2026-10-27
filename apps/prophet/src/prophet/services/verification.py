@@ -116,7 +116,7 @@ async def verify(selection='solar-wind-speed', *, writer, days=7, now=None, dead
     start = (now - timedelta(days=days)).replace(minute=0, second=0, microsecond=0)
     end = now.replace(minute=0, second=0, microsecond=0)
     async with get_db_session() as session, session.begin():
-        releases = (await session.execute(text('''SELECT product,id FROM prophet.forecast_release
+        releases = (await session.execute(text('''SELECT product,id FROM forecast_release
             WHERE product=ANY(:products) AND issue_time >= :start AND issue_time <= :now
             ORDER BY issue_time,id'''), {'products': list(products), 'start': start, 'now': now})).all()
     if not releases:
@@ -144,7 +144,7 @@ async def verify(selection='solar-wind-speed', *, writer, days=7, now=None, dead
                       'evidence_sha256': hashlib.sha256(evidence).hexdigest(),
                       **score(matched, artifact.name), 'pairs': records}
             async with transaction(writer) as session:
-                await session.execute(text('''INSERT INTO prophet.forecast_verification
+                await session.execute(text('''INSERT INTO forecast_verification
                     (release_id,artifact,evaluated_at,report) VALUES (:release_id,:name,:now,:report)
                     ON CONFLICT (release_id,artifact) DO UPDATE
                     SET evaluated_at=EXCLUDED.evaluated_at,report=EXCLUDED.report''').bindparams(bindparam('report', type_=JSONB)), {'release_id': release_id, 'name': artifact.name, 'now': now, 'report': report})
@@ -162,7 +162,7 @@ async def verification_report(product, *, days=7):
     products = PRODUCTS if product == 'all' else (product,)
     async with get_db_session() as session, session.begin():
         query = await session.execute(text('''SELECT r.product,v.artifact,v.evaluated_at,v.report
-            FROM prophet.forecast_verification v JOIN prophet.forecast_release r ON r.id=v.release_id
+            FROM forecast_verification v JOIN forecast_release r ON r.id=v.release_id
             WHERE r.product=ANY(:products) AND r.issue_time >= :start ORDER BY r.issue_time,r.id'''), {'products': list(products), 'start': datetime.now(UTC) - timedelta(days=days)})
         rows = query.mappings().all()
     return await asyncio.to_thread(_verification_summary, rows, days)
@@ -194,7 +194,7 @@ async def monthly_accuracy(product, *, now=None):
         query = await session.execute(text('SET LOCAL statement_timeout=10000'))
         # Include releases before the window whose forecast horizons enter it.
         query = await session.execute(text("""SELECT v.artifact,v.evaluated_at,v.report,r.issue_time
-            FROM prophet.forecast_verification v JOIN prophet.forecast_release r ON r.id=v.release_id
+            FROM forecast_verification v JOIN forecast_release r ON r.id=v.release_id
             WHERE r.product=:product AND r.issue_time >= :start AND r.issue_time <= :now
             ORDER BY r.issue_time,r.id"""), {'product': product, 'start': start-timedelta(hours=96), 'now': now})
         rows = query.mappings().all()

@@ -13,4 +13,4 @@ NAMING_CONVENTION = {
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
 
-    metadata = MetaData(schema="prophet", naming_convention=NAMING_CONVENTION)
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)

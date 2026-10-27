@@ -57,7 +57,7 @@ def test_monitoring_reads_latest_measurement_and_its_receipt(monkeypatch):
     assert result['measurements'][1]['metric'] == 'v'
     assert result['measurements'][1]['status'] == 'unavailable'
     query = str(session.scalars.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'DISTINCT ON (clio.measurement.metric)' in query
+    assert 'DISTINCT ON (measurement.metric)' in query
     session.scalars.assert_awaited_once()
 
 

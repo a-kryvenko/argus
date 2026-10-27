@@ -24,7 +24,7 @@ def test_readiness_checks_owned_storage(monkeypatch, available):
     monkeypatch.setattr(main, 'get_db_session', lambda: connection)
     if available:
         assert asyncio.run(main.ready())['status'] == 'ok'
-        assert any('intelligence.drag_profile' in str(call.args[0]) for call in connection.execute.call_args_list)
+        assert any('drag_profile' in str(call.args[0]) for call in connection.execute.call_args_list)
     else:
         with pytest.raises(HTTPException) as result:
             asyncio.run(main.ready())

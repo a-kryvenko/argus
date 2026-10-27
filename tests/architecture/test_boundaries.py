@@ -142,6 +142,8 @@ def test_runtime_sql_does_not_read_foreign_domain_tables():
              'intelligence': ROOT / 'apps/intelligence/src/intelligence'}
     for owner, root in roots.items():
         for path in root.rglob('*.py'):
+            if 'migrations' not in path.parts:
+                assert not list(sql_domains(path.read_text())), (path, 'Runtime SQL must use search_path')
             for domain in sql_domains(path.read_text()):
                 assert domain.lower() == owner, (path, domain)
 

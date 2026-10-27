@@ -66,7 +66,7 @@ async def ready():
     try:
         async with get_db_session() as session:
             await session.execute(text('SET LOCAL statement_timeout=3000'))
-            await session.execute(text('SELECT id FROM intelligence.drag_profile LIMIT 1'))
+            await session.execute(text('SELECT id FROM drag_profile LIMIT 1'))
     except Exception:
         raise HTTPException(503, 'Impact storage is not ready') from None
     return {'service': 'intelligence', 'status': 'ok', 'density_readiness': 'checked_per_request'}

@@ -26,7 +26,7 @@ def test_statistics_include_missing_windows_in_coverage():
     assert series['coverage']['invalid_slots'] == 1
     assert [gap['reason'] for gap in series['coverage']['gaps']] == ['partial', 'missing']
     assert 'processing' not in series
-    assert 'clio.measurement' in str(session.execute.call_args.args[0])
+    assert 'measurement' in str(session.execute.call_args.args[0])
 
 
 def test_partial_current_bucket_excluded_and_empty_history_is_missing():

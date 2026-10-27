@@ -19,7 +19,7 @@ async def history(session, metrics, start, end, seconds, now=None):
             SELECT DISTINCT ON (metric, date_trunc('minute', observed_at))
                 metric, observed_at, received_at, value, quality, spacecraft,
                 to_timestamp(floor(extract(epoch FROM observed_at) / :seconds) * :seconds) AS bucket
-            FROM clio.measurement
+            FROM measurement
             WHERE metric = ANY(:metrics)
               AND source_product IN ('swpc.rtsw_mag', 'swpc.rtsw_plasma')
               AND observed_at >= :start AND observed_at < :end

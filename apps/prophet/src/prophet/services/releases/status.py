@@ -98,17 +98,17 @@ async def product_status(product, *, now=None):
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         query = await session.execute(text('''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
             f.started_at,f.provenance->'input_diagnostics' AS input_diagnostics
-            FROM prophet.current_forecast c JOIN prophet.forecast_release r ON r.id=c.release_id
-            JOIN prophet.forecast_run f ON f.id=r.run_id WHERE c.product=:product'''), {'product': product})
+            FROM current_forecast c JOIN forecast_release r ON r.id=c.release_id
+            JOIN forecast_run f ON f.id=r.run_id WHERE c.product=:product'''), {'product': product})
         current = query.mappings().first()
         from prophet.services.generation.products import attempt_selections
         query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,
-            provenance->'input_diagnostics' AS input_diagnostics FROM prophet.forecast_run
+            provenance->'input_diagnostics' AS input_diagnostics FROM forecast_run
             WHERE product=ANY(:products) ORDER BY started_at DESC,id DESC LIMIT 1"""), {'products': attempt_selections(product)})
         attempt = query.mappings().first()
         artifacts = []
         if attempt:
-            query = await session.execute(text("""SELECT name,status,error FROM prophet.forecast_artifact
+            query = await session.execute(text("""SELECT name,status,error FROM forecast_artifact
                 WHERE run_id=:run_id AND name=ANY(:names) ORDER BY name"""), {'run_id': attempt['run_id'], 'names': list(PRODUCT_ARTIFACTS[product])})
             artifacts = query.mappings().all()
     max_age = None

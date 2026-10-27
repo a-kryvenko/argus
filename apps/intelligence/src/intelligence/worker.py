@@ -27,40 +27,40 @@ async def process_once(product='solar-wind-speed', *, fetch=None, assess=None):
                 return {'status': 'busy', 'product': product}
             # Journal commits survive a crash while the processing transaction holds the lock.
             async with db.get_db_session() as journal, journal.begin():
-                await journal.execute(text("""UPDATE intelligence.attempt SET status='interrupted',finished_at=now(),
+                await journal.execute(text("""UPDATE attempt SET status='interrupted',finished_at=now(),
                     error='Writer stopped before completion' WHERE status='running'"""))
-                pinned = await journal.scalar(text("""SELECT a.release_id FROM intelligence.attempt a
+                pinned = await journal.scalar(text("""SELECT a.release_id FROM attempt a
                     WHERE a.product=:product AND a.release_id IS NOT NULL AND a.status IN ('failed','interrupted')
-                    AND NOT EXISTS (SELECT 1 FROM intelligence.result r
+                    AND NOT EXISTS (SELECT 1 FROM result r
                         WHERE r.product=a.product AND r.release_id=a.release_id)
                     ORDER BY a.started_at LIMIT 1"""), {'product': product})
                 attempt_id = uuid4()
-                await journal.execute(text("""INSERT INTO intelligence.attempt(id,product,release_id,status)
+                await journal.execute(text("""INSERT INTO attempt(id,product,release_id,status)
                     VALUES (:id,:product,:release_id,'running')"""),
                     {'id': attempt_id, 'product': product, 'release_id': pinned})
             evidence = await asyncio.to_thread(fetch, product, release_id=pinned)
             release_id = evidence['release_id']
             async with db.get_db_session() as journal, journal.begin():
-                await journal.execute(text("""UPDATE intelligence.attempt SET release_id=:release_id,
+                await journal.execute(text("""UPDATE attempt SET release_id=:release_id,
                     prophet_run_id=:run_id WHERE id=:id"""),
                     {'release_id': release_id, 'run_id': evidence['run_id'], 'id': attempt_id})
-            if await session.scalar(text('SELECT 1 FROM intelligence.result WHERE product=:product AND release_id=:release_id'),
+            if await session.scalar(text('SELECT 1 FROM result WHERE product=:product AND release_id=:release_id'),
                                     {'product': product, 'release_id': release_id}):
-                await session.execute(text("UPDATE intelligence.attempt SET status='skipped',finished_at=clock_timestamp() WHERE id=:id"),
+                await session.execute(text("UPDATE attempt SET status='skipped',finished_at=clock_timestamp() WHERE id=:id"),
                                       {'id': attempt_id})
                 return {'status': 'skipped', 'product': product, 'release_id': str(release_id)}
             result = await asyncio.to_thread(assess, evidence)
-            await session.execute(text("""INSERT INTO intelligence.result(product,release_id,prophet_run_id,attempt_id,result,processed_at)
+            await session.execute(text("""INSERT INTO result(product,release_id,prophet_run_id,attempt_id,result,processed_at)
                 VALUES (:product,:release_id,:run_id,:attempt_id,:result,clock_timestamp())""").bindparams(bindparam('result', type_=JSONB)),
                 {'product': product, 'release_id': release_id, 'run_id': evidence['run_id'],
                  'attempt_id': attempt_id, 'result': result})
-            await session.execute(text("UPDATE intelligence.attempt SET status='succeeded',finished_at=clock_timestamp() WHERE id=:id"),
+            await session.execute(text("UPDATE attempt SET status='succeeded',finished_at=clock_timestamp() WHERE id=:id"),
                                   {'id': attempt_id})
         return {'status': 'succeeded', 'product': product, 'release_id': str(release_id), 'mode': 'stub'}
     except Exception:
         if attempt_id is not None:
             async with db.get_db_session() as journal, journal.begin():
-                await journal.execute(text("""UPDATE intelligence.attempt SET status='failed',finished_at=now(),
+                await journal.execute(text("""UPDATE attempt SET status='failed',finished_at=now(),
                     error='Release retrieval or stub processing failed' WHERE id=:id AND status='running'"""),
                     {'id': attempt_id})
         raise
@@ -69,13 +69,13 @@ async def process_once(product='solar-wind-speed', *, fetch=None, assess=None):
 async def status(product='solar-wind-speed'):
     async with db.get_db_session() as session, session.begin():
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        latest = (await session.execute(text('SELECT * FROM intelligence.attempt WHERE product=:product ORDER BY started_at DESC,id DESC LIMIT 1'),
+        latest = (await session.execute(text('SELECT * FROM attempt WHERE product=:product ORDER BY started_at DESC,id DESC LIMIT 1'),
                                         {'product': product})).mappings().first()
-        result = (await session.execute(text('SELECT * FROM intelligence.result WHERE product=:product ORDER BY processed_at DESC LIMIT 1'),
+        result = (await session.execute(text('SELECT * FROM result WHERE product=:product ORDER BY processed_at DESC LIMIT 1'),
                                         {'product': product})).mappings().first()
-        pending = await session.scalar(text("""SELECT count(DISTINCT a.release_id) FROM intelligence.attempt a
+        pending = await session.scalar(text("""SELECT count(DISTINCT a.release_id) FROM attempt a
             WHERE a.product=:product AND a.status IN ('failed','interrupted','running') AND a.release_id IS NOT NULL
-            AND NOT EXISTS (SELECT 1 FROM intelligence.result r WHERE r.product=a.product AND r.release_id=a.release_id)"""),
+            AND NOT EXISTS (SELECT 1 FROM result r WHERE r.product=a.product AND r.release_id=a.release_id)"""),
                                        {'product': product})
     return {'service': 'intelligence', 'mode': 'stub', 'product': product,
             'latest_attempt': dict(latest) if latest else None, 'latest_result': dict(result) if result else None,

@@ -74,7 +74,7 @@ async def live():
 async def ready():
     try:
         async with get_db_session() as session:
-            await asyncio.wait_for(session.execute(text('SELECT 1 FROM clio.measurement LIMIT 1')), timeout=5)
+            await asyncio.wait_for(session.execute(text('SELECT 1 FROM measurement LIMIT 1')), timeout=5)
     except Exception:
         raise HTTPException(503, 'Clio storage is not ready') from None
     return {'service': 'clio', 'status': 'ok'}

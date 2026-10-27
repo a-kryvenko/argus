@@ -4,12 +4,20 @@ from datetime import UTC, datetime, timedelta
 import gzip
 import hashlib
 import json
+import subprocess
+import sys
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
-from tests.support.database import database, migrate, runtime
+from tests.support.database import database, runtime
+
+
+def migrate(environment, revision='20261027_file_cutover'):
+    result = subprocess.run([sys.executable, '-c', 'from clio.cli import main; main()',
+        'migrate', 'upgrade', revision], env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.parametrize('kind', ['gong', 'goes'])
@@ -83,8 +91,7 @@ def test_snapshot_readers_and_collectors_ignore_legacy_and_work_after_its_remova
                     "WHERE legacy.slot_at=%s AND f.id=%s", (kind + ':', kind, duplicate['slot_at'],
                         observation_values(kind, duplicate)['id'])).fetchone()[0]
                 assert same_id  # Stage 1 ON CONFLICT(id) remains safe during rolling writes.
-                for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
-                    conn.execute('DROP TABLE clio.' + table)
+            migrate(environment, 'head')
             if kind == 'gong':
                 from clio.domains import gong
                 from clio.providers import gong as provider
@@ -182,9 +189,7 @@ def test_event_inputs_use_only_file_receipts_and_preserve_cutoffs(database, monk
             monkeypatch.setattr(collect_enlil.enlil, 'download', lambda url: pytest.fail('Known ENLIL run downloaded again'))
             await collect_enlil.run(SimpleNamespace())
             # The same application must keep reading and collecting after stage 3.
-            with runtime(dsns, 'clio', urls) as conn:
-                for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
-                    conn.execute('DROP TABLE clio.' + table)
+            migrate(environment, 'head')
             from clio.commands import collect_events
             monkeypatch.setattr(collect_events, 'load_observation_config', lambda: SimpleNamespace(
                 solar_wind_events=SimpleNamespace(lookback_days=30)))

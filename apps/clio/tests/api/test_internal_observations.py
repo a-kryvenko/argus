@@ -45,9 +45,9 @@ def test_measurement_selection_and_aggregation_are_requested_by_caller(monkeypat
     assert query.params['metric_1'] == ['bx', 't']
     assert query.params['observed_at_1'] == NOW-timedelta(days=3)
     assert query.params['observed_at_2'] == NOW
-    assert 'avg(clio.measurement.value)' in str(query)
+    assert 'avg(measurement.value)' in str(query)
     assert 'GROUP BY' in str(query)
-    assert 'clio.measurement.observed_at < ' in str(query)
+    assert 'measurement.observed_at < ' in str(query)
     assert {0, 1000, 999} <= set(v for v in query.params.values() if isinstance(v, (float, int)))
 
 

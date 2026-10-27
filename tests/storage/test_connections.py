@@ -111,3 +111,19 @@ def test_file_cutover_requires_online_validation(tmp_path):
     assert 'requires an online database connection' in result.stdout + result.stderr
     assert 'DROP TABLE' not in result.stdout
     assert 'UPDATE clio.alembic_version' not in result.stdout
+
+
+def test_legacy_file_cleanup_drops_only_retired_tables(tmp_path):
+    result = migration_sql('clio', '20261027_file_cutover:head', tmp_path)
+    assert result.returncode == 0, result.stderr
+    dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
+    assert dropped == [f'DROP TABLE clio.{table};' for table in (
+        'gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt', 'scheduled_job')]
+
+
+def test_prophet_cleanup_preserves_forecast_history(tmp_path):
+    result = migration_sql('prophet', '20260929_prophet_product_slots:head', tmp_path)
+    assert result.returncode == 0, result.stderr
+    dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
+    assert dropped == ['DROP TABLE prophet.scheduled_job;']
+    assert 'DROP COLUMN' not in result.stdout

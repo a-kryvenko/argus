@@ -168,7 +168,7 @@ def test_catalog_http_uses_requested_kind_interval_and_cutoff(monkeypatch):
     assert result.status_code == 200 and result.json()['data'] == []
     session.scalars.assert_awaited_once()
     query = session.scalars.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
-    assert 'clio.file_observation' in str(query)
+    assert 'file_observation' in str(query)
     assert query.params['kind_1'] == 'goes'
     assert query.params['source_key_1'] == start.replace(hour=0).isoformat()
     assert query.params['received_at_1'] == NOW

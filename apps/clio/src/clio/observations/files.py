@@ -132,7 +132,7 @@ def source_key(slot, source):
 
 
 def observation_values(kind, record):
-    # Match the expand release's legacy-to-file identity during rolling writes.
+    # Keep snapshot IDs stable across retries and existing archived observations.
     identity = f'{kind}:{record["slot_at"].astimezone(UTC):%Y-%m-%dT%H:%M:%S.%f}:{record["source_product"]}'
     id = UUID(hashlib.md5(identity.encode(), usedforsecurity=False).hexdigest())
     return dict(id=id, kind=kind, source_product=record['source_product'],

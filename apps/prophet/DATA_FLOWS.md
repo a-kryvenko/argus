@@ -5,8 +5,7 @@ flowchart TD
     clio[HTTP API Clio: наблюдения и оригинальные файлы] --> preparation[Prophet: индексы GOES и прогнозы PROSWIN]
     preparation -->|Подготовленный снимок входов и SHA256| forecast_run
     generation[Ручной или плановый запуск расчёта] -->|Статус, ошибки и provenance| forecast_run
-    scheduler[Планировщик расчётов по продуктам] --> forecast_slot
-    forecast_slot -->|Плановый слот запуска| forecast_run
+    cron[Cron: запуск расчётов по продуктам] --> generation
     forecast_run -->|Снимок входов для моделей| models[Расчёт моделей]
     models -->|CSV gzip, SHA256 и метаданные моделей| forecast_artifact
     forecast_run -->|Успешное завершение запуска| publication[Публикация полного продукта]
@@ -24,5 +23,4 @@ flowchart TD
     verification -->|Метрики и пары прогноз-факт| forecast_verification
     forecast_verification --> reports[Отчёты верификации]
     forecast_verification -->|Оценка точности за последние 30 дней| api
-    jobs[Завершённые слоты плановой верификации] --> scheduled_job
 ```

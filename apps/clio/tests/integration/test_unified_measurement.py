@@ -87,7 +87,7 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
     engine.dispose()
 
     async def verify():
-        engine = create_async_engine(database_url)
+        engine = create_async_engine(database_url, connect_args={'options': '-csearch_path=clio,public,pg_catalog,pg_temp'})
         factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
             async with factory() as session:

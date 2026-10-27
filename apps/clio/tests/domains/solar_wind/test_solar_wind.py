@@ -53,7 +53,7 @@ def test_history_preserves_gaps_and_flagged_values():
     assert result['gap_filling'] == 'none'
     assert points[1]['spacecraft'] == 'SOLAR1'
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'clio.measurement' in sql and 'source_product' in sql
+    assert 'measurement' in sql and 'source_product' in sql
 
 
 def test_empty_database_has_explicit_missing_series():

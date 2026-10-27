@@ -33,7 +33,7 @@ async def verify():
     root = Path(__file__).resolve().parents[4]
     schema = 'recovery_test_' + uuid4().hex
     admin = create_async_engine(get_database_url())
-    db = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'}, execution_options={'schema_translate_map': {'api': schema, 'clio': schema}})
+    db = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'})
     factory = async_sessionmaker(db, expire_on_commit=False)
     created = False
     try:

@@ -22,17 +22,17 @@ async def retain(session, run_id, inputs, *, captured_at):
         if len(content) > MAX_RESPONSE_BYTES:
             raise ValueError('Forecast input too large')
         checksum = hashlib.sha256(content).hexdigest()
-        stored = (await session.execute(text('''SELECT product,sha256 FROM intelligence.forecast_input
+        stored = (await session.execute(text('''SELECT product,sha256 FROM forecast_input
             WHERE release_id=:release_id'''), {'release_id': release.release_id})).mappings().first()
         if stored is None:
-            await session.execute(text('''INSERT INTO intelligence.forecast_input
+            await session.execute(text('''INSERT INTO forecast_input
                 (release_id,product,sha256,content_gzip,captured_at) VALUES (:release_id,:product,:sha256,:content_gzip,:captured_at)
                 ON CONFLICT (release_id) DO NOTHING'''), {'release_id': release.release_id, 'product': product, 'sha256': checksum, 'content_gzip': gzip.compress(content, compresslevel=3, mtime=0), 'captured_at': captured_at})
-            stored = (await session.execute(text('''SELECT product,sha256 FROM intelligence.forecast_input
+            stored = (await session.execute(text('''SELECT product,sha256 FROM forecast_input
                 WHERE release_id=:release_id'''), {'release_id': release.release_id})).mappings().first()
         if stored['product'] != product or stored['sha256'] != checksum:
             raise ValueError('Published release changed under the same ID')
-        await session.execute(text('''INSERT INTO intelligence.density_run_input(run_id,product,release_id)
+        await session.execute(text('''INSERT INTO density_run_input(run_id,product,release_id)
             VALUES (:run_id,:product,:release_id)'''), {'run_id': run_id, 'product': product, 'release_id': release.release_id})
 
 

@@ -22,7 +22,7 @@ async def hourly_speeds(session, as_of):
             SELECT observed_at, received_at, value, source_product,
                    date_trunc('hour', observed_at) AS bucket,
                    source_product = 'swpc.rtsw_plasma' AS native
-            FROM clio.measurement
+            FROM measurement
             WHERE metric='v' AND observed_at >= :start
               AND observed_at < date_trunc('hour', CAST(:cutoff AS timestamptz))
               AND received_at <= :cutoff

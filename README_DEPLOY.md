@@ -19,6 +19,8 @@ Configure `.env` / `.env.local` (local values override):
 
 Use three distinct service tokens. Passwords are raw; single-quote values containing `$`.
 Compose sets internal URLs and DB hosts; host tools use `127.0.0.1:5432`.
+Service SQL uses unqualified table names with `<service>, public` in `search_path`.
+Tables and Alembic version records remain in the existing service schemas until the next migration.
 
 ```bash
 pnpm install --frozen-lockfile

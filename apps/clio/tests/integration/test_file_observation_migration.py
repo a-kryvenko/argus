@@ -105,9 +105,9 @@ def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_d
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
     archive_stage1(settings)
-    result = upgrade(environment, 'head')
+    result = upgrade(environment, '20261027_file_cutover')
     assert result.returncode == 0, result.stderr
-    assert upgrade(environment, 'head').returncode == 0
+    assert upgrade(environment, '20261027_file_cutover').returncode == 0
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_cutover'
         assert conn.execute('SELECT count(*) FROM clio.file_observation').fetchone()[0] == 6
@@ -116,6 +116,16 @@ def test_cutover_refuses_missing_history_then_verifies_without_deleting_legacy_d
         assert conn.execute('SELECT fits_gzip FROM clio.gong_snapshot').fetchone()[0]
         assert conn.execute('SELECT raw_path FROM clio.goes_snapshot').fetchone()[0] == 'old.json'
     assert (roots['goes'] / 'old.json').exists()
+    with runtime(dsns, 'clio', urls) as conn:
+        before = conn.execute('SELECT id,kind,raw_path,sha256 FROM clio.file_observation ORDER BY id').fetchall()
+    originals = {(kind, path): (roots[kind] / path).read_bytes() for _, kind, path, _ in before if path}
+    result = upgrade(environment, 'head')
+    assert result.returncode == 0, result.stderr
+    with runtime(dsns, 'clio', urls) as conn:
+        for table in ('gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt'):
+            assert conn.execute('SELECT to_regclass(%s)', ('clio.' + table,)).fetchone()[0] is None
+        assert conn.execute('SELECT id,kind,raw_path,sha256 FROM clio.file_observation ORDER BY id').fetchall() == before
+    assert all((roots[kind] / path).read_bytes() == content for (kind, path), content in originals.items())
 
 
 @pytest.mark.parametrize('damage', ['gzip', 'missing', 'sidecar', 'time'])

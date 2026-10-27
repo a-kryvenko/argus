@@ -46,42 +46,42 @@ def database_parameters(prefix: str) -> dict:
     }
 
 
-def get_database_url(schema: str):
+def get_database_url(service: str):
     from sqlalchemy import URL
 
     try:
-        parameters = database_parameters(schema)
+        parameters = database_parameters(service.upper())
     except ValueError as exc:
         raise RuntimeError(str(exc)) from None
     
     return URL.create('postgresql+psycopg', **parameters)
 
-def _get_engine(schema: str) -> AsyncEngine:
-    if schema not in _engines:
-        _engines[schema] = create_async_engine(
-            get_database_url(schema.upper()),
+def _get_engine(service: str) -> AsyncEngine:
+    if service not in _engines:
+        _engines[service] = create_async_engine(
+            get_database_url(service),
             pool_pre_ping=True,
-            connect_args={"options": f"-csearch_path={schema},pg_catalog,pg_temp"},
+            connect_args={"options": f"-csearch_path={service},public,pg_catalog,pg_temp"},
         )
 
-    return _engines[schema]
+    return _engines[service]
 
-def _get_session_factory(schema: str) -> async_sessionmaker[AsyncSession]:
-    if schema not in _session_factories:
-        _session_factories[schema] = async_sessionmaker(
-            bind=_get_engine(schema),
+def _get_session_factory(service: str) -> async_sessionmaker[AsyncSession]:
+    if service not in _session_factories:
+        _session_factories[service] = async_sessionmaker(
+            bind=_get_engine(service),
             class_=AsyncSession,
             expire_on_commit=False,
         )
 
-    return _session_factories[schema]
+    return _session_factories[service]
 
 
 @asynccontextmanager
-async def get_db_session(schema: str) -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session(service: str) -> AsyncGenerator[AsyncSession, None]:
     # Keep one connection across commits until the session context exits.
-    async with _get_engine(schema).connect() as connection:
-        async with _get_session_factory(schema)(bind=connection) as session:
+    async with _get_engine(service).connect() as connection:
+        async with _get_session_factory(service)(bind=connection) as session:
             yield session
 
 

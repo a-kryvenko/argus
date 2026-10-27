@@ -47,7 +47,7 @@ from clio.main import app
 from clio.db.session import get_request_db_session
 from clio.db.models.measurement import Measurement
 url = make_url(os.environ['TEST_DATABASE_ADMIN_DSN']).set(drivername='postgresql+psycopg')
-engine = create_async_engine(url, execution_options={'schema_translate_map': {'clio': os.environ['TEST_DASHBOARD_SCHEMA']}})
+engine = create_async_engine(url, connect_args={'options': '-csearch_path=' + os.environ['TEST_DASHBOARD_SCHEMA']})
 factory = async_sessionmaker(engine)
 async def session():
     async with factory() as db:
@@ -115,7 +115,7 @@ async def verify():
     root = Path(__file__).resolve().parents[4]
     schema = 'dashboard_test_' + uuid4().hex
     admin = create_async_engine(get_database_url())
-    engine = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'}, execution_options={'schema_translate_map': {'api': schema, 'clio': schema}})
+    engine = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'})
     factory = async_sessionmaker(engine, expire_on_commit=False)
     created = False
     spec = importlib.util.spec_from_file_location('dashboard_migration', root / 'apps/api/src/api/db/migrations/versions/20260911_0010_dashboard.py')

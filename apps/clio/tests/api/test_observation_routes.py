@@ -84,9 +84,9 @@ def test_current_indices_keep_independent_source_times(monkeypatch):
         assert 'issue_time' not in str(series)
         loader.assert_not_awaited()
         query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
-        assert 'DISTINCT ON (clio.measurement.metric)' in str(query)
-        assert 'ORDER BY clio.measurement.metric, clio.measurement.observed_at DESC' in str(query)
-        assert 'clio.measurement.observed_at <=' in str(query)
+        assert 'DISTINCT ON (measurement.metric)' in str(query)
+        assert 'ORDER BY measurement.metric, measurement.observed_at DESC' in str(query)
+        assert 'measurement.observed_at <=' in str(query)
         assert set(query.params['param_1']) == {('ap', 'swpc.kp'), ('f10_7', 'swpc.f107'), ('f10_7', 'gfz.f107')}
 
 

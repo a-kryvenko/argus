@@ -17,7 +17,6 @@ def configure(environment, monkeypatch, tmp_path):
     for key, value in environment.items():
         if key.startswith('CLIO_DB_'):
             monkeypatch.setenv(key, value)
-    environment['ARGUS_GONG_ARCHIVE'] = str(tmp_path / 'gong')
     monkeypatch.setenv('ARGUS_GONG_ARCHIVE', str(tmp_path / 'gong'))
     monkeypatch.setenv('ARGUS_SDO_ARCHIVE', str(tmp_path / 'sdo'))
 
@@ -32,12 +31,10 @@ def test_gong_collection_archives_without_features_and_reads_are_causal(database
     migrate(environment)
     configure(environment, monkeypatch, tmp_path)
     from clio.domains import gong
-    from clio.db.models.file_observation import FileObservation
-    from sqlalchemy import select
     from clio.providers import gong as provider
     from clio.routers.observation_files import load_observation_files
-    from common.db.session import dispose_engine
     from clio.db.session import get_db_session
+    from common.db.session import dispose_engine
     now = datetime.now(UTC)
     observed = now-timedelta(minutes=30)
     original = b'original FITS for Prophet'
@@ -57,21 +54,16 @@ def test_gong_collection_archives_without_features_and_reads_are_causal(database
                 files = await load_observation_files(session, datetime.now(UTC))
                 assert len(files) == 1 and files[0].kind == 'gong'
                 assert files[0].sha256 == hashlib.sha256(original).hexdigest()
-                row = await session.scalar(select(FileObservation).where(FileObservation.kind == 'gong'))
-                (tmp_path / 'gong' / row.raw_path).unlink()
-            restored = await gong.collect(policy(), mode='live', now=now)
-            assert restored['files']['gong']['restored'] == 1
-            assert restored['files']['gong']['failed'] == 0
-            assert download.call_count == 2
-            async with get_db_session() as session:
-                assert await load_observation_files(session, datetime.now(UTC)) == files
         finally:
             await dispose_engine()
     asyncio.run(check())
     with runtime(dsns, 'clio', urls) as conn:
-        row = conn.execute("SELECT raw_path FROM clio.file_observation WHERE kind='gong'").fetchone()
-        assert gzip.decompress((tmp_path / 'gong' / row[0]).read_bytes()) == original
-        assert conn.execute("SELECT to_regclass('clio.gong_snapshot')").fetchone()[0] is None
+        row = conn.execute('SELECT raw_path,features,fits_gzip FROM clio.gong_snapshot').fetchone()
+        assert (tmp_path / 'gong' / row[0]).read_bytes() == original
+        assert row[1:] == (None, None)
+        archived = conn.execute("SELECT raw_path,sha256,received_at FROM clio.file_observation WHERE kind='gong'").fetchone()
+        assert gzip.decompress((tmp_path / 'gong' / archived[0]).read_bytes()) == original
+        assert archived[1] == hashlib.sha256(original).hexdigest()
 
 
 def test_migration_preserves_legacy_original_and_first_receipt(database, monkeypatch, tmp_path):
@@ -93,8 +85,8 @@ def test_migration_preserves_legacy_original_and_first_receipt(database, monkeyp
     from clio.domains import gong
     from clio.providers import gong as provider
     from clio.routers.observation_files import original_file
-    from common.db.session import dispose_engine
     from clio.db.session import get_db_session
+    from common.db.session import dispose_engine
     monkeypatch.setattr(provider, 'candidates', lambda *args, **kwargs: [])
     monkeypatch.setattr(provider, 'download', Mock(side_effect=AssertionError('Legacy original must not be downloaded')))
 
@@ -103,13 +95,13 @@ def test_migration_preserves_legacy_original_and_first_receipt(database, monkeyp
             async with get_db_session() as session:
                 assert (await original_file('gong', digest, session)).body == content
             result = await gong.collect(policy(), mode='live', now=now)
-            assert result['files']['gong']['retained'] == 1
+            assert result['files']['gong']['restored'] == 1
         finally:
             await dispose_engine()
     asyncio.run(check())
     with runtime(dsns, 'clio', urls) as conn:
-        row = conn.execute("SELECT raw_path,received_at,sha256 FROM clio.file_observation WHERE kind='gong'").fetchone()
-        assert gzip.decompress((tmp_path / 'gong' / row[0]).read_bytes()) == content
+        row = conn.execute('SELECT raw_path,available_at,sha256 FROM clio.gong_snapshot').fetchone()
+        assert (tmp_path / 'gong' / row[0]).read_bytes() == content
         assert row[1:] == (received, digest)
 
 
@@ -121,8 +113,8 @@ def test_goes_source_files_are_persisted_and_served_without_calibration(database
     monkeypatch.setenv('ARGUS_GOES_ARCHIVE', str(tmp_path / 'goes'))
     from clio.domains import goes
     from clio.routers.observation_files import load_observation_files, original_file
-    from common.db.session import dispose_engine
     from clio.db.session import get_db_session
+    from common.db.session import dispose_engine
     now = datetime.now(UTC)
     samples = pd.DataFrame([dict(timestamp=pd.Timestamp(now-timedelta(minutes=10)),
                                 goes_euv_256=2.5, goes_euvs_quality_valid=True)])
@@ -164,7 +156,7 @@ def test_migration_drops_legacy_aia_table_without_touching_sdo_files(database, t
     with runtime(dsns, 'clio', urls) as conn:
         assert conn.execute("SELECT to_regclass('clio.aia_snapshot')").fetchone()[0] is None
         assert conn.execute('SELECT version_num FROM clio.alembic_version').fetchone()[0] == '20261027_file_observation'
-        assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (False, False)
+        assert conn.execute("SELECT to_regclass('clio.gong_snapshot') IS NOT NULL, to_regclass('clio.goes_snapshot') IS NOT NULL").fetchone() == (True, True)
     assert original.read_bytes() == b'retained SDO original'
     from clio.db.base import Base
     assert 'clio.aia_snapshot' not in Base.metadata.tables

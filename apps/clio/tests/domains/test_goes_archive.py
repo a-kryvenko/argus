@@ -20,7 +20,7 @@ def test_live_archives_source_columns_without_calibration(monkeypatch, tmp_path)
     records = goes.download_snapshots(NOW-timedelta(days=1), NOW, False)
     assert len(records) == 1
     row = records[0]
-    samples = json.loads(gzip.decompress((tmp_path / row['raw_path']).read_bytes()))
+    samples = json.loads((tmp_path / row['raw_path']).read_bytes())
     assert samples[0]['goes_euv_256'] == 2.5
     assert not {'s10', 'm10', 'y10'} & samples[0].keys()
     monkeypatch.setattr(goes, 'source_frames', Mock(side_effect=AssertionError('Fetched retained snapshot')))

@@ -1,20 +1,27 @@
 """Collect numerical NOAA runs independently of DONKI availability."""
 import asyncio
+import gzip
+import hashlib
 import logging
 from datetime import UTC, datetime
 from sqlalchemy import select
 
+from clio.db.models.enlil_profile import EnlilProfileReceipt
 from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_db_session
-from clio.observations.files import store_receipt
+from clio.observations.transition import mirror_observation
 from clio.providers import enlil
 
 logger = logging.getLogger(__name__)
 
 
 async def store(values):
+    values['received_at'] = datetime.now(UTC)
     async with get_db_session() as session:
-        session.add(FileObservation(**values))
+        row = EnlilProfileReceipt(**values)
+        session.add(row)
+        await session.flush()
+        await mirror_observation(session, 'enlil', id=row.id)
         await session.commit()
 
 
@@ -24,33 +31,38 @@ async def run(args):
         if not objects:
             raise ValueError('No recent compact NOAA ENLIL L1 profiles')
     except (OSError, ValueError, enlil.requests.RequestException) as exc:
-        await store(await asyncio.to_thread(store_receipt, 'enlil', 'noaa.enlil', 'discovery', error=type(exc).__name__))
+        await store(dict(source_url=enlil.BASE_URL, error=type(exc).__name__))
         raise RuntimeError('NOAA ENLIL profile discovery failed') from exc
     failed = []
     for obj in objects:
-        metadata = dict(source_url=enlil.BASE_URL+obj['key'], source_key=obj['key'],
+        values = dict(source_url=enlil.BASE_URL+obj['key'], source_key=obj['key'],
             source_modified_at=datetime.fromisoformat(obj['last_modified'].replace('Z', '+00:00')))
-        key = obj['key'] + '@' + metadata['source_modified_at'].isoformat()
         async with get_db_session() as session:
+            key = obj['key'] + '@' + values['source_modified_at'].isoformat()
             known = await session.scalar(select(FileObservation.id).where(
-                FileObservation.kind == 'enlil', FileObservation.source_key == key,
-                FileObservation.error.is_(None)).limit(1))
+                FileObservation.kind == 'enlil', FileObservation.error.is_(None),
+                (FileObservation.source_key == key) | FileObservation.source_key.startswith(key + '#', autoescape=True)
+            ).limit(1))
+            if not known:
+                known = await session.scalar(select(EnlilProfileReceipt.id).where(
+                    EnlilProfileReceipt.source_key == obj['key'],
+                    EnlilProfileReceipt.source_modified_at == values['source_modified_at'],
+                    EnlilProfileReceipt.error.is_(None)).limit(1))
         if known:
             continue
-        raw, error = None, None
         try:
-            raw = await asyncio.to_thread(enlil.download, metadata['source_url'])
+            raw = await asyncio.to_thread(enlil.download, values['source_url'])
             if len(raw) != obj['size']:
                 raise ValueError('ENLIL profile size differs from listing')
+            # Retain exact source bytes even when normalization rejects a file.
+            values.update(sha256=hashlib.sha256(raw).hexdigest(), raw_gzip=gzip.compress(raw, mtime=0))
             payload = await asyncio.to_thread(enlil.parse_profile, raw)
-            metadata['model_created_at'] = payload.pop('model_created_at')
-            metadata['payload'] = payload
+            values['model_created_at'] = payload.pop('model_created_at')
+            values['payload'] = payload
         except (OSError, ValueError, KeyError, enlil.requests.RequestException) as exc:
             failed.append(obj['key'])
-            error = type(exc).__name__
-            logger.warning('NOAA ENLIL profile failed: %s', error)
-        values = await asyncio.to_thread(store_receipt, 'enlil', 'noaa.enlil', key,
-                                        raw=raw, error=error, metadata=metadata)
+            values['error'] = type(exc).__name__
+            logger.warning('NOAA ENLIL profile failed: %s', type(exc).__name__)
         await store(values)
     if failed:
         raise RuntimeError(f'NOAA ENLIL failed for {len(failed)} profiles')

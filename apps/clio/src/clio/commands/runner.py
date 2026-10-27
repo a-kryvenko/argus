@@ -3,7 +3,9 @@ import asyncio
 
 
 def invoke(name, args):
-    if name == 'collect-enlil':
+    if name == 'backfill-files':
+        from clio.commands.backfill_files import run
+    elif name == 'collect-enlil':
         from clio.commands.collect_enlil import run
     elif name == 'collect-events':
         from clio.commands.collect_events import run

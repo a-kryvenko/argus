@@ -6,6 +6,10 @@ from common.db.session import get_database_url
 from clio.db.base import Base
 from clio.db.models import (
     file_observation,
+    donki_poll,
+    enlil_profile,
+    goes_snapshot,
+    gong_snapshot,
     measurement,
     normalized_observation,
     observation_source_status,

@@ -1,5 +1,6 @@
 """Authenticated access to immutable originals, never computed model features."""
 import asyncio
+import gzip
 import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -12,13 +13,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_request_db_session
+from clio.db.models.gong_snapshot import GONGSnapshot
+from clio.db.models.goes_snapshot import GOESSnapshot
 from clio.db.models.file_observation import FileObservation
-from clio.observations.files import read_original, snapshot_receipt
+from clio.observations.files import archive_root, read_original
+from clio.observations.reading import snapshots
 from clio.routers.auth import require_service_token
 from common.schemas.observation_files import RawObservationFile
 from common.schemas.response import success_response
 
-FILE_KINDS = ('gong', 'goes')
+MODELS = {'gong': GONGSnapshot, 'goes': GOESSnapshot}
 router = APIRouter(prefix='/internal/v1/observations', dependencies=[Depends(require_service_token)])
 
 
@@ -26,29 +30,18 @@ async def load_observation_files(session, as_of: datetime, *, start=None, end=No
     start = start or datetime.min.replace(tzinfo=UTC)
     end = end or datetime.max.replace(tzinfo=UTC)
     files = []
-    for kind in FILE_KINDS:
+    for kind, model in MODELS.items():
         if kind not in kinds:
             continue
-        # Source keys begin with the UTC slot; historical GOES files cover a day.
-        lower = start.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        upper = end.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-        if upper < datetime.max.replace(tzinfo=UTC)-timedelta(hours=1):
-            upper += timedelta(hours=1)
-        rows = (await session.scalars(select(FileObservation).where(
-            FileObservation.kind == kind, FileObservation.error.is_(None),
-            FileObservation.source_key >= lower.isoformat(), FileObservation.source_key < upper.isoformat(),
-            FileObservation.received_at <= as_of).order_by(FileObservation.source_key))).all()
         try:
-            receipts = await asyncio.to_thread(lambda: [snapshot_receipt(row) for row in rows])
+            rows = await snapshots(session, kind, start=start, end=end, as_of=as_of)
         except (OSError, ValueError, KeyError):
             raise HTTPException(503, 'Observation file receipt is unavailable or corrupt') from None
-        for row in receipts:
-            if not start <= row['observed_at'] < end or row['observed_at'] > as_of:
-                continue
-            files.append(RawObservationFile(kind=kind, slot_at=row['slot_at'], observed_at=row['observed_at'],
-                available_at=row['available_at'], sha256=row['sha256'], source_product=row['source_product']))
-        if len(files) > 2400:
+        if len(rows) > 2400:
             raise HTTPException(503, 'Observation file range exceeds the supported batch size')
+        files.extend(RawObservationFile(kind=kind, slot_at=row.slot_at, observed_at=row.observed_at,
+            available_at=row.available_at, sha256=row.sha256,
+            source_product=row.source_product) for row in rows)
     if 'aia' in kinds:
         files.extend(await asyncio.to_thread(aia_files, as_of, start=start, end=end, channel=channel))
     return files
@@ -121,12 +114,33 @@ async def original_file(kind: Literal['aia', 'gong', 'goes'],
         except (OSError, ValueError):
             raise HTTPException(503, 'AIA original is unavailable or corrupt') from None
         return Response(content, media_type='application/fits', headers={'ETag': f'"{sha256}"'})
-    row = (await session.scalars(select(FileObservation).where(
+    archived = (await session.scalars(select(FileObservation).where(
         FileObservation.kind == kind, FileObservation.sha256 == sha256).limit(1))).first()
+    if archived is not None:
+        try:
+            content = await asyncio.to_thread(read_original, kind, archived.raw_path, sha256)
+        except (OSError, ValueError, TypeError):
+            raise HTTPException(503, 'Observation original is unavailable or corrupt') from None
+        return Response(content, media_type='application/json' if kind == 'goes' else 'application/fits',
+                        headers={'ETag': f'"{sha256}"'})
+    model = MODELS[kind]
+    row = (await session.scalars(select(model).where(model.sha256 == sha256).limit(1))).first()
     if row is None:
         raise HTTPException(404, 'Observation original not found')
     try:
-        content = await asyncio.to_thread(read_original, kind, row.raw_path, sha256)
+        if row.raw_path:
+            root = archive_root(kind).resolve()
+            path = (root / row.raw_path).resolve()
+            if not path.is_relative_to(root):
+                raise ValueError('Original path is outside its archive')
+            content = await asyncio.to_thread(path.read_bytes)
+        elif kind == 'gong':
+            compressed = await session.scalar(select(GONGSnapshot.fits_gzip).where(GONGSnapshot.slot_at == row.slot_at))
+            content = await asyncio.to_thread(gzip.decompress, compressed)
+        else:
+            raise FileNotFoundError()
+        if hashlib.sha256(content).hexdigest() != sha256:
+            raise ValueError('Original checksum differs from receipt')
     except (OSError, ValueError, TypeError):
         raise HTTPException(503, 'Observation original is unavailable or corrupt') from None
     return Response(content, media_type='application/json' if kind == 'goes' else 'application/fits',

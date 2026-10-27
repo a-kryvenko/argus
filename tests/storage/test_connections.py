@@ -89,8 +89,7 @@ def migration_sql(domain, revision, tmp_path):
 
 @pytest.mark.parametrize('domain', PATHS)
 def test_schema_migrations_compile_for_a_single_owner(domain, tmp_path):
-    revision = '20261014_enlil_profile' if domain == 'clio' else 'head'
-    result = migration_sql(domain, revision, tmp_path)
+    result = migration_sql(domain, 'head', tmp_path)
     assert result.returncode == 0, result.stderr
     assert f'CREATE SCHEMA IF NOT EXISTS {domain}' in result.stdout
     assert f'{domain}.alembic_version' in result.stdout
@@ -98,11 +97,9 @@ def test_schema_migrations_compile_for_a_single_owner(domain, tmp_path):
     assert 'REVOKE' not in result.stdout
 
 
-def test_file_observation_migration_requires_online_execution(tmp_path):
+def test_file_observation_expansion_only_adds_storage(tmp_path):
     result = migration_sql('clio', '20261014_enlil_profile:head', tmp_path)
-    assert result.returncode != 0
-    assert 'requires an online database connection' in result.stdout + result.stderr
-    assert '--sql is not supported' in result.stdout + result.stderr
-    assert 'CREATE TABLE file_observation' not in result.stdout
+    assert result.returncode == 0, result.stderr
+    assert 'CREATE TABLE file_observation' in result.stdout
     assert 'DROP TABLE' not in result.stdout
-    assert 'UPDATE clio.alembic_version' not in result.stdout
+    assert 'SELECT * FROM' not in result.stdout

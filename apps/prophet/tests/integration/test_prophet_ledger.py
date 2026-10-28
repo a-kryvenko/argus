@@ -136,7 +136,7 @@ async def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
                             (run.run_id,)).fetchone()[0] == 'interrupted'
 
 
-@pytest.mark.parametrize('age_days', [13, 14, 15, 100])
+@pytest.mark.parametrize('age_days', [6, 7, 8, 100])
 async def test_cleanup_expires_only_details_and_preserves_forecast_accuracy_history(recorder_setup, age_days):
     from prophet.services.releases.retention import cleanup
     from psycopg.types.json import Jsonb
@@ -163,7 +163,7 @@ async def test_cleanup_expires_only_details_and_preserves_forecast_accuracy_hist
                      (first_release.release_id, 'dst_quantile', old, Jsonb(report)))
         conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=ANY(%s)',
                      (old, old, ids))
-    expired = age_days > 14
+    expired = age_days > 7
     preview = await cleanup(now=now)
     assert preview['details'] == (3 if expired else 0)
     assert not preview['applied']

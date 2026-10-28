@@ -7,7 +7,7 @@ from prophet.db.session import get_db_session
 from prophet.db.locks import transaction
 
 
-DETAIL_DAYS = 14
+DETAIL_DAYS = 7
 EXPIRED_DETAILS = """status <> 'running' AND started_at < :cutoff
     AND (input_snapshot IS NOT NULL OR input_sha256 IS NOT NULL
          OR provenance <> '{}'::jsonb OR error IS NOT NULL)"""

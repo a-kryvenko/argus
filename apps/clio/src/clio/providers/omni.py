@@ -1,4 +1,4 @@
-"""Shared physical-unit OMNI missing-value contract for ingestion and training."""
+"""OMNI parsing and provider missing values."""
 import pandas as pd
 
 # Hourly OMNI2 fill values; Kp in persisted CSVs is already divided by ten.

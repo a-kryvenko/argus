@@ -61,7 +61,7 @@ DEFAULT_VARS = {
     "f10_7": {"id": 50, "title": "f10.7_index"},
 }
 
-from common.data.omni import OMNI_FILL_VALUES, clean_omni_values
+from clio.providers.omni import clean_omni_values
 
 
 class OMNIWeb_Loader:

@@ -40,7 +40,7 @@ async def load_observation_files(session, as_of: datetime, *, start=None, end=No
 
 
 def aia_files(as_of, *, start=None, end=None, channel='aia193'):
-    from common.sdo_images import archive_root, hourly_slots, read_metadata, original_path, utc
+    from clio.observations.sdo_archive import archive_root, hourly_slots, read_metadata, original_path, utc
     root = archive_root()
     files = []
     for slot in hourly_slots(as_of):
@@ -61,7 +61,7 @@ def aia_files(as_of, *, start=None, end=None, channel='aia193'):
 
 
 def aia_original(sha256, slot_at=None, channel="aia193"):
-    from common.sdo_images import archive_root, hourly_slots, read_metadata, original_path
+    from clio.observations.sdo_archive import archive_root, hourly_slots, read_metadata, original_path
     root = archive_root()
     retained = hourly_slots(datetime.now(UTC))
     slots = retained if slot_at is None else [slot_at] if slot_at in retained else []
@@ -117,7 +117,7 @@ async def snapshots(session, kind, *, start, end, as_of=None):
 
 
 def read_image_catalog(start, end, as_of, read_at, channels):
-    from common.sdo_images import archive_root, image_path, read_metadata, utc
+    from clio.observations.sdo_archive import archive_root, image_path, read_metadata, utc
     root = archive_root().resolve()
     items, missing = [], []
     for offset in range(int((end - start).total_seconds() // 3600)):

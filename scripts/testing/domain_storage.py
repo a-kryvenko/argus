@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory() as directory:
 """)
         print('Domain integration tests', flush=True)
         python(*pytest_args, *discovery_args, 'tests/integration', *sys.argv[1:])
-        for domain in ('clio', 'prophet', 'intelligence'):
+        for domain in ('api', 'clio', 'prophet', 'intelligence'):
             python(*pytest_args, *discovery_args,
                    f'apps/{domain}/tests/integration', *sys.argv[1:], domain=domain)
         python('apps/api/tests/integration/verify_dashboard.py', domain='api')

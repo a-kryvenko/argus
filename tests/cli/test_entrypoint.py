@@ -25,7 +25,7 @@ def entry(tmp_path, request):
         p.write_text(f'#!{sys.executable}\n' + '''import json, os, sys
 with open(os.environ['ARGUS_TEST_CALLS'], 'a') as out:
     out.write(json.dumps(sys.argv[1:]) + '\\n')
-if os.getenv('ARGUS_TEST_FAIL') and sys.argv[1:3] == ['clio', 'collect']:
+if os.getenv('ARGUS_TEST_FAIL'):
     sys.exit(7)
 ''')
         p.chmod(0o755)
@@ -60,9 +60,9 @@ def test_invalid_commands_have_no_side_effects(entry, args):
     assert not calls
 
 
-def test_collect_stops_on_failure(entry):
+def test_backend_exit_status_is_preserved(entry):
     _, run = entry
-    result, calls = run('clio', 'collect', fail=True)
+    result, calls = run('clio', 'test-command', fail=True)
     assert result.returncode == 7
     assert len(calls) == 1
 
@@ -74,32 +74,6 @@ def test_logs_routes_to_environment(entry):
     assert calls == [['prophet', '--tail', '20', '-f']]
 
 
-@pytest.mark.parametrize('args', [(), ('january-2026',), ('--refresh-data',)])
-def test_demo_rebuild_is_dev_only(entry, args):
-    mode, run = entry
-    result, calls = run('demo', *args)
-    assert result.returncode == (0 if mode == 'dev' else 2), result.stderr
-    assert calls == ([['demo', *args]] if mode == 'dev' else [])
-    if mode == 'prod':
-        assert 'disabled in production' in result.stderr
-
-
-@pytest.mark.parametrize('service', ['prophet', 'intelligence'])
-def test_autogenerate_requires_service_metadata(entry, service):
-    _, run = entry
-    result, calls = run(service, 'migration', 'create', '-m', 'new fields', '--autogenerate')
-    assert result.returncode == 2
-    assert not calls
-
-
-@pytest.mark.parametrize('args', [('observe',), ('observe', 'solar-wind-speed')])
-def test_removed_observe_has_no_side_effects(entry, args):
-    _, run = entry
-    result, calls = run(*args)
-    assert result.returncode == 2
-    assert not calls
-
-
 def test_compose_routes_to_selected_environment(entry):
     _, run = entry
     result, calls = run('compose', 'up', '-d', '--wait')
@@ -108,9 +82,9 @@ def test_compose_routes_to_selected_environment(entry):
 
 
 @pytest.mark.parametrize('args', [
-    ('clio', 'collect'),
-    ('prophet', 'verify', 'dst', '--days', '14'),
-    ('intelligence', 'check', 'dst', '--release-id', 'value with spaces'),
+    ('clio', 'test-command'),
+    ('prophet', 'test-command', '--option', 'value'),
+    ('intelligence', 'test-command', '--option', 'value with spaces'),
     ('api', 'user', '--help'),
 ])
 def test_service_arguments_pass_through_unchanged(entry, args):

@@ -13,7 +13,7 @@ from time import monotonic
 import numpy as np
 import requests
 
-from common.sdo_images import OBSERVED_CHANNELS, utc
+from clio.observations.sdo_archive import OBSERVED_CHANNELS, utc
 
 MAX_DOWNLOAD_BYTES = 128 * 1024 * 1024
 

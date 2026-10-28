@@ -24,7 +24,7 @@ async def merge_sdo(result, config, *, now, mode, metrics=None):
         return result
     import asyncio
     from clio.ingestion.sdo_images import cycle
-    from common.sdo_images import archive_root
+    from clio.observations.sdo_archive import archive_root
     report = await asyncio.to_thread(
         cycle, archive_root(), mode,
         full=True, clock=lambda: now,

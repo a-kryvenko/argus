@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from common.schemas.response import ApiResponse, success_response
 from common.schemas.sdo_images import SDOImageCatalog
-from common.sdo_images import OBSERVED_CHANNELS, RETENTION_HOURS, utc
+from clio.observations.sdo_archive import OBSERVED_CHANNELS, RETENTION_HOURS, utc
 from fastapi import APIRouter, HTTPException
 from pydantic import AwareDatetime
 

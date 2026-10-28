@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from common.data.omni import OMNI_WORDS as WORDS, parse_annual
+from clio.providers.omni import OMNI_WORDS as WORDS, parse_annual
 
 
 def record(year=2000, day=1, hour=0, fills=False):

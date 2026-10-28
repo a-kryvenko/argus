@@ -1,4 +1,4 @@
-"""Versioned hourly SDO observation storage shared by Clio and Prophet.
+"""Versioned hourly SDO observation storage owned by Clio.
 
 Only observations belong here. Missing channels have no files; reconstructed
 images must stay in the forecasting layer. Arrays retain their preprocessing

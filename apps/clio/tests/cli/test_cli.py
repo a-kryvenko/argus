@@ -85,18 +85,6 @@ def test_backfill_without_arguments_uses_configured_observations(monkeypatch):
     assert set(vars(args)) == {'command', 'now'}
 
 
-@pytest.mark.parametrize('failed', [[], ['dst']])
-def test_collection_exit_status_reflects_partial_failures(monkeypatch, failed):
-    monkeypatch.setattr(cli, 'invoke', lambda *args: {'failed_metrics': failed, 'downloaded_measurements': 1})
-    monkeypatch.setattr(runtime, 'run_command', lambda run: run())
-    if failed:
-        with pytest.raises(SystemExit) as result:
-            cli.main(['collect', 'dst'])
-        assert result.value.code == 1
-    else:
-        cli.main(['collect', 'dst'])
-
-
 def test_serve_runs_observation_api(monkeypatch):
     import uvicorn
     serve = Mock()

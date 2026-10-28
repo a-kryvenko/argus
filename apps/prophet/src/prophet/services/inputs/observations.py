@@ -1,7 +1,6 @@
 """Assemble model context using consumer-independent observation resources."""
 from datetime import UTC, datetime, timedelta
 
-from common.data.omni import OMNI_FILL_VALUES
 from common.schemas.observation import Observation
 from forecast.observation_inputs import ObservationInputs
 
@@ -34,8 +33,9 @@ def read_observations(client, url, token, as_of, *, request=None):
         return data['items']
 
     indices = measurements('f10_7,dst,ap', (as_of - timedelta(days=88)).isoformat())
-    speed = measurements('v', start, aggregation='hourly', min_value=0, max_value=OMNI_FILL_VALUES['v'])
-    density = measurements('n', start, aggregation='hourly', min_value=0, exclude_value=OMNI_FILL_VALUES['n'])
+    # Filter legacy stored-history missing codes before hourly aggregation.
+    speed = measurements('v', start, aggregation='hourly', min_value=0, max_value=9999)
+    density = measurements('n', start, aggregation='hourly', min_value=0, exclude_value=999.9)
     files = []
     for kind, days in (('gong', 2), ('goes', 90), ('aia', 45)):
         files.extend(read('files', kind=kind, start=(as_of-timedelta(days=days)).isoformat(),

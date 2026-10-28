@@ -25,7 +25,7 @@ async def run(args):
     result = {'live_removed': live.rowcount, 'normalized_removed': normalized.rowcount}
     if config.sdo_images.enabled:
         from clio.ingestion.sdo_images import cycle
-        from common.sdo_images import archive_root
+        from clio.observations.sdo_archive import archive_root
         result['sdo'] = await asyncio.to_thread(cycle, archive_root(), 'cleanup', clock=lambda: args.now)
     print(json.dumps(result, indent=2))
     return result

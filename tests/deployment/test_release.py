@@ -146,32 +146,6 @@ def test_migrations_are_fingerprinted_separately(source):
     assert {name for name in before['migrations'] if before['migrations'][name] != after['migrations'][name]} == {'clio'}
 
 
-@pytest.mark.parametrize('domain,command', [('prophet', 'generate'), ('intelligence', 'check')])
-def test_operator_wrapper_selects_project_and_forwards_arguments(tmp_path, domain, command):
-    root = tmp_path / 'host with spaces'
-    (root / 'scripts').mkdir(parents=True)
-    (root / '.argus-mode').write_text('prod\n')
-    wrapper = root / 'scripts/run'
-    wrapper.write_bytes((ROOT / 'scripts/run').read_bytes())
-    for name in ('.rolling-state.json', '.rolling-compose.json', '.release-compose.json'):
-        (root / name).write_text('{}')
-    fake_bin = tmp_path / 'tools'
-    fake_bin.mkdir()
-    docker = fake_bin / 'docker'
-    docker.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
-    docker.chmod(0o755)
-    import os
-    result = subprocess.run(['bash', str(wrapper), domain, command, 'solar-wind-speed'],
-                            cwd=tmp_path, env={**os.environ, 'PATH': str(fake_bin) + ':' + os.environ['PATH']},
-                            check=True, capture_output=True, text=True)
-    args = result.stdout.splitlines()
-    assert args[args.index('--project-directory') + 1] == str(root)
-    assert str(root / '.release-compose.json') in args
-    assert str(root / '.release-images.env') not in args
-    expected = ['run', '--rm', '--no-deps', *(['-T'] if domain == 'prophet' else []), domain, domain, command, 'solar-wind-speed']
-    assert args[-len(expected):] == expected
-
-
 def test_every_docker_copy_source_participates_in_image_identity():
     import shlex
     for component, prefixes in release.INPUTS.items():

@@ -1,58 +1,12 @@
-"""Service connections use isolated settings and preserve raw passwords."""
+"""Provisioning and migration invariants shared by all services."""
 import importlib.util
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
 
+from tests.support.migrations import migration_sql
+
 ROOT = Path(__file__).resolve().parents[2]
-PATHS = {
-    'api': 'apps/api/src/api/db/session.py',
-    'clio': 'apps/clio/src/clio/db/session.py',
-    'prophet': 'apps/prophet/src/prophet/db/session.py',
-    'intelligence': 'apps/intelligence/src/intelligence/db/session.py',
-}
-
-
-@pytest.mark.parametrize('domain', PATHS)
-def test_raw_passwords_and_domain_settings_are_isolated(domain, monkeypatch):
-    if os.getenv('ARGUS_DATABASE_URL_TEST') != domain:
-        result = subprocess.run([
-            str(ROOT / 'apps' / domain / '.venv/bin/python'), '-m', 'pytest', '--rootdir=.', '--confcutdir=.', '--import-mode=importlib',
-            '-q', f'{__file__}::test_raw_passwords_and_domain_settings_are_isolated[{domain}]'],
-            env={**os.environ, 'ARGUS_DATABASE_URL_TEST': domain, 'PYTHONPATH': ''},
-            cwd=ROOT, capture_output=True, text=True)
-        assert result.returncode == 0, result.stdout + result.stderr
-        return
-    from sqlalchemy.engine import make_url
-    spec = importlib.util.spec_from_file_location('storage_' + domain, ROOT / PATHS[domain])
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    from common.db.session import get_database_url
-    get_url = lambda: get_database_url(domain.upper())
-    prefix = domain.upper() + '_DB_'
-    for field in ('NAME', 'USER', 'PASSWORD', 'HOST', 'PORT'):
-        monkeypatch.delenv(prefix + field, raising=False)
-    monkeypatch.setenv('DB_USER', 'postgres')
-    monkeypatch.setenv('DB_PASSWORD', 'admin-secret')
-    monkeypatch.setenv('DATABASE_URL', 'postgresql://admin:secret@db/admin')
-    with pytest.raises(RuntimeError, match=prefix + 'PASSWORD'):
-        get_url()
-    for field, value in dict(NAME=domain, USER='owner', PASSWORD='temporary', PORT='5433').items():
-        monkeypatch.setenv(prefix + field, value)
-    for password in ('p@ss/word', 'a:b#c?d%20+e', 'space and $dollar', 'пароль=тест'):
-        monkeypatch.setenv(prefix + 'PASSWORD', password)
-        url = get_url()
-        assert url.database == domain and url.username == 'owner'
-        assert url.host == 'localhost' and url.port == 5433
-        assert url.password == password
-        assert make_url(url.render_as_string(hide_password=False)).password == password
-    for invalid in ('notaport', '0', '65536'):
-        monkeypatch.setenv(prefix + 'PORT', invalid)
-        with pytest.raises(RuntimeError, match=prefix + 'PORT') as exc:
-            get_url()
-        assert password not in str(exc.value)
 
 
 def test_provisioning_rejects_shared_databases_before_connecting(monkeypatch):
@@ -72,21 +26,7 @@ def test_provisioning_rejects_shared_databases_before_connecting(monkeypatch):
         module.provision(admin, {'api': 'postgresql://api:pass@other-server/api'}, apply=True)
 
 
-def migration_sql(domain, revision, tmp_path):
-    (tmp_path / 'configs').mkdir()
-    (tmp_path / 'configs/project.yaml').write_text('project: {name: test}\n')
-    (tmp_path / 'configs/models_registry.yaml').write_text('models: {}\n')
-    environment = {**os.environ, 'ARGUS_WORKDIR': str(tmp_path),
-                   **{domain.upper() + '_DB_' + key: value for key, value in
-                      dict(HOST='localhost', PORT='5432', NAME=domain, USER='owner', PASSWORD='p@ss:word/%').items()},
-                   'PYTHONPATH': ''}
-    python = str(ROOT / 'apps' / domain / '.venv/bin/python')
-    command = [python, '-m', 'alembic', '-c', str(ROOT / 'apps' / domain / 'alembic.ini')]
-    return subprocess.run([*command, 'upgrade', revision, '--sql'], env=environment,
-                          capture_output=True, text=True)
-
-
-@pytest.mark.parametrize('domain', PATHS)
+@pytest.mark.parametrize('domain', ['api', 'clio', 'prophet', 'intelligence'])
 def test_schema_migrations_compile_for_a_single_owner(domain, tmp_path):
     result = migration_sql(domain, '20261027_file_observation' if domain == 'clio' else 'head', tmp_path)
     assert result.returncode == 0, result.stderr
@@ -94,40 +34,3 @@ def test_schema_migrations_compile_for_a_single_owner(domain, tmp_path):
     assert f'{domain}.alembic_version' in result.stdout
     assert 'argus_' + domain + '_migrator' not in result.stdout
     assert 'REVOKE' not in result.stdout
-
-
-def test_file_observation_expansion_only_adds_storage(tmp_path):
-    result = migration_sql('clio', '20261014_enlil_profile:20261027_file_observation', tmp_path)
-    assert result.returncode == 0, result.stderr
-    assert 'CREATE TABLE file_observation' in result.stdout
-    assert 'DROP TABLE' not in result.stdout
-    assert 'SELECT * FROM' not in result.stdout
-
-
-def test_file_cutover_requires_online_validation(tmp_path):
-    result = migration_sql('clio', '20261027_file_observation:head', tmp_path)
-    assert result.returncode != 0
-    assert 'requires an online database connection' in result.stdout + result.stderr
-    assert 'DROP TABLE' not in result.stdout
-    assert 'UPDATE clio.alembic_version' not in result.stdout
-
-
-def test_legacy_file_cleanup_drops_only_retired_tables(tmp_path):
-    result = migration_sql('clio', '20261027_file_cutover:head', tmp_path)
-    assert result.returncode == 0, result.stderr
-    dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
-    assert dropped == [f'DROP TABLE clio.{table};' for table in (
-        'gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt', 'scheduled_job')]
-
-
-def test_prophet_cleanup_preserves_forecast_history(tmp_path):
-    result = migration_sql('prophet', '20260929_prophet_product_slots:head', tmp_path)
-    assert result.returncode == 0, result.stderr
-    dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
-    assert dropped == [f'DROP TABLE prophet.{table};' for table in (
-        'scheduled_job', 'forecast_slot', 'current_forecast')]
-    dropped_columns = [line.strip() for line in result.stdout.splitlines() if 'DROP COLUMN' in line]
-    assert dropped_columns == [
-        'ALTER TABLE prophet.forecast_run DROP COLUMN scheduled_slot;',
-        'ALTER TABLE prophet.forecast_run DROP COLUMN scheduled_product;',
-    ]

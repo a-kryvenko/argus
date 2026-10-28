@@ -8,7 +8,7 @@ import requests
 
 from clio.ingestion import sdo_images as collector
 from clio.providers.sdo_images import observation_url, prepare_observation
-from common.sdo_images import hourly_slots, read_image
+from clio.observations.sdo_archive import hourly_slots, read_image
 
 SLOT = datetime(2026, 9, 30, 6, tzinfo=UTC)
 
@@ -80,7 +80,7 @@ def test_failed_download_does_not_publish_or_block_other_channels(tmp_path, monk
 
 @pytest.mark.parametrize('channel', ['aia171', 'aia193', 'aia211'])
 def test_existing_reduced_image_recovers_native_fits_without_changing_receipt(tmp_path, monkeypatch, channel):
-    from common.sdo_images import original_path, save_image
+    from clio.observations.sdo_archive import original_path, save_image
     now = SLOT + timedelta(minutes=30)
     content = b'first original'
     metadata = dict(observed_at=SLOT.isoformat(), available_at=(SLOT+timedelta(minutes=5)).isoformat(),

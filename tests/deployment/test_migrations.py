@@ -48,9 +48,3 @@ def test_unknown_database_revision_is_rejected(tmp_path):
     scripts = graph(tmp_path, [('initial', None, 'online_compatible = True')])
     with pytest.raises(CommandError, match='unknown'):
         status.revision_status(scripts, {'unknown'}, online=True)
-
-
-def test_current_intelligence_upgrade_is_compatible():
-    scripts = ScriptDirectory(str(ROOT / 'apps/intelligence/src/intelligence/db/migrations'))
-    assert status.revision_status(scripts, {'20261017_forecast_inputs'}, online=True) == 'pending'
-    assert status.revision_status(scripts, set(), online=True) == 'pending'

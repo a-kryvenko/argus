@@ -7,13 +7,13 @@ import pytest
 
 from clio.routers import sdo_images as routes
 from clio.routers.auth import require_service_token
-from common.sdo_images import image_path, save_image
+from clio.observations.sdo_archive import image_path, save_image
 
 
 @pytest.fixture
 def catalog(tmp_path, monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
-    monkeypatch.setattr('common.sdo_images.archive_root', lambda: tmp_path)
+    monkeypatch.setattr('clio.observations.sdo_archive.archive_root', lambda: tmp_path)
     slot = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
     now = slot + timedelta(minutes=30)
     metadata = dict(observed_at=slot.isoformat(), available_at=(slot + timedelta(minutes=20)).isoformat(),
@@ -90,11 +90,11 @@ def test_catalog_validates_channel_and_bounded_aware_hourly_ranges(catalog):
 def test_empty_catalog_does_not_create_storage_and_corruption_is_not_a_gap(catalog, monkeypatch):
     client, root, slot, now = catalog
     absent = root / 'absent'
-    monkeypatch.setattr('common.sdo_images.archive_root', lambda: absent)
+    monkeypatch.setattr('clio.observations.sdo_archive.archive_root', lambda: absent)
     response = request(client, slot, now, channel='hmi_m')
     assert response.status_code == 200 and not response.json()['data']['items']
     assert not absent.exists()
-    monkeypatch.setattr('common.sdo_images.archive_root', lambda: root)
+    monkeypatch.setattr('clio.observations.sdo_archive.archive_root', lambda: root)
     image_path(root, slot, 'aia1600').write_bytes(b'broken archive')
     assert request(client, slot, now).status_code == 503
 

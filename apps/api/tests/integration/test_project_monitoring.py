@@ -1,25 +1,24 @@
-"""Exercise monitoring persistence in a disposable Docker database."""
+"""Monitoring persistence against a disposable PostgreSQL database."""
 import asyncio
 import importlib.util
 import json
 import os
-import subprocess
 import tempfile
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
-from uuid import uuid4
 
-import psycopg
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import text, select
+from sqlalchemy.engine import make_url
+
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from api.db.models.monitoring import MonitorState, TrafficMetric
 from api.services.monitoring import edge_traffic
 from api.services.monitoring import project as project_monitoring
+from tests.support.database import database
 
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -96,29 +95,11 @@ async def verify(dsn):
         async with api.begin() as connection:
             await connection.run_sync(lambda c: migrate(c, api_migrations, 'downgrade'))
             await connection.run_sync(lambda c: migrate(c, api_migrations, 'upgrade'))
-        print('Monitoring integration passed: migration roundtrip, permissions, concurrent ingestion, durable cursors, rotation, snapshots.')
     finally:
         await api.dispose()
 
 
-def main():
-    name = 'argus-monitoring-test-' + uuid4().hex[:10]
-    subprocess.run(['docker', 'run', '--rm', '-d', '--name', name,
-        '-p', '127.0.0.1::5432', '-e', 'POSTGRES_PASSWORD=monitoring-test', 'postgres:17-alpine'], check=True, capture_output=True)
-    try:
-        binding = subprocess.check_output(['docker', 'port', name, '5432/tcp'], text=True).strip()
-        port = binding.rsplit(':', 1)[1]
-        dsn = f'postgresql://postgres:monitoring-test@127.0.0.1:{port}/postgres'
-        for _ in range(30):
-            try:
-                with psycopg.connect(dsn, connect_timeout=1):
-                    break
-            except psycopg.OperationalError:
-                time.sleep(.3)
-        asyncio.run(verify(dsn.replace('postgresql://', 'postgresql+psycopg://')))
-    finally:
-        subprocess.run(['docker', 'stop', name], check=True, capture_output=True)
-
-
-if __name__ == '__main__':
-    main()
+def test_monitoring_persistence(database):
+    _, urls, _ = database
+    dsn = make_url(urls['api']).set(drivername='postgresql+psycopg')
+    asyncio.run(verify(dsn))

@@ -104,7 +104,7 @@ def test_file_read_rejects_paths_outside_archive(tmp_path, monkeypatch):
 @pytest.mark.parametrize('age_days', [0, 39])
 def test_aia_uses_shared_sdo_original_and_receipt_without_database(tmp_path, monkeypatch, age_days):
     import numpy as np
-    from common.sdo_images import save_image, save_original
+    from clio.observations.sdo_archive import save_image, save_original
     now = datetime.now(UTC)
     slot = now.replace(minute=0, second=0, microsecond=0) - timedelta(days=age_days)
     content = b'native AIA FITS'
@@ -135,7 +135,7 @@ def test_aia_uses_shared_sdo_original_and_receipt_without_database(tmp_path, mon
 @pytest.mark.parametrize('channel', ['aia171', 'aia211'])
 def test_proswin_channel_originals(tmp_path, monkeypatch, channel):
     import numpy as np
-    from common.sdo_images import save_image, save_original
+    from clio.observations.sdo_archive import save_image, save_original
     now = datetime.now(UTC)
     slot = now.replace(minute=0, second=0, microsecond=0)
     content = channel.encode()

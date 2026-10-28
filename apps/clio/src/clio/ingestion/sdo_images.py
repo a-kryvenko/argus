@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 
 from clio.providers.sdo_images import download_observation, observation_url, prepare_observation
-from common.sdo_images import (OBSERVED_CHANNELS, ORIGINAL_CHANNELS, archive_root, hourly_slots,
+from clio.observations.sdo_archive import (OBSERVED_CHANNELS, ORIGINAL_CHANNELS, archive_root, hourly_slots,
                                image_path, original_path, prune, save_image, save_original, utc)
 
 logger = logging.getLogger(__name__)

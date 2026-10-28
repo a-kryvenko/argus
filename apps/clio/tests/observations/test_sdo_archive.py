@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 import pytest
 
-from common.sdo_images import hourly_slots, image_path, prune, read_image, save_image
+from clio.observations.sdo_archive import hourly_slots, image_path, prune, read_image, save_image
 
 
 NOW = datetime(2026, 9, 30, 12, 30, tzinfo=UTC)
@@ -55,7 +55,7 @@ def test_reject_invalid_observations(tmp_path):
 
 
 def test_archive_accepts_only_configured_observation_channels(tmp_path):
-    from common.sdo_images import OBSERVED_CHANNELS
+    from clio.observations.sdo_archive import OBSERVED_CHANNELS
     slot = hourly_slots(NOW)[0]
     image = np.ones((512, 512), dtype=np.float32)
     assert len(OBSERVED_CHANNELS) == 9 and {'aia1600', 'hmi_m'}.issubset(OBSERVED_CHANNELS)
@@ -68,7 +68,7 @@ def test_archive_accepts_only_configured_observation_channels(tmp_path):
 
 def test_native_original_matches_first_receipt_and_expires_with_image(tmp_path):
     import hashlib
-    from common.sdo_images import original_path, save_original
+    from clio.observations.sdo_archive import original_path, save_original
     slot = hourly_slots(NOW)[0]
     content = b'native FITS pixels'
     metadata = {**receipt(slot), 'sha256': hashlib.sha256(content).hexdigest()}
@@ -84,7 +84,7 @@ def test_native_original_matches_first_receipt_and_expires_with_image(tmp_path):
 
 def test_archive_override_does_not_load_configuration_or_replace_credentials(tmp_path, monkeypatch):
     from common import config
-    from common.sdo_images import archive_root
+    from clio.observations.sdo_archive import archive_root
     import os
     monkeypatch.setenv('ARGUS_SDO_ARCHIVE', str(tmp_path))
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
@@ -98,7 +98,7 @@ def test_archive_override_does_not_load_configuration_or_replace_credentials(tmp
 def test_archive_default_uses_configured_data_root(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from common import config
-    from common.sdo_images import archive_root
+    from clio.observations.sdo_archive import archive_root
     monkeypatch.delenv('ARGUS_SDO_ARCHIVE', raising=False)
     monkeypatch.setattr(config, 'get_config', lambda: SimpleNamespace(data_root=tmp_path))
     assert archive_root() == tmp_path / 'observations/sdo'

@@ -205,11 +205,3 @@ def test_intelligence_runtime_is_infrastructure_only():
         if isinstance(node, ast.FunctionDef) and node.name == 'consistent_series':
             assert not any(isinstance(child, ast.Attribute) and child.attr in {'thresholds', 'drag_risk'}
                            for child in ast.walk(node)), schema
-
-
-def test_intelligence_audits_are_not_public_wrappers():
-    for name in ('drag_physics_audit.py', 'drag_density_transfer.py', 'drag_flight_audit.py'):
-        assert not (ROOT / 'scripts/testing' / name).exists()
-    assert not (ROOT / 'apps/intelligence/tests/test_drag_physics_audit.py').exists()
-
-

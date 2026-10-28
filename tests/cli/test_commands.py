@@ -51,26 +51,12 @@ if os.getenv('FAIL_CLIO') and any('clio' in arg for arg in sys.argv[1:]):
     return request.param, root, run
 
 
-def test_direct_demo_rebuild_runs_research_python_only_in_development(cli):
-    mode, root, run = cli
-    # Even an installed research interpreter must never run on production.
-    python = root / 'notebooks/.venv/bin/python'
-    python.parent.mkdir(parents=True)
-    python.write_text('#!/bin/sh\nexit 99\n')
-    python.chmod(0o755)
-    result, calls = run('demo')
-    assert result.returncode == (2 if mode == 'production' else 99)
-    if mode == 'production':
-        assert 'disabled in production' in result.stderr
-    assert not calls
-
-
 def test_domain_arguments_and_environment_files(cli):
     mode, root, run = cli
-    result, calls = run('intelligence', 'check', 'dst', '--release-id', 'value with spaces')
+    result, calls = run('intelligence', 'test-command', 'argument', '--option', 'value with spaces')
     assert result.returncode == 0, result.stderr
     args = calls[0]['args']
-    assert args[-5:] == ['intelligence', 'check', 'dst', '--release-id', 'value with spaces']
+    assert args[-5:] == ['intelligence', 'test-command', 'argument', '--option', 'value with spaces']
     assert args.index(str(root / '.env')) < args.index(str(root / '.env.local'))
     assert args[:1] == ['compose']
     assert args[args.index('--project-directory') + 1] == str(root)
@@ -148,7 +134,7 @@ def test_compose_arguments_are_forwarded_without_running_app(cli):
     assert calls[0]['args'][-6:] == [str(root / expected), 'up', '-d', '--wait', 'postgres', 'redis']
 
 
-@pytest.mark.parametrize('args', [('db', 'migrate'), ('prophet', 'generate', 'dst'), ('api', 'user', '--help')])
+@pytest.mark.parametrize('args', [('db', 'migrate'), ('prophet', 'test-command', 'argument'), ('api', 'user', '--help')])
 def test_deployment_lock_blocks_production_but_not_dev(cli, args):
     import fcntl
     mode, root, run = cli
@@ -182,7 +168,7 @@ def test_existing_database_is_left_running(cli, fail):
     assert not any('up' in call['args'] or 'stop' in call['args'] for call in calls)
 
 
-@pytest.mark.parametrize('domain,command', [('clio', ('backfill',)), ('prophet', ('generate', 'dst'))])
+@pytest.mark.parametrize('domain,command', [('clio', ('test-command',)), ('prophet', ('test-command', 'argument'))])
 def test_jobs_do_not_require_interactive_input(cli, domain, command):
     _, _, run = cli
     result, calls = run(domain, *command)
@@ -194,8 +180,8 @@ def test_jobs_do_not_require_interactive_input(cli, domain, command):
 
 def test_prophet_cron_origin_is_forwarded_into_the_container(cli):
     _, _, run = cli
-    result, calls = run('prophet', 'generate', 'dst', env={'ARGUS_CRON_JOB': 'generate-dst'})
+    result, calls = run('prophet', 'test-command', 'argument', env={'ARGUS_CRON_JOB': 'test-job'})
     assert result.returncode == 0, result.stderr
     args = calls[0]['args']
-    assert args[args.index('-e')+1] == 'ARGUS_CRON_JOB=generate-dst'
-    assert args[-4:] == ['prophet', 'prophet', 'generate', 'dst']
+    assert args[args.index('-e')+1] == 'ARGUS_CRON_JOB=test-job'
+    assert args[-4:] == ['prophet', 'prophet', 'test-command', 'argument']

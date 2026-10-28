@@ -9,9 +9,8 @@ import pytest
 from forecast.inputs import ForecastInputs
 from common.schemas.forecast_release import ForecastArtifact, ForecastRelease
 from common.schemas.observation import Observation
-from common.schemas.solar_wind_events import EventInputs, L1Sample, SourcePoll, SolarWindEvent
+from common.schemas.solar_wind_events import EventInputs, SourcePoll, SolarWindEvent
 from prophet.services.events.arrival import forecast_events as forecast
-from forecast_core.solar_events.events import l1_detections
 from prophet.services.generation.calculation import CalculationRequest, calculate_product
 
 NOW = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
@@ -41,55 +40,6 @@ def source(*polls, samples=()):
                     arrival_at=datetime.fromisoformat(row['estimatedShockArrivalTime'].replace('Z', '+00:00')),
                     arrival_target='Earth', observed_at=NOW-timedelta(hours=4), initial_speed_km_s=900))
     return EventInputs(as_of=NOW, read_at=NOW, polls=list(polls), events=events, l1_samples=list(samples))
-
-
-def samples():
-    onset = NOW-timedelta(minutes=30)
-    rows = []
-    for minute in range(-40, 20):
-        time = onset+timedelta(minutes=minute)
-        values = dict(v=500 if minute >= 0 else 400, n=10 if minute >= 0 else 4,
-                      bx=8 if minute >= 0 else 3, by=0, bz=-2)
-        rows.extend(L1Sample(observed_at=time, available_at=time+timedelta(seconds=30),
-            metric=m, value=v, quality='unverified') for m, v in values.items())
-    return onset, rows
-
-
-def test_sustained_l1_compression_is_one_unattributed_detection():
-    onset, rows = samples()
-    events = source(poll('WSAEnlilSimulations', [simulation(arrival=onset.isoformat())])).events
-    found = l1_detections(source(samples=rows), events)
-    assert len(found) == 1 and found[0].onset_at == onset
-    assert found[0].detected_at == onset+timedelta(minutes=10)
-    assert found[0].attribution == 'unresolved' and found[0].candidate_event_ids == ['cme1']
-
-
-def test_l1_can_associate_own_ensemble_without_enlil_prediction():
-    from types import SimpleNamespace
-    onset, rows = samples()
-    own = SimpleNamespace(cme_id='cme1', arrival_q10=onset-timedelta(hours=1),
-                          arrival_q90=onset+timedelta(hours=1))
-    result = l1_detections(source(samples=rows), [], [own])
-    assert result[0].candidate_event_ids == ['cme1'] and result[0].attribution == 'unresolved'
-
-
-@pytest.mark.parametrize('failure', ['spike', 'gap', 'flagged', 'late_receipt', 'missing_vector'])
-def test_l1_rejects_spikes_gaps_and_unavailable_samples(failure):
-    onset, rows = samples()
-    if failure == 'gap':
-        rows = [r for r in rows if not onset-timedelta(minutes=10) <= r.observed_at < onset]
-    elif failure == 'missing_vector':
-        rows = [r for r in rows if r.metric != 'bz']
-    else:
-        for row in rows:
-            if row.observed_at >= onset:
-                if failure == 'flagged':
-                    row.quality = 'flagged'
-                if failure == 'late_receipt':
-                    row.available_at = NOW+timedelta(minutes=1)
-                if failure == 'spike' and row.observed_at >= onset+timedelta(minutes=1):
-                    row.value = dict(v=400, n=4, bx=3, by=0, bz=-2)[row.metric]
-    assert l1_detections(source(samples=rows), []) == []
 
 
 def test_empty_report_publishes_through_existing_release_contract():

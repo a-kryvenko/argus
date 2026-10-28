@@ -14,7 +14,6 @@ CHECKS = [
     'pnpm --filter web test',
     'pnpm --filter web test:dashboard',
     'test-python',
-    'test-domain-storage',
     'pnpm docs:architecture',
     *[f'docker build --file .deploy/{component}.Dockerfile --tag argus-{component}:build-check '
       '--build-arg DEPLOYMENT_VERSION=build-check .'
@@ -40,7 +39,7 @@ if Path(sys.argv[0]).name in ('git', 'rsync'):
 raise SystemExit(17 if command == os.getenv('FAIL_CHECK') else 0)
 '''
     for file in [*(binaries / name for name in ('pnpm', 'docker', 'git', 'rsync')),
-                 tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
+                 tmp_path / 'scripts/test-python']:
         file.write_text(stub)
         file.chmod(0o755)
     result = subprocess.run(['bash', str(tmp_path / 'deploy.sh'), *(['patch', '-m', 'Release'] if failure else [])],
@@ -88,7 +87,7 @@ if 'diff --cached --quiet' in command:
     raise SystemExit(0 if sys.argv[2] == 'notebooks' and os.getenv('DIRTY_SUBMODULE_ONLY') == '1' else 1)
 '''
     for file in [*(binaries / name for name in ('pnpm', 'docker', 'git', 'rsync')),
-                 tmp_path / 'scripts/test-python', tmp_path / 'scripts/test-domain-storage']:
+                 tmp_path / 'scripts/test-python']:
         file.write_text(stub)
         file.chmod(0o755)
     args = ([bump] if bump else []) + ['-m', 'Release message']

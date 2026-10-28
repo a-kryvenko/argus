@@ -42,3 +42,7 @@ Prefix `/internal/v1/forecasts/{product}`: `latest`, `releases/{id}`, `status`, 
 `/health/live` and `/health/ready` check process/storage, not forecast freshness.
 
 [Setup](../../README_DEPLOY.md#local-development) · [Commands](../../docs/commands.md#prophet) · [Solar events](../../docs/solar-wind-events.md)
+
+Forecasts and verification history are retained. Hourly `cleanup --apply` removes
+input snapshots, provenance and errors after 14 days. Snapshot file entries contain
+metadata only. `cleanup` previews the affected run count.

@@ -1,41 +1,30 @@
-"""Explicit, bounded cleanup; current releases and latest attempts survive."""
+"""Expire diagnostic evidence independently of forecast and accuracy history."""
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
 from prophet.db.session import get_db_session
 from prophet.db.locks import transaction
-from prophet.services.releases.queries import LATEST_RELEASES
 
 
-async def cleanup(*, days=90, apply=False, now=None, writer=None):
-    if not isinstance(days, int) or days < 26:
-        raise ValueError('Retain at least 26 days, covering the verification window')
+DETAIL_DAYS = 14
+EXPIRED_DETAILS = """status <> 'running' AND started_at < :cutoff
+    AND (input_snapshot IS NOT NULL OR input_sha256 IS NOT NULL
+         OR provenance <> '{}'::jsonb OR error IS NOT NULL)"""
+
+
+async def cleanup(*, apply=False, now=None, writer=None):
     now = now or datetime.now(UTC)
-    if now.tzinfo is None:
+    if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError('now must include a timezone')
-    cutoff = now-timedelta(days=days)
+    cutoff = now - timedelta(days=DETAIL_DAYS)
     async with (transaction(writer) if apply else get_db_session()) as session:
-        if not apply:
-            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        ids = [row[0] for row in (await session.execute(text(f'''SELECT f.id FROM forecast_run f
-            WHERE f.status <> 'running' AND f.finished_at < :cutoff
-            AND EXISTS (SELECT 1 FROM forecast_run newer
-                        WHERE newer.product=f.product AND (newer.started_at,newer.id) > (f.started_at,f.id))
-            AND NOT EXISTS (SELECT 1 FROM ({LATEST_RELEASES}) latest WHERE latest.run_id=f.id)
-            ORDER BY f.finished_at,f.id LIMIT 1000'''), {'cutoff': cutoff})).all()]
-        counts = {'runs': len(ids), 'releases': 0, 'artifacts': 0, 'verifications': 0}
-        for table, key, predicate in (
-            ('forecast_release', 'releases', 'run_id=ANY(:ids)'),
-            ('forecast_artifact', 'artifacts', 'run_id=ANY(:ids)'),
-            ('forecast_verification', 'verifications',
-             'release_id IN (SELECT id FROM forecast_release WHERE run_id=ANY(:ids))'),
-        ):
-            counts[key] = (await session.execute(text(f'SELECT count(*) FROM {table} WHERE {predicate}'), {'ids': ids})).first()[0]
-        if apply and ids:
-            await session.execute(text('''DELETE FROM forecast_verification WHERE release_id IN
-                (SELECT id FROM forecast_release WHERE run_id=ANY(:ids))'''), {'ids': ids})
-            await session.execute(text('DELETE FROM forecast_release WHERE run_id=ANY(:ids)'), {'ids': ids})
-            await session.execute(text('DELETE FROM forecast_artifact WHERE run_id=ANY(:ids)'), {'ids': ids})
-            await session.execute(text('DELETE FROM forecast_run WHERE id=ANY(:ids)'), {'ids': ids})
-    return {'applied': apply, 'before': cutoff.isoformat(), 'batch_limit': 1000, **counts}
+        if apply:
+            result = await session.execute(text(f"""UPDATE forecast_run
+                SET input_snapshot=NULL,input_sha256=NULL,provenance='{{}}'::jsonb,error=NULL
+                WHERE {EXPIRED_DETAILS}"""), {'cutoff': cutoff})
+            count = result.rowcount
+        else:
+            count = await session.scalar(text(f'SELECT count(*) FROM forecast_run WHERE {EXPIRED_DETAILS}'),
+                                         {'cutoff': cutoff})
+    return {'applied': apply, 'before': cutoff.isoformat(), 'details': count}

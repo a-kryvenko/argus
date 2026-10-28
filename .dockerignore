@@ -39,3 +39,12 @@ packages/intelligence-core/tests
 packages/intelligence-core/examples
 packages/forecast-core/tests
 packages/forecast-core/examples
+packages/common/tests
+packages/common/docs
+packages/forecast/tests
+packages/forecast/docs
+apps/web/tests
+apps/web/playwright.config.ts
+apps/web/docs
+packages/forecast-core/docs
+packages/intelligence-core/docs

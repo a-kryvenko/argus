@@ -21,7 +21,6 @@ def main(argv=None):
     verification.add_argument('product', nargs='?', choices=(*VERIFIED_PRODUCTS, 'all'), default='solar-wind-speed')
 
     cleanup = commands.add_parser('cleanup')
-    cleanup.add_argument('--days', type=int, default=90)
     cleanup.add_argument('--apply', action='store_true')
 
     args = parser.parse_args(argv)

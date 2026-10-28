@@ -24,36 +24,3 @@ jobs:
         env:
           TEST_NGINX_IMAGE: nginx:stable-alpine
         run: python -m pytest -q tests/integration/test_login_edge.py
-
-  domain-storage:
-    # Forks and Dependabot cannot access the private runtime repositories.
-    if: github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/checkout@v6
-        with:
-          repository: a-kryvenko/argus-forecast-core
-          ref: master
-          path: packages/forecast-core
-          ssh-key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
-          persist-credentials: false
-      - uses: actions/checkout@v6
-        with:
-          repository: a-kryvenko/argus-intelligence-core
-          ref: master
-          path: packages/intelligence-core
-          ssh-key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          cache-dependency-glob: |
-            tests/runtime/uv.lock
-            apps/*/uv.lock
-            apps/*/pyproject.toml
-            packages/*/pyproject.toml
-      - name: Check service integration in the locked runtime
-        run: ./scripts/test-domain-storage

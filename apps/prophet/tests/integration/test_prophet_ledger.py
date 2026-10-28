@@ -136,41 +136,53 @@ async def test_shutdown_attempt_is_recorded_as_interrupted(recorder_setup):
                             (run.run_id,)).fetchone()[0] == 'interrupted'
 
 
-async def test_cleanup_preserves_current_release_and_latest_attempt(recorder_setup):
+@pytest.mark.parametrize('age_days', [13, 14, 15, 100])
+async def test_cleanup_expires_only_details_and_preserves_forecast_accuracy_history(recorder_setup, age_days):
     from prophet.services.releases.retention import cleanup
     from psycopg.types.json import Jsonb
     dsn, passwords, config, writer = recorder_setup
-    old = datetime.now(UTC)-timedelta(days=100)
-    first = (await RunRecorder.begin('dst', 'manual', config, writer=writer))
-    (await store_product(first))
-    (await first.finish())
-    first_release = (await read_release('dst'))
-    current = (await RunRecorder.begin('dst', 'manual', config, writer=writer))
-    (await store_product(current))
-    (await current.finish())
-    latest = (await RunRecorder.begin('dst', 'manual', config, writer=writer))
-    (await latest.finish(error=ValueError('test failure')))
+    now = datetime.now(UTC)
+    old = now - timedelta(days=age_days)
+    inputs = ForecastInputs(as_of=old, read_at=old, observations=Observation(points=[]))
+    first = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    await first.snapshot(inputs)
+    await store_product(first)
+    await first.finish()
+    first_release = await read_release('dst')
+    current = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    await current.snapshot(inputs)
+    await store_product(current)
+    await current.finish()
+    latest = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    await latest.snapshot(inputs)
+    await latest.finish(error=ValueError('test failure'))
+    report = {'accuracy': 'retained'}
+    ids = [run.run_id for run in (first, current, latest)]
     with runtime(dsn, 'prophet', passwords) as conn:
         conn.execute('INSERT INTO prophet.forecast_verification VALUES (%s,%s,%s,%s)',
-                     (first_release.release_id, 'dst_quantile', old, Jsonb({})))
-        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
-                     (old, old, first.run_id))
-        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
-                     (old+timedelta(seconds=1), old, current.run_id))
-        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
-                     (old+timedelta(seconds=2), old, latest.run_id))
-    preview = (await cleanup())
-    assert preview['runs'] == preview['releases'] == preview['artifacts'] == preview['verifications'] == 1
+                     (first_release.release_id, 'dst_quantile', old, Jsonb(report)))
+        conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=ANY(%s)',
+                     (old, old, ids))
+    expired = age_days > 14
+    preview = await cleanup(now=now)
+    assert preview['details'] == (3 if expired else 0)
     assert not preview['applied']
-    assert (await read_release('dst', first_release.release_id))
-    result = (await cleanup(apply=True, writer=writer))
-    assert result['runs'] == 1 and result['applied']
-    assert (await read_release('dst')).run_id == current.run_id
-    with pytest.raises(ReleaseNotFound):
-        (await read_release('dst', first_release.release_id))
     with runtime(dsn, 'prophet', passwords) as conn:
-        assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s',
-                            (latest.run_id,)).fetchone()[0] == 'failed'
+        assert conn.execute('SELECT count(*) FROM prophet.forecast_run WHERE input_snapshot IS NOT NULL').fetchone()[0] == 3
+    result = await cleanup(apply=True, writer=writer, now=now)
+    assert result['details'] == preview['details'] and result['applied']
+    assert (await read_release('dst')).run_id == current.run_id
+    retained = await read_release('dst', first_release.release_id)
+    assert retained.artifacts == first_release.artifacts
+    with runtime(dsn, 'prophet', passwords) as conn:
+        rows = conn.execute('SELECT input_snapshot,input_sha256,provenance,error FROM prophet.forecast_run WHERE id=ANY(%s)', (ids,)).fetchall()
+        if expired:
+            assert rows == [(None, None, {}, None)] * 3
+        else:
+            assert all(row[0] is not None and row[1] and row[2] for row in rows)
+        assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s', (latest.run_id,)).fetchone()[0] == 'failed'
+        assert conn.execute('SELECT report FROM prophet.forecast_verification WHERE release_id=%s', (first_release.release_id,)).fetchone()[0] == report
+    assert (await cleanup(apply=True, writer=writer, now=now))['details'] == 0
 
 
 async def test_only_completed_products_publish_and_history_survives(recorder_setup):
@@ -227,28 +239,20 @@ async def test_latest_reads_and_publication_reject_delayed_run(recorder_setup):
     assert newest.run_id == next_run.run_id
 
 
-async def test_cleanup_removes_old_release_and_preserves_latest_published_release(recorder_setup):
+async def test_cleanup_leaves_active_run_details(recorder_setup):
     from prophet.services.releases.retention import cleanup
     dsn, passwords, config, writer = recorder_setup
-    first = await RunRecorder.begin('dst', 'manual', config, writer=writer)
-    await store_product(first)
-    await first.finish()
-    first_release = await read_release('dst')
-    current = await RunRecorder.begin('dst', 'manual', config, writer=writer)
-    await store_product(current)
-    await current.finish()
-    latest = await RunRecorder.begin('dst', 'manual', config, writer=writer)
-    await latest.finish(error=ValueError('test failure'))
-    old = datetime.now(UTC) - timedelta(days=100)
+    now = datetime.now(UTC)
+    old = now - timedelta(days=15)
+    run = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    inputs = ForecastInputs(as_of=old, read_at=old, observations=Observation(points=[]))
+    await run.snapshot(inputs)
     with runtime(dsn, 'prophet', passwords) as conn:
-        for index, run in enumerate((first, current, latest)):
-            conn.execute('UPDATE prophet.forecast_run SET started_at=%s,finished_at=%s WHERE id=%s',
-                         (old + timedelta(seconds=index), old, run.run_id))
-    assert (await cleanup())['runs'] == 1
-    assert (await cleanup(apply=True, writer=writer))['runs'] == 1
-    assert (await read_release('dst')).run_id == current.run_id
-    with pytest.raises(ReleaseNotFound):
-        await read_release('dst', first_release.release_id)
+        conn.execute('UPDATE prophet.forecast_run SET started_at=%s WHERE id=%s', (old, run.run_id))
+    assert (await cleanup(apply=True, writer=writer, now=now))['details'] == 0
+    with runtime(dsn, 'prophet', passwords) as conn:
+        snapshot, provenance = conn.execute('SELECT input_snapshot,provenance FROM prophet.forecast_run WHERE id=%s', (run.run_id,)).fetchone()
+        assert snapshot == inputs.model_dump(mode='json') and provenance
 
 
 async def test_publication_failure_does_not_roll_back_another_product(recorder_setup):

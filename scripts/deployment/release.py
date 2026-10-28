@@ -2,6 +2,7 @@
 """Build identities depend on actual image inputs, not the previous git tag."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -74,6 +75,11 @@ IGNORED = {
     '.git', '.venv', '__pycache__', '.pytest_cache', 'node_modules', '.next',
     '.turbo', 'dist', 'build', 'coverage', 'test-results', 'playwright-report'
 }
+IMAGE_IGNORED = {
+    'packages/common/tests', 'packages/common/docs',
+    'packages/forecast/tests', 'packages/forecast/docs',
+    'apps/web/tests', 'apps/web/playwright.config.ts', 'apps/web/docs',
+}
 
 
 def artifact_digest(root):
@@ -90,12 +96,14 @@ def artifact_digest(root):
     return result.hexdigest()
 
 
-def digest(root, prefixes, *, private=False):
+def digest(root, prefixes, *, private=False, image=False):
     paths = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z', '--', *prefixes]).decode().split('\0')
     result = hashlib.sha256()
     for name in sorted(set(paths) - {''}):
         path = Path(name)
-        if any(part in IGNORED for part in path.parts) or (private and path.parts[0] in ('tests', 'examples')):
+        if any(part in IGNORED for part in path.parts) or (private and path.parts[0] in ('tests', 'examples', 'docs')):
+            continue
+        if image and any(path == Path(prefix) or Path(prefix) in path.parents for prefix in IMAGE_IGNORED):
             continue
         if path.name == '.env' or path.name.startswith('.env.') or path.suffix in ('.log', '.tsbuildinfo'):
             continue
@@ -139,7 +147,7 @@ def plan(root, *, rebuild=''):
               'private_commit': private_sha, 'intelligence_core_commit': intelligence_core_sha, 'components': {}, 'migrations': {},
               'config_hash': digest(root, ['configs']), 'cme_speed_model': cme_model}
     for name, prefixes in INPUTS.items():
-        source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'])
+        source = digest(root, [*prefixes, '.dockerignore', f'.deploy/{name}.Dockerfile'], image=True)
         backend_hash = (private_hash if name == 'prophet' else proswin_hash if name == 'proswin'
                         else intelligence_core_hash if name == 'intelligence' else '')
         identity = hashlib.sha256((source + backend_hash + rebuild).encode()).hexdigest()
@@ -150,11 +158,55 @@ def plan(root, *, rebuild=''):
     return result
 
 
+def resolve_image(repository, tag):
+    reference = repository + ':' + tag
+    try:
+        result = subprocess.run(
+            ['docker', 'buildx', 'imagetools', 'inspect', reference,
+             '--format', '{{.Manifest.Digest}}'],
+            capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('Registry lookup timed out') from None
+    if result.returncode:
+        error = result.stderr.strip()
+        if (error == f'ERROR: {reference}: not found'
+                or re.search(r': (?:manifest unknown|name unknown)(?::|$)', error, re.IGNORECASE)):
+            return None
+        raise RuntimeError(error or 'Docker registry lookup failed')
+    digest = result.stdout.strip()
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+        raise RuntimeError('Docker returned an invalid image digest')
+    return repository + '@' + digest
+
+
+def resolve_images(manifest, resolve):
+    def lookup(item):
+        name, spec = item
+        try:
+            return name, resolve(spec['repository'], spec['tag'])
+        except RuntimeError as error:
+            raise RuntimeError(f'{name}: {error}') from None
+    manifest['cached_images'] = {}
+    builds = []
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for name, image in pool.map(lookup, manifest['components'].items()):
+            spec = manifest['components'][name]
+            if image is None:
+                builds.append({'component': name, **spec})
+            else:
+                manifest['cached_images'][name] = {'tag': spec['tag'], 'image': image}
+    return {'include': builds}
+
+
 def bundle(root, plan_path, images_path, destination):
     manifest = json.loads(plan_path.read_text())
+    cached = manifest.pop('cached_images', {})
     manifest['images'] = {}
     for name, spec in manifest['components'].items():
-        image = json.loads((images_path / f'{name}.json').read_text())
+        path = images_path / f'{name}.json'
+        image = json.loads(path.read_text()) if path.is_file() else cached.get(name)
+        if image is None:
+            raise ValueError(f'Missing image result: {name}')
         if image['tag'] != spec['tag'] or not re.fullmatch(re.escape(spec['repository']) + r'@sha256:[0-9a-f]{64}', image['image']):
             raise ValueError(f'Image result does not match the plan: {name}')
         manifest['images'][name] = image['image']
@@ -190,6 +242,10 @@ if __name__ == '__main__':
     prepare = commands.add_parser('plan')
     prepare.add_argument('--rebuild', default='')
     prepare.add_argument('--output', type=Path, required=True)
+    resolve = commands.add_parser('resolve')
+    resolve.add_argument('--plan', type=Path, required=True)
+    resolve.add_argument('--output', type=Path, required=True)
+    resolve.add_argument('--github-output', type=Path, required=True)
     assemble = commands.add_parser('bundle')
     assemble.add_argument('--plan', type=Path, required=True)
     assemble.add_argument('--images', type=Path, required=True)
@@ -200,6 +256,15 @@ if __name__ == '__main__':
     root = Path(__file__).resolve().parents[2]
     if args.command == 'plan':
         args.output.write_text(json.dumps(plan(root, rebuild=args.rebuild), indent=2) + '\n')
+    elif args.command == 'resolve':
+        manifest = json.loads(args.plan.read_text())
+        matrix = resolve_images(manifest, resolve_image)
+        args.output.write_text(json.dumps(manifest, indent=2) + '\n')
+        with args.github_output.open('a') as output:
+            for key in ('private_commit', 'intelligence_core_commit'):
+                output.write(key + '=' + manifest[key] + '\n')
+            output.write('build_matrix=' + json.dumps(matrix) + '\n')
+            output.write('has_builds=' + ('true' if matrix['include'] else 'false') + '\n')
     elif args.command == 'bundle':
         bundle(root, args.plan, args.images, args.output)
     else:

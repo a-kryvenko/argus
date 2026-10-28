@@ -8,7 +8,7 @@ async def run(args):
     if args.apply:
         from prophet.db.locks import retention_lock
         async with retention_lock() as writer:
-            result = await cleanup(days=args.days, apply=True, writer=writer)
+            result = await cleanup(apply=True, writer=writer)
     else:
-        result = await cleanup(days=args.days)
+        result = await cleanup()
     print(json.dumps(result, indent=2))

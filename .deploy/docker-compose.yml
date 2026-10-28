@@ -1,7 +1,6 @@
 x-admin-db: &admin-db
   DB_HOST: ${DB_HOST:-postgres}
   DB_PORT: ${DB_PORT:-5432}
-  DB_NAME: ${DB_NAME:?DB_NAME is required}
   DB_USER: ${DB_USER:?DB_USER is required}
   DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
 
@@ -315,7 +314,7 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
+      POSTGRES_DB: postgres
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     ports:

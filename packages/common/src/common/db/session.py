@@ -17,10 +17,11 @@ _session_factories: dict[
 _engines: dict[str, AsyncEngine] = {}
 
 def database_parameters(prefix: str) -> dict:
-    """An empty prefix is reserved for the administrative provisioning tool."""
+    """An empty prefix selects the administrative connection to postgres."""
     base = f'{prefix}_DB_' if prefix else 'DB_'
 
-    required = [base + field for field in ('NAME', 'USER', 'PASSWORD')]
+    fields = ('NAME', 'USER', 'PASSWORD') if prefix else ('USER', 'PASSWORD')
+    required = [base + field for field in fields]
     missing = [key for key in required if not os.getenv(key)]
 
     if missing:
@@ -40,7 +41,7 @@ def database_parameters(prefix: str) -> dict:
     return {
         'host': host,
         'port': port,
-        'database': os.environ[base + 'NAME'],
+        'database': os.environ[base + 'NAME'] if prefix else 'postgres',
         'username': os.environ[base + 'USER'],
         'password': os.environ[base + 'PASSWORD']
     }

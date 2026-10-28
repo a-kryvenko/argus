@@ -1,6 +1,22 @@
 import pytest
 
 
+@pytest.mark.parametrize('legacy_name', [None, 'argus'])
+def test_administration_uses_postgres_without_legacy_database(monkeypatch, legacy_name):
+    from common.db.session import database_parameters
+    monkeypatch.delenv('DB_NAME', raising=False)
+    if legacy_name is not None:
+        monkeypatch.setenv('DB_NAME', legacy_name)
+    monkeypatch.setenv('DB_HOST', 'database-host')
+    monkeypatch.setenv('DB_PORT', '5433')
+    monkeypatch.setenv('DB_USER', 'administrator')
+    monkeypatch.setenv('DB_PASSWORD', 'admin-secret')
+    assert database_parameters('') == {
+        'host': 'database-host', 'port': 5433, 'database': 'postgres',
+        'username': 'administrator', 'password': 'admin-secret',
+    }
+
+
 @pytest.mark.parametrize('domain', ['api', 'clio', 'prophet', 'intelligence'])
 def test_raw_passwords_and_domain_settings_are_isolated(domain, monkeypatch):
     from sqlalchemy.engine import make_url

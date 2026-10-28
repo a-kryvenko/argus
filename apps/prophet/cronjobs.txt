@@ -10,3 +10,6 @@
 
 # Score published forecasts against later observations
 30 */6 * * * @ROOT@/scripts/cron-run prophet verification verification all
+
+# Keep diagnostic evidence for 14 days; retain forecasts and accuracy history
+45 * * * * @ROOT@/scripts/cron-run prophet cleanup cleanup --apply

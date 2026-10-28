@@ -52,7 +52,7 @@ Cron: `apps/clio/cronjobs.txt`. Logs: `log/clio/`.
 | `./argus prophet serve [--host HOST] [--port 8000]` | Serve published forecasts |
 | `./argus prophet generation [product]` | Generate/publish; default all |
 | `./argus prophet verification [product]` | Verify saved releases against observations |
-| `./argus prophet cleanup [--days 90] [--apply]` | Preview/delete eligible history |
+| `./argus prophet cleanup [--apply]` | Preview/clear diagnostics older than 14 days; preserve forecasts |
 
 Generation products: [catalog](../apps/prophet/README.md#products).
 Successes publish independently; any selected failure produces a nonzero exit.

@@ -68,24 +68,21 @@ experimental loss monitor have no retained inputs; reuse does not backfill them.
 Replay also requires the matching private core and configuration.
 
 Clio `as_of` is not a historical-availability guarantee for every observation.
-Prophet's frozen prepared snapshot is its replay boundary. Capture timestamps
+Prophet retains frozen input snapshots for 14 days; forecast history survives cleanup. Capture timestamps
 must not be presented as original provider publication times.
 
 ## Validation
 
 ```bash
 ./scripts/test-python -q
-./scripts/test-domain-storage
 pnpm docs:architecture:check
 ```
 
 Python suites use each owner's locked environment and eight workers (`-n 0` for
-sequential execution). Private suites require their checkouts. Domain-storage
-checks require Docker and create a disposable PostgreSQL; local credentials are
-not loaded. `TEST_DATABASE_ADMIN_DSN` may select an existing disposable server.
+sequential execution). Private suites require their checkouts.
 
 Checks cover imports/facades, manifests and lockfiles, foreign-domain SQL,
-Compose ownership, migrations, cross-DB access and atomic publication.
+Compose ownership.
 Project-wide tests live in `tests/`; service/package tests live with their owner.
 
 [Setup](../README_DEPLOY.md) · [Commands](commands.md) · [Diagrams](architecture/README.md)

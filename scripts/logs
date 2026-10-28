@@ -7,7 +7,7 @@ if [[ -n "${1:-}" && "$1" != -* ]]; then
         prophet) services=(prophet prophet-api) ;;
         clio) services=(clio) ;;
         intelligence) services=(intelligence intelligence-api) ;;
-        api|intelligence-api|prophet-api|postgres|redis|frontend|nginx|alloy) services=("$1") ;;
+        api|intelligence-api|prophet-api|postgres|redis|frontend|nginx|internal-router|alloy) services=("$1") ;;
         *) echo 'Unknown service' >&2; exit 2 ;;
     esac
     shift

@@ -25,8 +25,8 @@ def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
         assert services[domain + '-migrate']['profiles'] == ['maintenance']
     assert services['db-provision']['profiles'] == ['maintenance']
     assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
-    assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
-    assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://clio:8000'
+    assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://observations-router:8101'
+    assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://observations-router:8101'
     assert 'clio-worker' not in services
     assert not {'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'} & services.keys()
 
@@ -45,7 +45,7 @@ def test_forecast_read_service_is_internal_and_requires_token():
     assert set(reader['networks']) == {'backend', 'forecasts'}
     assert all('/data' not in volume for volume in reader['volumes'])
     assert reader['environment']['FORECASTS_SERVICE_TOKEN'].startswith('${FORECASTS_SERVICE_TOKEN:?')
-    assert services['api']['environment']['FORECASTS_URL'] == 'http://prophet-api:8000'
+    assert services['api']['environment']['FORECASTS_URL'] == 'http://forecasts-router:8102'
 
 
 def test_intelligence_credentials_and_networks_are_scoped():
@@ -76,7 +76,7 @@ def test_impact_service_is_internal_and_has_scoped_database_credentials():
     assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
     assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
     assert 'env_file' not in runtime
-    assert services['api']['environment']['INTELLIGENCE_URL'] == 'http://intelligence-api:8000'
+    assert services['api']['environment']['INTELLIGENCE_URL'] == 'http://impacts-router:8103'
     assert runtime['environment']['INTELLIGENCE_SERVICE_TOKEN'] == services['api']['environment']['INTELLIGENCE_SERVICE_TOKEN']
 
 

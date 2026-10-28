@@ -27,7 +27,7 @@ def harness(tmp_path):
     previous = {'image': 'example@sha256:old', 'networks': {'observations': {}}, 'environment': {}}
     desired = {**previous, 'image': 'example@sha256:new'}
     deployment.desired = {'name': 'argus-test', 'services': {'clio': desired}, 'networks': {'observations': {}}}
-    deployment.state = {'active': {'clio': {'slot': 'blue', 'spec': previous}}}
+    deployment.state = {'router_version': 2, 'active': {'clio': {'slot': 'blue', 'spec': previous}}}
     deployment.credentials = {'DEPLOY_SMOKE_USERNAME': 'test', 'DEPLOY_SMOKE_PASSWORD': 'secret'}
     deployment.calls = []
     deployment.compose = lambda *args, **kwargs: deployment.calls.append(args) or ''
@@ -43,14 +43,14 @@ def test_replacement_starts_and_checks_before_switching_and_stopping(tmp_path):
     calls = deployment.calls
     prepare = calls.index(('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', 'clio-green'))
     direct = calls.index(('smoke', 'clio-green', False))
-    reload = calls.index(('exec', '-T', 'clio', 'nginx', '-s', 'reload'))
+    reload = calls.index(('exec', '-T', rolling.ROUTER, 'nginx', '-s', 'reload'))
     routed = calls.index(('smoke', 'clio-green', True))
     stop = calls.index(('stop', 'clio-blue'))
     assert prepare < direct < reload < routed < stop
     assert deployment.state['active']['clio']['slot'] == 'green'
     assert deployment.state['active']['clio']['previous']['slot'] == 'blue'
     assert 'pending' not in json.loads(deployment.state_path.read_text())
-    assert 'clio-green:8000' in (tmp_path / 'routes/clio/default.conf').read_text()
+    assert 'clio-green:8000' in (tmp_path / 'routes/internal/clio.conf').read_text()
     assert deployment.state_path.stat().st_mode & 0o777 == 0o600
 
 
@@ -80,7 +80,7 @@ def test_failure_restores_previous_route_and_keeps_old_application(tmp_path, fai
         deployment.replace('clio')
     assert deployment.state['active']['clio'] == previous
     assert 'pending' not in deployment.state
-    assert 'clio-blue:8000' in (tmp_path / 'routes/clio/default.conf').read_text()
+    assert 'clio-blue:8000' in (tmp_path / 'routes/internal/clio.conf').read_text()
     assert ('stop', 'clio-green') in deployment.calls
     assert ('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', 'clio-blue') in deployment.calls
 
@@ -92,7 +92,7 @@ def test_interrupted_switch_is_recovered_from_disk(tmp_path):
     deployment.route('clio', 'clio-green')
     deployment.state = json.loads(deployment.state_path.read_text())
     deployment.recover()
-    assert 'clio-blue:8000' in (tmp_path / 'routes/clio/default.conf').read_text()
+    assert 'clio-blue:8000' in (tmp_path / 'routes/internal/clio.conf').read_text()
     assert 'pending' not in json.loads(deployment.state_path.read_text())
 
 
@@ -143,11 +143,46 @@ def test_runtime_keeps_stopped_previous_slot_and_preserves_network_isolation(tmp
     deployment = harness(tmp_path)
     deployment.replace('clio')
     config = json.loads(deployment.runtime.read_text())
-    assert set(config['services']) == {'clio', 'clio-blue', 'clio-green'}
-    assert config['services']['clio']['image'] == 'nginx:stable-alpine'
-    assert config['services']['clio']['networks'] == {'observations': {}}
-    assert 'environment' not in config['services']['clio']
+    assert set(config['services']) == {rolling.ROUTER, 'clio-blue', 'clio-green'}
+    assert config['services'][rolling.ROUTER]['image'] == 'nginx:stable-alpine'
+    assert config['services'][rolling.ROUTER]['networks'] == {'observations': {'aliases': ['observations-router']}}
+    assert 'environment' not in config['services'][rolling.ROUTER]
     assert config['services']['clio-blue']['image'].endswith(':old')
+
+
+def test_legacy_routers_are_removed_only_after_persisting_shared_routing(tmp_path):
+    deployment = harness(tmp_path)
+    deployment.state.pop('router_version')
+    deployment.route('clio', 'clio-blue')
+    deployment.install_runtime()
+    assert 'clio' in json.loads(deployment.runtime.read_text())['services']
+    deployment.replace('clio')
+    assert ('exec', '-T', rolling.ROUTER, 'nginx', '-s', 'reload') in deployment.calls
+    assert ('exec', '-T', 'clio', 'nginx', '-s', 'reload') in deployment.calls
+    assert 'clio-green:8000' in (tmp_path / 'routes/clio/default.conf').read_text()
+
+    def retire(service):
+        assert json.loads(deployment.state_path.read_text())['router_version'] == 2
+        assert service not in json.loads(deployment.runtime.read_text())['services']
+        deployment.calls.append(('retire', service))
+    deployment.retire_worker = retire
+    deployment.retire_legacy_routers()
+    assert ('retire', 'clio') in deployment.calls
+    deployment.retire_legacy_routers()  # Retrying removal uses the durable new mode.
+
+
+def test_interrupted_legacy_switch_restores_both_routes(tmp_path):
+    deployment = harness(tmp_path)
+    deployment.state.pop('router_version')
+    deployment.state['pending'] = {'service': 'clio', 'candidate': {
+        'slot': 'green', 'spec': deployment.desired['services']['clio']}}
+    deployment.route('clio', 'clio-green')
+    deployment.save()
+    deployment.prepare_router()
+    deployment.recover()
+    assert 'pending' not in deployment.state
+    for path in ('routes/internal/clio.conf', 'routes/clio/default.conf'):
+        assert 'clio-blue:8000' in (tmp_path / path).read_text()
 
 
 def test_drain_waits_for_pre_reload_worker_even_before_signal_is_processed(tmp_path, monkeypatch):

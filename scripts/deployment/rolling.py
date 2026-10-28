@@ -16,6 +16,19 @@ from backup import create_backup
 
 HTTP = {'clio': 8000, 'prophet-api': 8000, 'intelligence-api': 8000, 'api': 8000, 'frontend': 3000}
 WORKERS = ['intelligence', 'proswin']
+ROUTER = 'internal-router'
+ROUTES = {
+    'clio': ('observations', 'observations-router', 8101),
+    'prophet-api': ('forecasts', 'forecasts-router', 8102),
+    'intelligence-api': ('impacts', 'impacts-router', 8103),
+    'api': ('application', 'application-router', 8104),
+    'frontend': ('application', 'application-router', 8105),
+}
+
+
+def routed_url(service):
+    _, host, port = ROUTES[service]
+    return f'http://{host}:{port}'
 
 
 def write_json(path, value):
@@ -42,7 +55,7 @@ def slot_name(service, entry):
     return service + '-' + entry['slot']
 
 
-def router(service, spec, root):
+def legacy_router(service, spec, root):
     return {'image': 'nginx:stable-alpine', 'restart': 'unless-stopped',
             'networks': copy.deepcopy(spec['networks']),
             'volumes': [{'type': 'bind', 'source': str(root / 'routes' / service),
@@ -50,28 +63,44 @@ def router(service, spec, root):
             'stop_grace_period': '60s'}
 
 
+def router(state, root):
+    networks = {ROUTES[service][0]: {'aliases': [ROUTES[service][1]]}
+                for service in state['active']}
+    return {'image': 'nginx:stable-alpine', 'restart': 'unless-stopped',
+            'networks': networks,
+            'volumes': [{'type': 'bind', 'source': str(root / 'routes/internal'),
+                         'target': '/etc/nginx/conf.d', 'read_only': True}],
+            'healthcheck': {'test': ['CMD', 'nginx', '-t'], 'interval': '10s',
+                            'timeout': '5s', 'retries': 3, 'start_period': '10s', 'start_interval': '1s'},
+            'stop_grace_period': '120s'}
+
+
 def runtime_config(desired, state, root, pending=None):
     config = copy.deepcopy(desired)
     for service, entry in state['active'].items():
         config['services'].pop(service, None)
-        config['services'][service] = router(service, entry['spec'], root)
+        if state.get('router_version', 1) < 2:
+            config['services'][service] = legacy_router(service, entry['spec'], root)
         for item in (entry, entry.get('previous')):
             if item:
                 config['services'][slot_name(service, item)] = item['spec']
     if pending:
         service, entry = pending['service'], pending['candidate']
         config['services'][slot_name(service, entry)] = entry['spec']
+    config['services'][ROUTER] = router(state, root)
     # Routers are managed separately and must never be recreated by worker updates.
     for spec in config['services'].values():
         spec.pop('depends_on', None)
     return config
 
 
-def route_text(service, target):
+def route_text(service, target, *, legacy=False):
     port = HTTP[service]
-    return f'''resolver 127.0.0.11 valid=5s ipv6=off;
-server {{
-    listen {port};
+    _, host, listener = ROUTES[service]
+    listen = str(port) if legacy else f'{host}:{listener} bind'
+    return f'''server {{
+    resolver 127.0.0.11 valid=5s ipv6=off;
+    listen {listen};
     add_header X-Argus-Upstream {target} always;
     location / {{
         set $backend {target}:{port};
@@ -146,14 +175,45 @@ class Deployment:
         self.compose('config', '--quiet')
 
     def route(self, service, target):
-        directory = self.root / 'routes' / service
+        self.write_route(self.root / 'routes/internal' / (service + '.conf'), route_text(service, target))
+        if self.state.get('router_version', 1) < 2:
+            self.write_route(self.root / 'routes' / service / 'default.conf', route_text(service, target, legacy=True))
+
+    @staticmethod
+    def write_route(path, content):
+        directory = path.parent
         directory.mkdir(parents=True, exist_ok=True)
-        temporary = directory / 'default.conf.next'
+        temporary = path.with_name(path.name + '.next')
         with temporary.open('w') as output:
-            output.write(route_text(service, target))
+            output.write(content)
             output.flush()
             os.fsync(output.fileno())
-        temporary.replace(directory / 'default.conf')
+        temporary.replace(path)
+
+    def prepare_router(self):
+        for service, entry in self.state['active'].items():
+            self.route(service, slot_name(service, entry))
+        self.install_runtime(self.state.get('pending'))
+        self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', ROUTER)
+
+    def reload_routes(self, service):
+        workers = {ROUTER: self.reload(ROUTER)}
+        if self.state.get('router_version', 1) < 2:
+            workers[service] = self.reload(service)
+        return workers
+
+    def drain_routes(self, workers):
+        for router_name, pids in workers.items():
+            self.drain_router(router_name, pids)
+
+    def retire_legacy_routers(self):
+        # All readers and the public nginx now use the shared listeners. Persist
+        # before removal so a retry never tries to reload an already removed proxy.
+        self.state['router_version'] = 2
+        self.save()
+        self.install_runtime()
+        for service in self.state['active']:
+            self.retire_worker(service)
 
     def reload(self, service):
         workers = self.worker_pids(service)
@@ -168,7 +228,7 @@ class Deployment:
     def smoke(self, service, slot, routed=False):
         if service == 'frontend':
             # Node is available in the standalone frontend; check HTML and a referenced asset.
-            target = service if routed else '127.0.0.1'
+            base = routed_url(service) if routed else 'http://127.0.0.1:3000'
             program = '''const base=process.argv[1], expected=process.argv[2];
 let response;
 for(let i=0;i<50;i++) {
@@ -184,10 +244,10 @@ if(!asset) throw Error('Missing static asset');
 const result=await fetch(new URL(asset[1].replaceAll('&amp;','&'),base));
 if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static asset');'''
             self.compose('exec', '-T', slot, 'node', '--input-type=module', '-e', program,
-                         f'http://{target}:3000', slot if routed else '')
+                         base, slot if routed else '')
             return
         source = (self.bundle / 'smoke.py').read_text()
-        options = {'service': service, 'base': f'http://{service if routed else "127.0.0.1"}:8000',
+        options = {'service': service, 'base': routed_url(service) if routed else 'http://127.0.0.1:8000',
                    'username': self.credentials['DEPLOY_SMOKE_USERNAME'],
                    'password': self.credentials['DEPLOY_SMOKE_PASSWORD'], 'expected_upstream': slot if routed else None}
         # Credentials travel over stdin, never process arguments or logs.
@@ -204,8 +264,8 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         old = slot_name(service, previous)
         self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', old)
         self.route(service, old)
-        workers = self.reload(service)
-        self.drain_router(service, workers)
+        workers = self.reload_routes(service)
+        self.drain_routes(workers)
         self.compose('stop', slot_name(service, candidate))
         self.state.pop('pending')
         self.save()
@@ -360,11 +420,11 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             if service == 'frontend':
                 self.publish_static(name)
             self.route(service, name)
-            workers = self.reload(service)
+            workers = self.reload_routes(service)
             self.smoke(service, name, routed=True)
             # QUIT makes old nginx workers finish existing requests. Do not stop the
             # old app until those workers have exited; a timeout rolls routing back.
-            self.drain_router(service, workers)
+            self.drain_routes(workers)
             self.compose('stop', slot_name(service, previous))
             self.state['active'][service] = {**candidate, 'previous': {k: previous[k] for k in ('slot', 'spec')}}
             self.state.pop('pending')
@@ -418,7 +478,12 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
 
     def apply(self):
         self.snapshot()
+        self.prepare_router()
         self.recover()
+        self.drain_router(ROUTER, self.reload(ROUTER))
+        if self.state.get('router_version', 1) < 2:
+            for service, entry in self.state['active'].items():
+                self.smoke(service, slot_name(service, entry), routed=True)
         self.resume_workers()
         self.install_runtime()
         # Download before starting a second HTTP instance; retain stopped rollback slots.
@@ -442,9 +507,10 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             # envsubst is normally startup-only; render updated templates before graceful reload.
             self.compose('exec', '-T', 'nginx', 'sh', '/docker-entrypoint.d/20-envsubst-on-templates.sh')
         self.compose('up', '-d', '--no-deps', 'nginx', 'alloy')
-        self.reload('nginx')
+        self.drain_router('nginx', self.reload('nginx'))
         if self.fingerprints['alloy'] != self.previous_fingerprints.get('alloy'):
             self.compose('restart', 'alloy')
+        self.retire_legacy_routers()
         for name in ('run', 'logs', 'cron-run'):
             shutil.copy2(self.bundle / 'scripts' / name, self.root / 'scripts' / name)
         shutil.copy2(self.bundle / 'argus', self.root / 'argus')

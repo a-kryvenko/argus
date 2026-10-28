@@ -30,7 +30,7 @@ async def verify():
                 from clio.db.models.measurement import Measurement
                 row = Measurement(metric='schema-probe', observed_at=datetime.now(UTC), value=1)
             else:
-                table = 'current_forecast' if service == 'prophet' else 'drag_profile'
+                table = 'forecast_release' if service == 'prophet' else 'drag_profile'
                 await session.execute(text('SELECT * FROM ' + table + ' LIMIT 1'))
                 row = None
             if row is not None:

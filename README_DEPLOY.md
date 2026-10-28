@@ -71,6 +71,8 @@ Diagrams require Python 3.10+, Java 21+ and curl. [Diagram commands](docs/archit
 A `v*` tag deploys pinned images. Releases require existing `.rolling-state.json`
 and replace changed HTTP services individually: readiness, smoke checks, graceful routing switch, request
 drain, old-container stop. Workers remain single-instance and update separately.
+One `internal-router` nginx serves Clio/Prophet/Intelligence/API/frontend on ports
+8101–8105, bound to their service networks. The first release migrates and removes the old per-service routers.
 
 Smoke checks cover HTML/static assets, login/logout, observations, forecasts and
 Intelligence reads. No inference runs. Models/metrics use verified artifact bundles;

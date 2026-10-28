@@ -60,7 +60,7 @@ x-prophet-runtime: &prophet-runtime
   environment:
     ARGUS_WORKDIR: /var/www
     <<: *prophet-db
-    OBSERVATIONS_URL: http://clio:8000
+    OBSERVATIONS_URL: http://observations-router:8101
     OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
     SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
     FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
@@ -78,7 +78,7 @@ x-intelligence-runtime: &intelligence-runtime
     ARGUS_WORKDIR: /var/www
     INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR: ${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}
     <<: *intelligence-db
-    FORECASTS_URL: http://prophet-api:8000
+    FORECASTS_URL: http://forecasts-router:8102
     FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
     INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
   volumes:
@@ -172,7 +172,7 @@ services:
     init: true
     environment:
       ARGUS_WORKDIR: /var/www
-      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_URL: http://observations-router:8101
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
     volumes:
       - ./configs:/var/www/configs:ro
@@ -220,11 +220,11 @@ services:
       DEBUG: ${DEBUG:-false}
       <<: *api-db
       SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
-      INTELLIGENCE_URL: http://intelligence-api:8000
+      INTELLIGENCE_URL: http://impacts-router:8103
       INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
-      FORECASTS_URL: http://prophet-api:8000
+      FORECASTS_URL: http://forecasts-router:8102
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
-      OBSERVATIONS_URL: http://clio:8000
+      OBSERVATIONS_URL: http://observations-router:8101
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
       DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS-https://${APP_NAME:?APP_NAME is required}}
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}

@@ -41,14 +41,14 @@ http {
         }
     }
     server {
-        listen 8000;
+        listen 8104;
         default_type application/json;
         if ($http_x_test_account_limit) {
             return 429 '{"error":{"message":"Account limit"}}';
         }
         return 200 '{"upstream":true}';
     }
-    server { listen 3000; return 200; }
+    server { listen 8105; return 200; }
 }
 ''')
     name = 'argus-login-edge-' + uuid4().hex[:12]
@@ -56,7 +56,7 @@ http {
         return subprocess.run(['docker', *args], check=True, text=True, capture_output=True).stdout.strip()
     docker('run', '--rm', '-d', '--name', name,
            '-p', '127.0.0.1::80', '-p', '127.0.0.1::8081',
-           '--add-host', 'api:127.0.0.1', '--add-host', 'frontend:127.0.0.1',
+           '--add-host', 'application-router:127.0.0.1',
            '-v', f'{directory}:/test:ro',
            '-v', f'{directory / "default.conf"}:/etc/nginx/includes/default.conf:ro',
            '-v', f'{directory / "log"}:/var/www/log',

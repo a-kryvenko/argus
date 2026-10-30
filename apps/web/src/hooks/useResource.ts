@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../lib/http";
 
-export function useResource<T>(path: string) {
+export function useResource<T>(path: string, refreshMs?: number) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<{
     path: string;
@@ -10,6 +10,11 @@ export function useResource<T>(path: string) {
     data: T | null;
     error: string | null;
   } | null>(null);
+  useEffect(() => {
+    if (!refreshMs) return;
+    const timer = setInterval(() => setAttempt(value => value + 1), refreshMs);
+    return () => clearInterval(timer);
+  }, [refreshMs]);
   useEffect(() => {
     const controller = new AbortController();
     let active = true;

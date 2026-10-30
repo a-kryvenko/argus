@@ -263,6 +263,7 @@ services:
       DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS:-http://localhost:3000}
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-false}
       MONITORING_REDIS_URL: redis://redis:6379/0
+      API_REDIS_URL: redis://redis:6379/0
     volumes: &api-volumes
       - ./configs:/var/www/configs:ro
       - ./data/metrics:/var/www/data/metrics:ro

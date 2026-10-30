@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 READS = frozenset({
+    'sdo-browse',
     'history',
     'summary',
     'current-indices',

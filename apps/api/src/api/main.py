@@ -21,6 +21,10 @@ from api.routers.drag_monitor import router as drag_monitor_router
 from api.routers.density_advisory import router as density_advisory_router
 from api.routers.healthcheck import router as healthcheck_router
 from api.routers.observations import router as observations_router
+from api.routers.summary import router as summary_router
+from api.routers.sdo import router as sdo_router
+from api.services.summary import close_cache
+from api.services.sdo import close_image_client
 from common.schemas.response import error_response
 
 config = get_config()
@@ -38,6 +42,8 @@ async def lifespan(_: FastAPI):
         with suppress(TimeoutError):
             await asyncio.wait_for(flush(), timeout=5)
         await dispose_engine()
+        await close_cache()
+        await close_image_client()
 
 setup_sentry()
 
@@ -88,6 +94,8 @@ app.include_router(drag_monitor_router, include_in_schema=False)
 app.include_router(density_advisory_router, include_in_schema=False)
 app.include_router(healthcheck_router)
 app.include_router(observations_router)
+app.include_router(summary_router)
+app.include_router(sdo_router)
 
 app.include_router(atmospheric_density_router)
 app.include_router(leo_drag_router)

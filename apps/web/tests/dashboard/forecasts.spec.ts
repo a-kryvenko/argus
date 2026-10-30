@@ -57,22 +57,18 @@ async function screenshot(page: Page, name: string) {
   await captureScreenshot(page, { path: `test-results/${name}.png`, fullPage: true });
 }
 
-test('forecast overview links summary, horizon, quantile interval and time inspector', async ({ page }) => {
+test('forecast product links horizon, quantile interval and time inspector', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await mockForecasts(page);
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Forecast overview', exact: true })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
-  const summary = page.getByRole('region', { name: 'Forecast summary' });
-  await expect(summary).toContainText('420 km/s');
-  await expect(summary).toContainText('6.25 cm⁻³');
+  await page.goto('/forecast/solar-wind-speed');
+  await expect(page.getByRole('heading', { name: 'Solar Wind Speed', exact: true })).toBeVisible();
   const inspector = page.getByRole('complementary', { name: 'Forecast inspector' });
   await expect(inspector).toContainText('0%');
   await expect(inspector).toContainText('—');
   await expect(page.locator('.recharts-area-area')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Solar Wind Speed threshold probability', exact: true }).locator('canvas').first()).toBeVisible();
-  await screenshot(page, 'forecast-overview-desktop');
+  await screenshot(page, 'forecast-product-desktop');
   await page.getByRole('button', { name: 'First 24 hours', exact: true }).click();
   await expect(inspector.getByLabel('Forecast time · UTC')).toHaveAttribute('max', '23');
   await inspector.getByLabel('Forecast time · UTC').fill('11');
@@ -80,7 +76,7 @@ test('forecast overview links summary, horizon, quantile interval and time inspe
   await page.locator('summary').filter({ hasText: 'Hourly forecast values' }).click();
   await page.getByRole('button', { name: 'Inspect forecast at 30 Sept 2026, 02:00 UTC' }).click();
   await expect(inspector.getByLabel('Forecast time · UTC')).toHaveValue('1');
-  await summary.getByRole('button', { name: 'Show Geomagnetic activity forecast', exact: true }).click();
+  await page.goto('/forecast/geomagnetic-activity');
   await expect(page.getByRole('group', { name: 'Forecast variable' }).getByRole('button', { name: 'AP Ap Index' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Kp Index threshold probability', exact: true }).locator('canvas').first()).toBeVisible();
   expect(errors).toEqual([]);

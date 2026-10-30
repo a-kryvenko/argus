@@ -29,6 +29,7 @@ export default function WorkspaceShell({ children, section, contentId = 'forecas
   children: ReactNode; section: string; contentId?: string; status?: string; statusTone?: 'neutral' | 'good' | 'warning'; navigationGroups?: WorkspaceNavigationGroup[]; account?: WorkspaceAccount;
 }) {
   const pathname = usePathname();
+  const textNavigation = !pathname.startsWith('/dashboard');
   const demo = useDemo();
   const hrefFor = (href: string) => demo ? demo.href(href) : href;
   const currentPath = demo ? pathname.replace(/^\/demo/, '') || '/' : pathname;
@@ -37,18 +38,17 @@ export default function WorkspaceShell({ children, section, contentId = 'forecas
     { href: '/leo', label: 'LEO density scenario', icon: DragRiskIcon },
     { href: '/forecast/solar-events', label: 'Solar events · CME', icon: Activity },
   ] : navigation;
-  return <div className={styles.workspace} data-demo={!!demo} onMouseDownCapture={event => {
+  return <div className={styles.workspace} data-demo={!!demo} data-text-navigation={textNavigation} onMouseDownCapture={event => {
     if (event.button === 0 && event.target instanceof Element && event.target.closest('.recharts-wrapper, [data-chart]')) event.preventDefault();
   }}>
     <a className={styles.skipLink} href={`#${contentId}`}>Skip to {section.toLowerCase()}</a>
     <aside className={styles.sidebar} aria-label="Workspace navigation">
       <Link className={styles.brand} href={hrefFor('/')} aria-label="Argus SunWatch home"><span>ARGUS<small>SUNWATCH</small></span></Link>
-      <div className={styles.navLabel}>WORKSPACE</div>
-      <nav className={styles.navigation} aria-label="Main navigation">
+      <nav className={`${styles.navigation} ${textNavigation ? styles.textNavigation : ''}`} aria-label="Main navigation">
         {items.map(({ href, label, icon: Icon }) => {
           const active = href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`);
           return <Link href={hrefFor(href)} key={href} aria-label={label} title={label} aria-current={active ? 'page' : undefined}>
-            <Icon size={17} strokeWidth={1.5} aria-hidden="true" /><span>{label}</span>{active && <span className={styles.navMarker} />}
+            {!textNavigation && <Icon size={17} strokeWidth={1.5} aria-hidden="true" />}<span>{label}</span>{active && <span className={styles.navMarker} />}
           </Link>;
         })}
       </nav>

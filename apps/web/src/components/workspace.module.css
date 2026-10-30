@@ -123,3 +123,14 @@
 .workspace[data-demo="true"] .sidebar { top: var(--demo-panel-height); }
 .workspace[data-demo="true"] .commandBar { top: var(--demo-panel-height); }
 .workspace[data-demo="true"] { min-height: calc(100svh - var(--demo-panel-height)); }
+
+.textNavigation a > span:not(.navMarker) { display: inline; }
+@media (min-width: 761px) and (max-width: 1350px) {
+  .workspace[data-text-navigation="true"] { --sidebar-width: 184px; }
+  .textNavigation a { justify-content: flex-start; }
+}
+@media (max-width: 760px) {
+  .workspace[data-text-navigation="true"] .sidebar { grid-template-columns: minmax(0, 1fr); }
+  .textNavigation { justify-content: flex-start; min-width: 0; padding: 0 8px 6px; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
+  .textNavigation a { flex-shrink: 0; min-width: 0; padding: 8px; font-size: 11px; white-space: nowrap; }
+}

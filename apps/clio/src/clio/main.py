@@ -19,6 +19,7 @@ from clio.routers import (
     observation_files,
     observations,
     sdo_images,
+    sdo_browse,
     solar_wind,
     solar_wind_events,
 )
@@ -49,6 +50,7 @@ for module in (
     measurements,
     browse,
     sdo_images,
+    sdo_browse,
     observation_files
 ):
     app.include_router(module.router, dependencies=[Depends(require_service_token)])

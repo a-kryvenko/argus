@@ -16,7 +16,7 @@ def main(argv=None):
     serve.add_argument('--port', type=int, default=8000)
 
     commands.add_parser('collect').add_argument(
-        'metrics', nargs='*', help='Configured observations, sdo, donki or enlil (default: all)'
+        'metrics', nargs='*', help='Configured observations, sdo, sdo-browse, donki or enlil (default: all)'
     )
     
     commands.add_parser('normalize')
@@ -30,7 +30,7 @@ def main(argv=None):
     args.now = datetime.now(UTC)
 
     if args.command == 'collect':
-        if any(m not in OBSERVATIONS and m not in {'sdo', 'donki', 'enlil'} for m in args.metrics):
+        if any(m not in OBSERVATIONS and m not in {'sdo', 'sdo-browse', 'donki', 'enlil'} for m in args.metrics):
             parser.error('Unknown observation metric')
         args.metrics = args.metrics or None
 

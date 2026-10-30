@@ -6,8 +6,27 @@ prophet:
   shutdown_grace_seconds: 570
   verification_days: 30
 
+api:
+  summary:
+    ttl_seconds: 600
+    image_ttl_seconds: 1800
+    cme_grace_hours: 24
+    critical_levels:
+      v: [450, 500, 600, 700]
+      # Display bands for plasma; not standardized geomagnetic hazard thresholds.
+      n: [10, 20, 50, 80]
+      t: [100000, 200000, 500000, 800000]
+      kp: [4, 5, 6, 7]
+      ap: [27, 48, 80, 112]
+      dst: [-30, -50, -100, -150]
+      bt: [5, 10, 15, 20]
+      bx: [5, 10, 15, 20]
+      by: [5, 10, 15, 20]
+      bz: [-5, -10, -15, -20]
+
 # Observation sources and historical horizons.
 clio:
+  sdo_browse_enabled: true
   retention:
     live_days: 6
     normalized_days: 60

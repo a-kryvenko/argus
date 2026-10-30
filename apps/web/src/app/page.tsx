@@ -1,5 +1,8 @@
-import ForecastOverview from '../components/ForecastOverview';
+import type { Metadata } from 'next';
+import ObservationOverview from '../components/ObservationOverview';
 
-export default function Forecast() {
-  return <ForecastOverview />;
+export const metadata: Metadata = { title: 'Overview' };
+
+export default function Home() {
+  return <ObservationOverview />;
 }

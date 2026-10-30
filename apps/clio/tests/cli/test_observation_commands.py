@@ -52,7 +52,7 @@ def test_live_command_returns_per_metric_failures(monkeypatch):
     from datetime import UTC, datetime
     from clio.commands import collect as command
     session, dispose = session_factory(monkeypatch, command)
-    config = SimpleNamespace(sdo_images=SimpleNamespace(enabled=False), observations={'kp': object(), 'dst': object()})
+    config = SimpleNamespace(sdo_browse_enabled=False, sdo_images=SimpleNamespace(enabled=False), observations={'kp': object(), 'dst': object()})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
     result = {'failed_metrics': ['kp'], 'downloaded_measurements': 0}
     collect = AsyncMock(return_value=result)
@@ -141,7 +141,7 @@ def test_catalog_collection_selection_and_independent_failures(monkeypatch, sele
     from datetime import UTC, datetime
     from clio.commands import collect
     from clio.ingestion import donki, enlil
-    config = SimpleNamespace(observations={}, sdo_images=SimpleNamespace(enabled=False),
+    config = SimpleNamespace(sdo_browse_enabled=False, observations={}, sdo_images=SimpleNamespace(enabled=False),
                              solar_wind_events=SimpleNamespace(enabled=enabled, lookback_days=30))
     monkeypatch.setattr(collect, 'load_observation_config', lambda: config)
     monkeypatch.setattr(live, 'get_db_session', Mock(side_effect=AssertionError('numeric storage')))

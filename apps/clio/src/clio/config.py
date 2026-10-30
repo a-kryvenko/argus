@@ -44,6 +44,7 @@ class ClioObservations(StrictModel):
     retention: Retention = Field(default_factory=Retention)
     solar_wind_events: SolarWindEvents = Field(default_factory=SolarWindEvents)
     sdo_images: SDOImages = Field(default_factory=SDOImages)
+    sdo_browse_enabled: bool = False
     observations: dict[str, ObservationPolicy]
 
     @model_validator(mode='after')

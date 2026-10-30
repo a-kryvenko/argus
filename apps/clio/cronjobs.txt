@@ -13,3 +13,4 @@
 */15 * * * * @ROOT@/scripts/cron-run clio collect-events collect donki
 */15 * * * * @ROOT@/scripts/cron-run clio collect-enlil collect enlil
 */5 * * * * @ROOT@/scripts/cron-run clio sdo-live collect sdo
+0 * * * * @ROOT@/scripts/cron-run clio sdo-browse collect sdo-browse

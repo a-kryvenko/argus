@@ -95,6 +95,25 @@ test('keyboard arrows cycle large images through all channels and wrap in both d
   await expect(opener).toBeFocused();
 });
 
+test('movies start after keyboard channel navigation without waiting for canplaythrough', async ({ page }) => {
+  await mock(page);
+  await page.addInitScript(() => {
+    document.addEventListener('canplaythrough', event => event.stopImmediatePropagation(), true);
+  });
+  await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', route =>
+    route.fulfill({ path: 'tests/fixtures/sdo.mp4', contentType: 'video/mp4' }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open AIA 094 Å' }).click();
+  await page.keyboard.press('ArrowLeft');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading')).toHaveText('SDO · AIA 1700 Å');
+  await dialog.getByRole('button', { name: 'Play 48h' }).click();
+  const video = dialog.locator('video');
+  await expect(video.locator('source')).toHaveAttribute('src', 'https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_1700.mp4');
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+});
+
 test('movies load directly from NASA with one loader, start automatically, and respect a manual pause', async ({ page }) => {
   await mock(page);
   let release!: () => void;
@@ -126,6 +145,7 @@ test('movies load directly from NASA with one loader, start automatically, and r
   await video.dispatchEvent('playing');
   await video.evaluate((node: HTMLVideoElement) => {
     node.pause();
+    node.dispatchEvent(new Event('canplay'));
     node.dispatchEvent(new Event('canplaythrough'));
   });
   expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);

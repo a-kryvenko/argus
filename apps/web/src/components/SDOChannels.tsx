@@ -48,7 +48,7 @@ function Movie({ image }: { image: SolarImage }) {
   };
   return <div className={styles.movie} aria-busy={loading}>
     <video ref={videoRef} className={loading && !hasPlayed ? styles.loadingVideo : undefined} controls={!loading || hasPlayed} muted loop playsInline preload="auto" onError={fail}
-      onCanPlayThrough={event => { if (!started.current) void play(event.currentTarget); }}
+      onCanPlay={event => { if (!started.current) void play(event.currentTarget); }}
       onPlaying={() => { started.current = true; setHasPlayed(true); setLoading(false); setNeedsPlay(false); }}
       onWaiting={() => setLoading(true)}
       onPause={() => setLoading(false)}

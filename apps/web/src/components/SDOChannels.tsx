@@ -46,10 +46,11 @@ function Movie({ image }: { image: SolarImage }) {
     }
   };
   return <div className={styles.movie} aria-busy={loading}>
-    <video ref={videoRef} controls muted loop playsInline preload="auto" onError={fail}
+    <video ref={videoRef} className={loading ? styles.loadingVideo : undefined} controls={!loading} muted loop playsInline preload="auto" onError={fail}
       onCanPlayThrough={event => { if (!started.current) void play(event.currentTarget); }}
       onPlaying={() => { started.current = true; setLoading(false); setNeedsPlay(false); }}
-      onWaiting={() => setLoading(true)} onPause={() => setLoading(false)}
+      onWaiting={() => setLoading(true)}
+      onPause={() => setLoading(false)}
       poster={url(image, 1024, 'jpg')} aria-label={`SDO AIA ${image.channel} Å: latest 48 hours`}>
       <source src={`https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_${code}.mp4`} type="video/mp4" onError={fail} />
     </video>
@@ -76,7 +77,7 @@ function Viewer({ image }: { image: SolarImage }) {
   </>;
 }
 
-export default function SDOChannels({ assets }: { assets: Record<string, string> }) {
+export default function SDOChannels({ assets, onViewerOpenChange }: { assets: Record<string, string>; onViewerOpenChange: (open: boolean) => void }) {
   const [selected, setSelected] = useState<SolarImage | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -89,14 +90,14 @@ export default function SDOChannels({ assets }: { assets: Record<string, string>
     <div className={styles.strip} role="group" aria-label="SDO AIA channels">
       {images.map(image => {
         return <button key={image.channel} className={styles.channel} aria-label={`Open AIA ${image.channel} Å`}
-          onClick={event => { opener.current = event.currentTarget; setSelected(image); }}>
+          onClick={event => { opener.current = event.currentTarget; setSelected(image); onViewerOpenChange(true); }}>
           <span className={styles.thumbnail}><Picture key={image.asset_id} image={image} onUnavailable={() => setUnavailable(image.asset_id)} />
             <span className={styles.channelName} aria-hidden="true">{image.channel} Å</span>
           </span>
         </button>;
       })}
     </div>
-    <Dialog.Root open={selected !== null} onOpenChange={open => { if (!open) setSelected(null); }}>
+    <Dialog.Root open={selected !== null} onOpenChange={open => { if (!open) setSelected(null); onViewerOpenChange(open); }}>
       <Dialog.Portal><Dialog.Overlay className={styles.overlay} />
         <Dialog.Content className={styles.viewer} onCloseAutoFocus={event => {
           event.preventDefault();

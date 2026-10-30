@@ -34,6 +34,7 @@ test('nine AIA thumbnails stay in one row on desktop and mobile with JPEG fallba
 test('large images and direct NASA movies load only after user actions; Escape restores focus', async ({ page }) => {
   const requested: string[] = [];
   page.on('request', request => requested.push(request.url()));
+  await page.route('**/api/v1/sdo/movies/**', () => { throw new Error('Movie must never pass through our API'); });
   await mock(page);
   await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', route => route.abort());
   await page.goto('/');
@@ -50,7 +51,6 @@ test('large images and direct NASA movies load only after user actions; Escape r
   expect(requested.some(url => url.endsWith('.mp4'))).toBe(false);
   await captureScreenshot(page, { path: 'test-results/sdo-viewer.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Play 48h' }).click();
-  await expect(dialog.locator('video source')).toHaveAttribute('src', 'https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_0131.mp4');
   await expect.poll(() => requested.some(url => url === 'https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_0131.mp4')).toBe(true);
   await expect(dialog.getByRole('alert')).toContainText('Video unavailable.');
   await expect(dialog.getByRole('status')).toHaveCount(0);
@@ -61,7 +61,7 @@ test('large images and direct NASA movies load only after user actions; Escape r
   await expect(button).toBeFocused();
 });
 
-test('movies buffer with a loader, start automatically, and respect a manual pause', async ({ page }) => {
+test('movies load directly from NASA with one loader, start automatically, and respect a manual pause', async ({ page }) => {
   await mock(page);
   let release!: () => void;
   const ready = new Promise<void>(resolve => { release = resolve; });
@@ -75,15 +75,16 @@ test('movies buffer with a loader, start automatically, and respect a manual pau
   await dialog.getByRole('button', { name: 'Play 48h' }).click();
   const video = dialog.locator('video');
   await expect(dialog.getByRole('status')).toHaveText('Loading video…');
-  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await expect(dialog.getByRole('status')).toHaveCount(1);
+  await expect(video).toBeHidden();
+  expect(await video.evaluate((node: HTMLVideoElement) => node.controls)).toBe(false);
   release();
   await expect.poll(() => video.evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+  await expect(video.locator('source')).toHaveAttribute('src', 'https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_0131.mp4');
+  await expect(video).toBeVisible();
+  expect(await video.evaluate((node: HTMLVideoElement) => node.controls)).toBe(true);
   await expect(dialog.getByRole('status')).toHaveCount(0);
   expect(await video.evaluate((node: HTMLVideoElement) => node.muted)).toBe(true);
-  await video.dispatchEvent('waiting');
-  await expect(dialog.getByRole('status')).toHaveText('Loading video…');
-  await video.dispatchEvent('playing');
-  await expect(dialog.getByRole('status')).toHaveCount(0);
   await video.evaluate((node: HTMLVideoElement) => {
     node.pause();
     node.dispatchEvent(new Event('canplaythrough'));
@@ -119,6 +120,35 @@ test('a browser autoplay rejection leaves a working play button instead of a loa
   await dialog.getByRole('button', { name: 'Play video', exact: true }).click();
   await expect.poll(() => dialog.locator('video').evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
   await expect(dialog.getByRole('button', { name: 'Play video', exact: true })).toHaveCount(0);
+});
+
+test('summary polling pauses throughout video download and viewing, then resumes after closing', async ({ page }) => {
+  await page.clock.install();
+  let reads = 0;
+  page.on('request', request => { if (new URL(request.url()).pathname === '/api/v1/summary') reads++; });
+  await mock(page);
+  let release!: () => void;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', async route => {
+    await ready;
+    await route.fulfill({ path: 'tests/fixtures/sdo.mp4', contentType: 'video/mp4' });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open AIA 131 Å' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Play 48h' }).click();
+  await expect(dialog.getByRole('status')).toBeVisible();
+  await page.clock.fastForward(10 * 60 * 1000);
+  expect(reads).toBe(1);
+  await expect(dialog).toBeVisible();
+  release();
+  await expect.poll(() => dialog.locator('video').evaluate((node: HTMLVideoElement) => !node.paused)).toBe(true);
+  await page.clock.fastForward(10 * 60 * 1000);
+  expect(reads).toBe(1);
+  await expect(dialog.locator('video')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.clock.fastForward(5 * 60 * 1000);
+  await expect.poll(() => reads).toBe(2);
 });
 
 test('one missing SDO channel hides the whole block without hiding observations', async ({ page }) => {

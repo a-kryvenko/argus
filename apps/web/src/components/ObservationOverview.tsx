@@ -67,13 +67,14 @@ function ObservationCard({ group, id }: { group: Group; id: string }) {
 }
 
 export default function ObservationOverview() {
-  const { data, error, retry } = useResource<Summary>('/summary', 5 * 60 * 1000);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const { data, error, retry } = useResource<Summary>('/summary', viewerOpen ? undefined : 5 * 60 * 1000);
   return <WorkspaceShell section="Overview" contentId="overview-content">
     <main id="overview-content" className={styles.page}>
       <header className={styles.heading}><h1>Space weather</h1>
         <a className={styles.apiLink} href="/api/v1/summary" target="_blank" rel="noreferrer" aria-label="Summary API (opens in a new tab)">API ↗</a>
       </header>
-      <SDOChannels assets={data?.sdo_images ?? {}} />
+      <SDOChannels assets={data?.sdo_images ?? {}} onViewerOpenChange={setViewerOpen} />
       {!data && <div className={styles.state} role={error ? 'alert' : 'status'}>{error ?? 'Loading observations and CME events…'}
         {error && <button onClick={retry}>Try again</button>}
       </div>}

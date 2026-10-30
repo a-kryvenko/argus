@@ -26,6 +26,15 @@ def test_standalone_sdo_catalog_is_not_exposed():
     asyncio.run(verify())
 
 
+def test_movies_are_not_proxied_through_api(monkeypatch):
+    monkeypatch.setattr(sdo, 'image_client', lambda: pytest.fail('Unexpected movie request'))
+
+    async def verify():
+        async with AsyncClient(transport=httpx.ASGITransport(app=app()), base_url='http://api') as client:
+            assert (await client.get('/sdo/movies/0131.mp4')).status_code == 404
+    asyncio.run(verify())
+
+
 @pytest.mark.parametrize('status,expected', [(200, 200), (304, 304), (404, 404), (401, 503), (500, 503)])
 def test_image_proxy_authenticates_and_releases_stream_to_shared_client(monkeypatch, status, expected):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')

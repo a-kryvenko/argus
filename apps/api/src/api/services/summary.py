@@ -21,19 +21,20 @@ from common.schemas.response import success_response
 from common.schemas.sdo_browse import SDOBrowseCatalog
 from api.schemas.summary import ChartPoint, IMAGE_NAME_PATTERN, SummarySettings
 from api.services.errors import ArtifactNotReadyError
-from api.services.forecasts.client import read_release, read_event_forecast
+from api.services.forecasts.client import read_release, read_event_forecast, read_solar_indices
 from api.services.observations.client import read_observations
 from api.services.summary_images import ForecastImageGenerator
 
 logger = logging.getLogger(__name__)
-SUMMARY_KEY = 'api:summary:v6'
+SUMMARY_KEY = 'api:summary:v7'
 IMAGE_KEY = 'api:summary:image:'
 _cache = None
 GROUPS = {
     'plasma': ('Plasma', (('v', 'v', 'km/s'), ('n', 'n', 'cm⁻³'), ('t', 't', 'K'))),
     'geo': ('Geomagnetic', (('kp', 'Kp', ''), ('ap', 'Ap', ''), ('dst', 'Dst', 'nT'))),
     'hmf': ('HMF', tuple((m, m.capitalize(), 'nT') for m in ('bt', 'bx', 'by', 'bz'))),
-    'radio': ('Radio', (('f10_7', 'F10.7', 'sfu'), ('s10', 'S10', ''), ('m10', 'M10', ''), ('y10', 'Y10', ''))),
+    'radio': ('Radio', tuple((m, label, 'sfu') for m, label in (
+        ('f10_7', 'F10.7'), ('s10', 'S10'), ('m10', 'M10'), ('y10', 'Y10')))),
 }
 PRODUCTS = ('solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature',
             'geomagnetic-activity', 'dst', 'hmf', 'solar-radiation')
@@ -114,6 +115,14 @@ async def forecast_read(product):
         return None
 
 
+async def solar_indices_read():
+    try:
+        return await asyncio.to_thread(read_solar_indices)
+    except ArtifactNotReadyError:
+        logger.warning('Summary calibrated solar indices are unavailable')
+        return None
+
+
 def interval_value(index, thresholds):
     if index == 0:
         return thresholds[0]-(thresholds[1]-thresholds[0] if len(thresholds) > 1 else 1.)
@@ -183,17 +192,18 @@ def render_charts(releases, current, histories, levels, now):
             value = max(-value, 0.) if southward else value
             representative = interval_value(bisect_right(thresholds, value), thresholds)
             return -representative if southward else representative
-        cadence, count = (3, 2) if metric in ('kp', 'ap') else (1, 3)
+        daily = metric in ('f10_7', 's10', 'm10', 'y10')
+        cadence, count = (24, 3) if daily else (3, 2) if metric in ('kp', 'ap') else (1, 3)
         history = {point['time']: point['value'] for point in histories.get(metric, [])
                    if point['quality'] not in ('missing', 'flagged') and point['time'] < latest['time']}
         before = []
         for step in range(count, 0, -1):
             target = latest['time']-timedelta(hours=cadence*step)
-            times = [time for time in history if target-timedelta(hours=1) < time <= target]
+            times = [time for time in history if target-timedelta(hours=24 if daily else 1) < time <= target]
             if times:
                 time = max(times)
                 before.append(ChartPoint(time=time, value=display(history[time])))
-        anchor = latest['time'].replace(minute=0, second=0, microsecond=0)
+        anchor = (release.issue_time if daily else latest['time']).replace(minute=0, second=0, microsecond=0)
         first = max(1, int((now-anchor).total_seconds() // (cadence*3600))+1)
         targets = {anchor+timedelta(hours=cadence*step) for step in range(first, first+count)}
         after = {time: value for time, value in future.items() if time in targets}
@@ -225,13 +235,14 @@ def cme_events(events, now, grace_hours=24):
 async def build_summary(config):
     now = datetime.now(UTC)
     bounds = {'from': now-timedelta(hours=12), 'to': now}
-    wind, geo, additional, wind_history, geo_history, hourly, sdo_images, *forecasts = await asyncio.gather(
+    wind, geo, additional, wind_history, geo_history, hourly, sdo_images, solar, *forecasts = await asyncio.gather(
         observation_read('solar-wind/latest'), observation_read('geomagnetic/latest'),
         observation_read('current-indices'),
         observation_read('solar-wind/history', {**bounds, 'resolution': '1h'}, optional=True),
         observation_read('geomagnetic/history', bounds, optional=True),
         observation_read('history', {**bounds, 'limit': 13}, optional=True),
         sdo_images_read(),
+        solar_indices_read(),
         *(forecast_read(product) for product in (*PRODUCTS, 'events')))
     now = datetime.now(UTC)
     current, histories = {}, {}
@@ -243,10 +254,17 @@ async def build_summary(config):
         for metric, series in data.get('series', {}).items():
             histories[metric] = [value for point in series['points'] if (value := sample(point, now)) is not None]
     for point in hourly.get('points', []):
-        for metric in ('ap', 'f10_7', 's10', 'm10', 'y10'):
-            value = sample({'issue_time': point['issue_time'], 'value': point.get(metric)}, now)
+        value = sample({'issue_time': point['issue_time'], 'value': point.get('ap')}, now)
+        if value is not None:
+            histories.setdefault('ap', []).append(value)
+    if solar is not None and solar.as_of <= now:
+        for measurement in solar.items:
+            metric = measurement.metric
+            value = sample(measurement.model_dump(), now)
             if value is not None:
                 histories.setdefault(metric, []).append(value)
+                if metric != 'f10_7' and (not current.get(metric) or value['time'] > current[metric]['time']):
+                    current[metric] = value
     references, images, outlooks = render_charts(forecasts[:-1], current, histories, config.critical_levels, now)
     groups = {}
     for group, (title, metrics) in GROUPS.items():

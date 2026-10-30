@@ -167,6 +167,7 @@ def mock_models(monkeypatch):
     ('dst', ['dst_quantile']),
     ('solar-wind-density', ['plasma_density_quantile']),
     ('solar-wind-temperature', ['plasma_temperature_quantile']),
+    ('solar-radiation', ['f10_7_quantile', 's10_quantile', 'm10_quantile', 'y10_quantile']),
 ])
 def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
     from prophet.services.generation import calculation as generation
@@ -184,7 +185,7 @@ def test_selected_product_uses_one_snapshot(monkeypatch, selection, artifacts):
 def test_catalog_matches_public_contract():
     from prophet.services.generation.products import PRODUCTS
     from common.schemas.forecast_release import PRODUCT_ARTIFACTS
-    assert set(PRODUCTS) == set(PRODUCT_ARTIFACTS) - {'solar-radiation'}
+    assert set(PRODUCTS) == set(PRODUCT_ARTIFACTS)
     for name, product in PRODUCTS.items():
         assert product.artifacts == PRODUCT_ARTIFACTS[name]
 
@@ -194,7 +195,7 @@ def test_status_selections_include_canonical_names_and_historical_aliases():
     from prophet.services.generation.products import attempt_selections
     assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
     assert attempt_selections('dst') == ['all', 'dst']
-    assert attempt_selections('solar-radiation') == []
+    assert attempt_selections('solar-radiation') == ['all', 'solar-radiation']
 
 
 def test_temperature_verification_uses_hourly_observations():

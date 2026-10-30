@@ -80,6 +80,27 @@ def test_missing_token_fails_without_http(monkeypatch):
         forecasts_client.read_release('dst')
 
 
+@pytest.mark.parametrize('failure', [None, 'http', 'future', 'nonfinite'])
+def test_calibrated_solar_indices_read_authenticated_contract(monkeypatch, failure):
+    monkeypatch.setenv('FORECASTS_URL', 'http://prophet-api:8000')
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'secret')
+    real_client = httpx.Client
+    payload = {'as_of': '2026-10-30T12:00:00Z', 'items': [dict(
+        metric='s10', value='nan' if failure == 'nonfinite' else 100.,
+        observed_at='2026-10-30T13:00:00Z' if failure == 'future' else '2026-10-30T12:00:00Z')]}
+    def handle(request):
+        assert request.url.path == '/internal/v1/solar-indices'
+        assert request.headers['Authorization'] == 'Bearer secret'
+        return httpx.Response(503 if failure == 'http' else 200, json=payload)
+    monkeypatch.setattr(forecasts_client.httpx, 'Client', lambda **kwargs: real_client(
+        transport=httpx.MockTransport(handle), **kwargs))
+    if failure:
+        with pytest.raises(ArtifactNotReadyError):
+            forecasts_client.read_solar_indices()
+    else:
+        assert forecasts_client.read_solar_indices().items[0].value == 100.
+
+
 def test_hmf_preserves_southward_after_total_horizon(monkeypatch):
     import pandas as pd
     product = forecast_products.PRODUCTS['hmf']

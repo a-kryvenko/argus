@@ -82,15 +82,15 @@ models:
         goes_path: data/raw/goes/goes_2025.parquet
   
   s10_quantile:
-    model: argus-s10-q-v1
+    model: argus-s10-solfsmy-daily-v1
     metrics: data/metrics/radiation/s10_quantile
   
   m10_quantile:
-    model: argus-m10-q-v1
+    model: argus-m10-solfsmy-daily-v1
     metrics: data/metrics/radiation/m10_quantile
   
   y10_quantile:
-    model: argus-y10-q-v1
+    model: argus-y10-solfsmy-daily-v1
     metrics: data/metrics/radiation/y10_quantile
 
   dtc:

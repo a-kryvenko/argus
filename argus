@@ -20,7 +20,7 @@ Usage: ./argus <command> (environment: $mode)
   clio collect donki | clio collect enlil
   clio backfill [METRIC ...] [--from DATE --to DATE]
   clio sdo-cleanup
-  prophet generation [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|atmospheric-density]
+  prophet generation [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|solar-radiation|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (dev only; default: january-2026)
   prophet verification [PRODUCT]
   prophet cleanup [--days 90] [--apply]

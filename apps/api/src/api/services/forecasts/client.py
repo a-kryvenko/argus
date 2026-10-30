@@ -15,6 +15,21 @@ def read_event_forecast():
     return SolarWindEventForecast.model_validate_json(row['report_json'])
 
 
+def read_solar_indices():
+    from common.schemas.solar_indices import SolarIndices
+    url, token = os.getenv('FORECASTS_URL'), os.getenv('FORECASTS_SERVICE_TOKEN')
+    if not url or not token:
+        raise ArtifactNotReadyError('Forecast service is not configured')
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10, connect=3), follow_redirects=False, trust_env=False) as client:
+            response = client.get(url.rstrip('/')+'/internal/v1/solar-indices',
+                                  headers={'Authorization': f'Bearer {token}'})
+            response.raise_for_status()
+        return SolarIndices.model_validate_json(response.content)
+    except (httpx.HTTPError, ValueError):
+        raise ArtifactNotReadyError('Solar-index observations are unavailable') from None
+
+
 def read_release(product: str) -> ForecastRelease:
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unsupported forecast product')

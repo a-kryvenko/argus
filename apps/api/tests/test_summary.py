@@ -15,6 +15,7 @@ import pytest
 from common.schemas.forecast_release import ForecastArtifact, ForecastRelease, PREDICTION_COLUMNS, PRODUCT_ARTIFACTS
 from common.schemas.solar_wind_events import SolarWindEvent
 from common.schemas.sdo_browse import CHANNELS
+from common.schemas.solar_indices import SolarIndices
 from types import SimpleNamespace
 from api.schemas.summary import SummarySettings
 from api.services.errors import ArtifactNotReadyError
@@ -26,7 +27,8 @@ ISSUE = NOW.replace(minute=0)
 LEVELS = {'v': [450, 500, 600, 700], 'n': [10, 20, 50, 80], 't': [100000, 200000, 500000, 800000],
           'kp': [4, 5, 6, 7], 'ap': [27, 48, 80, 112], 'dst': [-30, -50, -100, -150],
           'bt': [5, 10, 15, 20], 'bx': [5, 10, 15, 20], 'by': [5, 10, 15, 20],
-          'bz': [-5, -10, -15, -20]}
+          'bz': [-5, -10, -15, -20], 'f10_7': [75, 150, 190],
+          's10': [65, 150, 215], 'm10': [72, 144, 167], 'y10': [81, 148, 165]}
 
 
 def release(product, *, future_peak=None):
@@ -36,7 +38,8 @@ def release(product, *, future_peak=None):
         buffer = io.StringIO()
         writer = csv.DictWriter(buffer, fieldnames=columns)
         writer.writeheader()
-        for lead in range(1, 13):
+        leads = range(24, 121, 24) if product == 'solar-radiation' else range(1, 13)
+        for lead in leads:
             median = {'plasma_speed_quantile': 500., 'plasma_density_quantile': 5.,
                       'plasma_temperature_quantile': 100000., 'ap_quantile': 40., 'dst_quantile': -60.}.get(name, 150.)
             values = [.8, .2, .1] if name.endswith('_threshold') else [median-1, median, median+1]
@@ -46,7 +49,7 @@ def release(product, *, future_peak=None):
                 lead_hours=lead, **dict(zip(PREDICTION_COLUMNS[name], values))))
         content = buffer.getvalue()
         artifacts.append(ForecastArtifact(name=name, csv_text=content,
-            sha256=hashlib.sha256(content.encode()).hexdigest(), row_count=12, columns=columns, model_info={}))
+            sha256=hashlib.sha256(content.encode()).hexdigest(), row_count=len(leads), columns=columns, model_info={}))
     return ForecastRelease(product=product, run_id=uuid4(), release_id=uuid4(),
                            issue_time=ISSUE, published_at=NOW, artifacts=artifacts)
 
@@ -88,6 +91,9 @@ def install_sources(monkeypatch, *, missing_forecasts=False):
     read = Mock(side_effect=ArtifactNotReadyError('not ready') if missing_forecasts else forecasts.__getitem__)
     monkeypatch.setattr(summary, 'read_release', read)
     monkeypatch.setattr(summary, 'read_event_forecast', Mock(side_effect=ArtifactNotReadyError('not ready')))
+    solar = SolarIndices(as_of=NOW, items=[dict(metric=metric, value=100., observed_at=ISSUE-timedelta(days=day))
+        for metric in ('f10_7', 's10', 'm10', 'y10') for day in (3, 2, 1, 0)])
+    monkeypatch.setattr(summary, 'read_solar_indices', Mock(return_value=solar))
     return data, reads, forecasts
 
 
@@ -101,7 +107,7 @@ def test_summary_uses_live_observations_and_generates_images_once_per_variable(m
     assert plasma[0]['risk_level'] == 2
     assert data['observations']['geo']['items'][2]['risk_level'] == 2
     names = [item['image_name'] for group in data['observations'].values() for item in group['items'] if item['image_name']]
-    assert len(names) == len(set(names)) == len(images) == 8
+    assert len(names) == len(set(names)) == len(images) == 12
     assert all(name in images for name in names)
     assert reads.await_count == 7
     assert data['sdo_images'] == {channel: f'2026103012_{channel}_{"a"*64}' for channel in CHANNELS}
@@ -147,6 +153,36 @@ def test_unavailable_forecasts_keep_observations_without_fake_charts(monkeypatch
     assert images == {}
     assert data['observations']['plasma']['items'][0]['value'] == 455.
     assert all(item['image_name'] is None for group in data['observations'].values() for item in group['items'])
+
+
+def test_radio_uses_calibrated_observations_daily_charts_and_configured_colors(monkeypatch):
+    install_sources(monkeypatch)
+    calls = []
+    renderer = summary.ForecastImageGenerator.render
+    def render(self, before, current, after, levels):
+        calls.append((before, current, after, levels))
+        return renderer(self, before, current, after, levels)
+    monkeypatch.setattr(summary.ForecastImageGenerator, 'render', render)
+    data, images = asyncio.run(summary.build_summary(SummarySettings(critical_levels=LEVELS)))
+    radio = data['observations']['radio']['items']
+    assert [item['value'] for item in radio] == [150., 100., 100., 100.]
+    assert all(item['measurements'] == 'sfu' and item['image_name'] in images for item in radio)
+    assert [item['risk_level'] for item in radio] == [2, 2, 2, 2]
+    for metric in ('f10_7', 's10', 'm10', 'y10'):
+        before, current, after, _ = next(call for call in calls if call[3] == LEVELS[metric])
+        assert [p.time for p in before] == [ISSUE-timedelta(days=i) for i in (3, 2, 1)]
+        assert current.time == ISSUE
+        assert [p.time for p in after] == [ISSUE+timedelta(days=i) for i in (1, 2, 3)]
+
+
+def test_missing_solar_estimates_does_not_hide_other_observations(monkeypatch):
+    install_sources(monkeypatch)
+    monkeypatch.setattr(summary, 'read_solar_indices', Mock(side_effect=ArtifactNotReadyError('not ready')))
+    data, _ = asyncio.run(summary.build_summary(SummarySettings(critical_levels=LEVELS)))
+    radio = data['observations']['radio']['items']
+    assert radio[0]['value'] == 150.
+    assert all(item['value'] is None and item['image_name'] is None for item in radio[1:])
+    assert data['observations']['plasma']['items'][0]['image_name'] is not None
 
 
 def test_bad_quality_and_missing_history_do_not_generate_replacement_values(monkeypatch):

@@ -13,6 +13,7 @@ from common.config import get_config
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
 from common.schemas.forecast_status import ForecastStatus
 from common.schemas.forecast_verification import ForecastVerification
+from common.schemas.solar_indices import SolarIndices
 from common.db.session import dispose_engine
 from prophet.db.session import get_db_session
 from sqlalchemy import text
@@ -82,6 +83,20 @@ async def status(product: str):
 @app.get('/health/live')
 def live():
     return {'service': 'prophet', 'status': 'ok'}
+
+
+@app.get('/internal/v1/solar-indices', response_model=SolarIndices,
+         dependencies=[Depends(require_service_token)])
+async def solar_indices():
+    from prophet.services.solar_indices import read_solar_indices
+    try:
+        result = await read_solar_indices()
+    except Exception:
+        logger.exception('Solar-index observation read failed')
+        raise HTTPException(503, 'Solar indices are unavailable') from None
+    if result is None:
+        raise HTTPException(503, 'Solar-index observations are not recorded yet')
+    return result
 
 
 @app.get('/health/ready')

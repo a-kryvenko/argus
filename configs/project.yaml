@@ -23,6 +23,11 @@ api:
       bx: [5, 10, 15, 20]
       by: [5, 10, 15, 20]
       bz: [-5, -10, -15, -20]
+      # Solar activity bands: doi:10.1029/2020SW002496, Table 1.
+      f10_7: [75, 150, 190]
+      s10: [65, 150, 215]
+      m10: [72, 144, 167]
+      y10: [81, 148, 165]
 
 # Observation sources and historical horizons.
 clio:

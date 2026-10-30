@@ -94,6 +94,8 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
             result.model_info.update(service.last_status)
         if product == 'atmospheric-density':
             result.model_info.update(service.model_info)
+        if product == 'solar-radiation' and hasattr(service, 'model_info'):
+            result.model_info.update(service.model_info)
         results[result.name] = result
         services[result.name] = service
     if product == 'solar-wind-speed':

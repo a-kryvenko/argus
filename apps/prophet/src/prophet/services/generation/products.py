@@ -31,10 +31,13 @@ PRODUCTS = {
     'hmf': Product((
         Model('hmf_total_threshold'),
         Model('hmf_southward_threshold'))),
+    'solar-radiation': Product(tuple(Model(name+'_quantile') for name in ('f10_7', 's10', 'm10', 'y10'))),
     'atmospheric-density': Product((Model('atmospheric_density', bundled=False),)),
 }
 GENERATION_CHOICES = ('all', *PRODUCTS)
-VERIFIED_PRODUCTS = tuple(name for name in PRODUCTS if name not in ('atmospheric-density', 'solar-wind-events'))
+# Solar verification needs independent reference observations, not our GOES estimates.
+VERIFIED_PRODUCTS = tuple(name for name in PRODUCTS if name not in (
+    'atmospheric-density', 'solar-wind-events', 'solar-radiation'))
 
 
 def select_products(selection: str) -> tuple[str, ...]:

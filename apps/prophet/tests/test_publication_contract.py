@@ -99,3 +99,24 @@ def test_status_contract_requires_auth_and_does_not_change_latest_reads(monkeypa
         assert client.get(path).status_code == 401
         response = client.get(path, headers={'Authorization': 'Bearer test-secret'})
         assert response.status_code == 200 and response.json()['mode'] == 'observe'
+
+
+def test_solar_indices_require_auth_and_keep_storage_errors_private(monkeypatch):
+    from prophet.services import solar_indices
+    from common.schemas.solar_indices import SolarIndices
+    now = datetime.now(UTC)
+    expected = SolarIndices(as_of=now, items=[dict(metric='s10', value=100., observed_at=now)])
+    read = AsyncMock(return_value=expected)
+    monkeypatch.setattr(solar_indices, 'read_solar_indices', read)
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
+    with TestClient(main.app) as client:
+        path = '/internal/v1/solar-indices'
+        assert client.get(path).status_code == 401
+        read.assert_not_awaited()
+        headers = {'Authorization': 'Bearer test-secret'}
+        assert client.get(path, headers=headers).json() == expected.model_dump(mode='json')
+        read.return_value = None
+        assert client.get(path, headers=headers).status_code == 503
+        read.side_effect = RuntimeError('private storage details')
+        response = client.get(path, headers=headers)
+        assert response.status_code == 503 and 'private storage details' not in response.text

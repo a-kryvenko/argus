@@ -52,11 +52,73 @@ test('large images and direct NASA movies load only after user actions; Escape r
   await dialog.getByRole('button', { name: 'Play 48h' }).click();
   await expect(dialog.locator('video source')).toHaveAttribute('src', 'https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_0131.mp4');
   await expect.poll(() => requested.some(url => url === 'https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_0131.mp4')).toBe(true);
+  await expect(dialog.getByRole('alert')).toContainText('Video unavailable.');
+  await expect(dialog.getByRole('status')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Image', exact: true }).click();
   await expect(dialog.locator('video')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(button).toBeFocused();
+});
+
+test('movies buffer with a loader, start automatically, and respect a manual pause', async ({ page }) => {
+  await mock(page);
+  let release!: () => void;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', async route => {
+    await ready;
+    await route.fulfill({ path: 'tests/fixtures/sdo.mp4', contentType: 'video/mp4' });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open AIA 131 Å' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Play 48h' }).click();
+  const video = dialog.locator('video');
+  await expect(dialog.getByRole('status')).toHaveText('Loading video…');
+  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  release();
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  expect(await video.evaluate((node: HTMLVideoElement) => node.muted)).toBe(true);
+  await video.dispatchEvent('waiting');
+  await expect(dialog.getByRole('status')).toHaveText('Loading video…');
+  await video.dispatchEvent('playing');
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await video.evaluate((node: HTMLVideoElement) => {
+    node.pause();
+    node.dispatchEvent(new Event('canplaythrough'));
+  });
+  expect(await video.evaluate((node: HTMLVideoElement) => node.paused)).toBe(true);
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Image', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Play 48h' }).click();
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+});
+
+test('a browser autoplay rejection leaves a working play button instead of a loader', async ({ page }) => {
+  await mock(page);
+  await page.addInitScript(() => {
+    const play = HTMLMediaElement.prototype.play;
+    let blocked = true;
+    HTMLMediaElement.prototype.play = function () {
+      if (blocked) {
+        blocked = false;
+        return Promise.reject(new DOMException('Autoplay blocked', 'NotAllowedError'));
+      }
+      return play.call(this);
+    };
+  });
+  await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', route =>
+    route.fulfill({ path: 'tests/fixtures/sdo.mp4', contentType: 'video/mp4' }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open AIA 131 Å' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'Play 48h' }).click();
+  await expect(dialog.getByRole('button', { name: 'Play video', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Play video', exact: true }).click();
+  await expect.poll(() => dialog.locator('video').evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+  await expect(dialog.getByRole('button', { name: 'Play video', exact: true })).toHaveCount(0);
 });
 
 test('one missing SDO channel hides the whole block without hiding observations', async ({ page }) => {

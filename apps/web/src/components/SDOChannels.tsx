@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Play, X } from 'lucide-react';
+import { LoaderCircle, Play, X } from 'lucide-react';
 import styles from './sdo.module.css';
 
 type SolarImage = { channel: string; asset_id: string };
@@ -25,27 +25,53 @@ function Picture({ image, full = false, onUnavailable }: { image: SolarImage; fu
   </picture>;
 }
 
-function Viewer({ image }: { image: SolarImage }) {
-  const [playing, setPlaying] = useState(false);
+function Movie({ image }: { image: SolarImage }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const started = useRef(false);
+  const [loading, setLoading] = useState(true);
+  const [needsPlay, setNeedsPlay] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const code = image.channel.padStart(4, '0');
+  const fail = () => { setVideoError(true); setLoading(false); setNeedsPlay(false); };
+  const play = async (video: HTMLVideoElement) => {
+    started.current = true;
+    setNeedsPlay(false);
+    setLoading(true);
+    try {
+      await video.play();
+    } catch (error) {
+      if (!video.isConnected || (error instanceof DOMException && error.name === 'AbortError')) return;
+      setLoading(false);
+      setNeedsPlay(true);
+    }
+  };
+  return <div className={styles.movie} aria-busy={loading}>
+    <video ref={videoRef} controls muted loop playsInline preload="auto" onError={fail}
+      onCanPlayThrough={event => { if (!started.current) void play(event.currentTarget); }}
+      onPlaying={() => { started.current = true; setLoading(false); setNeedsPlay(false); }}
+      onWaiting={() => setLoading(true)} onPause={() => setLoading(false)}
+      poster={url(image, 1024, 'jpg')} aria-label={`SDO AIA ${image.channel} Å: latest 48 hours`}>
+      <source src={`https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_${code}.mp4`} type="video/mp4" onError={fail} />
+    </video>
+    {loading && <div className={styles.movieStatus} role="status"><LoaderCircle className={styles.spinner} size={24} aria-hidden="true" />Loading video…</div>}
+    {needsPlay && !videoError && <div className={styles.movieStatus}><button className={styles.resume} onClick={() => { if (videoRef.current) void play(videoRef.current); }}><Play size={18} aria-hidden="true" />Play video</button></div>}
+    {videoError && <p role="alert">Video unavailable. <a href={`https://sdo.gsfc.nasa.gov/data/latest48.php?q=${code}`} target="_blank" rel="noreferrer">Open on NASA</a></p>}
+  </div>;
+}
+
+function Viewer({ image }: { image: SolarImage }) {
+  const [playing, setPlaying] = useState(false);
   return <>
     <div className={styles.viewerHeader}>
       <div><Dialog.Title>SDO · AIA {image.channel} Å</Dialog.Title>
         <Dialog.Description>NASA / SDO{playing ? ' · Live 48-hour movie from NASA' : ''}</Dialog.Description></div>
       <div className={styles.actions}>
-        <button onClick={() => { setPlaying(value => !value); setVideoError(false); }}>{playing ? 'Image' : <><Play size={14} aria-hidden="true" />Play 48h</>}</button>
+        <button onClick={() => setPlaying(value => !value)}>{playing ? 'Image' : <><Play size={14} aria-hidden="true" />Play 48h</>}</button>
         <Dialog.Close className={styles.close} aria-label="Close SDO viewer"><X size={20} aria-hidden="true" /></Dialog.Close>
       </div>
     </div>
     <div className={styles.viewerBody}>
-      {playing ? <div className={styles.movie}>
-        <video controls autoPlay loop playsInline preload="none" onError={() => setVideoError(true)}
-          poster={url(image, 1024, 'jpg')} aria-label={`SDO AIA ${image.channel} Å: latest 48 hours`}>
-          <source src={`https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_${code}.mp4`} type="video/mp4" />
-        </video>
-        {videoError && <p>Video unavailable. <a href={`https://sdo.gsfc.nasa.gov/data/latest48.php?q=${code}`} target="_blank" rel="noreferrer">Open on NASA</a></p>}
-      </div> : <Picture key={image.asset_id} image={image} full />}
+      {playing ? <Movie image={image} /> : <Picture key={image.asset_id} image={image} full />}
     </div>
   </>;
 }

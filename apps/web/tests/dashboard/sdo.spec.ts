@@ -61,6 +61,40 @@ test('large images and direct NASA movies load only after user actions; Escape r
   await expect(button).toBeFocused();
 });
 
+test('keyboard arrows cycle large images through all channels and wrap in both directions', async ({ page }) => {
+  await mock(page);
+  await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', route => route.abort());
+  await page.goto('/');
+  const opener = page.getByRole('button', { name: 'Open AIA 094 Å' });
+  await opener.click();
+  const dialog = page.getByRole('dialog');
+  const expectChannel = async (channel: string) => {
+    await expect(dialog.getByRole('heading')).toHaveText(`SDO · AIA ${channel} Å`);
+    await expect(dialog.locator('img')).toHaveAttribute('alt', `Sun in SDO AIA ${channel} Å`);
+  };
+  await page.keyboard.press('ArrowLeft');
+  await expectChannel('1700');
+  await page.keyboard.press('ArrowRight');
+  await expectChannel('094');
+  for (const channel of [...sdoChannels.slice(1), '094']) {
+    await page.keyboard.press('ArrowRight');
+    await expectChannel(channel);
+  }
+  for (const channel of [...sdoChannels.slice(1).reverse(), '094']) {
+    await page.keyboard.press('ArrowLeft');
+    await expectChannel(channel);
+  }
+  await expect(dialog.getByRole('button', { name: 'Play 48h' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Play 48h' }).click();
+  await page.keyboard.press('ArrowRight');
+  await expect(dialog.getByRole('heading')).toHaveText('SDO · AIA 094 Å');
+  await dialog.getByRole('button', { name: 'Image', exact: true }).click();
+  await page.keyboard.press('ArrowLeft');
+  await expectChannel('1700');
+  await page.keyboard.press('Escape');
+  await expect(opener).toBeFocused();
+});
+
 test('movies load directly from NASA with one loader, start automatically, and respect a manual pause', async ({ page }) => {
   await mock(page);
   let release!: () => void;
@@ -85,6 +119,11 @@ test('movies load directly from NASA with one loader, start automatically, and r
   expect(await video.evaluate((node: HTMLVideoElement) => node.controls)).toBe(true);
   await expect(dialog.getByRole('status')).toHaveCount(0);
   expect(await video.evaluate((node: HTMLVideoElement) => node.muted)).toBe(true);
+  await video.dispatchEvent('waiting');
+  await expect(dialog.getByRole('status')).toHaveCount(0);
+  await expect(video).toBeVisible();
+  expect(await video.evaluate((node: HTMLVideoElement) => node.controls)).toBe(true);
+  await video.dispatchEvent('playing');
   await video.evaluate((node: HTMLVideoElement) => {
     node.pause();
     node.dispatchEvent(new Event('canplaythrough'));
@@ -94,6 +133,37 @@ test('movies load directly from NASA with one loader, start automatically, and r
   await dialog.getByRole('button', { name: 'Image', exact: true }).click();
   await dialog.getByRole('button', { name: 'Play 48h' }).click();
   await expect.poll(() => video.evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+});
+
+test('fullscreen looping and buffering keep video controls and visibility unchanged', async ({ page }) => {
+  await mock(page);
+  await page.route('https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/*', route =>
+    route.fulfill({ path: 'tests/fixtures/sdo.mp4', contentType: 'video/mp4' }));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open AIA 131 Å' }).click();
+  await page.getByRole('button', { name: 'Play 48h' }).click();
+  const video = page.locator('video');
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => !node.paused && node.currentTime > 0)).toBe(true);
+  await expect(video).toBeVisible();
+  await video.evaluate(async (node: HTMLVideoElement) => {
+    Object.assign(window, { movieControlChanges: 0 });
+    new MutationObserver(records => {
+      const state = window as unknown as { movieControlChanges: number };
+      state.movieControlChanges += records.length;
+    }).observe(node, { attributes: true, attributeFilter: ['controls', 'class'] });
+    await node.requestFullscreen();
+    node.currentTime = node.duration - 0.2;
+  });
+  await expect.poll(() => video.evaluate((node: HTMLVideoElement) => node.currentTime < 1)).toBe(true);
+  await video.dispatchEvent('waiting');
+  await expect(page.locator('[role="status"]')).toHaveCount(0);
+  expect(await video.evaluate((node: HTMLVideoElement) => node.controls)).toBe(true);
+  await expect(video).toBeVisible();
+  await video.dispatchEvent('playing');
+  await expect(page.locator('[role="status"]')).toHaveCount(0);
+  expect(await video.evaluate(node => document.fullscreenElement === node)).toBe(true);
+  expect(await page.evaluate(() => (window as unknown as { movieControlChanges: number }).movieControlChanges)).toBe(0);
+  await page.evaluate(() => document.exitFullscreen());
 });
 
 test('a browser autoplay rejection leaves a working play button instead of a loader', async ({ page }) => {

@@ -29,6 +29,7 @@ function Movie({ image }: { image: SolarImage }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const started = useRef(false);
   const [loading, setLoading] = useState(true);
+  const [hasPlayed, setHasPlayed] = useState(false);
   const [needsPlay, setNeedsPlay] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const code = image.channel.padStart(4, '0');
@@ -46,15 +47,15 @@ function Movie({ image }: { image: SolarImage }) {
     }
   };
   return <div className={styles.movie} aria-busy={loading}>
-    <video ref={videoRef} className={loading ? styles.loadingVideo : undefined} controls={!loading} muted loop playsInline preload="auto" onError={fail}
+    <video ref={videoRef} className={loading && !hasPlayed ? styles.loadingVideo : undefined} controls={!loading || hasPlayed} muted loop playsInline preload="auto" onError={fail}
       onCanPlayThrough={event => { if (!started.current) void play(event.currentTarget); }}
-      onPlaying={() => { started.current = true; setLoading(false); setNeedsPlay(false); }}
+      onPlaying={() => { started.current = true; setHasPlayed(true); setLoading(false); setNeedsPlay(false); }}
       onWaiting={() => setLoading(true)}
       onPause={() => setLoading(false)}
       poster={url(image, 1024, 'jpg')} aria-label={`SDO AIA ${image.channel} Å: latest 48 hours`}>
       <source src={`https://sdo.gsfc.nasa.gov/assets/img/latest/mpeg/latest_1024_${code}.mp4`} type="video/mp4" onError={fail} />
     </video>
-    {loading && <div className={styles.movieStatus} role="status"><LoaderCircle className={styles.spinner} size={24} aria-hidden="true" />Loading video…</div>}
+    {loading && !hasPlayed && <div className={styles.movieStatus} role="status"><LoaderCircle className={styles.spinner} size={24} aria-hidden="true" />Loading video…</div>}
     {needsPlay && !videoError && <div className={styles.movieStatus}><button className={styles.resume} onClick={() => { if (videoRef.current) void play(videoRef.current); }}><Play size={18} aria-hidden="true" />Play video</button></div>}
     {videoError && <p role="alert">Video unavailable. <a href={`https://sdo.gsfc.nasa.gov/data/latest48.php?q=${code}`} target="_blank" rel="noreferrer">Open on NASA</a></p>}
   </div>;
@@ -99,11 +100,21 @@ export default function SDOChannels({ assets, onViewerOpenChange }: { assets: Re
     </div>
     <Dialog.Root open={selected !== null} onOpenChange={open => { if (!open) setSelected(null); onViewerOpenChange(open); }}>
       <Dialog.Portal><Dialog.Overlay className={styles.overlay} />
-        <Dialog.Content className={styles.viewer} onCloseAutoFocus={event => {
+        <Dialog.Content className={styles.viewer} onKeyDown={event => {
+          if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.currentTarget.querySelector('video')) return;
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const direction = event.key === 'ArrowLeft' ? -1 : 1;
+          setSelected(current => {
+            if (!current) return current;
+            const index = images.findIndex(image => image.channel === current.channel);
+            return images[(index + direction + images.length) % images.length];
+          });
+        }} onCloseAutoFocus={event => {
           event.preventDefault();
           opener.current?.focus();
         }}>
-          {selected && <Viewer key={selected.asset_id} image={selected} />}
+          {selected && <Viewer image={selected} />}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

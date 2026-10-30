@@ -26,7 +26,7 @@ from api.services.observations.client import read_observations
 from api.services.summary_images import ForecastImageGenerator
 
 logger = logging.getLogger(__name__)
-SUMMARY_KEY = 'api:summary:v5'
+SUMMARY_KEY = 'api:summary:v6'
 IMAGE_KEY = 'api:summary:image:'
 _cache = None
 GROUPS = {

@@ -43,7 +43,8 @@ class ForecastImageGenerator:
                 '</linearGradient></defs>'
                 f'<line x1="{current_x:.3f}" x2="{current_x:.3f}" '
                 f'y1="{self.padding}" y2="{self.height-self.padding}" '
-                'stroke="white" stroke-width="1" stroke-dasharray="4 4" stroke-opacity="0.7"/>'
+                'stroke="white" stroke-width="1.5" vector-effect="non-scaling-stroke" '
+                'stroke-dasharray="4 4" stroke-opacity="0.7"/>'
                 f'<polyline points="{line}" fill="none" stroke="url(#risk)" stroke-width="3" '
                 f'stroke-linecap="round" stroke-linejoin="round"/>{dots}</svg>').encode()
 

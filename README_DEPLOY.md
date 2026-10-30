@@ -86,6 +86,8 @@ with fast compression and progress every 15s. Migrations use a 5s lock timeout a
 5min statement timeout; affected workers drain while HTTP stays online.
 Current migration histories remain intact.
 
+Deployment waits up to 600s for running jobs to release `.deployment.lock` (`DEPLOY_LOCK_TIMEOUT`); timeout exits with status 75.
+
 Failed backups remain `.partial`; failed deployments do not rotate backups.
 Retain three pre-migration backups; prune unused images older than 72 hours.
 Operator env/models/data remain separate; do not override generated image references.

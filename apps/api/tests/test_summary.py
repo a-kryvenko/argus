@@ -31,7 +31,7 @@ LEVELS = {'v': [450, 500, 600, 700], 'n': [10, 20, 50, 80], 't': [100000, 200000
           's10': [65, 150, 215], 'm10': [72, 144, 167], 'y10': [81, 148, 165]}
 
 
-def release(product, *, future_peak=None):
+def release(product, *, future_peak=None, peak_lead=12, speed=500., threshold_peak_lead=None):
     artifacts = []
     for name in PRODUCT_ARTIFACTS[product]:
         columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
@@ -40,10 +40,12 @@ def release(product, *, future_peak=None):
         writer.writeheader()
         leads = range(24, 121, 24) if product == 'solar-radiation' else range(1, 13)
         for lead in leads:
-            median = {'plasma_speed_quantile': 500., 'plasma_density_quantile': 5.,
+            median = {'plasma_speed_quantile': speed, 'plasma_density_quantile': 5.,
                       'plasma_temperature_quantile': 100000., 'ap_quantile': 40., 'dst_quantile': -60.}.get(name, 150.)
             values = [.8, .2, .1] if name.endswith('_threshold') else [median-1, median, median+1]
-            if future_peak is not None and lead == 12 and not name.endswith('_threshold'):
+            if name.endswith('_threshold') and lead == threshold_peak_lead:
+                values = [.99]*3
+            if future_peak is not None and lead == peak_lead and not name.endswith('_threshold'):
                 values = [future_peak]*3
             writer.writerow(dict(issue_time=ISSUE.isoformat(), valid_time=(ISSUE+timedelta(hours=lead)).isoformat(),
                 lead_hours=lead, **dict(zip(PREDICTION_COLUMNS[name], values))))
@@ -195,7 +197,7 @@ def test_bad_quality_and_missing_history_do_not_generate_replacement_values(monk
     assert density['value'] == 5. and density['image_name'] is None
 
 
-def test_peak_risk_uses_all_future_points_even_when_history_or_current_are_missing(monkeypatch):
+def test_distant_forecast_peaks_do_not_increase_summary_risk(monkeypatch):
     data, _, forecasts = install_sources(monkeypatch)
     forecasts['dst'] = release('dst', future_peak=-200.)
     forecasts['solar-wind-density'] = release('solar-wind-density', future_peak=95.)
@@ -206,8 +208,26 @@ def test_peak_risk_uses_all_future_points_even_when_history_or_current_are_missi
     result, _ = asyncio.run(summary.build_summary(SummarySettings(critical_levels=LEVELS)))
     speed, density, _ = result['observations']['plasma']['items']
     dst = result['observations']['geo']['items'][2]
-    assert speed['risk_level'] == density['risk_level'] == dst['risk_level'] == 4
+    assert speed['risk_level'] == dst['risk_level'] == 2
+    assert density['risk_level'] == 0
     assert density['image_name'] is None and dst['image_name'] is None
+
+
+@pytest.mark.parametrize('missing', ['none', 'history', 'current'])
+@pytest.mark.parametrize('peak_lead,expected', [(1, 4), (2, 4), (3, 4), (4, 0), (12, 0)])
+def test_speed_risk_uses_only_current_and_three_hourly_forecast_points(monkeypatch, missing, peak_lead, expected):
+    data, _, forecasts = install_sources(monkeypatch)
+    data['solar-wind/latest']['series']['v']['latest']['value'] = 325.
+    forecasts['solar-wind-speed'] = release('solar-wind-speed', speed=350., future_peak=750., peak_lead=peak_lead)
+    if missing == 'history':
+        data['solar-wind/history']['series']['v']['points'] = []
+    elif missing == 'current':
+        data['solar-wind/latest']['series']['v']['latest'] = None
+    result, _ = asyncio.run(summary.build_summary(SummarySettings(critical_levels=LEVELS)))
+    speed = result['observations']['plasma']['items'][0]
+    assert speed['risk_level'] == expected
+    if missing != 'none':
+        assert speed['image_name'] is None
 
 
 def test_old_observation_does_not_force_chart_targets_into_the_past(monkeypatch):
@@ -218,6 +238,17 @@ def test_old_observation_does_not_force_chart_targets_into_the_past(monkeypatch)
     kp = result['observations']['geo']['items'][0]
     assert kp['image_name'] in images
     assert kp['observed_at'] == (ISSUE-timedelta(hours=3)).isoformat()
+
+
+@pytest.mark.parametrize('peak_lead,included', [(1, False), (2, False), (3, True), (6, True), (9, False), (12, False)])
+def test_kp_ap_risk_uses_only_current_and_two_three_hour_forecast_points(monkeypatch, peak_lead, included):
+    _, _, forecasts = install_sources(monkeypatch)
+    forecasts['geomagnetic-activity'] = release('geomagnetic-activity', future_peak=150.,
+                                               peak_lead=peak_lead, threshold_peak_lead=peak_lead)
+    result, _ = asyncio.run(summary.build_summary(SummarySettings(critical_levels=LEVELS)))
+    kp, ap, _ = result['observations']['geo']['items']
+    assert kp['risk_level'] == (4 if included else 1)
+    assert ap['risk_level'] == (4 if included else 2)
 
 
 @pytest.mark.parametrize('value,expected', [(449, 0), (450, 1), (500, 2), (600, 3), (700, 4), (-700, 4)])

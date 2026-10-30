@@ -15,15 +15,14 @@ class ForecastImageGenerator:
         low, high = min(values), max(values)
         margin = (high-low) * .1 if high > low else max(abs(low) * .05, 1.)
         low, high = low-margin, high+margin
-        start, end = points[0].time, points[-1].time
 
         def y(value):
             return self.height-self.padding - (value-low)/(high-low)*(self.height-2*self.padding)
 
         coordinates = [(
-            self.padding + (point.time-start).total_seconds()/(end-start).total_seconds()*(self.width-2*self.padding),
+            self.padding + index/(len(points)-1)*(self.width-2*self.padding),
             y(point.value),
-        ) for point in points]
+        ) for index, point in enumerate(points)]
         levels = data.critical_levels
         direction = 1 if (levels[-1] > levels[0] if len(levels) > 1 else levels[0] >= 0) else -1
         levels = [value*direction for value in levels]
@@ -45,6 +44,7 @@ class ForecastImageGenerator:
                 f'y1="{self.padding}" y2="{self.height-self.padding}" '
                 'stroke="white" stroke-width="1.5" vector-effect="non-scaling-stroke" '
                 'stroke-dasharray="4 4" stroke-opacity="0.7"/>'
-                f'<polyline points="{line}" fill="none" stroke="url(#risk)" stroke-width="3" '
+                f'<polyline points="{line}" fill="none" stroke="url(#risk)" stroke-width="2" '
+                'vector-effect="non-scaling-stroke" '
                 f'stroke-linecap="round" stroke-linejoin="round"/>{dots}</svg>').encode()
 

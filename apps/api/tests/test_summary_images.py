@@ -29,6 +29,9 @@ def test_svg_is_transparent_and_contains_only_chart_and_current_marker(count):
         assert 0 < float(circle.attrib['cx']) < 480
         assert 0 < float(circle.attrib['cy']) < 240
     assert len(content) < 3000
+    line = svg.find(f'{SVG}polyline')
+    assert line.attrib['stroke-width'] == '2'
+    assert line.attrib['vector-effect'] == 'non-scaling-stroke'
 
 
 @pytest.mark.parametrize('levels', [[500], [450, 600], [450, 500, 600], [-30, -50, -100],
@@ -50,13 +53,16 @@ def test_gradient_follows_critical_levels_in_danger_order(levels):
     assert (y1 > y2) == (levels[0] > 0)
 
 
-def test_constant_series_and_actual_time_spacing():
-    data = inputs(values=[400.]*7)
+@pytest.mark.parametrize('count', [2, 3])
+def test_constant_series_and_equal_spacing_despite_irregular_timestamps(count):
+    data = inputs(count=count, values=[400.]*7)
+    data['current']['time'] += timedelta(minutes=59)
     data['after'][-1]['time'] += timedelta(hours=3)
     svg = ET.fromstring(images.ForecastImageGenerator().render(**data))
     points = [tuple(map(float, pair.split(','))) for pair in svg.find(f'{SVG}polyline').attrib['points'].split()]
     assert len({point[1] for point in points}) == 1
-    assert points[-1][0]-points[-2][0] == pytest.approx(4*(points[1][0]-points[0][0]), abs=.01)
+    distances = [b[0]-a[0] for a, b in zip(points, points[1:])]
+    assert distances == pytest.approx([distances[0]]*len(distances), abs=.01)
     marker = svg.find(f'{SVG}line')
     assert float(marker.attrib['x1']) == float(marker.attrib['x2']) == points[len(data['before'])][0]
 

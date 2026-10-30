@@ -26,7 +26,7 @@ from api.services.observations.client import read_observations
 from api.services.summary_images import ForecastImageGenerator
 
 logger = logging.getLogger(__name__)
-SUMMARY_KEY = 'api:summary:v7'
+SUMMARY_KEY = 'api:summary:v9'
 IMAGE_KEY = 'api:summary:image:'
 _cache = None
 GROUPS = {
@@ -182,8 +182,15 @@ def render_charts(releases, current, histories, levels, now):
             value = float(row[median]) if median else threshold_value(
                 [float(row[threshold_columns[t]]) for t in thresholds], thresholds)
             future[valid] = -value if southward else value
-        outlooks[metric] = list(future.values())
         latest = current.get(metric)
+        daily = metric in ('f10_7', 's10', 'm10', 'y10')
+        cadence, count = (24, 3) if daily else (3, 2) if metric in ('kp', 'ap') else (1, 3)
+        anchor = (release.issue_time if daily else latest['time'] if latest else now).replace(
+            minute=0, second=0, microsecond=0)
+        first = max(1, int((now-anchor).total_seconds() // (cadence*3600))+1)
+        targets = {anchor+timedelta(hours=cadence*step) for step in range(first, first+count)}
+        after = {time: value for time, value in future.items() if time in targets}
+        outlooks[metric] = list(after.values())
         if not latest or latest['quality'] in ('missing', 'flagged') or metric not in levels:
             continue
         def display(value):
@@ -192,8 +199,6 @@ def render_charts(releases, current, histories, levels, now):
             value = max(-value, 0.) if southward else value
             representative = interval_value(bisect_right(thresholds, value), thresholds)
             return -representative if southward else representative
-        daily = metric in ('f10_7', 's10', 'm10', 'y10')
-        cadence, count = (24, 3) if daily else (3, 2) if metric in ('kp', 'ap') else (1, 3)
         history = {point['time']: point['value'] for point in histories.get(metric, [])
                    if point['quality'] not in ('missing', 'flagged') and point['time'] < latest['time']}
         before = []
@@ -203,10 +208,6 @@ def render_charts(releases, current, histories, levels, now):
             if times:
                 time = max(times)
                 before.append(ChartPoint(time=time, value=display(history[time])))
-        anchor = (release.issue_time if daily else latest['time']).replace(minute=0, second=0, microsecond=0)
-        first = max(1, int((now-anchor).total_seconds() // (cadence*3600))+1)
-        targets = {anchor+timedelta(hours=cadence*step) for step in range(first, first+count)}
-        after = {time: value for time, value in future.items() if time in targets}
         if len(before) < 2 or len(after) < 2:
             logger.info('Summary chart %s has insufficient history or future points', metric)
             continue

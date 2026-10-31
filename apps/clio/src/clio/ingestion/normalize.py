@@ -11,6 +11,7 @@ from clio.observations.measurements import load_measurements
 from clio.observations.normalized import load_normalized_observations, upsert_normalized_observations
 from clio.observations.schema import REQUIRED_METRICS, SOLAR_INDEX_METRICS, OBSERVATION_METRICS
 from common.schemas.observation import Observation
+from clio.db.session import get_db_session
 
 
 def normalize_measurements(measurements: pd.DataFrame) -> pd.DataFrame:
@@ -56,7 +57,7 @@ def normalize_measurements(measurements: pd.DataFrame) -> pd.DataFrame:
 
 
 async def refresh_normalized_observations(
-    session: AsyncSession,
+    config,
     now: datetime | None = None,
 ) -> Observation:
     """Write hourly rows from retained live measurements."""
@@ -64,15 +65,22 @@ async def refresh_normalized_observations(
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError('now must include a timezone')
-    config = load_observation_config()
+    
     since = now - timedelta(days=config.retention.live_days)
     products = [name for name, product in PRODUCTS.items() if product.kind == 'numeric' and 'live' in product.modes]
-    measurements = await load_measurements(session, since, until=now + timedelta(microseconds=1),
-                                           source_products=products)
-    normalized = normalize_measurements(measurements)
-    if normalized.empty:
-        raise RuntimeError("No complete normalized observations could be built; run collect first")
+    async with get_db_session() as session:
+        measurements = await load_measurements(
+            session,
+            since,
+            until=now + timedelta(microseconds=1),
+            source_products=products
+        )
+        normalized = normalize_measurements(measurements)
+        if normalized.empty:
+            raise RuntimeError("No complete normalized observations could be built; run collect first")
 
-    await upsert_normalized_observations(session, normalized)
-    await session.commit()
-    return await load_normalized_observations(session, since=since, until=now)
+        await upsert_normalized_observations(session, normalized)
+        await session.commit()
+        result = await load_normalized_observations(session, since=since, until=now)
+    
+    return result

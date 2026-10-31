@@ -146,10 +146,12 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
     from clio.db.models.normalized_observation import NormalizedObservation
     from clio.ingestion import numeric_backfill as backfill
     from clio.ingestion import normalize as normalized
+    from clio.ingestion import cleanup as cleanup_operation
     from clio.observations.schema import REQUIRED_METRICS
 
     config = load_observation_config().model_copy(deep=True)
     config.sdo_images.enabled = False
+    config.sdo_browse_enabled = False
     config.observations = {m: config.observations[m] for m in REQUIRED_METRICS}
     for policy in config.observations.values():
         policy.backfill_days = 2
@@ -161,13 +163,13 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
     provider = Mock()
     provider.fetch.return_value = archived
     monkeypatch.setattr(backfill, 'historical_adapters', lambda: {'omni.hourly': provider})
-    monkeypatch.setattr(normalized, 'load_observation_config', lambda: config)
     monkeypatch.setattr(cleanup, 'load_observation_config', lambda: config)
 
     async def verify():
         engine = create_async_engine(database_url)
         factory = async_sessionmaker(engine, expire_on_commit=False)
-        monkeypatch.setattr(cleanup, 'get_db_session', factory)
+        monkeypatch.setattr(cleanup_operation, 'get_db_session', factory)
+        monkeypatch.setattr(normalized, 'get_db_session', factory)
         try:
             async with engine.begin() as conn:
                 for model in (Measurement, NormalizedObservation):
@@ -194,7 +196,7 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
                     source_product=config.observations[m].sources.live[0], received_at=now, quality='unverified')
                     for m in REQUIRED_METRICS])
                 await session.commit()
-                await normalized.refresh_normalized_observations(session, now)
+                await normalized.refresh_normalized_observations(config, now)
                 assert await session.scalar(sa.select(NormalizedObservation.bz).where(
                     NormalizedObservation.observed_at == live_hour)) == 5.
                 assert await session.scalar(sa.select(NormalizedObservation.bz).where(

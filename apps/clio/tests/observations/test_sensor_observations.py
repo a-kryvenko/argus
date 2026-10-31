@@ -9,6 +9,7 @@ import pytest
 
 from clio.db.models.measurement import Measurement
 from clio.db.models.normalized_observation import NormalizedObservation
+from clio.config import ClioObservations
 from clio.observations.schema import (
     OBSERVATION_METRICS,
     REQUIRED_METRICS,
@@ -18,6 +19,15 @@ from clio.ingestion import normalize as service
 from clio.ingestion import normalize as processing
 from clio.ingestion.normalize import normalize_measurements
 from clio.observations.normalized import upsert_normalized_observations
+
+
+@pytest.fixture
+def storage(monkeypatch):
+    session = SimpleNamespace(execute=AsyncMock(), commit=AsyncMock())
+    context = AsyncMock()
+    context.__aenter__.return_value = session
+    monkeypatch.setattr(service, "get_db_session", lambda: context)
+    return session, context
 
 
 def _measurement_rows(timestamp: datetime, offset: float = 0) -> list[dict]:
@@ -94,12 +104,13 @@ def test_solar_only_measurements_do_not_create_core_observations():
     assert normalize_measurements(frame).empty
 
 
-def test_refresh_reads_stored_values_without_fetching(monkeypatch):
+def test_refresh_reads_stored_values_without_fetching(monkeypatch, storage):
     now = datetime(2026, 9, 5, 2, 45, tzinfo=UTC)
     stored = pd.DataFrame(_measurement_rows(now.replace(minute=0)))
     load = AsyncMock(return_value=stored)
     monkeypatch.setattr(service, "load_measurements", load)
-    session = SimpleNamespace(execute=AsyncMock(), commit=AsyncMock())
+    session, context = storage
+    config = ClioObservations(observations={})
 
     async def save(session, frame):
         records = [NormalizedObservation(**row) for row in frame.to_dict("records")]
@@ -109,23 +120,27 @@ def test_refresh_reads_stored_values_without_fetching(monkeypatch):
     monkeypatch.setattr(service, "upsert_normalized_observations", save)
     fetch = Mock(side_effect=AssertionError("refresh must not fetch"))
     monkeypatch.setattr('requests.sessions.Session.request', fetch)
-    result = asyncio.run(service.refresh_normalized_observations(session, now))
+    result = asyncio.run(service.refresh_normalized_observations(config, now))
     load.assert_awaited_once_with(session, now - timedelta(days=6), until=now + timedelta(microseconds=1),
                                  source_products=['swpc.rtsw_plasma', 'swpc.rtsw_mag', 'swpc.kp', 'swpc.dst', 'swpc.f107'])
     assert len(result.points) == 1
     assert result.points[0].s10 is None
     fetch.assert_not_called()
     session.commit.assert_awaited_once()
+    context.__aenter__.assert_awaited_once()
+    context.__aexit__.assert_awaited_once()
 
 
-def test_empty_refresh_fails_without_bootstrap_or_raw_writes(monkeypatch):
+def test_empty_refresh_fails_without_bootstrap_or_raw_writes(monkeypatch, storage):
     monkeypatch.setattr(service, 'load_measurements', AsyncMock(return_value=pd.DataFrame(
         columns=['metric', 'value', 'observed_at'])))
-    session = AsyncMock()
+    session, context = storage
+    config = ClioObservations(observations={})
     with pytest.raises(RuntimeError, match='collect first'):
-        asyncio.run(service.refresh_normalized_observations(session))
+        asyncio.run(service.refresh_normalized_observations(config))
     session.execute.assert_not_called()
     session.commit.assert_not_called()
+    context.__aexit__.assert_awaited_once()
 
 
 def test_normalized_upsert_writes_sql_null_for_missing_indices():
@@ -139,14 +154,12 @@ def test_normalized_upsert_writes_sql_null_for_missing_indices():
     assert all(parameters[f"{name}_m0"] is None for name in SOLAR_INDEX_METRICS)
 
 
-def test_live_normalization_uses_configured_retention(monkeypatch):
-    from clio.config import ClioObservations
+def test_live_normalization_uses_configured_retention(monkeypatch, storage):
     now = datetime(2026, 10, 27, tzinfo=UTC)
     config = ClioObservations(observations={}, retention={'live_days': 8})
-    monkeypatch.setattr(service, 'load_observation_config', lambda: config)
     load = AsyncMock(return_value=pd.DataFrame(columns=['metric', 'value', 'observed_at']))
     monkeypatch.setattr(service, 'load_measurements', load)
     with pytest.raises(RuntimeError, match='collect first'):
-        asyncio.run(service.refresh_normalized_observations(AsyncMock(), now))
+        asyncio.run(service.refresh_normalized_observations(config, now))
     assert load.call_args.args[1] == now - timedelta(days=8)
     assert 'omni.hourly' not in load.call_args.kwargs['source_products']

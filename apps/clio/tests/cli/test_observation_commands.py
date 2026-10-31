@@ -9,32 +9,36 @@ from common.schemas.observation import Observation
 from clio.commands import normalize as ingestion
 from clio.ingestion import numeric_live as live
 from clio.ingestion import backfill as backfill_operation
+from clio.ingestion import cleanup as cleanup_operation
 
 
 def session_factory(monkeypatch, module):
     session = AsyncMock()
     context = AsyncMock()
     context.__aenter__.return_value = session
-    target = live if module.__name__.endswith('.collect') else backfill_operation if module.__name__.endswith('.backfill') else module
-    monkeypatch.setattr(target, 'get_db_session', lambda: context)
+    monkeypatch.setattr(module, 'get_db_session', lambda: context)
     dispose = AsyncMock()
     monkeypatch.setattr(database, 'dispose_engine', dispose)
     return session, dispose
 
 
 def test_refresh_command_only_normalizes_stored_observations(monkeypatch):
-    session, dispose = session_factory(monkeypatch, ingestion)
+    dispose = AsyncMock()
+    monkeypatch.setattr(database, 'dispose_engine', dispose)
+    config = object()
+    monkeypatch.setattr(ingestion, 'load_observation_config', lambda: config)
     refresh = AsyncMock(return_value=Observation(points=[]))
     monkeypatch.setattr(ingestion, 'refresh_normalized_observations', refresh)
-    cli.invoke('normalize', SimpleNamespace(now=datetime.now(UTC)))
-    refresh.assert_awaited_once()
+    now = datetime.now(UTC)
+    cli.invoke('normalize', SimpleNamespace(now=now))
+    refresh.assert_awaited_once_with(config, now=now)
     dispose.assert_awaited_once()
 
 
 def test_backfill_command_uses_all_configured_observations(monkeypatch):
     from datetime import UTC, datetime
     from clio.commands import backfill as command
-    session, dispose = session_factory(monkeypatch, command)
+    session, dispose = session_factory(monkeypatch, backfill_operation)
     config = SimpleNamespace(sdo_images=SimpleNamespace(enabled=False), observations={'kp': object(), 'dst': object(), 'f10_7': object()})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
     expected = {'failed_metrics': ['dst'], 'status': 'partial'}
@@ -51,7 +55,7 @@ def test_backfill_command_uses_all_configured_observations(monkeypatch):
 def test_live_command_returns_per_metric_failures(monkeypatch):
     from datetime import UTC, datetime
     from clio.commands import collect as command
-    session, dispose = session_factory(monkeypatch, command)
+    session, dispose = session_factory(monkeypatch, live)
     config = SimpleNamespace(sdo_browse_enabled=False, sdo_images=SimpleNamespace(enabled=False), observations={'kp': object(), 'dst': object()})
     monkeypatch.setattr(command, 'load_observation_config', lambda: config)
     result = {'failed_metrics': ['kp'], 'downloaded_measurements': 0}
@@ -92,7 +96,7 @@ def test_mixed_backfill_commits_numeric_success_and_reports_file_failure(monkeyp
     from datetime import UTC, datetime
     from clio.commands import backfill as command
     from clio.ingestion import files as collection
-    session_factory(monkeypatch, command)
+    session_factory(monkeypatch, backfill_operation)
     from clio.config import ClioObservations, load_observation_config
     policies = load_observation_config().observations
     config = ClioObservations(observations={m: policies[m] for m in ('v', 'gong')})
@@ -172,7 +176,7 @@ def test_cleanup_removes_expired_data_and_runs_sdo_retention(monkeypatch):
     from clio.commands import cleanup
     from clio.ingestion import sdo_images
     from clio.config import ClioObservations
-    session, dispose = session_factory(monkeypatch, cleanup)
+    session, dispose = session_factory(monkeypatch, cleanup_operation)
     session.execute.return_value = Mock(rowcount=3)
     config = ClioObservations(observations={}, sdo_images={'enabled': True},
                               retention={'live_days': 8, 'normalized_days': 90})

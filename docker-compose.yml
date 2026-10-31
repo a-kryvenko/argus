@@ -149,6 +149,16 @@ services:
       start_period: 30s
     ports:
       - 127.0.0.1:8001:8000
+  
+  clio-worker:
+    <<: *clio-runtime
+    command: [".venv/bin/python", "-m", "clio.scheduler.worker", "--heartbeat-file", "/var/www/data/observations/worker-state.json"]
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-m", "clio.scheduler.healthcheck", "/var/www/data/observations/worker-state.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   prophet:
     <<: *prophet-runtime

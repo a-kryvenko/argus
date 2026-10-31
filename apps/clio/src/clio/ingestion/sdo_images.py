@@ -44,7 +44,7 @@ def collect_one(root, slot, channel, *, clock):
 
 
 def cycle(root, mode, *, batch_hours=6, clock=lambda: datetime.now(UTC),
-          full=False, start=None, end=None):
+          full=False, start=None, end=None, now=None):
     """A persistent per-lane lock prevents duplicate workers; publication has its own lock."""
     if mode not in ('live', 'warmup', 'cleanup'):
         raise ValueError('Unknown SDO mode')
@@ -58,7 +58,8 @@ def cycle(root, mode, *, batch_hours=6, clock=lambda: datetime.now(UTC),
         if mode == 'cleanup':
             report = {'removed': prune(root, now=clock())}
         else:
-            slots = hourly_slots(clock())
+            # Fix the requested slots while download/publication clocks advance.
+            slots = hourly_slots(now if now is not None else clock())
             cursor = root / '.warmup-cursor'
             if mode == 'live':
                 slots = slots[:4]

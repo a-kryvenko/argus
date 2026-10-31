@@ -134,7 +134,8 @@ def test_common_commands_include_sdo_without_numeric_storage(monkeypatch, name, 
     assert result['sdo']['saved'] == 1
     assert cycle.call_args.args[1] == mode
     assert cycle.call_args.kwargs['full'] is True
-    assert cycle.call_args.kwargs['clock']() == now
+    assert cycle.call_args.kwargs['now'] == now
+    assert 'clock' not in cycle.call_args.kwargs
     assert donki_collect.await_count == enlil_collect.await_count == int(name == 'collect' and selected is None)
 
 

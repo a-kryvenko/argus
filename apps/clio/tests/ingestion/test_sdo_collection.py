@@ -1,5 +1,7 @@
+import asyncio
 import pytest
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import hashlib
@@ -7,10 +9,47 @@ import numpy as np
 import requests
 
 from clio.ingestion import sdo_images as collector
+from clio.ingestion.selection import merge_sdo
 from clio.providers.sdo_images import observation_url, prepare_observation
 from clio.observations.sdo_archive import hourly_slots, read_image
 
 SLOT = datetime(2026, 9, 30, 6, tzinfo=UTC)
+
+
+@pytest.mark.parametrize('mode', ['live', 'warmup'])
+def test_collection_uses_receipt_time_after_download_and_keeps_requested_slots(tmp_path, monkeypatch, mode):
+    started = SLOT + timedelta(minutes=59, seconds=59)
+    current = [started]
+    visited = []
+
+    def download(url, channel, *, slot, now, include_original=False):
+        visited.append(slot)
+        assert now == current[0]
+        current[0] += timedelta(seconds=2)
+        return np.ones((1024, 1024), np.float32), dict(
+            channel=channel, header={}, source=url,
+            sha256=hashlib.sha256(b'original').hexdigest(),
+            observed_at=slot.isoformat(), available_at=current[0].isoformat(),
+        )
+
+    monkeypatch.setattr(collector, 'datetime', SimpleNamespace(now=lambda tz: current[0]))
+    monkeypatch.setattr(collector, 'OBSERVED_CHANNELS', ('aia335',))
+    monkeypatch.setattr(collector, 'download_observation', download)
+    monkeypatch.setattr('clio.observations.sdo_archive.archive_root', lambda: tmp_path)
+    config = SimpleNamespace(sdo_images=SimpleNamespace(enabled=True, backfill_days=1))
+    result = asyncio.run(merge_sdo(
+        {'status': 'complete', 'failed_metrics': []}, config,
+        now=started, mode=mode, metrics=['sdo'],
+    ))
+
+    count = 4 if mode == 'live' else 24
+    assert result['sdo']['saved'] == count
+    assert result['sdo']['failed'] == 0
+    assert visited == hourly_slots(started)[:count]
+    _, metadata = read_image(tmp_path, SLOT, 'aia335')
+    assert datetime.fromisoformat(metadata['available_at']) == started + timedelta(seconds=2)
+    with pytest.raises(ValueError, match='not available at forecast issue time'):
+        read_image(tmp_path, SLOT, 'aia335', as_of=started)
 
 
 def test_urls_and_reduction_preserve_missing_measurements_and_wcs():

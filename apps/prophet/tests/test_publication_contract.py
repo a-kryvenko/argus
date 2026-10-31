@@ -6,7 +6,8 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from common.schemas.forecast_release import ForecastArtifact, ForecastRelease
+from common.schemas.forecast_release import ForecastArtifact, ForecastRelease, PRODUCT_ARTIFACTS
+from common.schemas.forecast_status import ForecastsStatus
 from prophet import main
 from prophet.services.releases.publication import ReleaseNotFound
 
@@ -88,17 +89,26 @@ def test_missing_prediction_columns_are_rejected():
         ForecastArtifact.model_validate(payload)
 
 
-def test_status_contract_requires_auth_and_does_not_change_latest_reads(monkeypatch):
-    from prophet.services.releases import status as readiness
+def test_status_contract_requires_auth_and_returns_all_products(monkeypatch):
+    from prophet.services.releases import status as diagnostics
     monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    monkeypatch.setattr(readiness, 'product_status', AsyncMock(side_effect=lambda product: dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
+    expected = ForecastsStatus(products=[dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
         release_age_hours=None, existing_public_max_age_hours=None, freshness='unavailable',
-        latest_attempt=None, latest_attempt_artifacts=[])))
+        latest_attempt=None, latest_attempt_artifacts=[]) for product in PRODUCT_ARTIFACTS])
+    read = AsyncMock(return_value=expected)
+    monkeypatch.setattr(diagnostics, 'forecasts_status', read)
     with TestClient(main.app) as client:
-        path = '/internal/v1/forecasts/dst/status'
+        path = '/internal/v1/forecasts/status'
         assert client.get(path).status_code == 401
+        assert client.get(path, headers={'Authorization': 'Bearer wrong'}).status_code == 401
+        read.assert_not_awaited()
         response = client.get(path, headers={'Authorization': 'Bearer test-secret'})
-        assert response.status_code == 200 and response.json()['mode'] == 'observe'
+        assert response.status_code == 200
+        assert ForecastsStatus.model_validate(response.json()) == expected
+        read.assert_awaited_once()
+        read.side_effect = RuntimeError('private storage details')
+        response = client.get(path, headers={'Authorization': 'Bearer test-secret'})
+        assert response.status_code == 503 and 'private storage details' not in response.text
 
 
 def test_solar_indices_require_auth_and_keep_storage_errors_private(monkeypatch):

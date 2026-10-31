@@ -15,7 +15,7 @@ from release import artifact_digest
 from backup import create_backup
 
 HTTP = {'clio': 8000, 'prophet-api': 8000, 'intelligence-api': 8000, 'api': 8000, 'frontend': 3000}
-WORKERS = ['intelligence', 'proswin']
+WORKERS = ['intelligence', 'proswin', 'api-worker']
 ROUTER = 'internal-router'
 ROUTES = {
     'clio': ('observations', 'observations-router', 8101),
@@ -330,6 +330,8 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         # Readers and request writers remain online only for compatible migrations.
         workers = {'api': [], 'clio': [], 'prophet': [], 'intelligence': ['intelligence']}
         for domain in self.migrations:
+            if domain == 'api' and self.worker_containers('api-worker'):
+                workers[domain] = ['api-worker']
             if domain == 'prophet' and self.worker_containers('prophet'):
                 workers[domain] = ['prophet']
             if workers[domain]:

@@ -29,6 +29,9 @@ Schemas and parameters: `/api/v1/docs`.
 | `/dashboard/*` | Accounts, sessions, statistics and monitoring |
 | `/ping` | Liveness |
 
+`api-worker` refreshes observation/forecast diagnostics and request aggregates every 30 seconds.
+Dashboard status covers observations and forecasts; infrastructure monitoring uses Alloy → external Prometheus/Loki.
+
 Missing artifacts return 503.
 Summary requires `API_REDIS_URL`; settings: `api.summary` in `configs/project.yaml`.
 Summary CME: Earth arrivals only, at most 7 days old; retained until arrival window end (or arrival time) plus `cme_grace_hours` (24 by default).

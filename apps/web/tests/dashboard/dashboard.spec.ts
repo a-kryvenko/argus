@@ -17,21 +17,6 @@ const project = {
   status: "ok",
   checked_at: checkedAt,
   stale: false,
-  services: [
-    "Website",
-    "API",
-    "Clio",
-    "Prophet",
-    "Redis",
-    "PostgreSQL (API)",
-  ].map((name) => ({ name, status: "ok", response_ms: 12 })),
-  host: {
-    status: "ok",
-    cpu_percent: 12.5,
-    memory_percent: 42,
-    disk_percent: 30,
-    disk_free_bytes: 1024 ** 3 * 70,
-  },
   observations: {
     status: "ok",
     sources: {
@@ -369,8 +354,10 @@ test("multiple groups use monitoring permission and show source and forecast tim
 }) => {
   await mockApi(page, { ...admin, groups: ["clients", "admins"] });
   await page.goto("/dashboard");
-  await expect(page.getByText("All systems operational")).toBeVisible();
+  await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
   await expect(page.getByText("Estimated Kp", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Services", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Server resources" })).toHaveCount(0);
   await expect(
     page.getByRole("columnheader", { name: "Response received" }),
   ).toBeVisible();
@@ -393,8 +380,8 @@ test("stale checks cannot display a healthy project", async ({ page }) => {
     }),
   );
   await page.goto("/dashboard");
-  await expect(page.getByText("No current project status")).toBeVisible();
-  await expect(page.getByText("All systems operational")).toHaveCount(0);
+  await expect(page.getByText("No current data status")).toBeVisible();
+  await expect(page.getByText("Observations and forecasts are current")).toHaveCount(0);
 });
 
 test("unavailable monitoring is visible and does not break the page", async ({
@@ -409,14 +396,14 @@ test("unavailable monitoring is visible and does not break the page", async ({
   );
   await page.goto("/dashboard");
   await expect(
-    page.getByText(/Could not refresh project status/),
+    page.getByText(/Could not refresh data status/),
   ).toBeVisible();
   await expect(
     page.getByText("Public page requests", { exact: true }),
   ).toBeVisible();
 });
 
-test("unconfigured traffic does not degrade healthy services", async ({ page }) => {
+test("unconfigured traffic does not affect product diagnostics", async ({ page }) => {
   await mockApi(page);
   await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
     route.fulfill({
@@ -435,13 +422,13 @@ test("unconfigured traffic does not degrade healthy services", async ({ page }) 
     }),
   );
   await page.goto("/dashboard");
-  await expect(page.getByText("All systems operational")).toBeVisible();
+  await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
   await expect(page.getByText(/Traffic collection is not configured/)).toBeVisible();
   await expect(page.getByText(/Counts may be incomplete/)).toHaveCount(0);
   await expect(page.getByText(/Collection started:/)).toHaveCount(0);
 });
 
-test("recent server errors override healthy service probes", async ({
+test("traffic errors remain separate from product diagnostics", async ({
   page,
 }) => {
   await mockApi(page);
@@ -462,9 +449,9 @@ test("recent server errors override healthy service probes", async ({
     }),
   );
   await page.goto("/dashboard");
-  await expect(page.getByText("Project needs attention")).toBeVisible();
+  await expect(page.getByText("Observations or forecasts need attention")).toHaveCount(0);
   await expect(page.getByText(/7 server errors/)).toBeVisible();
-  await expect(page.getByText("All systems operational")).toHaveCount(0);
+  await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
 });
 
 for (const count of [0, "0"]) {
@@ -489,9 +476,9 @@ for (const count of [0, "0"]) {
       }),
     );
     await page.goto("/dashboard");
-    await expect(page.getByText("All systems operational")).toBeVisible();
+    await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
     await expect(page.getByText(/server errors \(5xx\)/)).toHaveCount(0);
-    await expect(page.getByText("Project needs attention")).toHaveCount(0);
+    await expect(page.getByText("Observations or forecasts need attention")).toHaveCount(0);
   });
 }
 

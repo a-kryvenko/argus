@@ -129,6 +129,7 @@ def test_success_commits_status_and_measurements_together():
 def test_api_returns_all_sources_in_empty_storage_without_fetching(monkeypatch):
     app = FastAPI(); app.include_router(routes.router)
     session = AsyncMock(); session.execute.return_value = Mock(scalars=Mock(return_value=[]))
+    session.scalars.return_value = []
     app.dependency_overrides[routes.get_request_db_session] = lambda: session
     with TestClient(app) as client:
         response = client.get('/internal/v1/observations/status')
@@ -136,6 +137,7 @@ def test_api_returns_all_sources_in_empty_storage_without_fetching(monkeypatch):
     data = response.json()['data']
     assert data['status'] == 'degraded' and len(data['sources']) == 4
     assert all(source['status'] == 'not_started' for source in data['sources'].values())
+    assert data['measurements'] and all(item['status'] == 'unavailable' for item in data['measurements'])
 
 
 def test_source_monitoring_uses_expected_poll_intervals_for_enabled_sources(monkeypatch):

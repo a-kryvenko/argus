@@ -73,9 +73,8 @@ Risk assessment uses [density-advisory HTTP routes](density-advisory.md#service-
 
 | Route | Purpose |
 | --- | --- |
-| Clio `/internal/v1/observations/status` | Collection errors/freshness |
-| Clio `/internal/v1/observations/monitoring` | Worker/data monitoring |
-| Prophet `/internal/v1/forecasts/{product}/status` | Release freshness and latest attempt |
+| Clio `/internal/v1/observations/status` | Collection diagnostics and measurement freshness |
+| Prophet `/internal/v1/forecasts/status` | All products: release freshness and latest attempt |
 | `/health/live`, `/health/ready` | HTTP process/local storage |
 
 Internal data routes require service tokens. Reads do not collect or generate.

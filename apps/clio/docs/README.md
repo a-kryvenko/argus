@@ -28,7 +28,7 @@ Backfill fills configured historical horizons and missing hourly rows; file reco
 ./argus clio cleanup
 ```
 
-Authenticated status: `/internal/v1/observations/status` and `/monitoring`.
+Authenticated diagnostics: `/internal/v1/observations/status`.
 `/health/live` checks HTTP; `/health/ready` checks storage.
 Cron uses the host timezone and `flock`; logs: `log/clio/`.
 The host needs Docker Compose, cron, flock and Python 3.

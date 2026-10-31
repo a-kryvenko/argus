@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert
 from api.db.models.monitoring import MonitorState, TrafficMetric
 from api.db.session import get_db_session
 from api.services.monitoring.statistics import BOUNDS, summary
-from api.services.monitoring.project import save_state
+from api.services.monitoring.project import INTERVAL, save_state
 
 logger = logging.getLogger(__name__)
 MAX_BATCH_BYTES = 4 * 1024 * 1024
@@ -132,7 +132,7 @@ async def run_traffic_loop():
             await ingest()
         except Exception:
             logger.warning('Traffic aggregation failed', exc_info=True)
-        await asyncio.sleep(15)
+        await asyncio.sleep(INTERVAL)
 
 
 def traffic_summary(rows, since, until, resolution):

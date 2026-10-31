@@ -123,15 +123,16 @@ async def api_stats(hours: int = Query(24, ge=1, le=720), db: AsyncSession = Dep
 @router.get('/project-monitoring', dependencies=[Depends(require('project_monitoring.read'))])
 async def project_monitoring(db: AsyncSession = Depends(get_request_db_session)):
     from api.db.models.monitoring import MonitorState
-    from api.services.monitoring.project import STALE_SECONDS
+    from api.services.monitoring.project import STALE_SECONDS, product_state
     state = await db.get(MonitorState, 'project')
     now = datetime.now(timezone.utc)
     if state is None:
         return success_response({'status': 'unknown', 'checked_at': None, 'stale': True,
-            'services': [], 'observations': None, 'forecasts': [], 'host': None})
+            'observations': None, 'forecasts': []})
     stale = (now-state.checked_at).total_seconds() > STALE_SECONDS
-    return success_response({**state.payload, 'checked_at': state.checked_at,
-        'stale': stale, 'status': 'unknown' if stale else state.payload['status']})
+    payload = product_state(state.payload)
+    return success_response({**payload, 'checked_at': state.checked_at,
+        'stale': stale, 'status': 'unknown' if stale else payload['status']})
 
 
 @router.get('/project-traffic', dependencies=[Depends(require('project_monitoring.read'))])

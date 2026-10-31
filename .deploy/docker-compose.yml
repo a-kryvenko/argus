@@ -227,14 +227,8 @@ services:
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
       DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS-https://${APP_NAME:?APP_NAME is required}}
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}
-      MONITORING_SITE_URL: http://nginx
-      MONITORING_SITE_HOST: ${APP_NAME}
-      MONITORING_API_URL: http://127.0.0.1:8000
-      MONITORING_REDIS_URL: redis://redis:6379/0
       API_REDIS_URL: redis://redis:6379/0
       MONITORING_TRAFFIC_LOG: /var/log/nginx/traffic.jsonl
-      MONITORING_HOST_PROC: /host/proc
-      MONITORING_DISK_PATH: /var/log/nginx
       DEPLOY_SMOKE_USERNAME: ${DEPLOY_SMOKE_USERNAME:-}
       DEPLOY_SMOKE_PASSWORD: ${DEPLOY_SMOKE_PASSWORD:-}
       DEPLOY_MIN_AVAILABLE_MIB: ${DEPLOY_MIN_AVAILABLE_MIB:-1024}
@@ -245,8 +239,6 @@ services:
       - ./data/metrics:/var/www/data/metrics:ro
       - ./data/demo:/var/www/data/demo:ro
       - ./log/api:/var/www/log
-      - ./log/nginx:/var/log/nginx:ro
-      - /proc:/host/proc:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -263,12 +255,39 @@ services:
 
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
-      interval: 10s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
       start_interval: 1s
     stop_grace_period: 60s
+
+  api-worker:
+    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
+    restart: unless-stopped
+    init: true
+    command: ["api", "worker"]
+    stop_grace_period: 60s
+    environment:
+      ARGUS_WORKDIR: /var/www
+      <<: *api-db
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+      OBSERVATIONS_URL: http://observations-router:8101
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      FORECASTS_URL: http://forecasts-router:8102
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      MONITORING_TRAFFIC_LOG: /var/log/nginx/traffic.jsonl
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./log/nginx:/var/log/nginx:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clio:
+        condition: service_started
+      prophet-api:
+        condition: service_started
+    networks: [backend, observations, forecasts]
 
   api-migrate:
     image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
@@ -304,7 +323,7 @@ services:
       application:
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
-      interval: 10s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s

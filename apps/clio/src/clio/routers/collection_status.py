@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_request_db_session
-from clio.monitoring.status import source_status
+from clio.monitoring.measurements import monitoring_status
 
 router = APIRouter(prefix='/internal/v1/observations', tags=['observations'])
 
@@ -16,12 +16,5 @@ async def collection_status(response: Response, session: AsyncSession = Depends(
     No recent attempts indicates missing progress; it does not inspect processes.
     A historical last error is retained after recovery; consecutive_failures resets.
     """
-    response.headers['Cache-Control'] = 'no-store'
-    return success_response(await source_status(session))
-
-
-@router.get('/monitoring')
-async def monitoring(response: Response, session: AsyncSession = Depends(get_request_db_session)):
-    from clio.monitoring.measurements import monitoring_status
     response.headers['Cache-Control'] = 'no-store'
     return success_response(await monitoring_status(session))

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import text
 
 from forecast.observation_inputs import DENSITY_METRICS
-from common.schemas.forecast_status import ForecastStatus
+from common.schemas.forecast_status import ForecastStatus, ForecastsStatus
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 from prophet.services.releases.queries import LATEST_RELEASES
 
@@ -88,7 +88,6 @@ def classify_freshness(issue_time, now, max_age_hours=None):
 async def product_status(product, *, now=None):
     """Read metadata without decompressing forecast payloads or running models."""
 
-    from common.config import get_config
     from prophet.db.session import get_db_session
     if product not in PRODUCT_ARTIFACTS:
         raise ValueError('Unknown forecast product')
@@ -97,21 +96,36 @@ async def product_status(product, *, now=None):
         raise ValueError('Assessment time must be timezone-aware')
     async with get_db_session() as session, session.begin():
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        query = await session.execute(text(f'''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
-            f.started_at,f.provenance->'input_diagnostics' AS input_diagnostics
-            FROM ({LATEST_RELEASES}) r
-            JOIN forecast_run f ON f.id=r.run_id WHERE r.product=:product'''), {'product': product})
-        current = query.mappings().first()
-        from prophet.services.generation.products import attempt_selections
-        query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,
-            provenance->'input_diagnostics' AS input_diagnostics FROM forecast_run
-            WHERE product=ANY(:products) ORDER BY started_at DESC,id DESC LIMIT 1"""), {'products': attempt_selections(product)})
-        attempt = query.mappings().first()
-        artifacts = []
-        if attempt:
-            query = await session.execute(text("""SELECT name,status,error FROM forecast_artifact
-                WHERE run_id=:run_id AND name=ANY(:names) ORDER BY name"""), {'run_id': attempt['run_id'], 'names': list(PRODUCT_ARTIFACTS[product])})
-            artifacts = query.mappings().all()
+        return await _product_status(session, product, now)
+
+
+async def forecasts_status():
+    """Assess all products against one database snapshot and timestamp."""
+    from prophet.db.session import get_db_session
+    now = datetime.now(UTC)
+    async with get_db_session() as session, session.begin():
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        products = [await _product_status(session, product, now) for product in PRODUCT_ARTIFACTS]
+    return ForecastsStatus(products=products)
+
+
+async def _product_status(session, product, now):
+    from common.config import get_config
+    query = await session.execute(text(f'''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
+        f.started_at,f.provenance->'input_diagnostics' AS input_diagnostics
+        FROM ({LATEST_RELEASES}) r
+        JOIN forecast_run f ON f.id=r.run_id WHERE r.product=:product'''), {'product': product})
+    current = query.mappings().first()
+    from prophet.services.generation.products import attempt_selections
+    query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,
+        provenance->'input_diagnostics' AS input_diagnostics FROM forecast_run
+        WHERE product=ANY(:products) ORDER BY started_at DESC,id DESC LIMIT 1"""), {'products': attempt_selections(product)})
+    attempt = query.mappings().first()
+    artifacts = []
+    if attempt:
+        query = await session.execute(text("""SELECT name,status,error FROM forecast_artifact
+            WHERE run_id=:run_id AND name=ANY(:names) ORDER BY name"""), {'run_id': attempt['run_id'], 'names': list(PRODUCT_ARTIFACTS[product])})
+        artifacts = query.mappings().all()
     max_age = None
     if product == 'atmospheric-density':
         max_age = get_config().models_registry['models']['atmospheric_density'].get('max_age_hours', 6)

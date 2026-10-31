@@ -79,38 +79,51 @@ def test_missing_project_snapshot_is_unknown():
     assert result.data['status'] == 'unknown'
 
 
-def test_host_metrics_are_unknown_without_host_mounts(monkeypatch):
-    monkeypatch.delenv('MONITORING_HOST_PROC', raising=False)
-    assert monitoring.host_metrics()['status'] == 'unknown'
+def forecast_payload(product='dst', **changes):
+    return {'product': product, 'assessed_at': NOW.isoformat(), 'current_release': None,
+            'release_age_hours': None, 'existing_public_max_age_hours': None,
+            'freshness': 'within_age_limit', 'latest_attempt': None,
+            'latest_attempt_artifacts': [], **changes}
 
 
-def test_host_metrics_use_delta_cpu_and_available_memory(tmp_path, monkeypatch):
-    (tmp_path/'stat').write_text('cpu  100 0 100 800 0 0 0 0 0 0\n')
-    (tmp_path/'meminfo').write_text('MemTotal: 1000 kB\nMemAvailable: 250 kB\n')
-    monkeypatch.setenv('MONITORING_HOST_PROC', str(tmp_path))
-    monkeypatch.setenv('MONITORING_DISK_PATH', str(tmp_path))
-    result = monitoring.host_metrics({'cpu_sample': [900, 750]})
-    assert result['cpu_percent'] == 50 and result['memory_percent'] == 75
-    assert result['disk_free_bytes'] > 0
-
-
-def test_individual_probe_failure_does_not_hide_other_services(monkeypatch):
+@pytest.mark.parametrize('forecast_unavailable', [False, True])
+def test_product_collection_makes_two_authenticated_status_requests(monkeypatch, forecast_unavailable):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
-    monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test')
-    async def run():
-        def respond(request):
-            if request.url.host == 'clio':
-                return httpx.Response(503)
-            return httpx.Response(200)
-        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-            clio, site, observations = await asyncio.gather(
-                monitoring.probe_http(client, 'Clio', 'http://clio', '/health/ready'),
-                monitoring.probe_http(client, 'Website', 'http://site', '/'),
-                monitoring.observation_status(client))
-        assert clio['status'] == 'down'
-        assert site['status'] == 'ok'
-        assert observations['status'] == 'unknown'
-    asyncio.run(run())
+    monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'observation-secret')
+    monkeypatch.setenv('FORECASTS_URL', 'http://prophet')
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'forecast-secret')
+    requests = []
+    def respond(request):
+        requests.append((str(request.url), request.headers['Authorization']))
+        if request.url.host == 'clio':
+            return httpx.Response(200, json={'success': True, 'data': {
+                'status': 'ok', 'sources': {}, 'measurements': []}})
+        return httpx.Response(503 if forecast_unavailable else 200,
+            json={'products': [forecast_payload(p) for p in monitoring.PRODUCT_ARTIFACTS]})
+    client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kwargs: client(
+        transport=httpx.MockTransport(respond), **kwargs))
+    result = asyncio.run(monitoring.collect())
+    assert result['status'] == ('degraded' if forecast_unavailable else 'ok')
+    assert result['observations']['status'] == 'ok'
+    assert {item['status'] for item in result['forecasts']} == {'unknown' if forecast_unavailable else 'ok'}
+    assert set(result) == {'status', 'observations', 'forecasts'}
+    assert {item['product'] for item in result['forecasts']} == set(monitoring.PRODUCT_ARTIFACTS)
+    assert sorted(requests) == [
+        ('http://clio/internal/v1/observations/status', 'Bearer observation-secret'),
+        ('http://prophet/internal/v1/forecasts/status', 'Bearer forecast-secret')]
+
+
+def test_legacy_infrastructure_status_is_removed_from_dashboard():
+    payload = {'status': 'degraded', 'host': {'status': 'warning'},
+        'services': [{'name': 'Redis', 'status': 'down'}],
+        'observations': {'status': 'ok'}, 'forecasts': [
+            {'product': product, 'status': 'ok'} for product in monitoring.PRODUCT_ARTIFACTS]}
+    db = AsyncMock()
+    db.get.return_value = SimpleNamespace(checked_at=datetime.now(UTC), payload=payload)
+    result = asyncio.run(project_monitoring(db)).data
+    assert result['status'] == 'ok'
+    assert 'host' not in result and 'services' not in result
 
 
 def test_forecast_keeps_release_when_latest_generation_failed(monkeypatch):
@@ -124,9 +137,10 @@ def test_forecast_keeps_release_when_latest_generation_failed(monkeypatch):
         'latest_attempt': {'run_id': identifier, 'status': 'failed', 'started_at': NOW.isoformat(),
                            'error': 'private database credentials'}, 'latest_attempt_artifacts': []}
     async def run():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))) as client:
-            return await monitoring.forecast_status(client, 'dst')
-    result = asyncio.run(run())
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={'products': [
+            payload if p == 'dst' else forecast_payload(p) for p in monitoring.PRODUCT_ARTIFACTS]}))) as client:
+            return await monitoring.forecast_status(client)
+    result = next(item for item in asyncio.run(run()) if item['product'] == 'dst')
     assert result['status'] == 'warning'
     assert result['current_release']['published_at'] == NOW.isoformat().replace('+00:00', 'Z')
     assert 'private' not in result['latest_attempt']['error']

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
-    domains = {'api': ['api'], 'clio': ['clio'],
+    domains = {'api': ['api', 'api-worker'], 'clio': ['clio'],
                'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
     for domain, names in domains.items():
         for name in [*names, domain + '-migrate']:
@@ -126,3 +126,19 @@ def test_prophet_generation_is_a_command_template_without_a_background_worker():
         assert service['profiles'] == ['commands']
         assert service['restart'] == 'no'
         assert service['command'] == ['prophet', '--help']
+
+
+@pytest.mark.parametrize('filename', ['docker-compose.yml', '.deploy/docker-compose.yml'])
+def test_api_worker_has_diagnostic_dependencies_and_no_http_listener(filename):
+    services = yaml.safe_load((ROOT / filename).read_text())['services']
+    worker = services['api-worker']
+    assert worker['image'] == services['api']['image']
+    assert worker['command'] == ['api', 'worker']
+    assert worker['restart'] == 'unless-stopped'
+    assert not {'ports', 'expose', 'healthcheck'} & worker.keys()
+    for key in ('OBSERVATIONS_URL', 'FORECASTS_URL', 'OBSERVATIONS_SERVICE_TOKEN', 'FORECASTS_SERVICE_TOKEN'):
+        assert worker['environment'][key] == services['api']['environment'][key]
+    assert worker['depends_on']['postgres']['condition'] == 'service_healthy'
+    if filename.startswith('.deploy'):
+        assert set(worker['networks']) == {'backend', 'observations', 'forecasts'}
+        assert './log/nginx:/var/log/nginx:ro' in worker['volumes']

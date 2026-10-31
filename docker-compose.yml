@@ -247,7 +247,7 @@ services:
     command: ["intelligence", "serve"]
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
-      interval: 10s
+      interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
@@ -259,7 +259,7 @@ services:
     image: argus-api-dev
     init: true
     user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
-    environment:
+    environment: &api-env
       ARGUS_WORKDIR: /var/www
       DEBUG: ${DEBUG:-false}
       <<: *api-db
@@ -272,7 +272,6 @@ services:
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
       DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS:-http://localhost:3000}
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-false}
-      MONITORING_REDIS_URL: redis://redis:6379/0
       API_REDIS_URL: redis://redis:6379/0
     volumes: &api-volumes
       - ./configs:/var/www/configs:ro
@@ -290,13 +289,31 @@ services:
         condition: service_started
     command: [".venv/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "src", "--reload-dir", "/var/www/packages"]
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ping', timeout=5)"]
-      interval: 5s
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     ports:
       - 127.0.0.1:8000:8000
+
+  api-worker:
+    build: *api-build
+    image: argus-api-dev
+    init: true
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    restart: unless-stopped
+    command: ["api", "worker"]
+    environment: *api-env
+    volumes: *api-volumes
+    stop_grace_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clio:
+        condition: service_started
+      prophet-api:
+        condition: service_started
 
   db-provision:
     build: *api-build

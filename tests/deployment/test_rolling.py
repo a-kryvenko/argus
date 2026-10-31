@@ -594,11 +594,12 @@ def test_retired_prophet_worker_is_removed_only_from_current_project(tmp_path):
 
 
 @pytest.mark.parametrize('legacy', [False, True])
-def test_prophet_migration_only_drains_existing_legacy_worker(tmp_path, monkeypatch, legacy):
+@pytest.mark.parametrize('domain,worker', [('prophet', 'prophet'), ('api', 'api-worker')])
+def test_migration_only_drains_existing_worker(tmp_path, monkeypatch, legacy, domain, worker):
     deployment = harness(tmp_path)
     deployment.base = ['docker', 'compose']
-    deployment.migrations = ['prophet']
-    deployment.worker_containers = lambda service: ['old-prophet'] if legacy else []
+    deployment.migrations = [domain]
+    deployment.worker_containers = lambda service: ['old-worker'] if legacy else []
     monkeypatch.setattr(rolling, 'create_backup', lambda *args: None)
     original = deployment.compose
     def compose(*args, **kwargs):
@@ -608,6 +609,6 @@ def test_prophet_migration_only_drains_existing_legacy_worker(tmp_path, monkeypa
     deployment.compose = compose
     with pytest.raises(RuntimeError, match='migration failed'):
         deployment.backup_and_migrate()
-    assert ('stop', 'prophet') in deployment.calls if legacy else ('stop', 'prophet') not in deployment.calls
-    assert ('start', 'prophet') in deployment.calls if legacy else ('start', 'prophet') not in deployment.calls
+    assert ('stop', worker) in deployment.calls if legacy else ('stop', worker) not in deployment.calls
+    assert ('start', worker) in deployment.calls if legacy else ('start', worker) not in deployment.calls
     assert not deployment.state.get('drained_workers')

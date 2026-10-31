@@ -2,7 +2,9 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel
+from pydantic import AwareDatetime, BaseModel, model_validator
+
+from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 
 
 class CurrentReleaseStatus(BaseModel):
@@ -41,3 +43,15 @@ class ForecastStatus(BaseModel):
     latest_attempt: ForecastAttemptStatus | None
     latest_attempt_artifacts: list[AttemptArtifactStatus]
     note: str = 'Diagnostic status does not establish model readiness or individual sensor freshness.'
+
+
+class ForecastsStatus(BaseModel):
+    contract_version: Literal[1] = 1
+    products: list[ForecastStatus]
+
+    @model_validator(mode='after')
+    def complete_products(self):
+        names = [item.product for item in self.products]
+        if len(names) != len(set(names)) or set(names) != set(PRODUCT_ARTIFACTS):
+            raise ValueError('Expected one status per forecast product')
+        return self

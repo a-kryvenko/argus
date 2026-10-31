@@ -38,7 +38,8 @@ input snapshot. Derivative cache: `data/prophet/source-cache`
 ## HTTP
 
 Bearer token: `FORECASTS_SERVICE_TOKEN`.
-Prefix `/internal/v1/forecasts/{product}`: `latest`, `releases/{id}`, `status`, `verification`.
+Prefix `/internal/v1/forecasts/{product}`: `latest`, `releases/{id}`, `verification`.
+All-product diagnostics: `/internal/v1/forecasts/status`.
 `/health/live` and `/health/ready` check process/storage, not forecast freshness.
 
 [Setup](../../README_DEPLOY.md#local-development) · [Commands](../../docs/commands.md#prophet) · [Solar events](../../docs/solar-wind-events.md)

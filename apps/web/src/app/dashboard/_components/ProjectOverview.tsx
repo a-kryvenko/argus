@@ -2,13 +2,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  Activity,
-  Cpu,
-  Database,
-  HardDrive,
-  Server,
-} from "lucide-react";
+import { Activity } from "lucide-react";
 import { Badge } from "@/app/dashboard/_components/ui/badge";
 import { Button } from "@/app/dashboard/_components/ui/button";
 import { Card } from "@/app/dashboard/_components/ui/card";
@@ -23,7 +17,6 @@ import {
 import { dashboardRequest, useSession } from "../session";
 import {
   Message,
-  MetricCard,
   PageHeading,
   Pending,
   selectClass,
@@ -31,12 +24,6 @@ import {
 import type { Summary } from "./ApiActivity";
 
 const TrafficChart = dynamic(() => import("./TrafficChart"), { ssr: false });
-type Service = {
-  name: string;
-  status: string;
-  detail?: string;
-  response_ms?: number;
-};
 type Source = {
   source_id: string;
   label: string;
@@ -78,7 +65,6 @@ type Project = {
   status: string;
   checked_at: string | null;
   stale: boolean;
-  services: Service[];
   observations: {
     status: string;
     sources: Record<string, Source>;
@@ -86,13 +72,6 @@ type Project = {
     error?: string;
   } | null;
   forecasts: Forecast[];
-  host: {
-    status: string;
-    cpu_percent: number | null;
-    memory_percent: number | null;
-    disk_percent: number | null;
-    disk_free_bytes: number | null;
-  } | null;
 };
 type Traffic = {
   recent_errors_5xx: number;
@@ -174,10 +153,6 @@ function Stamp({ value }: { value: string | null | undefined }) {
     </time>
   );
 }
-function percent(value: number | null | undefined) {
-  return value == null ? "—" : `${value.toFixed(1)}%`;
-}
-
 export default function ProjectOverview() {
   const user = useSession();
   const [project, setProject] = useState<Project | null>(null);
@@ -199,7 +174,7 @@ export default function ProjectOverview() {
       setErrors({
         project:
           results[0].status === "rejected"
-            ? "Could not refresh project status."
+            ? "Could not refresh data status."
             : "",
         traffic:
           results[1].status === "rejected"
@@ -227,26 +202,21 @@ export default function ProjectOverview() {
     traffic.stale ||
     !!errors.traffic;
   const recentErrors = Number(traffic?.recent_errors_5xx ?? 0);
-  const healthy =
-    !old &&
-    project?.status === "ok" &&
-    !trafficOld &&
-    (traffic?.status === "ok" || traffic?.status === "disabled") &&
-    recentErrors === 0;
+  const healthy = !old && project?.status === "ok";
   return (
     <>
       <PageHeading
         title="Project overview"
-        description="Service availability, observation freshness, forecasts and traffic. All times are UTC."
+        description="Observation freshness, forecasts and traffic. All times are UTC."
       />
       <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
           <p className="font-medium">
             {healthy
-              ? "All systems operational"
+              ? "Observations and forecasts are current"
               : old
-                ? "No current project status"
-                : "Project needs attention"}
+                ? "No current data status"
+                : "Observations or forecasts need attention"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Last check: <Stamp value={project?.checked_at} /> · Automatic checks
@@ -267,66 +237,12 @@ export default function ProjectOverview() {
         </Message>
       )}
       {!project && !errors.project && (
-        <Pending label="Checking project status…" />
+        <Pending label="Checking observations and forecasts…" />
       )}
-      {project && (
-        <>
-          {old && (
-            <Message>
-              Checks are missing or older than two minutes. The values below do
-              not confirm current availability.
-            </Message>
-          )}
-          <section
-            aria-label="Services"
-            className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
-          >
-            {project.services.map((service) => (
-              <Card key={service.name} className="p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <Server className="size-4 text-muted-foreground" />
-                    {service.name}
-                  </span>
-                  <Status value={old ? "unknown" : service.status} />
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {service.detail ??
-                    (service.response_ms != null
-                      ? `${service.response_ms} ms`
-                      : "Connection available")}
-                </p>
-              </Card>
-            ))}
-          </section>
-          <section
-            aria-label="Server resources"
-            className="grid gap-4 sm:grid-cols-3"
-          >
-            <MetricCard
-              label="CPU"
-              value={percent(project.host?.cpu_percent)}
-              detail={old ? "Last known sample" : "Host CPU between checks"}
-              icon={<Cpu className="size-4" />}
-            />
-            <MetricCard
-              label="Memory"
-              value={percent(project.host?.memory_percent)}
-              detail="Host memory in use"
-              icon={<Database className="size-4" />}
-            />
-            <MetricCard
-              label="Disk"
-              value={percent(project.host?.disk_percent)}
-              detail={
-                project.host?.disk_free_bytes != null
-                  ? `${(project.host.disk_free_bytes / 1024 ** 3).toFixed(1)} GiB available on the logs filesystem`
-                  : "Host metrics are not available"
-              }
-              icon={<HardDrive className="size-4" />}
-            />
-          </section>
-        </>
+      {project && old && (
+        <Message>
+          Checks are missing or older than two minutes. Values may be outdated.
+        </Message>
       )}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

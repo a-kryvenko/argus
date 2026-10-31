@@ -1,4 +1,4 @@
-"""Run project monitoring and Nginx traffic aggregation."""
+"""Refresh product diagnostics and aggregate request statistics."""
 import asyncio
 import signal
 

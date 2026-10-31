@@ -11,7 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from common.config import get_config
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
-from common.schemas.forecast_status import ForecastStatus
+from common.schemas.forecast_status import ForecastsStatus
 from common.schemas.forecast_verification import ForecastVerification
 from common.schemas.solar_indices import SolarIndices
 from common.db.session import dispose_engine
@@ -67,14 +67,12 @@ async def historical(product: str, release_id: UUID):
     return await load(product, release_id)
 
 
-@app.get('/internal/v1/forecasts/{product}/status', response_model=ForecastStatus,
+@app.get('/internal/v1/forecasts/status', response_model=ForecastsStatus,
          dependencies=[Depends(require_service_token)])
-async def status(product: str):
-    if product not in PRODUCT_ARTIFACTS:
-        raise HTTPException(404, 'Unknown forecast product')
-    from prophet.services.releases.status import product_status
+async def status():
+    from prophet.services.releases.status import forecasts_status
     try:
-        return await product_status(product)
+        return await forecasts_status()
     except Exception:
         logger.exception('Forecast status read failed')
         raise HTTPException(503, 'Forecast storage is not ready') from None

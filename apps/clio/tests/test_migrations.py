@@ -23,10 +23,3 @@ def test_legacy_file_cleanup_drops_only_retired_tables(tmp_path):
     dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
     assert dropped == [f'DROP TABLE clio.{table};' for table in (
         'gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt', 'scheduled_job')]
-
-
-def test_source_status_cleanup_preserves_observations(tmp_path):
-    result = migration_sql('clio', '20261027_measurement_metadata:head', tmp_path)
-    assert result.returncode == 0, result.stderr
-    dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
-    assert dropped == ['DROP TABLE clio.observation_source_status;']

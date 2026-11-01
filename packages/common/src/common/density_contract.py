@@ -42,6 +42,20 @@ def parse_density_frame(frame, *, max_age_hours=6, now=None) -> DensityForecast:
         if name not in ({"f10_7"} if model == "DTM2020" else {"f10_7", "s10", "m10", "y10"}) or not isinstance(dates, list) or not 1 <= len(dates) <= 2:
             raise ValueError("Invalid interpolation metadata")
     issue = frame.issue_time.iloc[0]
+    mean_dates = {}
+    if 'background_mean_observed_at' in frame:
+        if frame.background_mean_observed_at.nunique(dropna=False) != 1:
+            raise ValueError('Inconsistent published mean metadata')
+        mean_dates = json.loads(frame.background_mean_observed_at.iloc[0])
+    published = frame.background_method.iloc[0] == 'published_81_day_mean_persistence'
+    if not isinstance(mean_dates, dict) or published != bool(mean_dates):
+        raise ValueError('Missing or inconsistent published mean metadata')
+    if published:
+        if model != 'JB2008' or set(mean_dates) != {'f10_7', 's10', 'm10', 'y10'}:
+            raise ValueError('Incomplete published mean metadata')
+        mean_dates = {name: pd.Timestamp(value) for name, value in mean_dates.items()}
+        if any(pd.isna(value) or value.tzinfo is None or value > issue for value in mean_dates.values()):
+            raise ValueError('Invalid published mean window end')
     observed = frame.observed_at.iloc[0]
     now = pd.Timestamp(now or datetime.now(UTC))
     if (frame.issue_time.nunique() != 1 or frame.observed_at.nunique() != 1
@@ -85,4 +99,5 @@ def parse_density_frame(frame, *, max_age_hours=6, now=None) -> DensityForecast:
                            background_method=frame.background_method.iloc[0],
                            dtc_method=frame[magnetic_method].iloc[0] if model == "JB2008" else None,
                            geomagnetic_method=frame[magnetic_method].iloc[0],
-                           background_interpolated_days=interpolated_days)
+                           background_interpolated_days=interpolated_days,
+                           background_mean_observed_at=mean_dates)

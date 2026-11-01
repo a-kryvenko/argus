@@ -15,6 +15,8 @@ forecasting platform. Bring together live observations, forecast, impact intelli
 | **NASA OMNIWeb / OMNI 2** | Historical hourly solar-wind plasma, magnetic-field and geomagnetic data for backfilling and model evaluation. |
 | **ACE/SWEPAM via NASA SPDF; SOHO/CELIAS Proton Monitor** | Additional historical plasma sources, aggregated to hourly values when filling gaps. |
 | **GFZ** | Historical F10.7 radio flux. |
+| **CelesTrak** | Observed F10.7 radio flux and published trailing 81-day means. |
+| **SET SOLFSMY** | Published S10/M10/Y10 means, held at their latest available values for JB2008. |
 | **SDO via Stanford JSOC** | Numerical near-real-time FITS: AIA 94, 131, 171, 193, 211, 304, 335 and 1600 Å, plus HMI line-of-sight magnetograms. PROSWIN uses the original AIA 171/211 Å pair. |
 | **NSO GONG** | Solar magnetograms from the SWPC live feed and NSO archive, used to derive magnetic-field features for southward IMF forecasting. |
 | **NOAA GOES** | Live EUV and X-ray background measurements from SWPC, with historical files from the NOAA archive. These support calibrated estimates of S10, M10 and Y10; those estimates are derived indices, not direct observations of the indices. |

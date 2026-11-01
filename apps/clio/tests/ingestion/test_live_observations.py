@@ -219,7 +219,9 @@ def test_f107_uses_common_persistence_and_keeps_last_duplicate(monkeypatch):
     session, _ = storage(monkeypatch)
     monkeypatch.setattr(loaders.f107, 'fetch_f107', Mock(return_value=pd.DataFrame({
         'issue_time': [NOW, NOW, NOW + timedelta(days=1)], 'f10_7': [150., 160., 999.]})))
-    report = asyncio.run(live.collect_live(load_observation_config(), ['f10_7'], now=NOW))
+    config = load_observation_config().model_copy(deep=True)
+    config.observations['f10_7'].sources.live = ['swpc.f107']
+    report = asyncio.run(live.collect_live(config, ['f10_7'], now=NOW))
     assert report['failed_metrics'] == []
     assert report['downloaded_measurements'] == 1
     session.execute.assert_awaited_once()

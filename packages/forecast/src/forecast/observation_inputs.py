@@ -5,7 +5,7 @@ from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat
 from common.schemas.observation import Observation
 from common.schemas.observation_files import RawObservationFile
 
-DensityMetric = Literal['f10_7', 's10', 'm10', 'y10', 'dst', 'ap']
+DensityMetric = Literal['f10_7', 's10', 'm10', 'y10', 'dst', 'ap', 'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean']
 DENSITY_METRICS = ('f10_7', 's10', 'm10', 'y10', 'dst', 'ap')
 
 

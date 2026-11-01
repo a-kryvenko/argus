@@ -50,11 +50,14 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
     assert observations.load_inputs(NOW).observations.points[0].v == 420
     assert len(calls) == 8
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
-    assert calls[1].url.params['start'] == (NOW-timedelta(days=88)).isoformat()
+    assert calls[1].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
+    assert set(calls[1].url.params['metrics'].split(',')) == {
+        'f10_7', 'dst', 'ap', 'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}
     assert calls[2].url.params['metrics'] == 'v'
     assert calls[2].url.params['aggregation'] == 'hourly'
     assert calls[3].url.params['metrics'] == 'n'
     assert [request.url.params['kind'] for request in calls[4:7]] == ['gong', 'goes', 'aia']
+    assert calls[5].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
     assert calls[7].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
 
 

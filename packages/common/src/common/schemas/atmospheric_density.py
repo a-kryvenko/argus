@@ -40,8 +40,9 @@ class DensityForecast(BaseModel):
     history_start: datetime
     dtc_observed_at: datetime | None = None
     geomagnetic_observed_at: datetime | None = None
-    background_method: Literal["trailing_81_daily_values", "trailing_81_daily_values_linear_gapfill"]
+    background_method: Literal["trailing_81_daily_values", "trailing_81_daily_values_linear_gapfill", "published_81_day_mean_persistence"]
     background_interpolated_days: dict[str, list[date]] = Field(default_factory=dict)
+    background_mean_observed_at: dict[str, datetime] = Field(default_factory=dict)
     dtc_method: Literal["causal_dst_ap_v1"] | None = None
     geomagnetic_method: Literal["causal_dst_ap_v1", "ap_to_kp_lag3h_mean24h_v1"] | None = None
     horizon_hours: int

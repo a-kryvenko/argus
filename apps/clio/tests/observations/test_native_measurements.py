@@ -80,7 +80,8 @@ def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(m
     monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'degraded', 'sources': sources}))
     result = asyncio.run(monitoring.monitoring_status(session))
     assert {point['metric'] for point in result['measurements']} == {
-        'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7',
+        'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7', 'f10_7_81mean',
+        's10_81mean', 'm10_81mean', 'y10_81mean',
     }
     assert all(point['status'] == 'unavailable' for point in result['measurements'])
     assert result['sources'] == sources

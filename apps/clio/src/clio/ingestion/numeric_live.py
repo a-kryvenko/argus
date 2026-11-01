@@ -113,7 +113,7 @@ async def collect_live(config, metrics, *, now=None):
     priorities = {m: policy.sources.live for m, policy in config.observations.items()
                   if OBSERVATIONS[m].kind == 'numeric'}
     fetchers = {product: partial(collect_product, product, priorities) for product in LIVE_LOADERS}
-    frame, report = await fetch_live(metrics, config.observations, fetchers, now,
-                                     lookback_days=config.retention.live_days)
+    lookback_days = max(config.retention.live_days, *(OBSERVATIONS[m].max_age.total_seconds() / 86400 for m in metrics))
+    frame, report = await fetch_live(metrics, config.observations, fetchers, now, lookback_days=lookback_days)
     report['downloaded_measurements'] = len(frame)
     return report

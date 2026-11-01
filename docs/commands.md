@@ -41,6 +41,7 @@ Manual migrations do not stop writers or create backups.
 
 Backfill takes no arguments; horizons come from `clio.observations.*.backfill_days`.
 Cleanup uses `clio.retention.live_days` and `normalized_days` (6 and 60).
+Published means retain at least their configured backfill horizon.
 Restored originals must match their recorded SHA256.
 Partial results and reported failures exit with code 1.
 Cron: `apps/clio/cronjobs.txt`. Logs: `log/clio/`.

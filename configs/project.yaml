@@ -94,11 +94,31 @@ clio:
       backfill_days: 60
     f10_7:
       sources:
-        live: [swpc.f107]
-        historical: [gfz.f107, omni.hourly]
-      backfill_days: 88
+        live: [celestrak.f107, swpc.f107]
+        historical: [celestrak.f107_archive, gfz.f107, omni.hourly]
+      backfill_days: 35
+    f10_7_81mean:
+      sources:
+        live: [celestrak.f107]
+        historical: [celestrak.f107_archive]
+      backfill_days: 6
+    s10_81mean:
+      sources:
+        live: [solfsmy.means]
+        historical: [solfsmy.means_archive]
+      backfill_days: 14
+    m10_81mean:
+      sources:
+        live: [solfsmy.means]
+        historical: [solfsmy.means_archive]
+      backfill_days: 14
+    y10_81mean:
+      sources:
+        live: [solfsmy.means]
+        historical: [solfsmy.means_archive]
+      backfill_days: 14
     goes:
       sources:
         live: [goes.live]
         historical: [goes.archive]
-      backfill_days: 88
+      backfill_days: 35

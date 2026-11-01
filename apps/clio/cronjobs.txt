@@ -1,7 +1,7 @@
 # Live observations
 * * * * * @ROOT@/scripts/cron-run clio live-numeric-60 collect ap bx by bz kp n t v
 */5 * * * * @ROOT@/scripts/cron-run clio live-numeric-300 collect dst
-0 * * * * @ROOT@/scripts/cron-run clio live-numeric-3600 collect f10_7
+0 * * * * @ROOT@/scripts/cron-run clio live-numeric-3600 collect f10_7 f10_7_81mean s10_81mean m10_81mean y10_81mean
 0 * * * * @ROOT@/scripts/cron-run clio live-file-3600 collect goes gong
 
 # Historical recovery, normalization and retention

@@ -28,10 +28,28 @@ def load_f107(start, now):
         received_at=received, source_product='swpc.f107', quality=None)
 
 
+def load_celestrak_f107(start, now):
+    from clio.providers.celestrak_loader import fetch_celestrak_f107, METRICS
+    frame = fetch_celestrak_f107()
+    received = datetime.now(UTC)
+    frame = clean_records(frame, start, pd.Timestamp(now) + pd.Timedelta(microseconds=1), METRICS)
+    return frame.assign(received_at=received, source_product='celestrak.f107', quality=None)
+
+
+def load_solfsmy_means(start, now):
+    from clio.providers.solfsmy_loader import fetch_solfsmy_means, MEAN_COLUMNS
+    frame = fetch_solfsmy_means()
+    received = datetime.now(UTC)
+    frame = clean_records(frame, start, pd.Timestamp(now) + pd.Timedelta(microseconds=1), MEAN_COLUMNS)
+    return frame.assign(received_at=received, source_product='solfsmy.means', quality=None)
+
+
 LIVE_LOADERS = {
     'swpc.rtsw_mag': partial(load_wind, 'mag'),
     'swpc.rtsw_plasma': partial(load_wind, 'plasma'),
     'swpc.kp': partial(load_geomagnetic, 'kp'),
     'swpc.dst': partial(load_geomagnetic, 'dst'),
     'swpc.f107': load_f107,
+    'celestrak.f107': load_celestrak_f107,
+    'solfsmy.means': load_solfsmy_means,
 }

@@ -15,6 +15,7 @@ async def current_indices(session, metrics, *, trends=False, now=None):
                  .where(Measurement.metric.in_(metrics), Measurement.observed_at <= now,
                         tuple_(Measurement.metric, Measurement.source_product).in_([
                             ('ap', 'swpc.kp'), ('f10_7', 'swpc.f107'), ('f10_7', 'gfz.f107'),
+                            ('f10_7', 'celestrak.f107'), ('f10_7', 'celestrak.f107_archive'),
                         ]))
                  .distinct(Measurement.metric)
                  .order_by(Measurement.metric, Measurement.observed_at.desc()))

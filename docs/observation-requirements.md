@@ -12,8 +12,10 @@ History below is the configured backfill depth, except where stated otherwise.
 | Solar-wind speed v, km/s; proton density n, cm⁻³; temperature t, K | SWPC RTSW; OMNI/ACE/SOHO archives | Hourly, retain raw samples | 60 days |
 | Kp, ap | SWPC; OMNI archive | Native 3-hour intervals | 60 days |
 | Dst, nT | SWPC; OMNI archive | Hourly | 60 days |
-| F10.7, sfu | SWPC; GFZ/OMNI archives | Daily | 88 days |
-| GOES EUV, Lyman-alpha, Mg II, X-ray background, quality and Earth–Sun correction | GOES live/archive | Timestamped originals → daily solar indices | 88 days |
+| F10.7, sfu | CelesTrak; SWPC/GFZ/OMNI fallback | Daily | 35 days |
+| F10.7 trailing 81-day mean, sfu (`f10_7_81mean`) | CelesTrak `F10.7_OBS_LAST81` | Daily, published mean | 6 days |
+| S10/M10/Y10 81-day means | SET SOLFSMY | Published means held unchanged; timestamps mark window ends | 14 days |
+| GOES EUV, Lyman-alpha, Mg II, X-ray background, quality and Earth–Sun correction | GOES live/archive | Timestamped originals → daily solar indices | 35 days |
 | GONG magnetograms | GONG live/archive | Hourly collection | 2 days; freshness limit 3 hours |
 | AIA 171/211 Å image pairs | Clio SDO archive | Hourly slots | PROSWIN target = image time +96 hours |
 | Monthly sunspot number | SILSO, fetched by PROSWIN | Monthly | 12 consecutive available months required |
@@ -57,14 +59,15 @@ Requirements of the implemented adapters:
 | --- | --- | --- |
 | Solar indices | F10.7, S10, M10, Y10 | F10.7 |
 | Solar lag | F10.7/S10: 1 day; M10: 2 days; Y10: 5 days | F10.7 at issue −1 day |
-| Background | 81 daily values per index, ending at its lagged cutoff | 81 daily F10.7 values, ending at latest available day |
+| Background | Latest published F10.7 mean from CelesTrak; S10/M10/Y10 means from SOLFSMY | 81 daily F10.7 values, ending at latest available day |
 | Solar freshness | Latest sample ≤48 hours before lagged cutoff | Latest F10.7 ≤48 hours old; interpolation hold ≤1 day |
 | Geomagnetic history | Up to 168 Dst hours; consecutive valid tail ≥72 hours, including 6 quiet hours for initialization; ap also covers the 6.696-hour lag | Last 30 hours of ap; ≥8 consecutive closed 3-hour bins with coverage for interpolation |
 | Geomagnetic freshness | Latest Dst ≤3 hours old; lagged ap lookup tolerance 3 hours | ap hold ≤6 hours |
 | Derived driver | Causal DTC from Dst/ap | Kp from ap: −3-hour value and mean of 24 hourly values |
 
-Both use trailing 81-day means. At most two missing interior days may be filled
-per background series; no edge extrapolation or invalid-value replacement.
+JB2008 holds published means without filling; `background_mean_observed_at`
+records each window end (SOLFSMY row date +40 days). DTM2020 computes trailing
+means and may fill at most two missing interior days.
 DTM2020 does not require S10/M10/Y10, GOES, Dst or DTC.
 
 **Current configuration:** JB2008. Both adapters hold observed drivers fixed over
@@ -94,10 +97,8 @@ Store value/unit, source/product, observation interval, receipt time, quality an
 revision. Keep original files and checksums, calibration versions and issued
 forecasts. Forecast inputs must have been available at issue time.
 
-- JB driver preparation does not enforce `available_at`; DTM does.
 - Speed/density input DTOs lack per-point receipt times; HTTP reads are not durable historical snapshots.
 - SILSO historical availability is assumed; PROSWIN fetches it outside Clio.
-- Configured backfill does not establish complete 81-day solar-index coverage.
 
 Sources: [registry](../configs/models_registry.yaml), [collection settings](../configs/project.yaml),
 [input contract](../packages/forecast/src/forecast/observation_inputs.py),

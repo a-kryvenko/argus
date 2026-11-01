@@ -100,6 +100,26 @@ def test_gap_filled_metadata_is_returned_and_required(artifact):
         assert api.get('/forecasts/atmospheric-density').status_code == 503
 
 
+def test_published_mean_window_dates_are_exposed_without_claiming_gapfill(artifact):
+    import json
+    path, frame = artifact
+    frame['background_method'] = 'published_81_day_mean_persistence'
+    dates = {name: (frame.issue_time.iloc[0]-timedelta(days=6)).isoformat()
+             for name in ('f10_7', 's10', 'm10', 'y10')}
+    frame['background_mean_observed_at'] = json.dumps(dates)
+    frame.to_csv(path, index=False)
+    with client() as api:
+        response = api.get('/forecasts/atmospheric-density?meta=true')
+        assert response.status_code == 200
+        data = response.json()['data']
+        assert data['background_interpolated'] is False
+        assert data['meta']['background_method'] == 'published_81_day_mean_persistence'
+        assert {name: pd.Timestamp(value) for name, value in data['meta']['background_mean_observed_at'].items()} == {
+            name: pd.Timestamp(value) for name, value in dates.items()}
+        frame.drop(columns='background_mean_observed_at').to_csv(path, index=False)
+        assert api.get('/forecasts/atmospheric-density').status_code == 503
+
+
 def test_dtm_metadata_and_missing_runtime_metadata(artifact):
     path, frame = artifact
     frame['model'] = 'DTM2020'

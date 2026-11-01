@@ -87,7 +87,10 @@ def test_current_indices_keep_independent_source_times(monkeypatch):
         assert 'DISTINCT ON (measurement.metric)' in str(query)
         assert 'ORDER BY measurement.metric, measurement.observed_at DESC' in str(query)
         assert 'measurement.observed_at <=' in str(query)
-        assert set(query.params['param_1']) == {('ap', 'swpc.kp'), ('f10_7', 'swpc.f107'), ('f10_7', 'gfz.f107')}
+        assert set(query.params['param_1']) == {
+            ('ap', 'swpc.kp'), ('f10_7', 'swpc.f107'), ('f10_7', 'gfz.f107'),
+            ('f10_7', 'celestrak.f107'), ('f10_7', 'celestrak.f107_archive'),
+        }
 
 
 def test_current_indices_preserve_missing_values_and_validate_selection():

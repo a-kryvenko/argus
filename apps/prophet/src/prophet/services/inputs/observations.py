@@ -32,12 +32,13 @@ def read_observations(client, url, token, as_of, *, request=None):
             raise ValueError('Unsupported measurement schema version')
         return data['items']
 
-    indices = measurements('f10_7,dst,ap', (as_of - timedelta(days=88)).isoformat())
+    indices = measurements('f10_7,dst,ap,f10_7_81mean,s10_81mean,m10_81mean,y10_81mean',
+                           (as_of - timedelta(days=35)).isoformat())
     # Filter legacy stored-history missing codes before hourly aggregation.
     speed = measurements('v', start, aggregation='hourly', min_value=0, max_value=9999)
     density = measurements('n', start, aggregation='hourly', min_value=0, exclude_value=999.9)
     files = []
-    for kind, days in (('gong', 2), ('goes', 90), ('aia', 45)):
+    for kind, days in (('gong', 2), ('goes', 35), ('aia', 45)):
         files.extend(read('files', kind=kind, start=(as_of-timedelta(days=days)).isoformat(),
                           end=end, as_of=as_of.isoformat()))
     issue = as_of.replace(minute=0, second=0, microsecond=0)

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.db.models.measurement import Measurement
 from clio.observations.errors import ObservationUnavailable
 from clio.observations.intervals import interval_end_expression
-from clio.observations.schema import OBSERVATION_METRICS
+from clio.observations.schema import MEASUREMENT_METRICS
 
 UPSERT_BATCH_SIZE = 5_000
 
@@ -74,7 +74,7 @@ async def upsert_measurements(
     frame = measurements.copy()
     frame["observed_at"] = pd.to_datetime(frame["observed_at"], utc=True)
     frame["value"] = pd.to_numeric(frame["value"], errors="coerce")
-    frame = frame[frame["metric"].isin(OBSERVATION_METRICS)]
+    frame = frame[frame["metric"].isin(MEASUREMENT_METRICS)]
     frame = frame.replace([np.inf, -np.inf], np.nan).dropna(
         subset=["observed_at", "value"]
     )

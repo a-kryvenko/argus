@@ -36,6 +36,9 @@ OBSERVATIONS = {
     'ap': ObservationDefinition('nT', resolution='3h', live_resolution='3h', max_age=timedelta(hours=7)),
     'dst': ObservationDefinition('nT', quality='finite', live_resolution='1h', max_age=timedelta(hours=3)),
     'f10_7': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=2)),
+    'f10_7_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=2)),
+    **{name + '_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=14))
+       for name in ('s10', 'm10', 'y10')},
     'goes': ObservationDefinition('JSON', kind='file', live_resolution='1h', max_age=timedelta(hours=2)),
     'gong': ObservationDefinition('FITS', kind='file', live_resolution='1h', max_age=timedelta(hours=3)),
 }
@@ -60,6 +63,10 @@ PRODUCTS = {
     'swpc.dst': Product(frozenset({'dst'}), frozenset({'live'})),
     'swpc.f107': Product(frozenset({'f10_7'}), frozenset({'live'})),
     'gfz.f107': Product(frozenset({'f10_7'}), frozenset({'historical'})),
+    'celestrak.f107': Product(frozenset({'f10_7', 'f10_7_81mean'}), frozenset({'live'})),
+    'celestrak.f107_archive': Product(frozenset({'f10_7', 'f10_7_81mean'}), frozenset({'historical'})),
+    'solfsmy.means': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'live'})),
+    'solfsmy.means_archive': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'historical'})),
     'goes.live': Product(frozenset({'goes'}), frozenset({'live'}), kind='file'),
     'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file'),
     'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file'),

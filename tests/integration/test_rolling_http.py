@@ -28,10 +28,10 @@ class Handler(BaseHTTPRequestHandler):
             active += 1
             try: time.sleep(3)
             finally: active -= 1
-        status = 503 if os.getenv('BAD_SMOKE') == '1' and self.path.endswith('/summary') else 200
+        status = 503 if os.getenv('BAD_SMOKE') == '1' and self.path.endswith('/latest') else 200
         payload = {'version': os.environ['VERSION'], 'active': active}
-        if self.path.endswith('/summary'):
-            payload = {'success': True, 'data': {'solar_wind': {}, 'geomagnetic': {}}}
+        if self.path.endswith('/latest'):
+            payload = {'success': True, 'data': {'points': []}}
         body = json.dumps(payload).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')

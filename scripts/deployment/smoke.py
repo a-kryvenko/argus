@@ -34,11 +34,11 @@ def check(options):
             raise RuntimeError('Router did not select the expected application instance')
         time.sleep(.1)
     if service == 'clio':
-        data, _ = request('/internal/v1/observations/summary', headers={
+        data, _ = request('/internal/v1/observations/latest', headers={
             'Authorization': 'Bearer ' + os.environ['OBSERVATIONS_SERVICE_TOKEN']})
         if (not data.get('success') or not isinstance(data.get('data'), dict)
-                or not {'solar_wind', 'geomagnetic'} <= data['data'].keys()):
-            raise RuntimeError('Invalid observations summary')
+                or not isinstance(data['data'].get('points'), list)):
+            raise RuntimeError('Invalid latest observations')
     elif service == 'prophet-api':
         from common.schemas.forecast_release import ForecastRelease
         data, _ = request('/internal/v1/forecasts/solar-wind-speed/latest', headers={

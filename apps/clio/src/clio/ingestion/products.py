@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import math
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -18,7 +18,7 @@ class ObservationDefinition:
     kind: Literal['numeric', 'file'] = 'numeric'
     quality: str = 'finite_nonnegative'
     live_resolution: str = '1min'
-    max_age: timedelta = timedelta(minutes=10)
+    coverage: Literal['slots', 'latest'] = 'slots'
 
     def accepts(self, value: float) -> bool:
         return math.isfinite(value) and (self.quality == 'finite' or value >= 0) and (
@@ -32,15 +32,15 @@ OBSERVATIONS = {
     'v': ObservationDefinition('km/s'),
     'n': ObservationDefinition('cm^-3'),
     't': ObservationDefinition('K'),
-    'kp': ObservationDefinition('index', resolution='3h', quality='kp', live_resolution='3h', max_age=timedelta(hours=7)),
-    'ap': ObservationDefinition('nT', resolution='3h', live_resolution='3h', max_age=timedelta(hours=7)),
-    'dst': ObservationDefinition('nT', quality='finite', live_resolution='1h', max_age=timedelta(hours=3)),
-    'f10_7': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=2)),
-    'f10_7_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=2)),
-    **{name + '_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', max_age=timedelta(days=14))
+    'kp': ObservationDefinition('index', resolution='3h', quality='kp', live_resolution='3h'),
+    'ap': ObservationDefinition('nT', resolution='3h', live_resolution='3h'),
+    'dst': ObservationDefinition('nT', quality='finite', live_resolution='1h'),
+    'f10_7': ObservationDefinition('sfu', resolution='1D', live_resolution='1D'),
+    'f10_7_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', coverage='latest'),
+    **{name + '_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', coverage='latest')
        for name in ('s10', 'm10', 'y10')},
-    'goes': ObservationDefinition('JSON', kind='file', live_resolution='1h', max_age=timedelta(hours=2)),
-    'gong': ObservationDefinition('FITS', kind='file', live_resolution='1h', max_age=timedelta(hours=3)),
+    'goes': ObservationDefinition('JSON', kind='file', live_resolution='1h'),
+    'gong': ObservationDefinition('FITS', kind='file', live_resolution='1h'),
 }
 
 
@@ -71,6 +71,14 @@ PRODUCTS = {
     'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file'),
     'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file'),
     'gong.archive': Product(frozenset({'gong'}), frozenset({'historical'}), kind='file'),
+}
+
+
+SOURCE_IDS = {
+    'swpc.rtsw_mag': 'solar_wind_mag',
+    'swpc.rtsw_plasma': 'solar_wind_plasma',
+    'swpc.kp': 'kp',
+    'swpc.dst': 'dst',
 }
 
 

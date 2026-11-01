@@ -23,7 +23,7 @@ def configure(environment, monkeypatch, tmp_path):
 
 def policy():
     return SimpleNamespace(observations={'gong': SimpleNamespace(
-        backfill_days=2, sources=SimpleNamespace(live=['gong.live'], historical=['gong.archive']))})
+        backfill_days=2, freshness_minutes=180, sources=SimpleNamespace(live=['gong.live'], historical=['gong.archive']))})
 
 
 def test_gong_collection_archives_without_features_and_reads_are_causal(database, monkeypatch, tmp_path):
@@ -81,7 +81,7 @@ def test_goes_source_files_are_persisted_and_served_without_calibration(database
                                 goes_euv_256=2.5, goes_euvs_quality_valid=True)])
     source = Mock(return_value=[samples])
     monkeypatch.setattr(goes, 'source_frames', source)
-    config = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=88)})
+    config = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=88, freshness_minutes=120)})
 
     async def check():
         try:

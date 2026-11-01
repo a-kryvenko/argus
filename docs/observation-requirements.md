@@ -20,7 +20,7 @@ History below is the configured backfill depth, except where stated otherwise.
 | AIA 171/211 Å image pairs | Clio SDO archive | Hourly slots | PROSWIN target = image time +96 hours |
 | Monthly sunspot number | SILSO, fetched by PROSWIN | Monthly | 12 consecutive available months required |
 
-Homepage AIA images: `clio collect sdo-browse` runs hourly when `clio.sdo_browse_enabled` is true. Keeps two snapshots per channel in `data/observations/sdo_browse`; JPEG/WebP at 128–4096 px. `clio cleanup` also removes older variants.
+Homepage AIA images: The scheduler collects SDO browse images hourly when `clio.sdo_browse_enabled` is true. Keeps two snapshots per channel in `data/observations/sdo_browse`; JPEG/WebP at 128–4096 px. Scheduled cleanup removes older variants.
 
 S10/M10/Y10 are calibrated GOES estimates. SOLFSMY supplies reference values for
 calibration and validation. The GOES parser requires irradiance channels

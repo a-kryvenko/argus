@@ -2,6 +2,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 import os
+import logging
 from pathlib import Path
 
 import pandas as pd
@@ -13,15 +14,17 @@ from clio.observations.archive import observation_values
 from clio.observations.file_catalog import snapshots
 from clio.observations.archive import archive_root, store_original
 
+logger = logging.getLogger(__name__)
 
-def source_frames(start, end, historical):
+
+def source_frames(start, end, historical, *, days=None):
     if not historical:
         from clio.providers.goes_loader import fetch_goes
         yield fetch_goes(end=end, timeout=25)
         return
     from clio.providers.goes_history_loader import archive_session, discover_goes_history, iter_goes_history
     satellites = [int(value) for value in os.getenv('GOES_ARCHIVE_SATELLITES', '18,16').split(',')]
-    days = pd.date_range(start, end - timedelta(microseconds=1), freq='D')
+    days = days if days is not None else pd.date_range(start, end - timedelta(microseconds=1), freq='D')
     with archive_session() as session:
         files = discover_goes_history(sorted(set(days.year)), satellites, session)
         for _, frame in iter_goes_history(files, days, satellites, archive_root('goes') / 'source', session, refresh=True):
@@ -37,15 +40,19 @@ def download_snapshots(start, end, historical, expected=None):
     for slot in slots:
         slot = slot.to_pydatetime()
         saved = expected.get((slot, source))
-        if saved and (archive_root('goes') / saved['raw_path']).is_file():
-            record = store_original('goes', slot, saved['observed_at'], source,
-                lambda: None, relative=Path(saved['raw_path']), expected=saved)
+        relative = Path(saved['raw_path']) if saved else Path(source) / f'{slot:%Y/%m/%d/%H}.json.gz'
+        path = archive_root('goes') / relative
+        if path.is_file() and (saved or path.with_suffix(path.suffix + '.receipt.json').is_file()):
+            record = store_original('goes', slot, saved['observed_at'] if saved else slot, source,
+                lambda: None, relative=relative, expected=saved)
             records.append(record)
         else:
             pending.add(slot)
+    logger.info('GOES %s: retained=%d, missing=%d', 'backfill' if historical else 'live', len(records), len(pending))
     if not pending:
         return records
-    for frame in source_frames(start, end, historical):
+    options = {'days': pd.DatetimeIndex(sorted(pending))} if historical else {}
+    for frame in source_frames(start, end, historical, **options):
         frame = frame.loc[frame.timestamp.le(end)].copy()
         if historical:
             frame = frame.loc[frame.timestamp.ge(start) & frame.timestamp.lt(end)]
@@ -67,9 +74,11 @@ async def collect(config, *, mode, now=None, start=None, end=None):
     now = now or datetime.now(UTC)
     if mode not in ('live', 'backfill') or now.tzinfo is None or (start is None) != (end is None):
         raise ValueError('Use live/backfill and aware range boundaries')
+    now = now.astimezone(UTC)
+    policy = config.observations['goes']
     historical = mode == 'backfill'
     end = end or (now.replace(hour=0, minute=0, second=0, microsecond=0) if historical else now)
-    start = start or end - timedelta(days=config.observations['goes'].backfill_days if historical else 1)
+    start = start or end - timedelta(days=policy.backfill_days if historical else 1)
     if start.tzinfo is None or end.tzinfo is None or not start < end <= now or end - start > timedelta(days=90):
         raise ValueError('Choose a past GOES range up to 90 days')
     start, end = start.astimezone(UTC), end.astimezone(UTC)
@@ -91,7 +100,7 @@ async def collect(config, *, mode, now=None, start=None, end=None):
             await session.commit()
         latest = max((r['observed_at'] for r in records), default=None)
         report['latest_observed_at'] = latest.isoformat() if latest else None
-        report['missing'] = max(0, (end.date()-start.date()).days-len(records)) if historical else int(latest is None or latest < now-timedelta(hours=2))
+        report['missing'] = max(0, (end.date()-start.date()).days-len(records)) if historical else int(latest is None or latest < now-timedelta(minutes=policy.freshness_minutes))
     except Exception as exc:
         report['failed'] += 1
         report['source_errors'].append({'product': 'goes.archive' if historical else 'goes.live', 'error': str(exc)})

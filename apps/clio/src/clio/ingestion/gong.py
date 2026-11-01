@@ -23,12 +23,13 @@ async def collect(config, *, mode, now=None, start=None, end=None):
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError('now must include a timezone')
+    now = now.astimezone(UTC)
     policy = config.observations['gong']
     historical = mode == 'backfill'
     if mode not in ('live', 'backfill') or (start is None) != (end is None):
         raise ValueError('Use live/backfill and both range boundaries')
-    start = (start or now - timedelta(days=policy.backfill_days)) if historical else now - timedelta(hours=3)
-    end = end or now
+    end = end or (now.replace(minute=0, second=0, microsecond=0) if historical else now)
+    start = (start or end - timedelta(days=policy.backfill_days)) if historical else now - timedelta(hours=3)
     if start.tzinfo is None or end.tzinfo is None or not start < end <= now or end-start > timedelta(days=60):
         raise ValueError('Choose a past aware GONG range up to 60 days')
     start, end = start.astimezone(UTC), end.astimezone(UTC)
@@ -59,12 +60,27 @@ async def collect(config, *, mode, now=None, start=None, end=None):
     latest = max(usable) if usable else None
     report['retained'] = len(usable) - report['restored']
     try:
-        candidates = await asyncio.to_thread(provider.candidates, start, end, historical=historical)
-        # One magnetogram per observed hour; keep already received hours immutable.
+        # One magnetogram per closed hour. Do not rediscover filled days, and
+        # restore recorded originals by their URL rather than selecting a new one.
         hours = {t.replace(minute=0, second=0, microsecond=0) for t in existing}
+        required = set()
+        if historical:
+            hour = start.replace(minute=0, second=0, microsecond=0)
+            if hour < start:
+                hour += timedelta(hours=1)
+            while hour < end.replace(minute=0, second=0, microsecond=0):
+                required.add(hour)
+                hour += timedelta(hours=1)
+            pending = required - hours
+            candidates = []
+            for day in sorted({hour.replace(hour=0) for hour in pending}):
+                candidates.extend(await asyncio.to_thread(provider.candidates, max(start, day),
+                    min(end, day + timedelta(days=1)), historical=True))
+        else:
+            candidates = await asyncio.to_thread(provider.candidates, start, end, historical=False)
         for observed, url in candidates:
             hour = observed.replace(minute=0, second=0, microsecond=0)
-            if hour in hours:
+            if hour in hours or (historical and hour not in required):
                 continue
             try:
                 values = await asyncio.to_thread(snapshot_values, observed, url, source)
@@ -75,18 +91,22 @@ async def collect(config, *, mode, now=None, start=None, end=None):
                     await session.commit()
                 report['received' if inserted else 'retained'] += 1
                 hours.add(hour)
+                usable.add(observed)
                 if inserted:
                     latest = max(latest, observed) if latest else observed
             except Exception as exc:
                 report['failed'] += 1
                 if len(report['source_errors']) < 20:
                     report['source_errors'].append({'product': source, 'error': str(exc)})
-        expected = max(1, int((end-start).total_seconds() // 3600))
-        report['missing'] = max(0, expected-len(hours))
+        if historical:
+            report['missing'] = len(required - {t.replace(minute=0, second=0, microsecond=0) for t in usable})
+        else:
+            expected = max(1, int((end-start).total_seconds() // 3600))
+            report['missing'] = max(0, expected-len(hours))
     except Exception as exc:
         report['failed'] += 1
         report['source_errors'].append({'product': source, 'error': str(exc)})
     report['latest_observed_at'] = latest.isoformat() if latest else None
-    failed = report['failed'] > 0 if historical else latest is None or latest < now-timedelta(hours=3)
+    failed = report['failed'] > 0 if historical else latest is None or latest < now-timedelta(minutes=policy.freshness_minutes)
     return {'status': 'partial' if failed or report['missing'] or report['failed'] else 'complete',
             'failed_metrics': ['gong'] if failed else [], 'files': {'gong': report}}

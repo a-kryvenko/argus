@@ -122,7 +122,8 @@ def test_refresh_reads_stored_values_without_fetching(monkeypatch, storage):
     monkeypatch.setattr('requests.sessions.Session.request', fetch)
     result = asyncio.run(service.refresh_normalized_observations(config, now))
     load.assert_awaited_once_with(session, now - timedelta(days=6), until=now + timedelta(microseconds=1),
-                                 source_products=['swpc.rtsw_plasma', 'swpc.rtsw_mag', 'swpc.kp', 'swpc.dst', 'swpc.f107'])
+                                 source_products=['swpc.rtsw_plasma', 'swpc.rtsw_mag', 'swpc.kp', 'swpc.dst', 'swpc.f107',
+                                                  'celestrak.f107', 'solfsmy.means'])
     assert len(result.points) == 1
     assert result.points[0].s10 is None
     fetch.assert_not_called()

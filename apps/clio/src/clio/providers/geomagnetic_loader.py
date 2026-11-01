@@ -9,7 +9,6 @@ SOURCES = {
     'dst': 'https://services.swpc.noaa.gov/products/kyoto-dst.json',
 }
 INTERVAL_SECONDS = {'kp': 10800, 'dst': 3600}
-POLL_SECONDS = {'kp': 60, 'dst': 300}
 
 
 def parse_records(metric: str, payload: object, received_at: datetime) -> list[dict]:

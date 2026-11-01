@@ -24,18 +24,6 @@ import {
 import type { Summary } from "./ApiActivity";
 
 const TrafficChart = dynamic(() => import("./TrafficChart"), { ssr: false });
-type Source = {
-  source_id: string;
-  label: string;
-  status: string;
-  latest_observation_at: string | null;
-  latest_interval_end: string | null;
-  last_response_at: string | null;
-  last_success_at: string | null;
-  last_attempt_at: string | null;
-  last_error_message: string | null;
-  consecutive_failures: number;
-};
 type Measurement = {
   metric: string;
   latest_observation_at: string | null;
@@ -67,7 +55,6 @@ type Project = {
   stale: boolean;
   observations: {
     status: string;
-    sources: Record<string, Source>;
     measurements: Measurement[];
     error?: string;
   } | null;
@@ -96,14 +83,6 @@ const labels: Record<string, string> = {
   unavailable: "Unavailable",
   delayed: "Delayed",
   stale: "Outdated",
-  collecting: "Collecting",
-  source_delayed: "Source delayed",
-  collection_error: "Collection failed",
-  collector_stalled: "Collector stalled",
-  collector_overdue: "Collector overdue",
-  data_unavailable: "No usable data",
-  data_partial: "Partial data",
-  not_started: "Not started",
   within_age_limit: "Fresh",
   future_issue_time: "Future issue time",
   unconfigured: "Freshness limit not set",
@@ -381,72 +360,12 @@ export default function ProjectOverview() {
       {project && (
         <>
           <section className="space-y-3">
-            <h2 className="text-lg font-medium">Clio · Observation sources</h2>
+            <h2 className="text-lg font-medium">
+              Clio · Observations
+            </h2>
             {project.observations?.error && (
               <Message>{project.observations.error}</Message>
             )}
-            <Card className="overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Latest observation</TableHead>
-                    <TableHead>Response received</TableHead>
-                    <TableHead>Successfully saved</TableHead>
-                    <TableHead>Last attempt</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {Object.values(project.observations?.sources ?? {}).map(
-                    (source) => (
-                      <TableRow key={source.source_id}>
-                        <TableCell>
-                          <p className="font-medium">{source.label}</p>
-                          {source.consecutive_failures > 0 && (
-                            <p className="mt-1 max-w-64 text-xs text-amber-200">
-                              {source.last_error_message}
-                            </p>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Status value={old ? "unknown" : source.status} />
-                        </TableCell>
-                        <TableCell>
-                          <Stamp value={source.latest_observation_at} />
-                          {source.latest_interval_end && (
-                            <p className="text-xs text-muted-foreground">
-                              to {date(source.latest_interval_end)}
-                            </p>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Stamp value={source.last_response_at} />
-                        </TableCell>
-                        <TableCell>
-                          <Stamp value={source.last_success_at} />
-                        </TableCell>
-                        <TableCell>
-                          <Stamp value={source.last_attempt_at} />
-                        </TableCell>
-                      </TableRow>
-                    ),
-                  )}
-                </TableBody>
-              </Table>
-            </Card>
-            <p className="text-xs text-muted-foreground">
-              A successful response can contain old observations. Receipt and
-              observation times are shown separately.
-            </p>
-          </section>
-          <section className="space-y-3">
-            <h2 className="text-lg font-medium">
-              Clio · Model input observations
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Receipt times are recorded from the monitoring rollout onward.
-            </p>
             <Card className="overflow-hidden">
               <Table>
                 <TableHeader>

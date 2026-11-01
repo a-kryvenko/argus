@@ -6,8 +6,9 @@ from sqlalchemy.dialects import postgresql
 
 from clio.ingestion.conversion import wind_measurements, geomagnetic_measurements
 from clio.observations.measurements import store_native
-from clio.monitoring import measurements as monitoring
+from clio.observations import status as monitoring
 from clio.db.models.measurement import Measurement
+from clio.config import load_observation_config
 
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 
@@ -50,9 +51,10 @@ def test_monitoring_reads_latest_measurement_and_its_receipt(monkeypatch):
     point = Measurement(metric='bz', value=-2, observed_at=NOW, received_at=NOW-timedelta(seconds=5))
     session = AsyncMock()
     session.scalars.return_value = [point]
-    monkeypatch.setattr(monitoring, 'OBSERVATIONS', {metric: monitoring.OBSERVATIONS[metric] for metric in ('bz', 'v')})
-    monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
-    result = asyncio.run(monitoring.monitoring_status(session))
+    config = load_observation_config().model_copy(deep=True)
+    config.observations = {metric: config.observations[metric] for metric in ('bz', 'v')}
+    monkeypatch.setattr(monitoring, 'load_observation_config', lambda: config)
+    result = asyncio.run(monitoring.observation_status(session))
     assert result['measurements'][0]['latest_observation_at'] == NOW
     assert result['measurements'][0]['received_at'] == point.received_at
     assert result['measurements'][1]['metric'] == 'v'
@@ -66,9 +68,10 @@ def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
     point = Measurement(metric='bz', value=None, observed_at=NOW, received_at=NOW, quality='missing')
     session = AsyncMock()
     session.scalars.return_value = [point]
-    monkeypatch.setattr(monitoring, 'OBSERVATIONS', {'bz': monitoring.OBSERVATIONS['bz']})
-    monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'ok'}))
-    result = asyncio.run(monitoring.monitoring_status(session))
+    config = load_observation_config().model_copy(deep=True)
+    config.observations = {'bz': config.observations['bz']}
+    monkeypatch.setattr(monitoring, 'load_observation_config', lambda: config)
+    result = asyncio.run(monitoring.observation_status(session))
     assert result['measurements'][0]['status'] == 'unavailable'
     assert result['status'] == 'degraded'
 
@@ -76,14 +79,11 @@ def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
 def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(monkeypatch):
     session = AsyncMock()
     session.scalars.return_value = []
-    sources = {'solar_wind_mag': {'status': 'not_started'}}
-    monkeypatch.setattr(monitoring, 'source_status', AsyncMock(return_value={'status': 'degraded', 'sources': sources}))
-    result = asyncio.run(monitoring.monitoring_status(session))
+    result = asyncio.run(monitoring.observation_status(session))
     assert {point['metric'] for point in result['measurements']} == {
         'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7', 'f10_7_81mean',
         's10_81mean', 'm10_81mean', 'y10_81mean',
     }
     assert all(point['status'] == 'unavailable' for point in result['measurements'])
-    assert result['sources'] == sources
     assert result['status'] == 'degraded'
     assert 'last_refresh_completed_at' not in result

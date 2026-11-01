@@ -52,7 +52,7 @@ def test_create_migration_is_dev_only_and_preserves_message(entry):
     assert calls == ([['clio', 'migrate', 'revision', '-m', 'add run metadata', '--autogenerate']] if mode == 'dev' else [])
 
 
-@pytest.mark.parametrize('args', [('up',), ('ps',), ('clio', 'migrate', 'current')])
+@pytest.mark.parametrize('args', [('up',), ('ps',), ('clio', 'migrate', 'current'), ('clio', 'collect'), ('clio', 'backfill'), ('clio', 'serve')])
 def test_invalid_commands_have_no_side_effects(entry, args):
     _, run = entry
     result, calls = run(*args)
@@ -62,7 +62,7 @@ def test_invalid_commands_have_no_side_effects(entry, args):
 
 def test_backend_exit_status_is_preserved(entry):
     _, run = entry
-    result, calls = run('clio', 'test-command', fail=True)
+    result, calls = run('prophet', 'test-command', fail=True)
     assert result.returncode == 7
     assert len(calls) == 1
 
@@ -82,7 +82,6 @@ def test_compose_routes_to_selected_environment(entry):
 
 
 @pytest.mark.parametrize('args', [
-    ('clio', 'test-command'),
     ('prophet', 'test-command', '--option', 'value'),
     ('intelligence', 'test-command', '--option', 'value with spaces'),
     ('api', 'user', '--help'),

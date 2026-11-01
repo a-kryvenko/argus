@@ -41,11 +41,11 @@ async def observation_status(client):
         response = await http_read(client, os.getenv('OBSERVATIONS_URL'), '/internal/v1/observations/status', token)
         payload = response.json()
         data = payload['data']
-        if payload.get('success') is not True or not isinstance(data.get('sources'), dict) or not isinstance(data.get('measurements'), list):
+        if payload.get('success') is not True or not isinstance(data.get('measurements'), list):
             raise ValueError('Invalid diagnostics')
         return data
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
-        return {'status': 'unknown', 'sources': {}, 'measurements': [], 'error': 'Observation diagnostics unavailable'}
+        return {'status': 'unknown', 'measurements': [], 'error': 'Observation diagnostics unavailable'}
 
 
 def forecast_diagnostic(data):

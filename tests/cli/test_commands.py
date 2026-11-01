@@ -170,7 +170,7 @@ def test_existing_database_is_left_running(cli, fail):
     assert not any('up' in call['args'] or 'stop' in call['args'] for call in calls)
 
 
-@pytest.mark.parametrize('domain,command', [('clio', ('test-command',)), ('prophet', ('test-command', 'argument'))])
+@pytest.mark.parametrize('domain,command', [('prophet', ('test-command', 'argument'))])
 def test_jobs_do_not_require_interactive_input(cli, domain, command):
     _, _, run = cli
     result, calls = run(domain, *command)
@@ -187,3 +187,11 @@ def test_prophet_cron_origin_is_forwarded_into_the_container(cli):
     args = calls[0]['args']
     assert args[args.index('-e')+1] == 'ARGUS_CRON_JOB=test-job'
     assert args[-4:] == ['prophet', 'prophet', 'test-command', 'argument']
+
+
+@pytest.mark.parametrize('command', ['serve', 'collect', 'backfill', 'normalize', 'cleanup'])
+def test_removed_clio_commands_do_not_start_containers(cli, command):
+    _, _, run = cli
+    result, calls = run('clio', command)
+    assert result.returncode == 2
+    assert not calls

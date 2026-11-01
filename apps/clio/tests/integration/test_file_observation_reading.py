@@ -99,13 +99,13 @@ def test_snapshot_readers_and_collectors_ignore_legacy_and_work_after_its_remova
                 from clio.providers import gong as provider
                 monkeypatch.setattr(provider, 'candidates', lambda *a, **kw: [(newest['observed_at'], 'https://test/observation')])
                 monkeypatch.setattr(provider, 'download', lambda *a: pytest.fail('Known observation downloaded again'))
-                policy = SimpleNamespace(observations={'gong': SimpleNamespace(backfill_days=2,
+                policy = SimpleNamespace(observations={'gong': SimpleNamespace(backfill_days=2, freshness_minutes=180,
                     sources=SimpleNamespace(live=[source], historical=['gong.archive']))})
                 report = await gong.collect(policy, mode='live', now=now)
             else:
                 from clio.ingestion import goes
                 monkeypatch.setattr(goes, 'source_frames', lambda *a: pytest.fail('Known observation downloaded again'))
-                policy = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=2)})
+                policy = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=2, freshness_minutes=120)})
                 report = await goes.collect(policy, mode='live', now=now)
             assert report['files'][kind]['failed'] == 0
             assert report['files'][kind]['received'] == 0

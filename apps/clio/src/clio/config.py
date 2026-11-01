@@ -23,6 +23,7 @@ class Sources(StrictModel):
 class ObservationPolicy(StrictModel):
     sources: Sources
     backfill_days: int = Field(strict=True, gt=0)
+    freshness_minutes: int = Field(strict=True, gt=0)
 
 
 class SDOImages(StrictModel):

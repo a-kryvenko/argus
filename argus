@@ -16,10 +16,6 @@ Usage: ./argus <command> (environment: $mode)
   <service> migrate
   <service> migration create -m MESSAGE [--autogenerate] (dev only)
   <service> migration current | history | downgrade REVISION
-  clio collect [METRIC ...] | clio normalize
-  clio collect donki | clio collect enlil
-  clio backfill [METRIC ...] [--from DATE --to DATE]
-  clio sdo-cleanup
   prophet generation [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|solar-radiation|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (dev only; default: january-2026)
   prophet verification [PRODUCT]
@@ -79,5 +75,7 @@ case "$command" in
             downgrade) [[ $# == 1 ]] || fail 'Specify one target revision'; exec "$backend" "$service" migrate downgrade "$@" ;;
             *) fail 'Expected migration create/current/history/downgrade' ;;
         esac ;;
-    *) exec "$backend" "$service" "$command" "$@" ;;
+    *)
+        [[ "$service" != clio ]] || fail 'Clio jobs run in clio-worker; use compose or migration commands'
+        exec "$backend" "$service" "$command" "$@" ;;
 esac

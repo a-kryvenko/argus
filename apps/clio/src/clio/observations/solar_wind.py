@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.providers.solar_wind_loader import SOURCES
 from clio.db.models.measurement import Measurement
-from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
+from clio.config import load_observation_config
 from clio.observations.coverage import coverage
 
 METADATA = {
@@ -23,11 +23,14 @@ METADATA = {
 
 def metadata(metric: str) -> dict:
     kind, label, unit, coordinates = METADATA[metric]
+    policies = load_observation_config().observations
+    threshold = (min(policies[m].freshness_minutes for m in ('bx', 'by', 'bz'))
+                 if metric == 'bt' else policies[metric].freshness_minutes) * 60
     return {"label": label, "unit": unit, "coordinate_system": coordinates,
             "source": "NOAA SWPC RTSW", "source_url": SOURCES[kind],
             "location": "L1", "time_basis": "measurement", "propagated": False,
             "resolution_seconds": 60, "aggregation": "source_1_minute",
-            "selection": "NOAA active spacecraft", "stale_after_seconds": WIND_STALE_AFTER_SECONDS}
+            "selection": "NOAA active spacecraft", "stale_after_seconds": threshold}
 
 
 def sample(record: Measurement, metric: str) -> dict:
@@ -45,9 +48,10 @@ async def latest(session: AsyncSession, metrics: list[str], now: datetime | None
         record = (await session.execute(statement)).scalars().first()
         point = sample(record, metric) if record is not None else None
         age = max(0, int((now - record.observed_at).total_seconds())) if record is not None else None
-        series[metric] = {**metadata(metric), "latest": point, "age_seconds": age,
+        info = metadata(metric)
+        series[metric] = {**info, "latest": point, "age_seconds": age,
                           "status": "missing" if point is None or point["value"] is None else
-                          "stale" if age > WIND_STALE_AFTER_SECONDS else "fresh"}
+                          "stale" if age > info['stale_after_seconds'] else "fresh"}
     return {"generated_at": now, "series": series}
 
 

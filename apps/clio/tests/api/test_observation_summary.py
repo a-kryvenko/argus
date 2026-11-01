@@ -11,7 +11,7 @@ def points(count=65):
 
 
 def test_change_compares_five_minute_means_an_hour_apart():
-    result = change_one_hour(points(), NOW)
+    result = change_one_hour(points(), NOW, freshness_minutes=10)
     assert result['status'] == 'available' and result['value'] == 60
     assert result['recent_mean'] == 62 and result['previous_mean'] == 2
     assert result['coverage'] == {'recent': 1, 'previous': 1}
@@ -19,15 +19,15 @@ def test_change_compares_five_minute_means_an_hour_apart():
 
 def test_change_only_requires_one_usable_sample_in_each_window():
     rows = points()
-    result = change_one_hour([rows[4], rows[-1]], NOW)
+    result = change_one_hour([rows[4], rows[-1]], NOW, freshness_minutes=10)
     assert result['status'] == 'available' and result['value'] == 60
-    assert change_one_hour(rows[5:], NOW)['reason'] == 'missing_comparison'
-    assert change_one_hour(rows[:-5], NOW)['reason'] == 'missing_comparison'
+    assert change_one_hour(rows[5:], NOW, freshness_minutes=10)['reason'] == 'missing_comparison'
+    assert change_one_hour(rows[:-5], NOW, freshness_minutes=10)['reason'] == 'missing_comparison'
 
 
 def test_change_does_not_require_measurements_between_comparison_windows():
     rows = points()
-    result = change_one_hour(rows[1:5]+rows[-4:], NOW)
+    result = change_one_hour(rows[1:5]+rows[-4:], NOW, freshness_minutes=10)
     assert result['status'] == 'available'
     assert result['value'] == 60
     assert result['coverage'] == {'recent': 0.8, 'previous': 0.8}
@@ -35,26 +35,26 @@ def test_change_does_not_require_measurements_between_comparison_windows():
 
 def test_stale_and_missing_latest_are_not_reported_as_current():
     rows = points()
-    assert change_one_hour(rows, NOW+timedelta(minutes=11))['reason'] == 'stale'
+    assert change_one_hour(rows, NOW+timedelta(minutes=11), freshness_minutes=10)['reason'] == 'stale'
     rows[-1]['value'] = None
-    assert change_one_hour(rows, NOW)['reason'] == 'missing_latest'
-    assert change_one_hour([], NOW)['reason'] == 'missing_latest'
+    assert change_one_hour(rows, NOW, freshness_minutes=10)['reason'] == 'missing_latest'
+    assert change_one_hour([], NOW, freshness_minutes=10)['reason'] == 'missing_latest'
 
 
 def test_source_switch_does_not_suppress_trend():
     rows = points()
     rows[10]['spacecraft'] = 'ACE'
-    assert change_one_hour(rows, NOW)['value'] == 60
+    assert change_one_hour(rows, NOW, freshness_minutes=10)['value'] == 60
 
 
 def test_flagged_samples_do_not_count_as_coverage():
     rows = points()
     rows[0]['quality'] = rows[1]['quality'] = 'flagged'
-    assert change_one_hour(rows, NOW)['value'] == 59
+    assert change_one_hour(rows, NOW, freshness_minutes=10)['value'] == 59
     rows[2]['quality'] = rows[3]['quality'] = rows[4]['quality'] = 'flagged'
-    assert change_one_hour(rows, NOW)['reason'] == 'missing_comparison'
+    assert change_one_hour(rows, NOW, freshness_minutes=10)['reason'] == 'missing_comparison'
     rows[-1]['quality'] = 'flagged'
-    assert change_one_hour(rows, NOW)['reason'] == 'missing_latest'
+    assert change_one_hour(rows, NOW, freshness_minutes=10)['reason'] == 'missing_latest'
 
 
 @pytest.mark.parametrize('start_minutes,expected', [(0, 2), (-30, 2), (-120, 0)])
@@ -73,7 +73,7 @@ def test_summary_includes_all_wind_variables_and_geomagnetic_changes(monkeypatch
     from clio.observations import summary as service
     from clio.observations.solar_wind import METADATA
 
-    wind = {metric: {'points': points(), 'unit': 'unit'} for metric in METADATA}
+    wind = {metric: {'points': points(), 'unit': 'unit', 'stale_after_seconds': 600} for metric in METADATA}
     wind_history = AsyncMock(return_value={'series': wind})
     monkeypatch.setattr(service.solar_wind, 'latest', AsyncMock(return_value={'series': {}}))
     monkeypatch.setattr(service.solar_wind, 'history', wind_history)

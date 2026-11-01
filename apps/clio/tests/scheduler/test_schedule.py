@@ -12,7 +12,7 @@ def test_every_configured_observation_is_scheduled_once():
 
 def test_monitored_source_intervals_match_scheduler():
     from clio.ingestion.numeric_live import SOURCE_IDS
-    from clio.monitoring.specs import poll_seconds
+    from clio.scheduler.schedule import poll_seconds
 
     config = load_observation_config()
     checked = set()
@@ -23,7 +23,7 @@ def test_monitored_source_intervals_match_scheduler():
                 source = SOURCE_IDS.get(product)
                 if source is None:
                     continue
-                seconds = poll_seconds(source)
+                seconds = poll_seconds(metric)
                 assert minute == ('*' if seconds == 60 else f'*/{int(seconds // 60)}')
                 checked.add(source)
     assert checked == set(SOURCE_IDS.values())

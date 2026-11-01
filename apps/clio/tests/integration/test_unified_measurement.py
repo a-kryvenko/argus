@@ -136,12 +136,10 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
 
 
 def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
-    from types import SimpleNamespace
     from unittest.mock import Mock
 
     import pandas as pd
 
-    from clio.commands import cleanup
     from clio.config import load_observation_config
     from clio.db.models.normalized_observation import NormalizedObservation
     from clio.ingestion import numeric_backfill as backfill
@@ -163,7 +161,6 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
     provider = Mock()
     provider.fetch.return_value = archived
     monkeypatch.setattr(backfill, 'historical_adapters', lambda: {'omni.hourly': provider})
-    monkeypatch.setattr(cleanup, 'load_observation_config', lambda: config)
 
     async def verify():
         engine = create_async_engine(database_url)
@@ -215,7 +212,7 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
                     NormalizedObservation(observed_at=now-timedelta(days=60), **{m: 2. for m in REQUIRED_METRICS}),
                 ])
                 await session.commit()
-            report = await cleanup.run(SimpleNamespace(now=now))
+            report = await cleanup_operation.cleanup(config, now)
             assert report == {'live_removed': 1, 'normalized_removed': 1}
             async with factory() as session:
                 rows = (await session.scalars(sa.select(Measurement).where(Measurement.observed_at <= boundary))).all()

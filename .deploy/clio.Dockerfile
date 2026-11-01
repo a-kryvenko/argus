@@ -22,4 +22,4 @@ ENV XDG_CONFIG_HOME=/tmp/clio-config \
 
 RUN install -d -m 1777 "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 
-CMD ["clio", "serve"]
+CMD ["uvicorn", "clio.main:app", "--host", "0.0.0.0", "--port", "8000"]

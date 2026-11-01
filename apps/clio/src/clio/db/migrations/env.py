@@ -8,7 +8,6 @@ from clio.db.models import (
     file_observation,
     measurement,
     normalized_observation,
-    observation_source_status,
 )
 
 run_migrations(

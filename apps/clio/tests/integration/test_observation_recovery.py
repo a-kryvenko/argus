@@ -14,7 +14,6 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from clio.db.models.measurement import Measurement
-from clio.db.models.observation_source_status import ObservationSourceStatus
 from clio.ingestion import numeric_live as live
 from clio.providers import solar_wind_loader as solar_wind, geomagnetic_loader as geomagnetic
 
@@ -41,8 +40,7 @@ async def verify():
             await connection.execute(text(f'CREATE SCHEMA {schema}'))
             created = True
         async with db.begin() as connection:
-            for model in (Measurement, ObservationSourceStatus):
-                await connection.run_sync(model.__table__.create)
+            await connection.run_sync(Measurement.__table__.create)
         for source in ('mag', 'plasma', 'kp', 'dst'):
             solar = source in ('mag', 'plasma')
             provider = solar_wind if solar else geomagnetic

@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
+from email.utils import formatdate
+import json
 import logging
 import re
 import tempfile
@@ -117,17 +119,32 @@ def cache_archive_file(
         return path
     temporary = None
     try:
-        logger.info("Downloading GOES archive %s", path.name)
-        with session.get(source.url, stream=True, timeout=(20, 120)) as response:
+        headers = {}
+        metadata_path = path.with_suffix(path.suffix + '.http.json')
+        if path.is_file():
+            metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
+            if metadata.get('etag'):
+                headers['If-None-Match'] = metadata['etag']
+            headers['If-Modified-Since'] = metadata.get('last_modified') or formatdate(path.stat().st_mtime, usegmt=True)
+        options = {'headers': headers} if headers else {}
+        with session.get(source.url, stream=True, timeout=(20, 120), **options) as response:
+            if response.status_code == 304 and path.is_file():
+                with xr.open_dataset(path, engine='h5netcdf'):
+                    pass
+                return path
             response.raise_for_status()
+            logger.info("Downloading GOES archive %s", path.name)
             with tempfile.NamedTemporaryFile(dir=cache_dir, suffix=".part", delete=False) as stream:
                 temporary = Path(stream.name)
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     stream.write(chunk)
+            metadata = {name: value for name, header in [('etag', 'ETag'), ('last_modified', 'Last-Modified')]
+                        if isinstance(value := response.headers.get(header), str) and value}
         # Never promote an interrupted download or an HTML error page to cache.
         with xr.open_dataset(temporary, engine="h5netcdf"):
             pass
         temporary.replace(path)
+        metadata_path.write_text(json.dumps(metadata))
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
@@ -224,10 +241,17 @@ def iter_goes_history(
 ) -> Iterator[tuple[int, pd.DataFrame]]:
     """Download and normalize one year at a time to bound memory use."""
     xrs = {}
+    active = {s.satellite for s in files if s.product == EUVS_PRODUCT and s.year in set(days.year)}
+    background_days = set((days - pd.Timedelta(days=1)).normalize())
     for source in files:
-        if source.product == XRS_PRODUCT:
-            path = cache_archive_file(source, cache_dir, session, refresh=refresh)
+        if source.product == XRS_PRODUCT and source.satellite in active:
+            was_cached = (cache_dir / Path(urlparse(source.url).path).name).is_file()
+            path = cache_archive_file(source, cache_dir, session)
             xrs[source.satellite] = read_xrs_archive(path, source.satellite)
+            if refresh and was_cached and not background_days.issubset(set(
+                    xrs[source.satellite].goes_xray_background_timestamp.dt.normalize().unique())):
+                path = cache_archive_file(source, cache_dir, session, refresh=True)
+                xrs[source.satellite] = read_xrs_archive(path, source.satellite)
     for year in sorted(set(days.year)):
         frames = []
         for source in files:
@@ -235,8 +259,12 @@ def iter_goes_history(
                 continue
             if source.satellite not in xrs:
                 raise ValueError(f"No XRS background archive for GOES-{source.satellite}")
-            path = cache_archive_file(source, cache_dir, session, refresh=refresh)
+            was_cached = (cache_dir / Path(urlparse(source.url).path).name).is_file()
+            path = cache_archive_file(source, cache_dir, session)
             euvs = read_euvs_archive(path, source.satellite)
+            if refresh and was_cached and not set(days[days.year == year]).issubset(set(euvs.timestamp.dt.normalize().unique())):
+                path = cache_archive_file(source, cache_dir, session, refresh=True)
+                euvs = read_euvs_archive(path, source.satellite)
             euvs = euvs.loc[euvs.timestamp.dt.floor("D").isin(days) & euvs.timestamp.dt.year.eq(year)]
             frames.append(join_archive_background(euvs, xrs[source.satellite]))
         if frames:

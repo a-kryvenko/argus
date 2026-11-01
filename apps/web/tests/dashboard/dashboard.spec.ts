@@ -19,18 +19,6 @@ const project = {
   stale: false,
   observations: {
     status: "ok",
-    sources: {
-      kp: {
-        source_id: "kp",
-        label: "Estimated Kp",
-        status: "ok",
-        latest_observation_at: checkedAt,
-        last_response_at: checkedAt,
-        last_success_at: checkedAt,
-        last_attempt_at: checkedAt,
-        consecutive_failures: 0,
-      },
-    },
     measurements: [
       {
         metric: "dst",
@@ -346,20 +334,20 @@ test("client landing never requests project monitoring", async ({ page }) => {
   expect(
     reads.some((url) => /project-(monitoring|traffic)/.test(url.pathname)),
   ).toBeFalsy();
-  await expect(page.getByText("Clio · Observation sources")).toHaveCount(0);
+  await expect(page.getByText("Clio · Observations")).toHaveCount(0);
 });
 
-test("multiple groups use monitoring permission and show source and forecast timestamps", async ({
+test("multiple groups use monitoring permission and show observation and forecast timestamps", async ({
   page,
 }) => {
   await mockApi(page, { ...admin, groups: ["clients", "admins"] });
   await page.goto("/dashboard");
   await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
-  await expect(page.getByText("Estimated Kp", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clio · Observations", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Services", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Server resources" })).toHaveCount(0);
   await expect(
-    page.getByRole("columnheader", { name: "Response received" }),
+    page.getByRole("columnheader", { name: "Last received" }),
   ).toBeVisible();
   await expect(
     page.getByRole("columnheader", { name: "Published", exact: true }),

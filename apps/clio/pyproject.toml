@@ -23,9 +23,6 @@ dependencies = [
   "apscheduler>=3.11.3",
 ]
 
-[project.scripts]
-clio = "clio.cli:main"
-
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

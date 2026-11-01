@@ -31,7 +31,7 @@ fi
 templates=("${compose[@]}" "${template_files[@]}")
 compose+=("${compose_files[@]}")
 usage() {
-    echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
+    echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio migrate <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
 }
 lock() {
     [[ "$mode" == prod ]] || return 0
@@ -106,9 +106,11 @@ case "${1:-}" in
                     ;;
                 *) usage >&2; exit 2 ;;
             esac
+        elif [[ "$domain" == clio ]]; then
+            usage >&2; exit 2
         else
             lock s
-            if [[ "$domain" == clio || "$domain" == prophet ]]; then
+            if [[ "$domain" == prophet ]]; then
                 cron_options=()
                 if [[ -n "${ARGUS_CRON_JOB:-}" ]]; then cron_options+=(-e "ARGUS_CRON_JOB=$ARGUS_CRON_JOB"); fi
                 exec "${templates[@]}" run --rm --no-deps -T "${cron_options[@]}" "$domain" "$domain" "$@"

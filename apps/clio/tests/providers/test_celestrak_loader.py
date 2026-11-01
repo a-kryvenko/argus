@@ -86,9 +86,9 @@ def test_backfill_batches_both_metrics_and_downloads_history_once(monkeypatch):
     adapter = CelesTrakHistoryAdapter()
     pending = {m: set(pd.date_range(START, NOW, inclusive='left')) for m in loader.METRICS}
     frame, attempts = fetch_missing(pending, policies, {'celestrak.f107_archive': adapter})
-    assert frame.value.tolist() == [91., 111., 92., 112.]
+    assert frame.value.tolist() == [91., 92., 112.]
     assert len(attempts) == 1
-    assert attempts[0]['accepted_measurements'] == 4
+    assert attempts[0]['accepted_measurements'] == 3
     # Subsequent date chunks in this backfill reuse the same source snapshot.
     assert adapter.fetch(pd.Timestamp('2026-10-31T20:00Z'), pd.Timestamp(NOW)).value.tolist() == [92., 112.]
     assert adapter.fetch(pd.Timestamp('2026-10-31T21:00Z'), pd.Timestamp(NOW)).empty
@@ -96,8 +96,8 @@ def test_backfill_batches_both_metrics_and_downloads_history_once(monkeypatch):
     session = AsyncMock()
     asyncio.run(upsert_measurements(session, frame, replace_existing=False))
     values = session.execute.call_args.args[0].compile(dialect=postgresql.dialect()).params
-    assert values['metric_m1'] == 'f10_7_81mean'
-    assert values['value_m1'] == 111.
+    assert values['metric_m2'] == 'f10_7_81mean'
+    assert values['value_m2'] == 112.
 
 
 def test_live_clips_future_observations_and_fetches_both_metrics_once(monkeypatch):

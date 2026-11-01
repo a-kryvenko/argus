@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.providers.geomagnetic_loader import SOURCES, INTERVAL_SECONDS
 from clio.db.models.measurement import Measurement
-from clio.monitoring.specs import SOURCE_SPECS, poll_seconds
+from clio.config import load_observation_config
+from clio.scheduler.schedule import poll_seconds
 from clio.observations.coverage import coverage
 from clio.observations.intervals import interval_end, interval_end_expression
 
@@ -18,7 +19,7 @@ def metadata(metric: str) -> dict:
             'source_url': SOURCES[metric], 'resolution_seconds': INTERVAL_SECONDS[metric],
             'poll_seconds': poll_seconds(metric),
             'data_status': 'estimated' if metric == 'kp' else 'realtime',
-            'stale_after_seconds': SOURCE_SPECS[metric]['stale_after_seconds'], 'freshness_basis': 'interval_end',
+            'stale_after_seconds': load_observation_config().observations[metric].freshness_minutes * 60, 'freshness_basis': 'interval_end',
             'time_basis': 'source_interval_start', 'gap_filling': 'none'}
 
 
@@ -38,10 +39,11 @@ async def latest(session: AsyncSession, now: datetime | None = None) -> dict:
                      .order_by(Measurement.observed_at.desc()).limit(1))
         record = (await session.execute(statement)).scalars().first()
         lag = max(0, int((now-interval_end(record.metric, record.observed_at)).total_seconds())) if record is not None else None
-        series[metric] = {**metadata(metric), 'latest': sample(record, now) if record is not None else None,
+        info = metadata(metric)
+        series[metric] = {**info, 'latest': sample(record, now) if record is not None else None,
                           'lag_seconds': lag,
                           'status': 'missing' if record is None or record.value is None else
-                          'stale' if lag > SOURCE_SPECS[metric]['stale_after_seconds'] else 'fresh'}
+                          'stale' if lag > info['stale_after_seconds'] else 'fresh'}
     return {'generated_at': now, 'series': series}
 
 

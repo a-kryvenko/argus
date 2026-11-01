@@ -14,25 +14,17 @@ Event inputs contain catalog observations and external ENLIL predictions with re
 ## Observations
 
 [project.yaml](../../../configs/project.yaml) defines sources, priorities and backfill.
-Polling frequency differs from provider publication cadence.
+`freshness_minutes` sets the maximum data age; Kp/Ap/Dst use the interval end.
 Backfill fills configured historical horizons and missing hourly rows; file recovery requires matching SHA256.
 `normalize` writes hourly rows from live data. `cleanup` uses `clio.retention` (live: 6 days; hourly: 60 days).
 [Model input requirements](../../../docs/observation-requirements.md).
 
 ## Operation
 
-```bash
-./argus clio collect
-./argus clio backfill
-./argus clio normalize
-./argus clio cleanup
-```
-
+`clio` serves HTTP; `clio-worker` schedules collection, backfill, normalization and cleanup.
+Logs: `./argus logs clio`.
 Authenticated diagnostics: `/internal/v1/observations/status`.
 `/health/live` checks HTTP; `/health/ready` checks storage.
-Cron uses the host timezone and `flock`; logs: `log/clio/`.
-The host needs Docker Compose, cron, flock and Python 3.
-Deployment installs [cronjobs.txt](../cronjobs.txt) with the other services and deploy jobs.
 
 ## File storage
 

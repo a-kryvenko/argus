@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.observations import geomagnetic
 from clio.observations import solar_wind as solar_wind
-from clio.monitoring.specs import WIND_STALE_AFTER_SECONDS
 
 LOOKBACK_MINUTES = 75
 
@@ -26,13 +25,13 @@ def unavailable(reason: str, **extra) -> dict:
     }
 
 
-def change_one_hour(points: list[dict], now: datetime) -> dict:
+def change_one_hour(points: list[dict], now: datetime, *, freshness_minutes: float) -> dict:
     if not points or not valid(points[-1]):
         return unavailable('missing_latest')
     last = points[-1]
     end = last['observed_at']
 
-    if (now-end).total_seconds() > WIND_STALE_AFTER_SECONDS:
+    if (now-end).total_seconds() > freshness_minutes * 60:
         return unavailable('stale', as_of=end)
     
     windows = [[point for point in points if valid(point)
@@ -93,7 +92,7 @@ async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
 
     changes = {
         metric: {
-            **change_one_hour(series['points'], now),
+            **change_one_hour(series['points'], now, freshness_minutes=series['stale_after_seconds'] / 60),
             'unit': series['unit']
         } for metric, series in past['series'].items()
     }

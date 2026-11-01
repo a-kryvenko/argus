@@ -114,7 +114,7 @@ services:
     healthcheck:
       <<: *clio-healthcheck
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
-    command: [clio, serve]
+    command: [.venv/bin/uvicorn, 'clio.main:app', --host, 0.0.0.0, --port, '8000']
 
   clio-worker:
     <<: *clio-runtime

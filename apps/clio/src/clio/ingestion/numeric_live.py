@@ -1,6 +1,6 @@
 """Collect selected live observations with product batching and gap fallback."""
 import asyncio
-from contextlib import nullcontext
+import logging
 from datetime import UTC, datetime, timedelta
 from functools import partial
 
@@ -10,20 +10,14 @@ from sqlalchemy.exc import SQLAlchemyError
 import pandas as pd
 from requests import RequestException
 
-from clio.ingestion.products import OBSERVATIONS
+from clio.ingestion.products import OBSERVATIONS, SOURCE_IDS
 from clio.ingestion.live import LIVE_LOADERS, COLUMNS
 from clio.db.session import get_db_session
 from clio.db.locks import SOURCE_LOCKS
-from clio.monitoring.status import track_attempt
 from clio.observations.measurements import store_native
+from clio.observations.intervals import INTERVALS
 
-SOURCE_IDS = {
-    'swpc.rtsw_mag': 'solar_wind_mag',
-    'swpc.rtsw_plasma': 'solar_wind_plasma',
-    'swpc.kp': 'kp',
-    'swpc.dst': 'dst',
-}
-
+logger = logging.getLogger(__name__)
 
 async def collect_product(product, priorities, start, now):
     async with get_db_session() as session:
@@ -33,15 +27,14 @@ async def collect_product(product, priorities, start, now):
                                          {'key': SOURCE_LOCKS[source_id]})
             if not lock.scalar_one():
                 return pd.DataFrame(columns=COLUMNS)
-        context = track_attempt(source_id, session, get_db_session) if source_id else nullcontext()
-        async with context as attempt:
+        try:
             frame = await asyncio.to_thread(LIVE_LOADERS[product], start, now)
             records = frame.astype(object).where(pd.notna(frame), None).to_dict('records')
-            if attempt is not None:
-                attempt.received(records)
             await store_native(session, records, source_priorities=priorities)
-            if attempt is None:
-                await session.commit()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         return frame
 
 
@@ -92,11 +85,12 @@ async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
                     accepted += 1
                 attempt['accepted_measurements'] = accepted
             except (RequestException, OSError, ValueError, KeyError, RuntimeError, SQLAlchemyError) as exc:
+                logger.warning('Live source %s failed', product, exc_info=True)
                 attempt['error'] = str(exc)
             attempts.append(attempt)
     frame = pd.DataFrame(rows, columns=['metric', 'value', 'observed_at', 'source_product', 'received_at'])
     latest = {m: frame.loc[frame.metric == m, 'observed_at'].max() for m in metrics}
-    failed = [m for m in metrics if pd.isna(latest[m]) or latest[m] < now - OBSERVATIONS[m].max_age]
+    failed = [m for m in metrics if pd.isna(latest[m]) or latest[m] + INTERVALS.get(m, timedelta()) < now - timedelta(minutes=policies[m].freshness_minutes)]
     return frame, {'status': 'partial' if failed else 'complete', 'failed_metrics': failed,
                    'latest_observed_at': {m: None if pd.isna(t) else t.isoformat() for m, t in latest.items()},
                    'missing_live_slots': {m: len(slots) for m, slots in pending.items()}, 'source_attempts': attempts}
@@ -113,7 +107,7 @@ async def collect_live(config, metrics, *, now=None):
     priorities = {m: policy.sources.live for m, policy in config.observations.items()
                   if OBSERVATIONS[m].kind == 'numeric'}
     fetchers = {product: partial(collect_product, product, priorities) for product in LIVE_LOADERS}
-    lookback_days = max(config.retention.live_days, *(OBSERVATIONS[m].max_age.total_seconds() / 86400 for m in metrics))
+    lookback_days = max(config.retention.live_days, *((config.observations[m].freshness_minutes * 60 + INTERVALS.get(m, timedelta()).total_seconds()) / 86400 for m in metrics))
     frame, report = await fetch_live(metrics, config.observations, fetchers, now, lookback_days=lookback_days)
     report['downloaded_measurements'] = len(frame)
     return report

@@ -97,7 +97,7 @@ def test_product_collection_makes_two_authenticated_status_requests(monkeypatch,
         requests.append((str(request.url), request.headers['Authorization']))
         if request.url.host == 'clio':
             return httpx.Response(200, json={'success': True, 'data': {
-                'status': 'ok', 'sources': {}, 'measurements': []}})
+                'status': 'ok', 'measurements': []}})
         return httpx.Response(503 if forecast_unavailable else 200,
             json={'products': [forecast_payload(p) for p in monitoring.PRODUCT_ARTIFACTS]})
     client = httpx.AsyncClient

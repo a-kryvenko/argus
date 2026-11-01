@@ -16,20 +16,10 @@ from common.runtime import setup_sentry
 
 from clio.scheduler import warmup
 from clio.scheduler.jobs import run_backfill, run_cleanup, run_collect, run_normalize
+from clio.scheduler.schedule import COLLECTING_SCHEDULES
 
 logger = logging.getLogger(__name__)
 
-"""
-Groups of metrics | crontab minutes rule
-"""
-COLLECTING_SCHEDULES = [
-    (["v", "n", "t"], "*"),
-    (["bx", "by", "bz"], "*"),
-    (["kp", "ap"], "*"),
-    (["dst", "sdo"], "*/5"),
-    (["donki", "enlil", "sdo-browse"], "*/15"),
-    (["f10_7", "f10_7_81mean", "s10_81mean", "m10_81mean", "y10_81mean", "goes", "gong"], "0"),
-]
 
 def _init_job(scheduler, func, job_id, args=(), **schedule):
     options = {

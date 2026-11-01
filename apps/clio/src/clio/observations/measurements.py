@@ -67,6 +67,7 @@ async def upsert_measurements(
     measurements: pd.DataFrame,
     *, replace_existing: bool = True,
     source_priorities: dict[str, list[str]] | None = None,
+    repair_missing: bool = False,
 ) -> None:
     if measurements.empty:
         return
@@ -113,6 +114,18 @@ async def upsert_measurements(
                 # Re-polling the same value must not erase known provenance.
                 where=changed,
             )
+        elif repair_missing:
+            from clio.ingestion.products import OBSERVATIONS
+            nonnegative = [name for name, definition in OBSERVATIONS.items()
+                           if definition.kind == 'numeric' and definition.quality != 'finite']
+            missing = or_(Measurement.value.is_(None), Measurement.value <= float('-inf'),
+                          Measurement.value >= float('inf'), Measurement.quality.in_(['missing', 'flagged']),
+                          and_(Measurement.metric.in_(nonnegative), Measurement.value < 0),
+                          and_(Measurement.metric == 'kp', Measurement.value > 9))
+            statement = statement.on_conflict_do_update(
+                constraint='uq_measurement_metric',
+                set_={'value': statement.excluded.value, 'source_product': statement.excluded.source_product,
+                      'received_at': statement.excluded.received_at, 'quality': None}, where=missing)
         else:
             statement = statement.on_conflict_do_nothing(constraint="uq_measurement_metric")
         await session.execute(statement)

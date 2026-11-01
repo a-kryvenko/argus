@@ -47,78 +47,94 @@ clio:
         live: [gong.live]
         historical: [gong.archive]
       backfill_days: 2
+      freshness_minutes: 180
     bx:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       backfill_days: 60
+      freshness_minutes: 10
     by:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       backfill_days: 60
+      freshness_minutes: 10
     bz:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       backfill_days: 60
+      freshness_minutes: 10
     v:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       backfill_days: 60
+      freshness_minutes: 10
     n:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       backfill_days: 60
+      freshness_minutes: 10
     t:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       backfill_days: 60
+      freshness_minutes: 10
     kp:
       sources:
         live: [swpc.kp]
         historical: [omni.hourly]
       backfill_days: 60
+      freshness_minutes: 240
     ap:
       sources:
         live: [swpc.kp]
         historical: [omni.hourly]
       backfill_days: 60
+      freshness_minutes: 240
     dst:
       sources:
         live: [swpc.dst]
         historical: [omni.hourly]
       backfill_days: 60
+      freshness_minutes: 120
     f10_7:
       sources:
         live: [celestrak.f107, swpc.f107]
         historical: [celestrak.f107_archive, gfz.f107, omni.hourly]
       backfill_days: 35
+      freshness_minutes: 2880
     f10_7_81mean:
       sources:
         live: [celestrak.f107]
         historical: [celestrak.f107_archive]
       backfill_days: 6
+      freshness_minutes: 2880
     s10_81mean:
       sources:
         live: [solfsmy.means]
         historical: [solfsmy.means_archive]
       backfill_days: 14
+      freshness_minutes: 20160
     m10_81mean:
       sources:
         live: [solfsmy.means]
         historical: [solfsmy.means_archive]
       backfill_days: 14
+      freshness_minutes: 20160
     y10_81mean:
       sources:
         live: [solfsmy.means]
         historical: [solfsmy.means_archive]
       backfill_days: 14
+      freshness_minutes: 20160
     goes:
       sources:
         live: [goes.live]
         historical: [goes.archive]
       backfill_days: 35
+      freshness_minutes: 120

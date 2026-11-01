@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
-from clio.config import ClioObservations
+from clio.config import ClioObservations, load_observation_config
 from clio.ingestion.adapters import WideHistoryAdapter, historical_adapters
 from clio.ingestion.products import PRODUCTS
 from clio.ingestion import numeric_backfill as service
@@ -26,7 +26,7 @@ def config(metrics=('v', 'n', 't')):
         return {'live': live, 'historical': historical}
     return ClioObservations.model_validate({'observations': {
         metric: {'sources': sources(metric),
-                 'backfill_days': 2}
+                 'backfill_days': 2, 'freshness_minutes': load_observation_config().observations[metric].freshness_minutes}
         for metric in metrics}})
 
 
@@ -39,6 +39,11 @@ def frame(*rows):
     lambda p: p['sources'].update(historical=['swpc.rtsw_plasma']),
     lambda p: p['sources'].update(historical=['omni.hourly', 'omni.hourly']),
     lambda p: p['sources'].update(historical=[]),
+    lambda p: p.pop('freshness_minutes'),
+    lambda p: p.update(freshness_minutes=0),
+    lambda p: p.update(freshness_minutes=-1),
+    lambda p: p.update(freshness_minutes=True),
+    lambda p: p.update(freshness_minutes='10'),
     lambda p: p.update(backfill_days=0),
     lambda p: p.update(backfill_days=True),
     lambda p: p.update(backfill_days='60'),
@@ -48,7 +53,7 @@ def frame(*rows):
 ])
 def test_invalid_policy_rejected(change):
     policy = {'sources': {'live': ['swpc.rtsw_plasma'], 'historical': ['omni.hourly']},
-              'backfill_days': 60}
+              'backfill_days': 60, 'freshness_minutes': 10}
     change(policy)
     with pytest.raises(ValidationError):
         ClioObservations.model_validate({'observations': {'v': policy}})
@@ -154,7 +159,7 @@ def test_backfill_preserves_concurrent_values_and_uses_metric_depth(monkeypatch)
     pending = fetch.call_args.args[0]
     assert len(pending['v']) == 48 and len(pending['n']) == 24
     assert normalize.call_args.args[0].value.tolist() == [450.]
-    assert insert.call_args.kwargs == {'replace_existing': False}
+    assert insert.call_args.kwargs == {'replace_existing': False, 'repair_missing': True}
     assert result['missing_observed_hours'] == {'v': 47, 'n': 24}
     session.commit.assert_awaited_once()
 
@@ -176,9 +181,11 @@ def test_legacy_repoll_does_not_erase_provenance_for_unchanged_values():
     assert sql.rsplit(' WHERE ', 1)[-1].endswith('measurement.value IS DISTINCT FROM excluded.value')
 
 
-def test_existing_observation_closes_hour_even_when_flagged_or_off_grid():
+def test_invalid_observation_does_not_close_hour_but_valid_off_grid_value_does():
     stored = frame(('v', float('nan'), START + timedelta(minutes=5)))
-    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1)) == set()
+    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1), freshness_minutes=load_observation_config().observations['v'].freshness_minutes) == {pd.Timestamp(START)}
+    stored['value'] = 400.
+    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1), freshness_minutes=load_observation_config().observations['v'].freshness_minutes) == set()
 
 
 def test_all_sources_failing_does_not_commit(monkeypatch):
@@ -198,10 +205,10 @@ def test_coverage_uses_three_hour_and_daily_slots_and_only_closed_intervals():
     end = START + timedelta(days=1, hours=2)
     stored = frame(('kp', 3., START), ('kp', 2., START + timedelta(hours=3)),
                    ('f10_7', 150., START + timedelta(hours=12)))
-    assert len(service.missing_slots(stored, 'kp', START, end)) == 6
-    assert not service.missing_slots(stored, 'f10_7', START, end)
-    assert len(service.missing_slots(stored, 'ap', START, end)) == 8
-    assert not service.missing_slots(stored, 'f10_7', START + timedelta(hours=1), end)
+    assert len(service.missing_slots(stored, 'kp', START, end, freshness_minutes=load_observation_config().observations['kp'].freshness_minutes)) == 6
+    assert not service.missing_slots(stored, 'f10_7', START, end, freshness_minutes=load_observation_config().observations['f10_7'].freshness_minutes)
+    assert len(service.missing_slots(stored, 'ap', START, end, freshness_minutes=load_observation_config().observations['ap'].freshness_minutes)) == 8
+    assert not service.missing_slots(stored, 'f10_7', START + timedelta(hours=1), end, freshness_minutes=load_observation_config().observations['f10_7'].freshness_minutes)
 
 
 def test_omni_adapter_retains_signed_fields_and_filters_invalid_indices():
@@ -254,9 +261,70 @@ def test_daily_backfill_uses_configured_closed_days(monkeypatch):
     assert result['missing_observed_slots'] == {'f10_7': 2}
 
 
+def test_second_backfill_of_complete_history_makes_no_provider_requests(monkeypatch):
+    stored = frame()
+    async def read(*args, **kwargs):
+        return stored.copy()
+    async def save(session, values, **kwargs):
+        nonlocal stored
+        if not values.empty:
+            new = values[['metric', 'value', 'observed_at']]
+            stored = new.copy() if stored.empty else pd.concat([stored, new], ignore_index=True)
+    adapter = Mock()
+    adapter.fetch.return_value = frame(*(
+        ('v', 400., time) for time in pd.date_range(START, START+timedelta(days=2), freq='h', inclusive='left')))
+    factory = Mock(return_value={'omni.hourly': adapter})
+    monkeypatch.setattr(service, 'load_measurements', read)
+    monkeypatch.setattr(service, 'upsert_measurements', save)
+    monkeypatch.setattr(service, 'historical_adapters', factory)
+    monkeypatch.setattr(service, 'upsert_normalized_observations', AsyncMock())
+    session = AsyncMock()
+    first = asyncio.run(service.backfill_numeric(session, config(('v',)), ['v'], now=START+timedelta(days=2)))
+    second = asyncio.run(service.backfill_numeric(session, config(('v',)), ['v'], now=START+timedelta(days=2)))
+    assert first['downloaded_measurements'] == 48
+    assert second['downloaded_measurements'] == 0
+    assert second['source_attempts'] == []
+    assert second['missing_observed_slots'] == {'v': 0}
+    adapter.fetch.assert_called_once()
+    factory.assert_called_once()
+
+
+def test_held_solfsmy_mean_does_not_create_daily_gaps_through_publication_delay():
+    end = START+timedelta(days=14)
+    stored = frame(('s10_81mean', 110., end-timedelta(days=6, hours=12)))
+    assert service.missing_slots(stored, 's10_81mean', START, end, freshness_minutes=load_observation_config().observations['s10_81mean'].freshness_minutes) == set()
+    stored['value'] = float('nan')
+    assert len(service.missing_slots(stored, 's10_81mean', START, end, freshness_minutes=load_observation_config().observations['s10_81mean'].freshness_minutes)) == 14
+
+
+def test_shared_historical_response_is_reused_when_fallback_needs_another_metric():
+    from clio.config import load_observation_config
+    policies = load_observation_config().observations
+    omni, celestrak, gfz = Mock(), Mock(), Mock()
+    omni.fetch.return_value = frame(('v', 400., START), ('f10_7', 123., START+timedelta(hours=12)))
+    celestrak.fetch.return_value = gfz.fetch.return_value = frame()
+    result, attempts = service.fetch_missing({'v': {pd.Timestamp(START)}, 'f10_7': {pd.Timestamp(START)}},
+        policies, {'omni.hourly': omni, 'celestrak.f107_archive': celestrak, 'gfz.f107': gfz})
+    assert set(result.metric) == {'v', 'f10_7'}
+    omni.fetch.assert_called_once()
+    assert [a['accepted_measurements'] for a in attempts if a['product'] == 'omni.hourly'] == [1, 1]
+
+
+def test_backfill_repairs_only_unusable_stored_values():
+    session = AsyncMock()
+    asyncio.run(upsert_measurements(session, frame(('v', 400., START)), replace_existing=False, repair_missing=True))
+    query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
+    text = str(query)
+    assert 'DO UPDATE' in text and 'quality = ' in text
+    condition = text.rsplit(' WHERE ', 1)[-1]
+    assert 'measurement.value IS NULL' in condition
+    assert 'measurement.quality IN' in condition
+    assert 'excluded.value' not in condition  # A different but valid measurement is preserved.
+
+
 def test_magnetic_config_cannot_use_ace_gse_as_gsm_fallback():
     policy = {'sources': {'live': ['swpc.rtsw_mag'], 'historical': ['ace.plasma_hourly']},
-              'backfill_days': 60}
+              'backfill_days': 60, 'freshness_minutes': 10}
     with pytest.raises(ValidationError, match='incompatible'):
         ClioObservations.model_validate({'observations': {'bz': policy}})
 

@@ -32,19 +32,9 @@ Manual migrations do not stop writers or create backups.
 
 ## Clio
 
-| Command | Purpose |
-| --- | --- |
-| `./argus clio serve` | Run the observation API |
-| `./argus clio collect [METRIC ...]` | Collect live observations; default: all |
-| `./argus clio backfill` | Check and fill configured historical horizons |
-| `./argus clio normalize` | Write hourly rows from live observations |
-| `./argus clio cleanup` | Remove expired live observations, hourly rows and SDO files |
-
-Backfill takes no arguments; horizons come from `clio.observations.*.backfill_days`.
-Cleanup uses `clio.retention.live_days` and `normalized_days` (6 and 60).
-Published means retain at least their configured backfill horizon.
-Restored originals must match their recorded SHA256.
-Partial results and reported failures exit with code 1.
+Backfill fills missing native slots within `clio.observations.*.backfill_days`.
+Published means need only a recent release.
+Cleanup uses `clio.retention`; restored originals must match their SHA256.
 Scheduler: `clio-worker` in dev and prod. Logs: `./argus logs clio`.
 
 ## Prophet
@@ -75,7 +65,7 @@ Risk assessment uses [density-advisory HTTP routes](density-advisory.md#service-
 
 | Route | Purpose |
 | --- | --- |
-| Clio `/internal/v1/observations/status` | Collection diagnostics and measurement freshness |
+| Clio `/internal/v1/observations/status` | Stored observation availability and freshness |
 | Prophet `/internal/v1/forecasts/status` | All products: release freshness and latest attempt |
 | `/health/live`, `/health/ready` | HTTP process/local storage |
 

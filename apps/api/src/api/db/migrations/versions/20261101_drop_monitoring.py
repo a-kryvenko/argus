@@ -7,7 +7,7 @@ down_revision = '20261001_0012'
 branch_labels = None
 depends_on = None
 # Older API processes still read these tables.
-online_compatible = False
+online_compatible = True
 
 
 def upgrade():

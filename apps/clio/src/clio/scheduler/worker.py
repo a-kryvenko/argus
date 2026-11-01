@@ -28,7 +28,7 @@ COLLECTING_SCHEDULES = [
     (["kp", "ap"], "*"),
     (["dst", "sdo"], "*/5"),
     (["donki", "enlil", "sdo-browse"], "*/15"),
-    (["f10_7", "goes", "gong"], "0"),
+    (["f10_7", "f10_7_81mean", "s10_81mean", "m10_81mean", "y10_81mean", "goes", "gong"], "0"),
 ]
 
 def _init_job(scheduler, func, job_id, args=(), **schedule):

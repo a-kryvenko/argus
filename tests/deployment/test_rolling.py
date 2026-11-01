@@ -343,7 +343,7 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
         (deployment.bundle / 'scripts' / name).write_bytes((ROOT / 'scripts' / name).read_bytes())
     for name in ('configs', 'nginx', 'alloy'):
         (deployment.bundle / name).mkdir()
-    for service in ('clio', 'prophet', 'api', 'intelligence'):
+    for service in ('prophet', 'api', 'intelligence'):
         path = deployment.bundle / 'apps' / service
         path.mkdir(parents=True)
         (path / 'cronjobs.txt').write_bytes((ROOT / 'apps' / service / 'cronjobs.txt').read_bytes())
@@ -373,6 +373,9 @@ def test_host_application_checkpoints_release_and_never_starts_all_http_slots(tm
     assert not any(service in call for call in starts for service in rolling.HTTP)
     assert sum('clio-green' in call for call in starts) == 1
     assert ('crontab', '-') in deployment.calls
+    worker_start = next(i for i, call in enumerate(deployment.calls) if call[0] == 'up' and 'clio-worker' in call)
+    assert deployment.calls.index(('crontab', '-')) < worker_start
+    assert not any(call[:2] == ('docker', 'stop') and 'clio-worker' in call for call in deployment.calls)
     deployment.calls.clear()
     deployment.apply()
     assert not any(call[0] == 'smoke' for call in deployment.calls)
@@ -397,6 +400,7 @@ def test_real_compose_export_preserves_maintenance_services(tmp_path):
     for domain in ('api', 'clio', 'prophet', 'intelligence'):
         services[domain + '-migrate'] = {'image': 'busybox', 'profiles': ['maintenance'], 'command': ['true']}
     (bundle / 'docker-compose.yml').write_text(json.dumps({'services': services}))
+    (bundle / 'docker-compose.prod.yml').write_text('{}')
     seed_state(tmp_path)
     deployment = rolling.Deployment(tmp_path, bundle)
     assert set(deployment.desired['services']) == set(services)
@@ -521,17 +525,20 @@ def test_production_cli_never_falls_back_to_old_files(tmp_path, missing):
     assert f'Missing production deployment file: {missing}' in result.stderr
 
 
-@pytest.mark.parametrize('containers', ['', 'old-clio-worker\n'])
-def test_retired_clio_worker_is_stopped_only_in_current_project(tmp_path, containers):
+@pytest.mark.parametrize('containers', ['', 'existing-clio-worker\n'])
+def test_clio_scheduler_is_drained_for_migration_only_if_already_running(tmp_path, monkeypatch, containers):
     deployment = harness(tmp_path)
-    calls = []
-    deployment.capture = lambda *args: calls.append(args) or containers
-    deployment.run = lambda *args: calls.append(args)
-    deployment.retire_clio_worker()
-    assert calls[0] == ('docker', 'ps', '-aq', '--filter', 'label=com.docker.compose.project=argus-test',
-                        '--filter', 'label=com.docker.compose.service=clio-worker')
-    assert calls[1:] == ([('docker', 'stop', '--time', '600', 'old-clio-worker'),
-                         ('docker', 'rm', 'old-clio-worker')] if containers else [])
+    deployment.base = ['docker', 'compose']
+    deployment.migrations = ['clio']
+    deployment.capture = lambda *args: containers
+    monkeypatch.setattr(rolling, 'create_backup', lambda *args: None)
+    deployment.backup_and_migrate()
+    assert deployment.calls == ([('stop', 'clio-worker')] if containers else []) + [
+        ('run', '--rm', '--no-deps', 'clio-migrate')]
+    deployment.resume_workers()
+    if containers:
+        assert deployment.calls[-1] == ('start', 'clio-worker')
+    assert not deployment.state.get('drained_workers')
 
 
 @pytest.fixture
@@ -539,7 +546,7 @@ def cron_deployment(tmp_path, monkeypatch):
     deployment = harness(tmp_path / 'host with spaces')
     deployment.bundle = tmp_path / 'bundle'
     files = [deployment.bundle / 'apps' / service / 'cronjobs.txt'
-             for service in ('clio', 'prophet', 'api', 'intelligence')]
+             for service in ('prophet', 'api', 'intelligence')]
     files.append(deployment.bundle / '.deploy/cronjobs.txt')
     for index, path in enumerate(files):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -571,6 +578,15 @@ def test_deployment_replaces_crontab_with_all_sources_in_order(cron_deployment):
     assert 'old crontab' not in state.read_text()
     command = next(line for line in state.read_text().splitlines() if not line.startswith('#') and line)
     assert shlex.split(command.split(maxsplit=5)[5])[0] == str(deployment.root / 'argus')
+
+
+def test_legacy_clio_cron_is_excluded_even_when_present_in_release(cron_deployment):
+    deployment, _, state = cron_deployment
+    legacy = deployment.bundle / 'apps/clio/cronjobs.txt'
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('* * * * * @ROOT@/argus clio collect\n')
+    deployment.install_crontab()
+    assert 'clio collect' not in state.read_text()
 
 
 def test_missing_cron_source_does_not_replace_host_crontab(cron_deployment):

@@ -107,4 +107,5 @@ Use `argus` for production commands/logs; it selects active HTTP slots. Bare
 
 [Commands](docs/commands.md) · [Architecture](docs/architecture.md)
 
-Deployment replaces the host crontab with `apps/{clio,prophet,api,intelligence}/cronjobs.txt` and `.deploy/cronjobs.txt`. `@ROOT@` expands to the deployment directory. Requires cron and flock; Logs: `log/clio/`, `log/prophet/`.
+Clio runs in `clio-worker`; logs: `./argus logs clio`.
+Deployment replaces host cron with `apps/{prophet,api,intelligence}/cronjobs.txt` and `.deploy/cronjobs.txt`; `@ROOT@` expands to the deployment directory.

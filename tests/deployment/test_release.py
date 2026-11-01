@@ -236,9 +236,24 @@ def test_bundle_includes_only_shared_command_scripts(tmp_path):
     assert {p.name for p in (destination / 'scripts').iterdir()} == {'run', 'logs', 'cron-run'}
     for name in ('run', 'logs', 'cron-run'):
         assert (destination / 'scripts' / name).read_bytes() == (ROOT / 'scripts' / name).read_bytes()
-    for service in ('clio', 'prophet', 'api', 'intelligence'):
+    for service in ('prophet', 'api', 'intelligence'):
         assert (destination / 'apps' / service / 'cronjobs.txt').read_bytes() == (ROOT / 'apps' / service / 'cronjobs.txt').read_bytes()
     assert (destination / '.deploy/cronjobs.txt').read_bytes() == (ROOT / '.deploy/cronjobs.txt').read_bytes()
+    assert not (destination / 'apps/clio/cronjobs.txt').exists()
+    assert (destination / 'docker-compose.yml').read_bytes() == (ROOT / 'docker-compose.yml').read_bytes()
+    assert (destination / 'docker-compose.prod.yml').read_bytes() == (ROOT / '.deploy/docker-compose.yml').read_bytes()
+    assert not (destination / 'docker-compose.override.yml').exists()
+    import shutil
+    if shutil.which('docker'):
+        normalized = json.loads(subprocess.check_output([
+            'docker', 'compose', '--project-directory', str(destination), '--env-file', '/dev/null',
+            '--profile', '*', '-f', str(destination / 'docker-compose.yml'),
+            '-f', str(destination / 'docker-compose.prod.yml'), 'config', '--no-interpolate', '--format', 'json'], text=True))
+        services = normalized['services']
+        assert services['clio-worker']['command'][2] == 'clio.scheduler.worker'
+        assert all('build' not in service for service in services.values())
+        config_mount = next(m for m in services['clio-worker']['volumes'] if m['target'] == '/var/www/configs')
+        assert config_mount['source'] == str(destination / 'configs')
 
 
 def test_packaged_api_revision_changes_migration_fingerprint(source):

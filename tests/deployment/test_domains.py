@@ -1,14 +1,14 @@
 """Deployment must not hand administrator or migration credentials to runtimes."""
 from pathlib import Path
-import yaml
 import pytest
+from .compose import load_compose
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
-    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
-    domains = {'api': ['api', 'api-worker'], 'clio': ['clio'],
+    services = load_compose('.deploy/docker-compose.yml')['services']
+    domains = {'api': ['api', 'api-worker'], 'clio': ['clio', 'clio-worker'],
                'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
     for domain, names in domains.items():
         for name in [*names, domain + '-migrate']:
@@ -27,7 +27,7 @@ def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
     assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
     assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://observations-router:8101'
     assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://observations-router:8101'
-    assert 'clio-worker' not in services
+    assert services['clio-worker']['command'][2] == 'clio.scheduler.worker'
     assert not {'solar-wind', 'geomagnetic', 'clio-refresh', 'clio-aggregate'} & services.keys()
 
 
@@ -39,7 +39,7 @@ def test_static_crontab_only_bootstraps_proxy():
 
 
 def test_forecast_read_service_is_internal_and_requires_token():
-    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    services = load_compose('.deploy/docker-compose.yml')['services']
     reader = services['prophet-api']
     assert 'ports' not in reader
     assert set(reader['networks']) == {'backend', 'forecasts'}
@@ -49,11 +49,11 @@ def test_forecast_read_service_is_internal_and_requires_token():
 
 
 def test_intelligence_credentials_and_networks_are_scoped():
-    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    services = load_compose('.deploy/docker-compose.yml')['services']
     runtime = services['intelligence']
     assert 'profiles' not in runtime
     assert runtime['command'] == ['intelligence', 'worker']
-    assert runtime['networks'] == ['backend', 'forecasts']
+    assert set(runtime['networks']) == {'backend', 'forecasts'}
     assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'ARGUS_WORKDIR', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR', 'INTELLIGENCE_SERVICE_TOKEN'}
     assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
     assert runtime['environment']['INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'] == '${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}'
@@ -67,7 +67,7 @@ def test_intelligence_credentials_and_networks_are_scoped():
 
 
 def test_impact_service_is_internal_and_has_scoped_database_credentials():
-    services = yaml.safe_load((ROOT / '.deploy/docker-compose.yml').read_text())['services']
+    services = load_compose('.deploy/docker-compose.yml')['services']
     runtime = services['intelligence-api']
     assert runtime['command'] == ['intelligence', 'serve']
     assert 'ports' not in runtime
@@ -80,9 +80,9 @@ def test_impact_service_is_internal_and_has_scoped_database_credentials():
     assert runtime['environment']['INTELLIGENCE_SERVICE_TOKEN'] == services['api']['environment']['INTELLIGENCE_SERVICE_TOKEN']
 
 
-@pytest.mark.parametrize('filename', ['docker-compose.yml', '.deploy/docker-compose.yml'])
+@pytest.mark.parametrize('filename', ['docker-compose.override.yml', '.deploy/docker-compose.yml'])
 def test_runtime_storage_credentials_and_startup_boundaries(filename):
-    services = yaml.safe_load((ROOT / filename).read_text())['services']
+    services = load_compose(filename)['services']
     owners = {'clio': 'CLIO', 'prophet': 'PROPHET',
               'prophet-api': 'PROPHET', 'intelligence': 'INTELLIGENCE',
               'intelligence-api': 'INTELLIGENCE', 'api': 'API'}
@@ -120,17 +120,17 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
 
 
 def test_prophet_generation_is_a_command_template_without_a_background_worker():
-    for filename in ('docker-compose.yml', '.deploy/docker-compose.yml'):
-        services = yaml.safe_load((ROOT / filename).read_text())['services']
+    for filename in ('docker-compose.override.yml', '.deploy/docker-compose.yml'):
+        services = load_compose(filename)['services']
         service = services['prophet']
         assert service['profiles'] == ['commands']
         assert service['restart'] == 'no'
         assert service['command'] == ['prophet', '--help']
 
 
-@pytest.mark.parametrize('filename', ['docker-compose.yml', '.deploy/docker-compose.yml'])
+@pytest.mark.parametrize('filename', ['docker-compose.override.yml', '.deploy/docker-compose.yml'])
 def test_api_worker_has_diagnostic_dependencies_and_no_http_listener(filename):
-    services = yaml.safe_load((ROOT / filename).read_text())['services']
+    services = load_compose(filename)['services']
     worker = services['api-worker']
     assert worker['image'] == services['api']['image']
     assert worker['command'] == ['api', 'worker']

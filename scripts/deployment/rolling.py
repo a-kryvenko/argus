@@ -15,7 +15,7 @@ from release import artifact_digest
 from backup import create_backup
 
 HTTP = {'clio': 8000, 'prophet-api': 8000, 'intelligence-api': 8000, 'api': 8000, 'frontend': 3000}
-WORKERS = ['intelligence', 'proswin', 'api-worker']
+WORKERS = ['clio-worker', 'intelligence', 'proswin', 'api-worker']
 ROUTER = 'internal-router'
 ROUTES = {
     'clio': ('observations', 'observations-router', 8101),
@@ -137,7 +137,8 @@ class Deployment:
         self.base = ['docker', 'compose', '--project-directory', str(root),
                      '--env-file', str(root / '.env'), '--env-file', str(root / '.env.local')]
         self.desired = json.loads(self.capture(*self.base, '--env-file', str(bundle / 'images.env'),
-                                               '--profile', '*', '-f', str(bundle / 'docker-compose.yml'), 'config', '--format', 'json'))
+                                               '--profile', '*', '-f', str(bundle / 'docker-compose.yml'),
+                                               '-f', str(bundle / 'docker-compose.prod.yml'), 'config', '--format', 'json'))
         required = {domain + '-migrate' for domain in ('api', 'clio', 'prophet', 'intelligence')}
         if not required <= self.desired['services'].keys():
             raise RuntimeError('Release configuration is missing maintenance services')
@@ -330,6 +331,8 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         # Readers and request writers remain online only for compatible migrations.
         workers = {'api': [], 'clio': [], 'prophet': [], 'intelligence': ['intelligence']}
         for domain in self.migrations:
+            if domain == 'clio' and self.worker_containers('clio-worker'):
+                workers[domain] = ['clio-worker']
             if domain == 'api' and self.worker_containers('api-worker'):
                 workers[domain] = ['api-worker']
             if domain == 'prophet' and self.worker_containers('prophet'):
@@ -458,14 +461,11 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         if any(char in str(self.root) for char in ('\n', '\r', '%')):
             raise RuntimeError('Cron deployment path must not contain newlines or %')
         paths = [self.bundle / 'apps' / service / 'cronjobs.txt'
-                 for service in ('clio', 'prophet', 'api', 'intelligence')]
+                 for service in ('prophet', 'api', 'intelligence')]
         paths.append(self.bundle / '.deploy/cronjobs.txt')
         contents = [path.read_text().rstrip() for path in paths]
         crontab = '\n\n'.join(contents).replace('@ROOT@', shlex.quote(str(self.root))) + '\n'
         self.run('crontab', '-', input=crontab, text=True)
-
-    def retire_clio_worker(self):
-        self.retire_worker('clio-worker')
 
     def worker_containers(self, service):
         return self.capture('docker', 'ps', '-aq', '--filter',
@@ -495,6 +495,8 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         self.backup_and_migrate()
         for service in HTTP:
             self.replace(service)
+        # Replace legacy Clio cron entries before starting its scheduler.
+        self.install_crontab()
         self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', *WORKERS)
         legacy = [name for name in self.state.get('drained_workers', []) if name == 'prophet']
         if legacy:
@@ -516,8 +518,6 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         for name in ('run', 'logs', 'cron-run'):
             shutil.copy2(self.bundle / 'scripts' / name, self.root / 'scripts' / name)
         shutil.copy2(self.bundle / 'argus', self.root / 'argus')
-        self.install_crontab()
-        self.retire_clio_worker()
         self.retire_worker('prophet')
         self.state.pop('drained_workers', None)
         self.save()

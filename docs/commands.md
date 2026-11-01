@@ -2,6 +2,7 @@
 
 `./argus help` and `./argus <service> --help` list options.
 The wrapper selects dev/prod Compose and loads env files.
+Shared services: `docker-compose.yml`; overrides: `docker-compose.override.yml` (dev), `.deploy/docker-compose.yml` (prod).
 [First startup](../README_DEPLOY.md#local-development).
 
 ## Service processes
@@ -9,7 +10,7 @@ The wrapper selects dev/prod Compose and loads env files.
 ```bash
 ./argus compose up -d --wait
 pnpm dev                         # Local frontend
-./argus compose restart prophet # Worker source changes
+./argus compose restart clio-worker # Scheduler source changes
 ./argus compose down
 ```
 
@@ -44,7 +45,7 @@ Cleanup uses `clio.retention.live_days` and `normalized_days` (6 and 60).
 Published means retain at least their configured backfill horizon.
 Restored originals must match their recorded SHA256.
 Partial results and reported failures exit with code 1.
-Cron: `apps/clio/cronjobs.txt`. Logs: `log/clio/`.
+Scheduler: `clio-worker` in dev and prod. Logs: `./argus logs clio`.
 
 ## Prophet
 

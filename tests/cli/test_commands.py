@@ -64,6 +64,8 @@ def test_domain_arguments_and_environment_files(cli):
     assert str(root / '.release-images.env') not in args
     expected = '.release-compose.json' if mode == 'production' else 'docker-compose.yml'
     assert args[args.index('-f') + 1] == str(root / expected)
+    if mode == 'local':
+        assert args[args.index('-f') + 2:args.index('-f') + 4] == ['-f', str(root / 'docker-compose.override.yml')]
 
 
 @pytest.mark.parametrize('apply', [False, True])
@@ -130,7 +132,7 @@ def test_compose_arguments_are_forwarded_without_running_app(cli):
     result, calls = run('compose', 'up', '-d', '--wait', 'postgres', 'redis')
     assert result.returncode == 0, result.stderr
     assert len(calls) == 1
-    expected = '.rolling-compose.json' if mode == 'production' else 'docker-compose.yml'
+    expected = '.rolling-compose.json' if mode == 'production' else 'docker-compose.override.yml'
     assert calls[0]['args'][-6:] == [str(root / expected), 'up', '-d', '--wait', 'postgres', 'redis']
 
 

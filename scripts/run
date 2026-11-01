@@ -21,15 +21,15 @@ if [[ "$mode" == prod ]]; then
     for file in .rolling-state.json .rolling-compose.json .release-compose.json; do
         [[ -f "$root/$file" ]] || { echo "Missing production deployment file: $file" >&2; exit 2; }
     done
-    compose_file="$root/.rolling-compose.json"
-    template_file="$root/.release-compose.json"
+    compose_files=(-f "$root/.rolling-compose.json")
+    template_files=(-f "$root/.release-compose.json")
 else
     export LOCAL_UID="${LOCAL_UID:-$(id -u)}" LOCAL_GID="${LOCAL_GID:-$(id -g)}"
-    compose_file="$root/docker-compose.yml"
-    template_file="$compose_file"
+    compose_files=(-f "$root/docker-compose.yml" -f "$root/docker-compose.override.yml")
+    template_files=("${compose_files[@]}")
 fi
-templates=("${compose[@]}" -f "$template_file")
-compose+=(-f "$compose_file")
+templates=("${compose[@]}" "${template_files[@]}")
+compose+=("${compose_files[@]}")
 usage() {
     echo 'Usage: argus db provision [--apply] | db migrate | api migrate <arguments> | api user <arguments> | clio <arguments> | prophet <arguments> | intelligence <arguments> | compose <arguments>'
 }

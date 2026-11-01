@@ -28,6 +28,7 @@ apps/web/.env
 
 Dockerfile
 docker-compose.yml
+docker-compose.override.yml
 
 *.log
 .DS_Store

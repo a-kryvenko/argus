@@ -211,8 +211,9 @@ def bundle(root, plan_path, images_path, destination):
             raise ValueError(f'Image result does not match the plan: {name}')
         manifest['images'][name] = image['image']
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ('docker-compose.yml', 'nginx-proxy-up.sh'):
-        shutil.copy2(root / '.deploy' / name, destination / name)
+    shutil.copy2(root / 'docker-compose.yml', destination / 'docker-compose.yml')
+    shutil.copy2(root / '.deploy/docker-compose.yml', destination / 'docker-compose.prod.yml')
+    shutil.copy2(root / '.deploy/nginx-proxy-up.sh', destination / 'nginx-proxy-up.sh')
     for name in ('nginx', 'alloy'):
         shutil.copytree(root / '.deploy' / name, destination / name, dirs_exist_ok=True)
     shutil.copytree(root / 'configs', destination / 'configs', dirs_exist_ok=True)
@@ -223,7 +224,7 @@ def bundle(root, plan_path, images_path, destination):
     (destination / 'scripts').mkdir(exist_ok=True)
     for name in ('run', 'logs', 'cron-run'):
         shutil.copy2(root / 'scripts' / name, destination / 'scripts' / name)
-    for service in ('clio', 'prophet', 'api', 'intelligence'):
+    for service in ('prophet', 'api', 'intelligence'):
         target = destination / 'apps' / service
         target.mkdir(parents=True, exist_ok=True)
         shutil.copy2(root / 'apps' / service / 'cronjobs.txt', target / 'cronjobs.txt')

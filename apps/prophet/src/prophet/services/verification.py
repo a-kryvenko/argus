@@ -47,7 +47,7 @@ def targets(frame, start, end):
     """Prepare verification targets from raw observations, without filling gaps."""
     data = frame[frame.metric.isin(['v', 'n', 't', 'kp', 'ap', 'dst', 'bx', 'by', 'bz'])].copy()
     data['observed_at'] = pd.to_datetime(data.observed_at, utc=True)
-    # browse includes its end boundary; verification uses [start, end).
+    # Keep the verification cutoff half-open even for revised remote responses.
     data = data[(data.observed_at >= start) & (data.observed_at < end)]
     if data.empty:
         return []
@@ -77,31 +77,24 @@ def read_targets(start, end, *, deadline=None):
     url, token = os.getenv('OBSERVATIONS_URL'), os.getenv('OBSERVATIONS_SERVICE_TOKEN')
     if not url or not token:
         raise RuntimeError('OBSERVATIONS_URL and OBSERVATIONS_SERVICE_TOKEN are required')
-    rows, total = [], None
+    rows = []
     with httpx.Client(timeout=httpx.Timeout(180, connect=10), trust_env=False) as client:
-        for page in range(1, 100_001):
+        left = start
+        while left < end:
             check_progress(deadline)
-            response = client.get(url.rstrip('/') + '/internal/v1/observations/browse',
-                                  params={'kind': 'raw', 'start': start.isoformat(), 'end': end.isoformat(),
-                                          'order': 'asc', 'page': page, 'page_size': 200},
-                                  headers={'Authorization': f'Bearer {token}'},
-                                  timeout=httpx.Timeout(min(180, max(.1, deadline-monotonic())) if deadline else 180,
-                                                        connect=10))
+            right = min(end, left+timedelta(days=1))
+            response = client.get(url.rstrip('/') + '/internal/v1/observations/metrics',
+                params={'from': left.isoformat(), 'to': right.isoformat(), 'interval': '1m',
+                        'metrics': 'v,n,t,kp,ap,dst,bt,bx,by,bz'},
+                headers={'Authorization': f'Bearer {token}'},
+                timeout=httpx.Timeout(min(180, max(.1, deadline-monotonic())) if deadline else 180, connect=10))
             response.raise_for_status()
             payload = response.json()
-            if not payload['success']:
+            if not payload.get('success') or payload['data'].get('interval') != '1m':
                 raise ValueError('Observation read failed')
-            data = payload['data']
-            if total is not None and data['total'] != total:
-                raise ValueError('Observations changed during pagination; repeat verification')
-            total = data['total']
-            rows.extend(data['items'])
-            if len(rows) >= total:
-                break
-            if not data['items']:
-                raise ValueError('Incomplete observation response')
-        else:
-            raise ValueError('Observation range exceeds browse pagination limit')
+            rows.extend(dict(observed_at=point['time'], metric=metric, value=value)
+                        for point in payload['data']['points'] for metric, value in point.items() if metric != 'time')
+            left = right
     frame = pd.DataFrame(rows, columns=['observed_at', 'metric', 'value'])
     return {'source': 'clio-measurement-hourly-mean-v1', 'status': 'provisional',
             'points': targets(frame, start, end)}

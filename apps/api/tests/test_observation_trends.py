@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import pytest
-from clio.observations.summary import change_one_hour, interval_change
+from api.services.observations.trends import change_one_hour, interval_change
 
 NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 
@@ -65,29 +65,3 @@ def test_interval_change_uses_values_available_now_and_one_hour_ago(start_minute
          'value': 4, 'quality': 'unverified'},
     ]
     assert interval_change(rows, NOW)['value'] == expected
-
-
-def test_summary_includes_all_wind_variables_and_geomagnetic_changes(monkeypatch):
-    import asyncio
-    from unittest.mock import AsyncMock
-    from clio.observations import summary as service
-    from clio.observations.solar_wind import METADATA
-
-    wind = {metric: {'points': points(), 'unit': 'unit', 'stale_after_seconds': 600} for metric in METADATA}
-    wind_history = AsyncMock(return_value={'series': wind})
-    monkeypatch.setattr(service.solar_wind, 'latest', AsyncMock(return_value={'series': {}}))
-    monkeypatch.setattr(service.solar_wind, 'history', wind_history)
-    monkeypatch.setattr(service.geomagnetic, 'latest', AsyncMock(return_value={
-        'series': {metric: {'status': 'fresh'} for metric in ('kp', 'dst')}}))
-    monkeypatch.setattr(service.geomagnetic, 'history', AsyncMock(return_value={'series': {
-        metric: {'unit': 'unit', 'points': [
-            {'interval_start': NOW-timedelta(hours=1), 'interval_end': NOW, 'value': 1, 'quality': None},
-            {'interval_start': NOW, 'interval_end': NOW+timedelta(hours=1), 'value': 3, 'quality': None},
-        ]} for metric in ('kp', 'dst')
-    }}))
-    result = asyncio.run(service.summary(object(), NOW))
-    assert 'southward_bz' not in result
-    assert set(result['changes_1h']) == {*METADATA, 'kp', 'dst'}
-    assert all(result['changes_1h'][metric]['value'] == 60 for metric in METADATA)
-    assert result['changes_1h']['kp']['value'] == result['changes_1h']['dst']['value'] == 2
-    assert wind_history.await_args.args[1] == list(METADATA)

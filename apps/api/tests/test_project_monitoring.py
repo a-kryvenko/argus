@@ -28,7 +28,7 @@ def test_each_dashboard_request_reads_current_service_status(monkeypatch, foreca
         requests.append((str(request.url), request.headers['Authorization']))
         if request.url.host == 'clio':
             return httpx.Response(200, json={'success': True, 'data': {
-                'status': 'ok', 'measurements': []}})
+                'points': [dict(time=datetime.now(UTC).isoformat(), **{m: 2. for m in monitoring.get_config().project_config['clio']['observations'] if m not in ('goes', 'gong')})]}})
         return httpx.Response(503 if forecast_unavailable else 200,
             json={'products': [forecast_payload(p) for p in monitoring.PRODUCT_ARTIFACTS]})
     client = httpx.AsyncClient
@@ -43,7 +43,7 @@ def test_each_dashboard_request_reads_current_service_status(monkeypatch, foreca
     assert set(result) == {'status', 'observations', 'forecasts', 'checked_at', 'stale'}
     assert {item['product'] for item in result['forecasts']} == set(monitoring.PRODUCT_ARTIFACTS)
     assert sorted(requests) == [
-        ('http://clio/internal/v1/observations/status', 'Bearer observation-secret'),
+        ('http://clio/internal/v1/observations/latest', 'Bearer observation-secret'),
         ('http://prophet/internal/v1/forecasts/status', 'Bearer forecast-secret')]
     second = asyncio.run(project_monitoring(Response())).data
     assert len(requests) == 4

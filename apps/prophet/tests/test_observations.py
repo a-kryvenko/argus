@@ -27,14 +27,13 @@ def configure(monkeypatch, handler):
 
 def resource_response(request, payload):
     resource = request.url.path.removeprefix('/internal/v1/observations/')
-    if resource == 'history':
-        data = payload['observations']
-    elif resource == 'measurements':
-        data = {'schema_version': payload.get('schema_version', 1), 'items': []}
+    if resource == 'metrics':
+        interval = request.url.params['interval']
+        data = {'interval': payload.get('interval', interval), 'points': [
+            dict(time=point['issue_time'], **{k: v for k, v in point.items() if k != 'issue_time'})
+            for point in payload['observations']['points']]}
     elif resource == 'files':
         data = []
-    elif resource == 'solar-wind/history':
-        data = {'series': {}}
     else:
         raise AssertionError(resource)
     return httpx.Response(200, json={'success': True, 'data': data})
@@ -48,17 +47,15 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
         return resource_response(request, stored_inputs().model_dump(mode='json'))
     configure(monkeypatch, handler)
     assert observations.load_inputs(NOW).observations.points[0].v == 420
-    assert len(calls) == 8
+    assert len(calls) == 5
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
-    assert calls[1].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
-    assert set(calls[1].url.params['metrics'].split(',')) == {
-        'f10_7', 'dst', 'ap', 'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}
-    assert calls[2].url.params['metrics'] == 'v'
-    assert calls[2].url.params['aggregation'] == 'hourly'
-    assert calls[3].url.params['metrics'] == 'n'
-    assert [request.url.params['kind'] for request in calls[4:7]] == ['gong', 'goes', 'aia']
-    assert calls[5].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
-    assert calls[7].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
+    assert calls[0].url.params['interval'] == '1h'
+    assert set(calls[0].url.params['metrics'].split(',')) >= {'f10_7', 'dst', 'ap', 's10_81mean'}
+    assert calls[1].url.params['interval'] == '1m'
+    assert calls[1].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
+    assert [request.url.params['kind'] for request in calls[2:]] == ['gong', 'goes', 'aia']
+    assert calls[3].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
+
 
 
 @pytest.mark.parametrize('status', [401, 503])
@@ -78,56 +75,48 @@ def test_empty_inputs_fail_without_ingestion(monkeypatch):
 
 def test_rejects_incompatible_contract(monkeypatch):
     payload = stored_inputs().model_dump(mode='json')
-    payload['schema_version'] = 2
+    payload['interval'] = '5m'
     configure(monkeypatch, lambda request: resource_response(request, payload))
     with pytest.raises(ValueError):
         observations.load_inputs(NOW)
 
 
-def test_verification_reads_raw_browse_pages_and_excludes_end(monkeypatch):
+def test_verification_reads_compact_live_metrics_and_excludes_end(monkeypatch):
     from prophet.services.verification import read_targets
     times = pd.date_range('2026-01-01', periods=201, freq='min', tz='UTC')
-    rows = [{'observed_at': time.isoformat(), 'metric': 'v', 'value': 400.} for time in times]
-    pages = []
+    calls = []
     def handler(request):
-        assert request.url.path == '/internal/v1/observations/browse'
+        calls.append(request)
+        assert request.url.path == '/internal/v1/observations/metrics'
         assert request.headers['Authorization'] == 'Bearer test-token'
-        assert request.url.params['kind'] == 'raw'
-        assert request.url.params['order'] == 'asc'
-        assert request.url.params['page_size'] == '200'
-        assert request.url.params['start'] == times[0].isoformat()
-        assert request.url.params['end'] == times[-1].isoformat()
-        page = int(request.url.params['page'])
-        pages.append(page)
-        return httpx.Response(200, json={'success': True, 'data': {
-            'items': rows[(page-1)*200:page*200], 'total': len(rows)}})
+        assert request.url.params['interval'] == '1m'
+        assert request.url.params['from'] == times[0].isoformat()
+        assert request.url.params['to'] == times[-1].isoformat()
+        return httpx.Response(200, json={'success': True, 'data': {'interval': '1m', 'points': [
+            dict(time=time.isoformat(), v=400.) for time in times]}})
     configure(monkeypatch, handler)
     result = read_targets(times[0], times[-1])
-    assert pages == [1, 2]
+    assert len(calls) == 1
     assert sum(row['sample_count'] for row in result['points']) == 200
     assert all(row['value'] == 400. for row in result['points'])
 
 
-@pytest.mark.parametrize('failure', ['http', 'changed', 'incomplete'])
-def test_verification_rejects_failed_or_inconsistent_pages(monkeypatch, failure):
+@pytest.mark.parametrize('failure', ['http', 'interval'])
+def test_verification_rejects_failed_or_incompatible_reads(monkeypatch, failure):
     from prophet.services.verification import read_targets
     def handler(request):
-        page = int(request.url.params['page'])
-        if failure == 'http':
-            return httpx.Response(503)
-        return httpx.Response(200, json={'success': True, 'data': {
-            'items': [{'observed_at': NOW.isoformat(), 'metric': 'v', 'value': 400}] if page == 1 else [],
-            'total': 3 if page == 2 and failure == 'changed' else 2}})
+        return httpx.Response(503) if failure == 'http' else httpx.Response(200, json={
+            'success': True, 'data': {'interval': '1h', 'points': []}})
     configure(monkeypatch, handler)
     with pytest.raises((httpx.HTTPStatusError, ValueError)):
-        read_targets(NOW - pd.Timedelta(days=1), NOW)
+        read_targets(NOW-timedelta(days=1), NOW)
 
 
 def test_verification_empty_observations(monkeypatch):
     from prophet.services.verification import read_targets
     configure(monkeypatch, lambda _: httpx.Response(200, json={
-        'success': True, 'data': {'items': [], 'total': 0}}))
-    assert read_targets(NOW - pd.Timedelta(days=1), NOW)['points'] == []
+        'success': True, 'data': {'interval': '1m', 'points': []}}))
+    assert read_targets(NOW-timedelta(days=1), NOW)['points'] == []
 
 
 def test_verification_targets_preserve_gaps_and_derive_before_averaging():
@@ -227,11 +216,10 @@ def test_runtime_catalog_selects_explicit_services():
 def test_assembles_native_measurements_and_originals(monkeypatch):
     from prophet.services.inputs.observations import read_observations
     def handler(request):
-        if request.url.path.endswith('/measurements'):
-            metrics = request.url.params['metrics']
-            metric, value = ('v', 430.) if metrics == 'v' else ('n', 4.5) if metrics == 'n' else ('dst', -20.)
-            return httpx.Response(200, json={'success': True, 'data': {'schema_version': 1, 'items': [{
-                'metric': metric, 'value': value, 'observed_at': NOW.isoformat(), 'available_at': NOW.isoformat()}]}})
+        if request.url.path.endswith('/metrics'):
+            payload = stored_inputs().model_dump(mode='json')
+            payload['observations']['points'][0].update(v=430., n=4.5, dst=-20.)
+            return resource_response(request, payload)
         if request.url.path.endswith('/files') and request.url.params['kind'] == 'gong':
             return httpx.Response(200, json={'success': True, 'data': [{
                 'kind': 'gong', 'slot_at': NOW.isoformat(), 'observed_at': NOW.isoformat(),
@@ -240,7 +228,7 @@ def test_assembles_native_measurements_and_originals(monkeypatch):
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = read_observations(client, 'http://observations', 'test-token', NOW)
     assert result.as_of == NOW
-    assert result.measurements[0].metric == 'dst' and result.measurements[0].value == -20.
+    assert next(row for row in result.measurements if row.metric == 'dst').value == -20.
     assert result.speed_observations[0].v == 430.
     assert result.density_observations[0].n == 4.5
     assert result.files[0].kind == 'gong'

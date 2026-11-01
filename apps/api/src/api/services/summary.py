@@ -22,7 +22,7 @@ from common.schemas.sdo_browse import SDOBrowseCatalog
 from api.schemas.summary import ChartPoint, IMAGE_NAME_PATTERN, SummarySettings
 from api.services.errors import ArtifactNotReadyError
 from api.services.forecasts.client import read_release, read_event_forecast, read_solar_indices
-from api.services.observations.client import read_observations
+from api.services.observations.read import read_observations
 from api.services.summary_images import ForecastImageGenerator
 
 logger = logging.getLogger(__name__)

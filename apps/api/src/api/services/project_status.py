@@ -1,7 +1,9 @@
 """Read current observation and forecast status directly from their owners."""
 import asyncio
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import math
+from common.config import get_config
 
 import httpx
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
@@ -16,17 +18,37 @@ async def http_read(client, base, path, token=None):
     return response
 
 
+def status_from_points(points, *, now=None):
+    now = now or datetime.now(UTC)
+    policies = get_config().project_config['clio']['observations']
+    latest = {metric: (datetime.fromisoformat(row['time'].replace('Z', '+00:00')), value)
+              for row in points for metric, value in row.items() if metric != 'time'}
+    measurements = []
+    for metric, policy in policies.items():
+        if metric in ('goes', 'gong'):
+            continue
+        time, value = latest.get(metric, (None, None))
+        duration = timedelta(hours=3 if metric in ('kp', 'ap') else 1 if metric == 'dst' else 0)
+        age = max(0, (now-time-duration).total_seconds()) if time is not None else None
+        threshold = policy['freshness_minutes'] * 60
+        state = ('unavailable' if time is None or value is None or not math.isfinite(value) else
+                 'future' if time > now+timedelta(minutes=5) else 'delayed' if age > threshold else 'fresh')
+        measurements.append(dict(metric=metric, latest_observation_at=time, received_at=None,
+                                 age_seconds=age, stale_after_seconds=threshold, status=state))
+    return dict(generated_at=now, status='ok' if all(row['status'] == 'fresh' for row in measurements) else 'degraded',
+                measurements=measurements)
+
+
 async def observation_status(client):
     try:
         token = os.getenv('OBSERVATIONS_SERVICE_TOKEN')
         if not token:
             raise ValueError('Not configured')
-        response = await http_read(client, os.getenv('OBSERVATIONS_URL'), '/internal/v1/observations/status', token)
+        response = await http_read(client, os.getenv('OBSERVATIONS_URL'), '/internal/v1/observations/latest', token)
         payload = response.json()
-        data = payload['data']
-        if payload.get('success') is not True or not isinstance(data.get('measurements'), list):
-            raise ValueError('Invalid diagnostics')
-        return data
+        if payload.get('success') is not True or not isinstance(payload['data'].get('points'), list):
+            raise ValueError('Invalid observations')
+        return status_from_points(payload['data']['points'])
     except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
         return {'status': 'unknown', 'measurements': [], 'error': 'Observation diagnostics unavailable'}
 

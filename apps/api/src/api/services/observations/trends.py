@@ -1,12 +1,7 @@
-"""Observed trends only: explicit coverage and no interpolation across gaps."""
+"""Observed changes calculated by the API from Clio numeric resources."""
 import math
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from statistics import mean
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from clio.observations import geomagnetic
-from clio.observations import solar_wind as solar_wind
 
 LOOKBACK_MINUTES = 75
 
@@ -78,39 +73,3 @@ def interval_change(points: list[dict], now: datetime) -> dict:
         return unavailable('missing_comparison')
     return {'status': 'available', 'value': change, 'as_of': current['interval_end']}
 
-
-async def summary(session: AsyncSession, now: datetime | None = None) -> dict:
-    now = now or datetime.now(UTC)
-    current = await solar_wind.latest(session, list(solar_wind.METADATA), now)
-    indices = await geomagnetic.latest(session, now)
-    past = await solar_wind.history(
-        session,
-        list(solar_wind.METADATA),
-        now-timedelta(minutes=LOOKBACK_MINUTES),
-        now+timedelta(microseconds=1)
-    )
-
-    changes = {
-        metric: {
-            **change_one_hour(series['points'], now, freshness_minutes=series['stale_after_seconds'] / 60),
-            'unit': series['unit']
-        } for metric, series in past['series'].items()
-    }
-
-    index_history = await geomagnetic.history(
-        session, now-timedelta(hours=4), now+timedelta(microseconds=1), now,
-    )
-    for metric, series in index_history['series'].items():
-        changes[metric] = {
-            **(interval_change(series['points'], now) if indices['series'][metric]['status'] != 'stale'
-               else unavailable('stale')),
-            'unit': series['unit'],
-        }
-
-    return {
-        'generated_at': now,
-        'solar_wind': current['series'],
-        'geomagnetic': indices['series'],
-        'changes_1h': changes,
-        'lookback_minutes': LOOKBACK_MINUTES
-    }

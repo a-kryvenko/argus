@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from clio.observations.coverage import coverage
+from api.services.observations.coverage import coverage
 
 START = datetime(2026, 9, 1, tzinfo=UTC)
 

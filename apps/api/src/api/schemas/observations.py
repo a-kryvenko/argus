@@ -51,7 +51,7 @@ class ObservationMetadata(BaseModel):
 
 class SolarSample(BaseModel):
     observed_at: datetime
-    received_at: datetime
+    received_at: datetime | None = optional_field()
     value: float | None
     quality: Quality = optional_field()
     interval_end: datetime | None = optional_field()
@@ -69,7 +69,7 @@ class IndexSample(BaseModel):
     interval_status: Literal['in_progress', 'completed']
     value: float | None
     quality: Quality = optional_field()
-    received_at: datetime
+    received_at: datetime | None = optional_field()
 
 
 class SolarLatestSeries(BaseModel):
@@ -150,9 +150,9 @@ class IndexHistorySeries(BaseModel):
 
 class SolarHistory(TimeRange):
     """Fixed units: v km/s, n cm^-3, t K, bx/by/bz GSM nT, bt nT.
-    At 60 seconds value is the native sample; at 300/3600 seconds it is the
-    mean of valid samples, with min/max and coverage over a closed UTC bucket.
-    Missing timestamps are gaps; explicit missing values are null. No gap filling.
+    At 60 seconds value is the native sample; at 300 seconds it is a live
+    sample mean. At 3600 seconds values come from normalized hourly storage.
+    Missing timestamps are gaps; explicit missing values are null.
     """
     resolution_seconds: int = 60
     evaluated_from: datetime | None = optional_field()

@@ -6,9 +6,7 @@ from sqlalchemy.dialects import postgresql
 
 from clio.ingestion.conversion import wind_measurements, geomagnetic_measurements
 from clio.observations.measurements import store_native
-from clio.observations import status as monitoring
 from clio.db.models.measurement import Measurement
-from clio.config import load_observation_config
 
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 
@@ -45,45 +43,3 @@ def test_upsert_updates_quality_but_receipt_alone_is_not_a_revision():
     assert 'quality IS DISTINCT FROM' in where
     assert 'received_at IS DISTINCT FROM' not in where
     assert 'ON CONFLICT ON CONSTRAINT uq_measurement_metric' in query
-
-
-def test_monitoring_reads_latest_measurement_and_its_receipt(monkeypatch):
-    point = Measurement(metric='bz', value=-2, observed_at=NOW, received_at=NOW-timedelta(seconds=5))
-    session = AsyncMock()
-    session.scalars.return_value = [point]
-    config = load_observation_config().model_copy(deep=True)
-    config.observations = {metric: config.observations[metric] for metric in ('bz', 'v')}
-    monkeypatch.setattr(monitoring, 'load_observation_config', lambda: config)
-    result = asyncio.run(monitoring.observation_status(session))
-    assert result['measurements'][0]['latest_observation_at'] == NOW
-    assert result['measurements'][0]['received_at'] == point.received_at
-    assert result['measurements'][1]['metric'] == 'v'
-    assert result['measurements'][1]['status'] == 'unavailable'
-    query = str(session.scalars.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert 'DISTINCT ON (measurement.metric)' in query
-    session.scalars.assert_awaited_once()
-
-
-def test_missing_latest_measurement_is_not_reported_as_fresh(monkeypatch):
-    point = Measurement(metric='bz', value=None, observed_at=NOW, received_at=NOW, quality='missing')
-    session = AsyncMock()
-    session.scalars.return_value = [point]
-    config = load_observation_config().model_copy(deep=True)
-    config.observations = {'bz': config.observations['bz']}
-    monkeypatch.setattr(monitoring, 'load_observation_config', lambda: config)
-    result = asyncio.run(monitoring.observation_status(session))
-    assert result['measurements'][0]['status'] == 'unavailable'
-    assert result['status'] == 'degraded'
-
-
-def test_monitoring_handles_full_numeric_registry_without_legacy_solar_indices(monkeypatch):
-    session = AsyncMock()
-    session.scalars.return_value = []
-    result = asyncio.run(monitoring.observation_status(session))
-    assert {point['metric'] for point in result['measurements']} == {
-        'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7', 'f10_7_81mean',
-        's10_81mean', 'm10_81mean', 'y10_81mean',
-    }
-    assert all(point['status'] == 'unavailable' for point in result['measurements'])
-    assert result['status'] == 'degraded'
-    assert 'last_refresh_completed_at' not in result

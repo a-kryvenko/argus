@@ -19,7 +19,7 @@ from api.schemas.observations import (
     SolarHistory,
     SolarLatest,
 )
-from api.services.observations.client import read_observations
+from api.services.observations.read import read_observations
 from common.schemas.response import ApiResponse, success_response
 
 router = APIRouter(prefix='/observations', tags=['observations'])

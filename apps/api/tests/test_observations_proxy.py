@@ -36,13 +36,13 @@ def test_owner_failure_maps_to_503_without_sql_fallback(monkeypatch, status):
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'secret')
     monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **_: client)
     with pytest.raises(HTTPException) as error:
-        asyncio.run(service.read_observations('history'))
+        asyncio.run(service.read_observations('metrics'))
     assert error.value.status_code == 503
 
 
 def test_versioned_read_path_and_authentication(monkeypatch):
     def response(request):
-        assert request.url.path == '/internal/v1/observations/history'
+        assert request.url.path == '/internal/v1/observations/metrics'
         assert request.url.params['limit'] == '2'
         assert request.headers['authorization'] == 'Bearer secret'
         return httpx.Response(200, json={'success': True, 'data': {'items': []}, 'error': None})
@@ -50,7 +50,7 @@ def test_versioned_read_path_and_authentication(monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'secret')
     monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **_: client)
-    assert asyncio.run(service.read_observations('history', {'limit': 2}))['data']['items'] == []
+    assert asyncio.run(service.read_observations('metrics', {'limit': 2}))['data']['items'] == []
 
 
 def test_validation_response_is_preserved(monkeypatch):
@@ -59,7 +59,7 @@ def test_validation_response_is_preserved(monkeypatch):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'secret')
     monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **_: client)
-    result = asyncio.run(service.read_observations('history'))
+    result = asyncio.run(service.read_observations('metrics'))
     assert result.status_code == 422
 
 

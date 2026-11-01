@@ -12,15 +12,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from clio.config import load_observation_config
 from clio.db.session import get_db_session
 from clio.routers import (
-    browse,
-    collection_status,
-    geomagnetic,
-    measurements,
     observation_files,
     observations,
     sdo_images,
     sdo_browse,
-    solar_wind,
     solar_wind_events,
 )
 from clio.routers.auth import require_service_token
@@ -43,12 +38,7 @@ app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)
 
 for module in (
     observations,
-    solar_wind,
     solar_wind_events,
-    geomagnetic,
-    collection_status,
-    measurements,
-    browse,
     sdo_images,
     sdo_browse,
     observation_files

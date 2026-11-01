@@ -6,16 +6,7 @@ import httpx
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-READS = frozenset({
-    'sdo-browse',
-    'history',
-    'summary',
-    'current-indices',
-    'solar-wind/latest',
-    'solar-wind/history',
-    'geomagnetic/latest',
-    'geomagnetic/history',
-})
+READS = frozenset({'latest', 'metrics', 'sdo-browse'})
 
 
 async def read_observations(

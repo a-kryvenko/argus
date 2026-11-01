@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from clio.db.models.measurement import Measurement
 from clio.ingestion.conversion import wind_measurements
 from clio.observations.measurements import store_native
-from clio.observations.solar_wind import aggregated_history as history
+from clio.observations.metrics import history
 from clio.observations.measurements import load_measurements
 
 pytestmark = pytest.mark.skipif(not os.getenv('TEST_DATABASE_ADMIN_DSN'), reason='Disposable PostgreSQL required')
@@ -103,27 +103,16 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 await session.commit()
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(Measurement.metric == 'bz').limit(1))
                 assert receipt == NOW+timedelta(hours=1)
-                data = await history(session, ['bz'], NOW, NOW+timedelta(minutes=10), 300, now=NOW+timedelta(hours=3))
-                series = data['series']['bz']
-                point = series['points'][0]
-                assert point['value'] == pytest.approx(-8/3)
-                assert point['min'] == -8 and point['max'] == 2 and point['negative_count'] == 2
-                assert point['count'] == 3 and 'source_changes' not in point
-                assert series['coverage']['expected_slots'] == 10
-                assert series['coverage']['invalid_slots'] == 2 and series['coverage']['missing_slots'] == 5
-                assert series['coverage']['percent'] == 30
+                data = await history(session, ['bz'], NOW, NOW+timedelta(minutes=10), '5m', NOW+timedelta(hours=3))
+                assert data['points'][0] == {'time': NOW, 'bz': pytest.approx(-8/3)}
                 frame = await load_measurements(session, NOW)
                 assert frame.loc[frame.metric == 'bz', 'value'].tolist() == [-8, 2, -2]
                 session.add_all([Measurement(metric=metric, value=2, observed_at=NOW,
                     received_at=NOW+timedelta(minutes=5), quality='unverified', source_product=source)
                     for metric, source in [('kp', 'swpc.kp'), ('ap', 'swpc.kp'), ('dst', 'swpc.dst')]])
                 await session.commit()
-                from clio.routers.measurements import measurements
-                result = await measurements(start=NOW, end=NOW+timedelta(hours=4), metrics='kp,ap,dst',
-                    aggregation='raw', min_value=None, max_value=None, exclude_value=None, session=session)
-                available = {row['metric']: row['available_at'] for row in result.data['items']}
-                assert available == {'kp': NOW+timedelta(hours=3), 'ap': NOW+timedelta(hours=3),
-                                     'dst': NOW+timedelta(hours=1)}
+                data = await history(session, ['kp', 'ap', 'dst'], NOW, NOW+timedelta(hours=4), '1m', NOW+timedelta(hours=4))
+                assert data['points'] == [{'time': NOW, 'kp': 2., 'ap': 2., 'dst': 2.}]
                 payload[0]['values']['bz'] = -10
                 await store_native(session, wind_measurements('mag', payload))
                 await session.commit()

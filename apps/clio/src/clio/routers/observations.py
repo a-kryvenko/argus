@@ -1,69 +1,49 @@
-from datetime import timedelta
+"""The numeric Clio contract: last observations and bounded metric history."""
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
-from common.schemas.response import error_response, success_response
+from common.schemas.response import success_response
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AwareDatetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.session import get_request_db_session
-from clio.observations.indices import current_indices as read_current_indices
-from clio.observations.normalized import load_normalized_observations
-from clio.observations.summary import summary
+from clio.observations import metrics as reads
+from clio.observations.errors import ObservationUnavailable
 
-router = APIRouter(prefix="/internal/v1/observations", tags=["observations"])
-
-
-@router.get("/history")
-async def observation_history(
-    limit: int = Query(default=24, ge=1, le=8784),
-    session: AsyncSession = Depends(get_request_db_session),
-    start: AwareDatetime | None = Query(default=None, alias='from'),
-    end: AwareDatetime | None = Query(default=None, alias='to'),
-):
-    """Return the most recent hourly observations, oldest first (up to 8784)."""
-    bounds = {}
-    if start is not None or end is not None:
-        if start is None or end is None or start >= end:
-            raise HTTPException(422, 'from and to must define a positive timezone-aware interval')
-        bounds = {'since': start, 'until': end - timedelta(microseconds=1)}
-    observations = await load_normalized_observations(session, limit=limit, **bounds)
-    return success_response(observations)
+router = APIRouter(prefix='/internal/v1/observations', tags=['observations'])
 
 
-@router.get("/latest")
-async def latest_observations(
-    session: AsyncSession = Depends(get_request_db_session),
-):
-    observations = await load_normalized_observations(session, limit=1)
-    if not observations.points:
-        return error_response(
-            code="OBSERVATIONS_NOT_READY",
-            msg="No observations found"
-        )
-
-    latest = observations.points[-1]
-    return success_response(latest)
+def selected_metrics(metrics: str | None = None):
+    selected = list(reads.METRICS) if metrics is None else list(dict.fromkeys(m.strip() for m in metrics.split(',')))
+    if not selected or any(m not in reads.METRICS for m in selected):
+        raise HTTPException(422, 'Unknown observation metric')
+    return selected
 
 
-@router.get('/summary')
-async def observation_summary(response: Response, session: AsyncSession = Depends(get_request_db_session)):
-    """Current values and observed trends with coverage; no forecast or impact score.
-
-    Solar-wind changes compare available samples in two five-minute windows one hour apart.
-    Indices compare the last available values now and one hour ago.
-    Stale inputs suppress trends.
-    """
+@router.get('/latest')
+async def latest(response: Response, metrics: list[str] = Depends(selected_metrics),
+                 as_of: AwareDatetime | None = None, session: AsyncSession = Depends(get_request_db_session)):
+    now = datetime.now(UTC)
+    if as_of is not None and as_of > now:
+        raise HTTPException(422, 'as_of must not be in the future')
     response.headers['Cache-Control'] = 'no-store'
-    return success_response(await summary(session))
+    return success_response(await reads.latest(session, metrics, as_of or now))
 
 
-@router.get('/current-indices')
-async def current_indices(
-    metrics: str = Query(default='ap,f10_7,s10,m10,y10'),
-    trends: bool = Query(default=False),
-    session: AsyncSession = Depends(get_request_db_session),
-):
-    selected = list(dict.fromkeys(value.strip() for value in metrics.split(',')))
-    if any(value not in ('ap', 'f10_7', 's10', 'm10', 'y10') for value in selected):
-        raise HTTPException(422, 'Unknown index')
-    return success_response(await read_current_indices(session, selected, trends=trends))
+@router.get('/metrics')
+async def metrics(response: Response, start: AwareDatetime = Query(alias='from'),
+                  end: AwareDatetime = Query(alias='to'),
+                  interval: Literal['1m', '5m', '1h'] = '1h',
+                  metrics: list[str] = Depends(selected_metrics), as_of: AwareDatetime | None = None,
+                  session: AsyncSession = Depends(get_request_db_session)):
+    now = datetime.now(UTC)
+    cutoff = as_of or now
+    if not timedelta(0) < end-start <= timedelta(days=366) or cutoff > now:
+        raise HTTPException(422, 'Use a past interval of at most 366 days and a past as_of')
+    response.headers['Cache-Control'] = 'no-store'
+    try:
+        data = await reads.history(session, metrics, start.astimezone(UTC), end.astimezone(UTC), interval, cutoff)
+    except ObservationUnavailable as exc:
+        raise HTTPException(503, str(exc)) from None
+    return success_response(data)

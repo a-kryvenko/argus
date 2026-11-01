@@ -1,163 +1,101 @@
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock
+import asyncio
+from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from common.schemas.observation import Observation, ObservationPoint
+from sqlalchemy.dialects import postgresql
 
-from clio.routers import observations
+from clio.routers import observations as routes
+from clio.observations import metrics as reads
+from clio.main import app as application
 
-
-def test_history_returns_points_and_passes_limit(monkeypatch):
-    point = ObservationPoint(
-        issue_time=datetime(2026, 9, 5, tzinfo=UTC),
-        bx=1, by=2, bz=-3, v=420, n=5, t=100000,
-        kp=2, dst=-10, ap=5, f10_7=120,
-        s10=110.5, m10=99.25,
-    )
-    loader = AsyncMock(return_value=Observation(points=[point]))
-    monkeypatch.setattr(observations, "load_normalized_observations", loader)
-    app = FastAPI()
-    app.include_router(observations.router)
-    session = object()
-    app.dependency_overrides[observations.get_request_db_session] = lambda: session
-    with TestClient(app) as client:
-        response = client.get('/internal/v1/observations/history?limit=12')
-        assert response.status_code == 200
-        assert response.json()['data']['points'][0]['v'] == 420
-        assert response.json()['data']['points'][0]['s10'] == 110.5
-        assert response.json()['data']['points'][0]['m10'] == 99.25
-        assert response.json()['data']['points'][0]['y10'] is None
-        loader.assert_awaited_once_with(session, limit=12)
-        latest = client.get('/internal/v1/observations/latest')
-        assert latest.status_code == 200
-        assert latest.json()['data']['s10'] == 110.5
-        assert latest.json()['data']['y10'] is None
-        for limit in [0, 8785, 'invalid']:
-            assert client.get(f'/internal/v1/observations/history?limit={limit}').status_code == 422
-        loader.return_value = Observation(points=[])
-        assert client.get('/internal/v1/observations/history').json() == {
-            'success': True, 'data': {'points': []}, 'error': None,
-        }
+NOW = datetime(2026, 9, 12, 12, tzinfo=UTC)
 
 
-def test_history_applies_exclusive_utc_bounds(monkeypatch):
-    from datetime import timedelta
-    loader = AsyncMock(return_value=Observation(points=[]))
-    monkeypatch.setattr(observations, 'load_normalized_observations', loader)
-    app = FastAPI()
-    app.include_router(observations.router)
-    session = object()
-    app.dependency_overrides[observations.get_request_db_session] = lambda: session
-    with TestClient(app) as client:
-        result = client.get('/internal/v1/observations/history', params={
-            'from': '2026-09-01T00:00:00Z', 'to': '2026-09-02T00:00:00Z'})
-        assert result.status_code == 200
-        loader.assert_awaited_once_with(session, limit=24, since=datetime(2026, 9, 1, tzinfo=UTC),
-            until=datetime(2026, 9, 2, tzinfo=UTC) - timedelta(microseconds=1))
-        assert client.get('/internal/v1/observations/history?from=2026-09-01').status_code == 422
+def record(metric, minute, value, quality=None):
+    return SimpleNamespace(metric=metric, observed_at=NOW+timedelta(minutes=minute), value=value, quality=quality)
 
 
-def test_current_indices_keep_independent_source_times(monkeypatch):
-    from types import SimpleNamespace
-    from unittest.mock import Mock
-    from sqlalchemy.dialects import postgresql
-    at = datetime(2026, 10, 19, 15, tzinfo=UTC)
-    flux_at = datetime(2026, 10, 18, 20, tzinfo=UTC)
+def result(records):
+    return Mock(all=Mock(return_value=records), scalars=Mock(return_value=Mock(all=Mock(return_value=records))))
+
+
+def test_only_two_numeric_routes_and_file_routes_remain():
+    paths = set(application.openapi()['paths'])
+    numeric = {path for path in paths if path.startswith('/internal/v1/observations')
+               and not any(part in path for part in ('/files', '/sdo-', '/solar-wind-events/'))}
+    assert numeric == {'/internal/v1/observations/latest', '/internal/v1/observations/metrics'}
+
+
+def test_latest_keeps_independent_times_and_null_latest_values():
     session = AsyncMock()
-    session.execute.return_value = Mock(scalars=lambda: Mock(all=lambda: [
-        SimpleNamespace(metric='ap', value=4.0, observed_at=at, interval_end=at, quality='unverified'),
-        SimpleNamespace(metric='f10_7', value=112.5, observed_at=flux_at, interval_end=None, quality=None),
-    ]))
-    loader = AsyncMock()
-    monkeypatch.setattr(observations, 'load_normalized_observations', loader)
-    app = FastAPI()
-    app.include_router(observations.router)
-    app.dependency_overrides[observations.get_request_db_session] = lambda: session
-    with TestClient(app) as client:
-        result = client.get('/internal/v1/observations/current-indices')
-        assert result.status_code == 200
-        series = result.json()['data']['series']
-        assert series['ap']['observed_at'] == '2026-10-19T15:00:00Z'
-        assert series['f10_7'] == {'observed_at': '2026-10-18T20:00:00Z', 'value': 112.5, 'quality': None}
-        assert all(series[metric] is None for metric in ('s10', 'm10', 'y10'))
-        assert 'issue_time' not in str(series)
-        loader.assert_not_awaited()
-        query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
-        assert 'DISTINCT ON (measurement.metric)' in str(query)
-        assert 'ORDER BY measurement.metric, measurement.observed_at DESC' in str(query)
-        assert 'measurement.observed_at <=' in str(query)
-        assert set(query.params['param_1']) == {
-            ('ap', 'swpc.kp'), ('f10_7', 'swpc.f107'), ('f10_7', 'gfz.f107'),
-            ('f10_7', 'celestrak.f107'), ('f10_7', 'celestrak.f107_archive'),
-        }
+    session.execute.return_value = result([record('v', 1, 400), record('bx', 2, -3), record('n', 2, 10, 'flagged')])
+    data = asyncio.run(reads.latest(session, ['v', 'bx', 'n'], NOW+timedelta(minutes=3)))
+    assert data == {'points': [{'time': NOW+timedelta(minutes=1), 'v': 400.},
+                               {'time': NOW+timedelta(minutes=2), 'bx': -3., 'n': None}]}
+    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
+    assert 'DISTINCT ON' in sql and 'received_at <=' in sql
 
 
-def test_current_indices_preserve_missing_values_and_validate_selection():
-    from unittest.mock import Mock
+def test_hourly_uses_normalized_storage_and_preserves_published_mean_dates():
     session = AsyncMock()
-    session.execute.return_value = Mock(scalars=lambda: Mock(all=lambda: []))
-    app = FastAPI()
-    app.include_router(observations.router)
-    app.dependency_overrides[observations.get_request_db_session] = lambda: session
-    with TestClient(app) as client:
-        result = client.get('/internal/v1/observations/current-indices?metrics=f10_7,s10,f10_7')
-        assert result.status_code == 200
-        assert result.json()['data']['series'] == {'f10_7': None, 's10': None}
-        session.execute.reset_mock()
-        for metrics in ('', 'unknown', 'f10_7,unknown'):
-            assert client.get('/internal/v1/observations/current-indices', params={'metrics': metrics}).status_code == 422
-        session.execute.assert_not_awaited()
+    session.execute.side_effect = [result([(NOW, -3.)]), result([record('s10_81mean', 30, 110)])]
+    data = asyncio.run(reads.history(session, ['bx', 's10_81mean'], NOW, NOW+timedelta(hours=1),
+                                    '1h', NOW+timedelta(hours=2)))
+    assert data == {'interval': '1h', 'points': [
+        {'time': NOW, 'bx': -3., 's10_81mean': None},
+        {'time': NOW+timedelta(minutes=30), 'bx': None, 's10_81mean': 110.}]}
+    sql = [str(call.args[0].compile(dialect=postgresql.dialect())) for call in session.execute.call_args_list]
+    assert 'normalized_observation' in sql[0]
+    assert 'measurement' in sql[1] and 'received_at <=' in sql[1]
 
 
-def test_current_indices_can_include_changes_against_last_hour():
-    from types import SimpleNamespace
-    from unittest.mock import Mock
-    from sqlalchemy.dialects import postgresql
-    now = datetime.now(UTC)
+def test_five_minute_windows_use_valid_unique_minutes_and_exclude_partial_window():
     session = AsyncMock()
-    def result(records):
-        return Mock(scalars=lambda: Mock(all=lambda: records))
-    session.execute.side_effect = [
-        result([SimpleNamespace(metric='ap', value=6., observed_at=now, interval_end=None, quality=None),
-                SimpleNamespace(metric='f10_7', value=112., observed_at=now, interval_end=None, quality=None)]),
-        result([SimpleNamespace(metric='ap', value=4., quality=None),
-                SimpleNamespace(metric='f10_7', value=112., quality=None)]),
-    ]
-    app = FastAPI()
-    app.include_router(observations.router)
-    app.dependency_overrides[observations.get_request_db_session] = lambda: session
-    with TestClient(app) as client:
-        response = client.get('/internal/v1/observations/current-indices?trends=true')
-        assert response.status_code == 200
-        assert response.json()['data']['changes_1h'] == {'ap': 2, 'f10_7': 0, 's10': None, 'm10': None, 'y10': None}
-    previous = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
-    from datetime import timedelta
-    assert (previous.params['observed_at_1'] - previous.params['observed_at_2']) == timedelta(hours=1)
+    session.execute.return_value = result([record('v', 0, 100), record('v', 1, 300),
+        record('v', 2, float('nan')), record('v', 3, 900, 'flagged'), record('v', 5, 500)])
+    data = asyncio.run(reads.history(session, ['v'], NOW, NOW+timedelta(minutes=7), '5m', NOW+timedelta(minutes=7)))
+    assert data == {'interval': '5m', 'points': [{'time': NOW, 'v': 200.}]}
+    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
+    assert 'source_product IN' in sql and 'normalized_observation' not in sql
 
 
-def test_browse_keeps_pagination_and_rejects_naive_dates():
-    from unittest.mock import Mock
-    from sqlalchemy.dialects import postgresql
-    from clio.db.models.measurement import Measurement
-    from clio.routers import browse
-
+def test_one_minute_does_not_fill_gaps_or_return_nonfinite_values():
     session = AsyncMock()
-    session.scalars.return_value = Mock(all=lambda: [Measurement(id=1, metric='bz', value=-4.)])
-    session.scalar.return_value = 1
+    session.execute.return_value = result([record('v', 0, 100), record('v', 2, float('inf'))])
+    data = asyncio.run(reads.history(session, ['v'], NOW, NOW+timedelta(hours=1), '1m', NOW+timedelta(hours=1)))
+    assert data['points'] == [{'time': NOW, 'v': 100.}, {'time': NOW+timedelta(minutes=2), 'v': None}]
+
+
+def client(monkeypatch):
     app = FastAPI()
-    app.include_router(browse.router)
-    app.dependency_overrides[browse.get_request_db_session] = lambda: session
-    with TestClient(app) as client:
-        result = client.get('/internal/v1/observations/browse', params={'metric': 'bz', 'page': 2, 'page_size': 10})
-        assert result.status_code == 200
-        data = result.json()['data']
-        assert data['items'][0]['value'] == -4.
-        assert data['total'] == 1 and data['page'] == 2 and data['page_size'] == 10
-        query = session.scalars.call_args.args[0].compile(dialect=postgresql.dialect())
-        assert query.params['metric_1'] == 'bz'
-        assert query.params['param_1'] == 10 and query.params['param_2'] == 10
-        session.scalars.reset_mock()
-        for key in ('start', 'end'):
-            assert client.get('/internal/v1/observations/browse', params={key: '2026-09-01T00:00:00'}).status_code == 422
-        session.scalars.assert_not_awaited()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.get_request_db_session] = lambda: object()
+    return TestClient(app)
+
+
+def test_route_has_compact_payload_and_passes_selection(monkeypatch):
+    read = AsyncMock(return_value={'interval': '5m', 'points': [{'time': NOW, 'v': 400.}]})
+    monkeypatch.setattr(reads, 'history', read)
+    response = client(monkeypatch).get('/internal/v1/observations/metrics', params={
+        'metrics': 'v,v', 'from': NOW.isoformat(), 'to': (NOW+timedelta(hours=1)).isoformat(), 'interval': '5m'})
+    assert response.status_code == 200
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.json()['data'] == {'interval': '5m', 'points': [{'time': NOW.isoformat().replace('+00:00', 'Z'), 'v': 400.}]}
+    assert read.call_args.args[1] == ['v']
+
+
+@pytest.mark.parametrize('query', [
+    {'metrics': 'unknown'}, {'interval': '10m'}, {'from': '2026-09-12'},
+    {'to': '2026-09-11T12:00:00Z'}, {'from': '2025-01-01T00:00:00Z'},
+])
+def test_invalid_numeric_reads_fail_before_storage(monkeypatch, query):
+    read = AsyncMock()
+    monkeypatch.setattr(reads, 'history', read)
+    response = client(monkeypatch).get('/internal/v1/observations/metrics', params={
+        'metrics': 'v', 'from': NOW.isoformat(), 'to': (NOW+timedelta(hours=1)).isoformat(), **query})
+    assert response.status_code == 422
+    read.assert_not_awaited()

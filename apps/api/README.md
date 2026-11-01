@@ -26,10 +26,10 @@ Schemas and parameters: `/api/v1/docs`.
 | `/forecasts/solar-wind-events` | [Solar events](../../docs/solar-wind-events.md) |
 | `/dashboard/density-advisory/*` | [Owned profiles, assessments and journal](../../docs/density-advisory.md) |
 | `/risks/leo-drag` | [Experimental calculator](../../docs/leo-drag.md) |
-| `/dashboard/*` | Accounts, sessions, statistics and monitoring |
+| `/dashboard/*` | Accounts, sessions and current service status |
 | `/ping` | Liveness |
 
-`api-worker` refreshes observation/forecast diagnostics and request aggregates every 30 seconds.
+Dashboard requests observation/forecast status directly from Clio and Prophet.
 Dashboard status covers observations and forecasts; infrastructure monitoring uses Alloy → external Prometheus/Loki.
 
 Missing artifacts return 503.

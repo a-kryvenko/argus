@@ -1,28 +1,11 @@
-"""Observation and forecast diagnostics. Infrastructure is monitored externally."""
+"""Read current observation and forecast status directly from their owners."""
 import asyncio
-import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import httpx
-from fastapi.encoders import jsonable_encoder
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import insert
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 from common.schemas.forecast_status import ForecastsStatus
-from api.db.models.monitoring import MonitorState
-from api.db.session import get_db_session
-
-logger = logging.getLogger(__name__)
-INTERVAL = 30
-STALE_SECONDS = 120
-
-
-async def save_state(db, name, payload, now):
-    stmt = insert(MonitorState).values(name=name, payload=jsonable_encoder(payload), checked_at=now)
-    await db.execute(stmt.on_conflict_do_update(index_elements=['name'],
-        set_={'payload': stmt.excluded.payload, 'checked_at': now}))
-
 
 async def http_read(client, base, path, token=None):
     if not base:
@@ -88,35 +71,13 @@ def product_state(payload):
             'observations': observations, 'forecasts': forecasts}
 
 
-async def collect():
+async def read_project_status():
     async with httpx.AsyncClient(timeout=5, follow_redirects=False, trust_env=False,
                                  headers={'User-Agent': 'Argus-Monitor/1'}) as client:
         observations, forecasts = await asyncio.gather(
             observation_status(client),
             forecast_status(client),
         )
-    return product_state({'observations': observations, 'forecasts': forecasts})
+    return {**product_state({'observations': observations, 'forecasts': forecasts}),
+            'checked_at': datetime.now(UTC), 'stale': False}
 
-
-async def refresh():
-    async with get_db_session() as db:
-        await db.execute(text("SET LOCAL statement_timeout = '10s'"))
-        if not await db.scalar(text('SELECT pg_try_advisory_xact_lock(730310)')):
-            return
-        previous = await db.get(MonitorState, 'project')
-        now = datetime.now(UTC)
-        if previous and now - previous.checked_at < timedelta(seconds=INTERVAL-1):
-            return
-        async with asyncio.timeout(12):
-            payload = await collect()
-        await save_state(db, 'project', payload, datetime.now(UTC))
-        await db.commit()
-
-
-async def run_monitor_loop():
-    while True:
-        try:
-            await refresh()
-        except Exception:
-            logger.warning('Product diagnostics refresh failed', exc_info=True)
-        await asyncio.sleep(INTERVAL)

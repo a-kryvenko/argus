@@ -616,6 +616,7 @@ def test_migration_only_drains_existing_worker(tmp_path, monkeypatch, legacy, do
     deployment.base = ['docker', 'compose']
     deployment.migrations = [domain]
     deployment.worker_containers = lambda service: ['old-worker'] if legacy else []
+    deployment.run = lambda *args, **kwargs: deployment.calls.append(args)
     monkeypatch.setattr(rolling, 'create_backup', lambda *args: None)
     original = deployment.compose
     def compose(*args, **kwargs):
@@ -625,6 +626,8 @@ def test_migration_only_drains_existing_worker(tmp_path, monkeypatch, legacy, do
     deployment.compose = compose
     with pytest.raises(RuntimeError, match='migration failed'):
         deployment.backup_and_migrate()
-    assert ('stop', worker) in deployment.calls if legacy else ('stop', worker) not in deployment.calls
-    assert ('start', worker) in deployment.calls if legacy else ('start', worker) not in deployment.calls
+    stop = ('docker', 'stop', '--time', '600', 'old-worker') if domain == 'api' else ('stop', worker)
+    start = ('docker', 'start', 'old-worker') if domain == 'api' else ('start', worker)
+    assert (stop in deployment.calls) == legacy
+    assert (start in deployment.calls) == legacy
     assert not deployment.state.get('drained_workers')

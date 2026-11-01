@@ -12,7 +12,6 @@ def main(argv=None):
     serve.add_argument('--host', default='0.0.0.0')
     serve.add_argument('--port', type=int, default=8000)
     
-    commands.add_parser('worker')
 
     user = commands.add_parser('user')
     user_commands = user.add_subparsers(dest='action', required=True)
@@ -32,11 +31,6 @@ def main(argv=None):
     reset_user_password.set_defaults(command_parser=reset_user_password)
 
     args = parser.parse_args(argv)
-
-    if args.command == 'worker':
-        from common.runtime import run_command
-        from api.worker import work
-        return run_command(work)
 
     if args.command == 'user':
         from common.runtime import run_command

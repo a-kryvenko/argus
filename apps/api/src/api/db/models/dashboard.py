@@ -1,7 +1,7 @@
-"""Dashboard identities and bounded, anonymous API metric buckets."""
+"""Dashboard identities and sessions."""
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.base import Base
@@ -39,14 +39,3 @@ class LoginAttempt(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     window: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     count: Mapped[int] = mapped_column(Integer)
-
-
-class ApiMetric(Base):
-    __tablename__ = 'api_metric'
-    hour: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    route: Mapped[str] = mapped_column(String(256), primary_key=True)
-    method: Mapped[str] = mapped_column(String(16), primary_key=True)
-    status: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bucket_ms: Mapped[int] = mapped_column(Integer, primary_key=True)
-    count: Mapped[int] = mapped_column(Integer)
-    duration_ms: Mapped[float] = mapped_column(Float)

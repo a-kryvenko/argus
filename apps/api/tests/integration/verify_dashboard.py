@@ -28,7 +28,6 @@ from api.routers.dashboard import router
 from api.schemas.dashboard import UserCreate
 from api.services.authentication import create_user
 from api.routers.observations import router as public_router
-from api.services.monitoring import statistics as api_statistics
 
 @contextmanager
 def clio_server(root, schema):
@@ -157,7 +156,7 @@ async def verify():
                     assert 'southward_bz' not in data
                     if params.get('trends') == 'true':
                         assert data['changes_1h']['v'] == 0
-                for path in ['me', 'users', 'groups', 'api-stats']:
+                for path in ['me', 'users', 'groups']:
                     assert (await client.get('/dashboard/'+path)).status_code == 401
                 async def login(c, username='admin', password='administrator-password'):
                     return await c.post('/dashboard/login', json={'username': username, 'password': password})
@@ -175,7 +174,7 @@ async def verify():
                 assert (await client.post('/dashboard/users', json={'username': 'new', 'password': 'some-long-password', 'groups': ['admins']})).status_code == 200
                 assert (await client.patch(f"/dashboard/users/{primary['id']}", json={'active': False})).status_code == 409
                 assert (await login(secondary, 'reader', 'reader-password')).status_code == 200
-                for path in ['users', 'groups', 'api-stats']:
+                for path in ['users', 'groups']:
                     assert (await secondary.get('/dashboard/'+path)).status_code == 403
                 assert (await client.patch(f"/dashboard/users/{reader['id']}", json={'groups': ['admins']})).status_code == 200
                 assert (await secondary.get('/dashboard/me')).status_code == 401
@@ -211,12 +210,6 @@ async def verify():
                         await db.commit()
                     assert (await login(secondary, 'distributed', 'wrong')).status_code == 401
                 assert (await login(client)).status_code == 200
-                api_statistics.record('/dashboard/users/{user_id}', 'PATCH', 200, 42)
-                api_statistics.record('__unmatched__', 'GET', 404, 9)
-                with patch.object(api_statistics, 'get_db_session', side_effect=factory):
-                    await api_statistics.flush()
-                stats = (await client.get('/dashboard/api-stats')).json()['data']
-                assert stats['summary']['requests'] == 2 and stats['summary']['errors_4xx'] == 1
                 async with factory() as db:
                     await db.execute(update(Session).values(expires_at=now-timedelta(seconds=1)))
                     await db.commit()
@@ -225,7 +218,7 @@ async def verify():
         async with engine.begin() as conn:
             await conn.run_sync(lambda c: migrate(c, 'downgrade'))
             await conn.run_sync(lambda c: migrate(c, 'upgrade'))
-        print('Dashboard integration passed: migration roundtrip, login, cookies, CSRF, permissions, users, revocation, pagination, public API, rate limiting and persisted statistics.')
+        print('Dashboard integration passed: migration roundtrip, login, cookies, CSRF, permissions, users, revocation, pagination, public API, rate limiting.')
     finally:
         await engine.dispose()
         if created:

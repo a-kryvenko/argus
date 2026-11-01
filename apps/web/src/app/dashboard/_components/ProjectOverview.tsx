@@ -1,10 +1,6 @@
 "use client";
-import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Activity } from "lucide-react";
 import { Badge } from "@/app/dashboard/_components/ui/badge";
-import { Button } from "@/app/dashboard/_components/ui/button";
 import { Card } from "@/app/dashboard/_components/ui/card";
 import {
   Table,
@@ -14,16 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/app/dashboard/_components/ui/table";
-import { dashboardRequest, useSession } from "../session";
+import { dashboardRequest } from "../session";
 import {
   Message,
   PageHeading,
   Pending,
-  selectClass,
 } from "./presentation";
-import type { Summary } from "./ApiActivity";
 
-const TrafficChart = dynamic(() => import("./TrafficChart"), { ssr: false });
 type Measurement = {
   metric: string;
   latest_observation_at: string | null;
@@ -60,19 +53,6 @@ type Project = {
   } | null;
   forecasts: Forecast[];
 };
-type Traffic = {
-  recent_errors_5xx: number;
-  status: string;
-  checked_at: string | null;
-  stale: boolean;
-  since: string | null;
-  resolution: string;
-  channels: Record<
-    "api" | "site",
-    { summary: Summary; points: (Summary & { time: string })[] }
-  > | null;
-};
-
 const labels: Record<string, string> = {
   ok: "Healthy",
   fresh: "Fresh",
@@ -133,33 +113,22 @@ function Stamp({ value }: { value: string | null | undefined }) {
   );
 }
 export default function ProjectOverview() {
-  const user = useSession();
   const [project, setProject] = useState<Project | null>(null);
-  const [traffic, setTraffic] = useState<Traffic | null>(null);
-  const [period, setPeriod] = useState("day");
-  const [errors, setErrors] = useState({ project: "", traffic: "" });
+  const [error, setError] = useState("");
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
     let disposed = false;
     async function refresh() {
-      const results = await Promise.allSettled([
-        dashboardRequest<Project>("/project-monitoring"),
-        dashboardRequest<Traffic>(`/project-traffic?period=${period}`),
-      ]);
-      if (disposed) return;
+      try {
+        const result = await dashboardRequest<Project>("/project-monitoring");
+        if (disposed) return;
+        setProject(result);
+        setError("");
+      } catch {
+        if (disposed) return;
+        setError("Could not refresh data status.");
+      }
       setClock(Date.now());
-      if (results[0].status === "fulfilled") setProject(results[0].value);
-      if (results[1].status === "fulfilled") setTraffic(results[1].value);
-      setErrors({
-        project:
-          results[0].status === "rejected"
-            ? "Could not refresh data status."
-            : "",
-        traffic:
-          results[1].status === "rejected"
-            ? "Could not refresh traffic statistics."
-            : "",
-      });
     }
     void refresh();
     const timer = window.setInterval(refresh, 30000);
@@ -169,24 +138,18 @@ export default function ProjectOverview() {
       window.clearInterval(timer);
       window.clearInterval(tick);
     };
-  }, [period]);
+  }, []);
   const old =
     !project?.checked_at ||
     clock - Date.parse(project.checked_at) > 120000 ||
     project.stale ||
-    !!errors.project;
-  const trafficOld =
-    !traffic?.checked_at ||
-    clock - Date.parse(traffic.checked_at) > 120000 ||
-    traffic.stale ||
-    !!errors.traffic;
-  const recentErrors = Number(traffic?.recent_errors_5xx ?? 0);
+    !!error;
   const healthy = !old && project?.status === "ok";
   return (
     <>
       <PageHeading
         title="Project overview"
-        description="Observation freshness, forecasts and traffic. All times are UTC."
+        description="Observation freshness and forecasts. All times are UTC."
       />
       <Card className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
@@ -204,18 +167,12 @@ export default function ProjectOverview() {
         </div>
         <Status value={healthy ? "ok" : old ? "unknown" : "degraded"} />
       </Card>
-      {recentErrors > 0 && (
+      {error && (
         <Message>
-          {recentErrors} server errors (5xx) in the last five minute buckets.
-          Check API and website traffic below.
+          {error} Previously loaded values may be outdated.
         </Message>
       )}
-      {errors.project && (
-        <Message>
-          {errors.project} Previously loaded values may be outdated.
-        </Message>
-      )}
-      {!project && !errors.project && (
+      {!project && !error && (
         <Pending label="Checking observations and forecasts…" />
       )}
       {project && old && (
@@ -223,140 +180,6 @@ export default function ProjectOverview() {
           Checks are missing or older than two minutes. Values may be outdated.
         </Message>
       )}
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-medium">
-            Traffic · API and public website
-          </h2>
-          <select
-            className={`${selectClass} max-w-48`}
-            aria-label="Traffic period"
-            value={period}
-            onChange={(event) => {
-              setTraffic(null);
-              setPeriod(event.target.value);
-            }}
-          >
-            <option value="hour">Last hour · minutes</option>
-            <option value="day">Last 24 hours</option>
-            <option value="week">Last 7 days</option>
-          </select>
-        </div>
-        {errors.traffic && <Message>{errors.traffic}</Message>}
-        {traffic &&
-          (trafficOld || !["ok", "disabled"].includes(traffic.status)) && (
-            <Message>
-              Traffic collection is unavailable, catching up or outdated. Counts
-              may be incomplete.
-            </Message>
-          )}
-        {traffic?.status === "disabled" ? (
-          <p className="text-sm text-muted-foreground">
-            Traffic collection is not configured for this environment. Request
-            counts are unavailable.
-          </p>
-        ) : (
-          traffic && (
-            <p className="text-xs text-muted-foreground">
-              Public page requests include bots. Static assets, dashboard pages and
-              monitoring probes are excluded. Collection started:{" "}
-              <Stamp value={traffic.since} />.
-            </p>
-          )
-        )}
-        {traffic?.channels && (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {(["api", "site"] as const).map((channel) => {
-              const data = traffic.channels![channel];
-              const start = traffic.since ? Date.parse(traffic.since) : 0;
-              const rows = data.points
-                .filter(
-                  (p) =>
-                    Date.parse(p.time) +
-                      (traffic.resolution === "minute" ? 60000 : 3600000) >
-                    start,
-                )
-                .map((p) => ({ ...p, hour: p.time }));
-              return (
-                <Card key={channel} className="min-w-0 p-5">
-                  <h3 className="flex items-center gap-2 font-medium">
-                    <Activity className="size-4" />
-                    {channel === "api"
-                      ? "API requests"
-                      : "Public page requests"}
-                  </h3>
-                  <div className="my-4 grid grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Requests</p>
-                      <p className="mt-1 text-xl tabular-nums">
-                        {data.summary.requests.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">4xx / 5xx</p>
-                      <p className="mt-1 tabular-nums">
-                        {data.summary.errors_4xx} / {data.summary.errors_5xx}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">
-                        Mean / p95
-                      </p>
-                      <p className="mt-1 tabular-nums">
-                        {data.summary.requests
-                          ? `${data.summary.average_ms} ms`
-                          : "—"}{" "}
-                        /{" "}
-                        {data.summary.p95_upper_ms == null
-                          ? "—"
-                          : data.summary.p95_upper_ms < 0
-                            ? "> 60 s"
-                            : `≤ ${data.summary.p95_upper_ms} ms`}
-                      </p>
-                    </div>
-                  </div>
-                  <TrafficChart
-                    rows={rows}
-                    label={`${channel === "api" ? "API" : "Public website"} requests and errors per ${traffic.resolution}`}
-                  />
-                  <details className="mt-3 text-xs">
-                    <summary className="cursor-pointer text-muted-foreground">
-                      Show values
-                    </summary>
-                    <div className="mt-2 max-h-48 overflow-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>UTC</TableHead>
-                            <TableHead>Requests</TableHead>
-                            <TableHead>4xx</TableHead>
-                            <TableHead>5xx</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {rows.map((row) => (
-                            <TableRow key={row.hour}>
-                              <TableCell>{date(row.hour)}</TableCell>
-                              <TableCell>{row.requests}</TableCell>
-                              <TableCell>{row.errors_4xx}</TableCell>
-                              <TableCell>{row.errors_5xx}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </details>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-        {user?.permissions.includes("api_stats.read") && (
-          <Button variant="outline" asChild>
-            <Link href="/dashboard/api-stats">Detailed API statistics</Link>
-          </Button>
-        )}
-      </section>
       {project && (
         <>
           <section className="space-y-3">

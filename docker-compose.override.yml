@@ -130,20 +130,6 @@ services:
     ports:
       - 127.0.0.1:8000:8000
 
-  api-worker:
-    <<: *api-runtime
-    environment:
-      <<: *api-environment
-      DEBUG: ${DEBUG:-false}
-      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
-      API_REDIS_URL: redis://redis:6379/0
-    volumes:
-      - ./data/metrics:/var/www/data/metrics:ro
-      - ./data/demo:/var/www/data/demo:ro
-      - ./apps/api/src:/var/www/apps/api/src
-      - ./scripts/db/provision.py:/var/www/scripts/db/provision.py:ro
-      - ./packages/common/src:/var/www/packages/common/src
-
   db-provision:
     build:
       context: .

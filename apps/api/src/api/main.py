@@ -1,6 +1,4 @@
 from contextlib import asynccontextmanager
-import asyncio
-from contextlib import suppress
 import time
 
 import sentry_sdk
@@ -11,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from api.services.monitoring.statistics import record, run_flush_loop, flush
 from api.routers.dashboard import router as dashboard_router
 from common.db.session import dispose_engine
 from api.routers.forecasts import router as forecasts_router
@@ -32,15 +29,9 @@ config = get_config()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    flush_task = asyncio.create_task(run_flush_loop())
     try:
         yield
     finally:
-        flush_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await flush_task
-        with suppress(TimeoutError):
-            await asyncio.wait_for(flush(), timeout=5)
         await dispose_engine()
         await close_cache()
         await close_image_client()
@@ -104,17 +95,8 @@ app.include_router(forecasts_router)
 @app.middleware("http")
 async def add_processing_time_header(request: Request, call_next):
     start_time = time.perf_counter()
-    status_code = 500
-    try:
-        response = await call_next(request)
-        status_code = response.status_code
-        process_time = time.perf_counter() - start_time
-        response.headers["X-Process-Time"] = str(process_time)
-        if request.url.path.startswith('/dashboard') or '/dashboard/' in request.url.path:
-            response.headers['Cache-Control'] = 'no-store'
-        return response
-    finally:
-        route = request.scope.get('route')
-        record(getattr(route, 'path', '__unmatched__'), request.method, status_code,
-               (time.perf_counter() - start_time) * 1000,
-               user_agent=request.headers.get('user-agent', ''))
+    response = await call_next(request)
+    response.headers["X-Process-Time"] = str(time.perf_counter() - start_time)
+    if request.url.path.startswith('/dashboard') or '/dashboard/' in request.url.path:
+        response.headers['Cache-Control'] = 'no-store'
+    return response

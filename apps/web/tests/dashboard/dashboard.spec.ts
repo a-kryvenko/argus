@@ -8,7 +8,6 @@ const admin = {
   groups: ["admins"],
   permissions: [
     "users.manage",
-    "api_stats.read",
     "project_monitoring.read",
   ],
 };
@@ -45,38 +44,6 @@ const project = {
   ],
 };
 const secondUser = { ...admin, id: 2, username: "alex" };
-const summary = {
-  requests: 12840,
-  errors_4xx: 24,
-  errors_5xx: 3,
-  average_ms: 42.6,
-  p95_upper_ms: 100,
-};
-const stats = {
-  summary,
-  hours: Array.from({ length: 24 }, (_, i) => ({
-    ...summary,
-    hour: `2026-09-11T${String(i).padStart(2, "0")}:00:00Z`,
-    requests: 250 + ((i * 71) % 550),
-    errors_4xx: i % 6,
-    errors_5xx: i % 9 === 0 ? 1 : 0,
-  })),
-  routes: [
-    "/observations",
-    "/observations/history",
-    "/forecasts/dst",
-  ].map((route, i) => ({
-    ...summary,
-    route,
-    method: "GET",
-    requests: 12840 - i * 2000,
-  })),
-  statuses: [
-    { status: 200, requests: 12813 },
-    { status: 404, requests: 24 },
-    { status: 500, requests: 3 },
-  ],
-};
 async function mockApi(page: Page, user = admin) {
   const writes: {
     method: string;
@@ -108,29 +75,8 @@ async function mockApi(page: Page, user = admin) {
     reads.push(url);
     let data: unknown;
     if (path === "/me") data = user;
-    else if (path === "/api-stats") data = stats;
     else if (path === "/project-monitoring") data = project;
-    else if (path === "/project-traffic")
-      data = {
-        status: "ok",
-        checked_at: checkedAt,
-        stale: false,
-        since: new Date(Date.now() - 86400000).toISOString(),
-        resolution: "hour",
-        recent_errors_5xx: 0,
-        channels: Object.fromEntries(
-          ["api", "site"].map((channel) => [
-            channel,
-            {
-              summary: {
-                ...summary,
-                requests: channel === "api" ? 12840 : 3210,
-              },
-              points: [{ ...summary, time: checkedAt }],
-            },
-          ]),
-        ),
-      };
+
     else if (path === "/users") data = { items: [admin, secondUser], total: 2 };
     else if (path === "/groups")
       data = [{ name: "admins", permissions: admin.permissions }];
@@ -149,31 +95,14 @@ test("overview, chart and shared workspace navigation", async ({
   await expect(
     page.getByRole("heading", { name: "Project overview" }),
   ).toBeVisible();
-  await expect(page.getByText("12,840", { exact: true })).toBeVisible();
-  await expect(page.locator("canvas").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clio · Observations" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "API statistics", exact: true })).toHaveCount(0);
   await expect(page.locator("h1")).toHaveCSS("font-size", "24px");
-  await expect(page.getByText("Requests", { exact: true }).first()).toHaveCSS(
-    "font-size",
-    "12px",
-  );
   await captureScreenshot(page, {
     path: "/tmp/argus-dashboard-overview.png",
     fullPage: true,
   });
   await expect(page.getByRole('navigation', { name: 'Analytics', exact: true }).getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
-  await page.setViewportSize({ width: 1100, height: 1000 });
-  await expect(page.getByRole('navigation', { name: 'Analytics', exact: true }).getByRole('link', { name: 'API statistics', exact: true })).toBeVisible();
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await expect(
-    page.getByRole("link", { name: "API statistics", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("link", { name: "API statistics", exact: true }).click();
-  await expect(
-    page.getByRole("heading", { name: "API statistics", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Endpoint performance")).toBeVisible();
-  await page.getByLabel("Statistics period").selectOption("168");
-  await expect(page.getByText("Across all API routes · 7 days")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -218,7 +147,7 @@ test("create and edit dialogs preserve groups and submit correct mutations", asy
   });
 });
 
-test("mobile workspace menu closes on navigation; statistics remain contained", async ({
+test("mobile workspace menu closes on navigation; users remain contained", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -230,10 +159,10 @@ test("mobile workspace menu closes on navigation; statistics remain contained", 
   await page.getByText('Resources', { exact: true }).click();
   const menu = page.getByRole('navigation', { name: 'Mobile resources' });
   await expect(menu).toBeVisible();
-  await menu.getByRole('link', { name: 'API statistics', exact: true }).click();
+  await menu.getByRole('link', { name: 'Users & access', exact: true }).click();
   await expect(menu).toBeHidden();
   await expect(
-    page.getByRole("heading", { name: "API statistics", exact: true }),
+    page.getByRole("heading", { name: "Users & access", exact: true }),
   ).toBeAttached();
   expect(
     await page.evaluate(
@@ -352,9 +281,7 @@ test("multiple groups use monitoring permission and show observation and forecas
   await expect(
     page.getByRole("columnheader", { name: "Published", exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText("Public page requests", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Project overview", exact: true })).toBeVisible();
 });
 
 test("stale checks cannot display a healthy project", async ({ page }) => {
@@ -386,89 +313,8 @@ test("unavailable monitoring is visible and does not break the page", async ({
   await expect(
     page.getByText(/Could not refresh data status/),
   ).toBeVisible();
-  await expect(
-    page.getByText("Public page requests", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Project overview", exact: true })).toBeVisible();
 });
-
-test("unconfigured traffic does not affect product diagnostics", async ({ page }) => {
-  await mockApi(page);
-  await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        data: {
-          status: "disabled",
-          checked_at: new Date().toISOString(),
-          stale: false,
-          since: null,
-          recent_errors_5xx: 0,
-          resolution: "hour",
-          channels: null,
-        },
-      },
-    }),
-  );
-  await page.goto("/dashboard");
-  await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
-  await expect(page.getByText(/Traffic collection is not configured/)).toBeVisible();
-  await expect(page.getByText(/Counts may be incomplete/)).toHaveCount(0);
-  await expect(page.getByText(/Collection started:/)).toHaveCount(0);
-});
-
-test("traffic errors remain separate from product diagnostics", async ({
-  page,
-}) => {
-  await mockApi(page);
-  await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        data: {
-          status: "ok",
-          checked_at: checkedAt,
-          stale: false,
-          since: checkedAt,
-          recent_errors_5xx: 7,
-          resolution: "hour",
-          channels: null,
-        },
-      },
-    }),
-  );
-  await page.goto("/dashboard");
-  await expect(page.getByText("Observations or forecasts need attention")).toHaveCount(0);
-  await expect(page.getByText(/7 server errors/)).toBeVisible();
-  await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
-});
-
-for (const count of [0, "0"]) {
-  test(`zero server errors (${typeof count}) do not degrade project health`, async ({
-    page,
-  }) => {
-    await mockApi(page);
-    await page.route("**/api/v1/dashboard/project-traffic?*", (route) =>
-      route.fulfill({
-        json: {
-          success: true,
-          data: {
-            status: "ok",
-            checked_at: new Date().toISOString(),
-            stale: false,
-            since: checkedAt,
-            recent_errors_5xx: count,
-            resolution: "hour",
-            channels: null,
-          },
-        },
-      }),
-    );
-    await page.goto("/dashboard");
-    await expect(page.getByText("Observations and forecasts are current")).toBeVisible();
-    await expect(page.getByText(/server errors \(5xx\)/)).toHaveCount(0);
-    await expect(page.getByText("Observations or forecasts need attention")).toHaveCount(0);
-  });
-}
 
 test('mobile member can open account and sign out from shared resources', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -486,9 +332,9 @@ test('mobile member can open account and sign out from shared resources', async 
 
 test('restricted sections do not fetch protected data for a member', async ({ page }) => {
   const { reads } = await mockApi(page, { ...admin, groups: ['clients'], permissions: [] });
-  for (const path of ['/dashboard/users', '/dashboard/api-stats']) {
+  for (const path of ['/dashboard/users']) {
     await page.goto(path);
     await expect(page.locator('.dashboard').getByRole('alert')).toContainText('You do not have access');
   }
-  expect(reads.some(url => /\/(users|groups|api-stats|project-monitoring)/.test(url.pathname))).toBe(false);
+  expect(reads.some(url => /\/(users|groups|project-monitoring)/.test(url.pathname))).toBe(false);
 });

@@ -15,7 +15,7 @@ from release import artifact_digest
 from backup import create_backup
 
 HTTP = {'clio': 8000, 'prophet-api': 8000, 'intelligence-api': 8000, 'api': 8000, 'frontend': 3000}
-WORKERS = ['clio-worker', 'intelligence', 'proswin', 'api-worker']
+WORKERS = ['clio-worker', 'intelligence', 'proswin']
 ROUTER = 'internal-router'
 ROUTES = {
     'clio': ('observations', 'observations-router', 8101),
@@ -340,7 +340,10 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             if workers[domain]:
                 self.state.setdefault('drained_workers', []).extend(workers[domain])
                 self.save()
-                self.compose('stop', *workers[domain])
+                if domain == 'api':
+                    self.run('docker', 'stop', '--time', '600', *self.worker_containers('api-worker'))
+                else:
+                    self.compose('stop', *workers[domain])
             try:
                 self.compose('run', '--rm', '--no-deps', domain + '-migrate')
             except Exception:
@@ -352,6 +355,10 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             workers = [name for name in self.state['drained_workers'] if name in WORKERS or name == 'prophet']
             if workers:
                 self.compose('start', *workers)
+            if 'api-worker' in self.state['drained_workers']:
+                containers = self.worker_containers('api-worker')
+                if containers:
+                    self.run('docker', 'start', *containers)
             self.state.pop('drained_workers')
             self.save()
 
@@ -498,7 +505,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         # Replace legacy Clio cron entries before starting its scheduler.
         self.install_crontab()
         self.compose('up', '-d', '--no-deps', '--wait', '--wait-timeout', '300', *WORKERS)
-        legacy = [name for name in self.state.get('drained_workers', []) if name == 'prophet']
+        legacy = [name for name in self.state.get('drained_workers', []) if name in ('prophet', 'api-worker')]
         if legacy:
             self.state['drained_workers'] = legacy
         else:
@@ -519,6 +526,7 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
             shutil.copy2(self.bundle / 'scripts' / name, self.root / 'scripts' / name)
         shutil.copy2(self.bundle / 'argus', self.root / 'argus')
         self.retire_worker('prophet')
+        self.retire_worker('api-worker')
         self.state.pop('drained_workers', None)
         self.save()
         # Keep the previous CLI usable when preflight, migration or replacement fails.

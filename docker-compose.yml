@@ -215,17 +215,6 @@ services:
       timeout: 10s
       start_period: 30s
 
-  api-worker:
-    <<: *api-runtime
-    depends_on:
-      <<: *api-depends_on
-      clio:
-        condition: service_started
-    init: true
-    restart: unless-stopped
-    command: [api, worker]
-    stop_grace_period: 60s
-
   db-provision:
     environment:
       INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}

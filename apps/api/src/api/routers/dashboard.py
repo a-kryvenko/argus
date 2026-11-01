@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from typing import Literal
 import os
 import secrets
 
@@ -11,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from api.db.session import get_db_session, get_request_db_session
-from api.db.models.dashboard import User, Group, Membership, Session, LoginAttempt, ApiMetric
+from api.db.models.dashboard import User, Group, Membership, Session, LoginAttempt
 from api.services.authentication import COOKIE, DUMMY_HASH, check_origin, current_user, digest, hash_password, verify_password, require, user_info, users_info, validate_groups, create_user
 from common.schemas.response import success_response
 
@@ -112,55 +111,8 @@ async def update_user(user_id: int, body: UserUpdate, actor: User = Depends(requ
     return success_response(await user_info(db, user))
 
 
-@router.get('/api-stats', dependencies=[Depends(require('api_stats.read'))])
-async def api_stats(hours: int = Query(24, ge=1, le=720), db: AsyncSession = Depends(get_request_db_session)):
-    from api.services.monitoring.statistics import summarize
-    since = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) - timedelta(hours=hours-1)
-    rows = (await db.scalars(select(ApiMetric).where(ApiMetric.hour >= since))).all()
-    return success_response(summarize(rows))
-
-
 @router.get('/project-monitoring', dependencies=[Depends(require('project_monitoring.read'))])
-async def project_monitoring(db: AsyncSession = Depends(get_request_db_session)):
-    from api.db.models.monitoring import MonitorState
-    from api.services.monitoring.project import STALE_SECONDS, product_state
-    state = await db.get(MonitorState, 'project')
-    now = datetime.now(timezone.utc)
-    if state is None:
-        return success_response({'status': 'unknown', 'checked_at': None, 'stale': True,
-            'observations': None, 'forecasts': []})
-    stale = (now-state.checked_at).total_seconds() > STALE_SECONDS
-    payload = product_state(state.payload)
-    return success_response({**payload, 'checked_at': state.checked_at,
-        'stale': stale, 'status': 'unknown' if stale else payload['status']})
-
-
-@router.get('/project-traffic', dependencies=[Depends(require('project_monitoring.read'))])
-async def project_traffic(period: Literal['hour', 'day', 'week'] = 'day', db: AsyncSession = Depends(get_request_db_session)):
-    from api.db.models.monitoring import MonitorState, TrafficMetric
-    from api.services.monitoring.edge_traffic import traffic_summary
-    now = datetime.now(timezone.utc)
-    resolution = 'minute' if period == 'hour' else 'hour'
-    if not os.getenv('MONITORING_TRAFFIC_LOG'):
-        return success_response({'recent_errors_5xx': 0, 'status': 'disabled',
-            'checked_at': now, 'stale': False, 'since': None,
-            'resolution': resolution, 'channels': None})
-    until = now.replace(second=0, microsecond=0, **({'minute': 0} if resolution == 'hour' else {}))
-    since = until - (timedelta(minutes=59) if period == 'hour' else timedelta(hours=23 if period == 'day' else 167))
-    state = await db.get(MonitorState, 'traffic')
-    stale = not state or (now-state.checked_at).total_seconds() > 120
-    payload = state.payload if state else {}
-    last_event = payload.get('last_event_at')
-    if not last_event or (now-datetime.fromisoformat(last_event)).total_seconds() > 120:
-        stale = True
-    rows = (await db.scalars(select(TrafficMetric).where(TrafficMetric.resolution == resolution,
-        TrafficMetric.time >= since, TrafficMetric.time <= until))).all()
-    recent_errors = await db.scalar(select(func.coalesce(func.sum(TrafficMetric.count), 0)).where(
-        TrafficMetric.resolution == 'minute', TrafficMetric.time >= now.replace(second=0, microsecond=0)-timedelta(minutes=4),
-        TrafficMetric.status >= 500))
-    # PostgreSQL SUM(bigint) returns numeric/Decimal; keep the JSON counter numeric.
-    return success_response({'recent_errors_5xx': int(recent_errors),
-        'status': 'unknown' if stale else payload.get('status', 'unknown'),
-        'checked_at': state.checked_at if state else None, 'stale': bool(stale),
-        'since': payload.get('since'), 'resolution': resolution,
-        'channels': traffic_summary(rows, since, until, resolution) if state else None})
+async def project_monitoring(response: Response):
+    from api.services.project_status import read_project_status
+    response.headers['Cache-Control'] = 'no-store'
+    return success_response(await read_project_status())

@@ -4,7 +4,7 @@ from common.db.alembic import run_migrations
 from common.db.session import get_database_url
 
 from api.db.base import Base
-from api.db.models import dashboard, monitoring
+from api.db.models import dashboard
 
 run_migrations(
     'api',

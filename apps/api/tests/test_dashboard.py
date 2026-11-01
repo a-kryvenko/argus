@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 from api.services.authentication import hash_password, verify_password, current_user
 from api.db.session import get_request_db_session
 from api.routers.dashboard import router, users
-from api.services.monitoring.statistics import summarize, record
 
 
 def test_password_hashes_are_salted_and_verified():
@@ -45,7 +44,7 @@ def test_anonymous_cannot_access_dashboard():
     app.include_router(router)
     app.dependency_overrides[get_request_db_session] = lambda: AsyncMock()
     with TestClient(app) as client:
-        for path in ['/me', '/users', '/groups', '/api-stats', '/project-monitoring', '/project-traffic']:
+        for path in ['/me', '/users', '/groups', '/project-monitoring']:
             assert client.get('/dashboard'+path).status_code == 401
         assert client.post('/dashboard/users', headers={'Origin': 'http://localhost:3000'},
                            json={'username': 'test', 'password': 'long-password'}).status_code == 401
@@ -72,28 +71,8 @@ def test_user_without_permissions_is_forbidden():
     app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=1, username='reader', active=True)
     with TestClient(app) as client:
         assert client.get('/dashboard/me').status_code == 200
-        for endpoint in ['/users', '/groups', '/api-stats', '/project-monitoring', '/project-traffic']:
+        for endpoint in ['/users', '/groups', '/project-monitoring']:
             assert client.get('/dashboard'+endpoint).status_code == 403
-
-
-def test_statistics_weighted_mean_statuses_and_p95():
-    hour = datetime(2026, 9, 11, tzinfo=timezone.utc)
-    def row(count, duration, status, bucket):
-        return SimpleNamespace(hour=hour, route='/users/{user_id}', method='GET',
-            count=count, duration_ms=duration, status=status, bucket_ms=bucket)
-    result = summarize([row(94, 940, 200, 10), row(5, 500, 404, 100), row(1, 90000, 500, -1)])
-    assert result['summary'] == {'requests': 100, 'errors_4xx': 5, 'errors_5xx': 1, 'average_ms': 914.4, 'p95_upper_ms': 100}
-    assert len(result['routes']) == len(result['hours']) == 1
-    assert summarize([])['summary']['p95_upper_ms'] is None
-    assert summarize([row(1, 90000, 500, -1)])['summary']['p95_upper_ms'] == -1
-
-
-def test_metric_cardinality_is_bounded(monkeypatch):
-    from api.services.monitoring import statistics as api_statistics
-    monkeypatch.setattr(api_statistics, '_buffer', {})
-    record('/users/{user_id}', 'UNRECOGNIZED', 200, 12)
-    key = next(iter(api_statistics._buffer))
-    assert key[1:] == ('/users/{user_id}', 'OTHER', 200, 25)
 
 
 def test_empty_origin_configuration_fails_closed(monkeypatch):

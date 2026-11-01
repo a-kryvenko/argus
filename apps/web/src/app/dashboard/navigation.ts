@@ -1,6 +1,5 @@
 import DragRiskIcon from '@/components/DragRiskIcon';
 import {
-  Activity,
   LayoutDashboard,
   UsersRound,
 } from "lucide-react";
@@ -13,12 +12,6 @@ export const navigation = [
         title: "Overview",
         icon: LayoutDashboard,
         permission: null,
-      },
-      {
-        href: "/dashboard/api-stats",
-        title: "API statistics",
-        icon: Activity,
-        permission: "api_stats.read",
       },
     ],
   },
@@ -45,4 +38,4 @@ export const navigation = [
     ],
   },
 ];
-export const dashboardLinks = navigation.flatMap((group) => group.items);
+export const dashboardLinks = navigation.flatMap<(typeof navigation)[number]["items"][number]>((group) => group.items);

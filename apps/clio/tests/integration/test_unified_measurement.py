@@ -13,13 +13,19 @@ from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from clio.db.models.measurement import Measurement
-from clio.ingestion.conversion import wind_measurements
+from clio.ingestion.conversion import wide_to_measurements
+from clio.providers.solar_wind_loader import parse_records
 from clio.observations.measurements import store_native
 from clio.observations.metrics import history
 from clio.observations.measurements import load_measurements
 
 pytestmark = pytest.mark.skipif(not os.getenv('TEST_DATABASE_ADMIN_DSN'), reason='Disposable PostgreSQL required')
 NOW = datetime(2026, 9, 1, tzinfo=UTC)
+
+
+def wind_rows(payload, received):
+    return wide_to_measurements(parse_records('mag', payload, received)).assign(
+        received_at=received, source_product='swpc.rtsw_mag').to_dict('records')
 
 
 @pytest.fixture
@@ -91,15 +97,15 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
         factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
             async with factory() as session:
-                payload = [dict(observed_at=NOW+timedelta(minutes=i), received_at=NOW+timedelta(hours=1),
-                                spacecraft='A' if i < 2 else 'B', active=True,
-                                values={'bz': value}, raw={'overall_quality': 1 if i == 2 else 0})
+                payload = [dict(time_tag=(NOW+timedelta(minutes=i)).isoformat(),
+                                source='A' if i < 2 else 'B', active=True, bx_gsm=None, by_gsm=None, bt=None,
+                                bz_gsm=value, overall_quality=1 if i == 2 else 0)
                            for i, value in enumerate([-8, 2, 99, None, -2])]
-                await store_native(session, wind_measurements('mag', payload))
+                received = NOW+timedelta(hours=1)
+                await store_native(session, wind_rows(payload, received))
                 await session.commit()
-                for row in payload:
-                    row['received_at'] += timedelta(hours=1)
-                await store_native(session, wind_measurements('mag', payload))
+                received += timedelta(hours=1)
+                await store_native(session, wind_rows(payload, received))
                 await session.commit()
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(Measurement.metric == 'bz').limit(1))
                 assert receipt == NOW+timedelta(hours=1)
@@ -108,13 +114,13 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 frame = await load_measurements(session, NOW)
                 assert frame.loc[frame.metric == 'bz', 'value'].tolist() == [-8, 2, -2]
                 session.add_all([Measurement(metric=metric, value=2, observed_at=NOW,
-                    received_at=NOW+timedelta(minutes=5), quality='unverified', source_product=source)
+                    received_at=NOW+timedelta(minutes=5), source_product=source)
                     for metric, source in [('kp', 'swpc.kp'), ('ap', 'swpc.kp'), ('dst', 'swpc.dst')]])
                 await session.commit()
                 data = await history(session, ['kp', 'ap', 'dst'], NOW, NOW+timedelta(hours=4), '1m', NOW+timedelta(hours=4))
                 assert data['points'] == [{'time': NOW, 'kp': 2., 'ap': 2., 'dst': 2.}]
-                payload[0]['values']['bz'] = -10
-                await store_native(session, wind_measurements('mag', payload))
+                payload[0]['bz_gsm'] = -10
+                await store_native(session, wind_rows(payload, received))
                 await session.commit()
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(
                     Measurement.metric == 'bz', Measurement.observed_at == NOW))
@@ -179,7 +185,7 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
                     NormalizedObservation.observed_at == start)) == 2.
                 live_hour = now - timedelta(hours=1)
                 session.add_all([Measurement(metric=m, value=5., observed_at=live_hour+timedelta(minutes=15),
-                    source_product=config.observations[m].sources.live[0], received_at=now, quality='unverified')
+                    source_product=config.observations[m].sources.live[0], received_at=now)
                     for m in REQUIRED_METRICS])
                 await session.commit()
                 await normalized.refresh_normalized_observations(config, now)

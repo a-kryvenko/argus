@@ -107,7 +107,7 @@ def test_calendar_requests_are_bounded_and_skip_complete_days():
 
 
 def test_adapter_clips_provider_days_and_rejects_invalid_plasma():
-    loader = Mock(return_value=pd.DataFrame({'issue_time': [START, END, START + timedelta(hours=1)],
+    loader = Mock(return_value=pd.DataFrame({'timestamp': [START, END, START + timedelta(hours=1)],
                                            'v': [400., 500., -1e31], 'by': [1., 2., 3.]}))
     result = WideHistoryAdapter(loader, ('v', 'n', 't')).fetch(START, END)
     assert result.metric.tolist() == ['v']
@@ -118,11 +118,11 @@ def test_ace_plasma_does_not_request_magnetic_and_skips_fill_values(monkeypatch)
     load = Mock(return_value=object())
     monkeypatch.setattr(SPDF_Loader, '_load_cdf_from_url', load)
     monkeypatch.setattr(SPDF_Loader, '_swepam_dataframe', lambda _: pd.DataFrame({
-        'issue_time': [START, START + timedelta(minutes=5)],
+        'timestamp': [START, START + timedelta(minutes=5)],
         'v': [-1e31, 410.], 'n': [5., 6.], 't': [100., 200.]}))
     result = SPDF_Loader.load_plasma(START, END)
     assert result.v.tolist() == [410.]
-    assert result.issue_time.tolist() == [START]
+    assert result.timestamp.tolist() == [START]
     assert '/swepam/' in load.call_args.args[0]
     load.assert_called_once()
 
@@ -213,7 +213,7 @@ def test_coverage_uses_three_hour_and_daily_slots_and_only_closed_intervals():
 
 def test_omni_adapter_retains_signed_fields_and_filters_invalid_indices():
     loader = Mock(return_value=pd.DataFrame({
-        'issue_time': [START, START + timedelta(hours=1)],
+        'timestamp': [START, START + timedelta(hours=1)],
         'bx': [-5., 0.], 'by': [-2., 1.], 'bz': [-3., float('inf')],
         'dst': [-80., -20.], 'kp': [9., 10.], 'ap': [0., -1.]}))
     result = WideHistoryAdapter(loader, PRODUCTS['omni.hourly'].metrics).fetch(START, END)
@@ -315,10 +315,9 @@ def test_backfill_repairs_only_unusable_stored_values():
     asyncio.run(upsert_measurements(session, frame(('v', 400., START)), replace_existing=False, repair_missing=True))
     query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     text = str(query)
-    assert 'DO UPDATE' in text and 'quality = ' in text
+    assert 'DO UPDATE' in text and 'quality' not in text
     condition = text.rsplit(' WHERE ', 1)[-1]
     assert 'measurement.value IS NULL' in condition
-    assert 'measurement.quality IN' in condition
     assert 'excluded.value' not in condition  # A different but valid measurement is preserved.
 
 

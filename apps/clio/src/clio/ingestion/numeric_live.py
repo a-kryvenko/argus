@@ -76,7 +76,6 @@ async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
                     observed = observed.tz_convert('UTC')
                     slot = observed.floor(definition.live_resolution)
                     if (not start <= observed <= now or slot not in requested[row.metric]
-                            or getattr(row, 'quality', None) in ('missing', 'flagged')
                             or pd.isna(row.value) or not definition.accepts(row.value)):
                         continue
                     rows.append(dict(metric=row.metric, value=row.value, observed_at=observed,

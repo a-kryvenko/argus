@@ -32,7 +32,7 @@ QUALITY_FLAGS = ("eclipse", "lunar_transit", "geocorona")
 
 
 def _parse_euvs_json(payload: Any) -> pd.DataFrame:
-    """Normalize the SWPC one-minute EUVS response into one row per timestamp."""
+    """Normalize usable EUVS values into one row per timestamp."""
     if not isinstance(payload, list) or not payload:
         raise RuntimeError("GOES EUVS response is empty or malformed")
 
@@ -53,55 +53,48 @@ def _parse_euvs_json(payload: Any) -> pd.DataFrame:
             continue
 
         timestamp = pd.to_datetime(record.get("time_tag"), utc=True, errors="coerce")
-        if pd.isna(timestamp) or not np.isfinite(value) or not np.isfinite(au_factor):
+        if pd.isna(timestamp) or not np.isfinite(value) or value < 0 or not np.isfinite(au_factor):
             continue
 
         flags = record.get("flags")
         flags = flags if isinstance(flags, dict) else {}
+        if any(flags.get(flag, False) for flag in QUALITY_FLAGS):
+            value = np.nan
         rows.append({
             "timestamp": timestamp,
             "goes_euvs_satellite": satellite,
             "goes_au_factor": au_factor,
             "line": line,
             "value": value,
-            **{
-                f"goes_{flag}": bool(flags.get(flag, False))
-                for flag in QUALITY_FLAGS
-            },
         })
 
     if not rows:
         raise RuntimeError("No valid GOES EUVS observations parsed")
 
-    records = pd.DataFrame(rows)
-    value_frame = records.pivot_table(
+    records = pd.DataFrame(rows).drop_duplicates(['timestamp', 'goes_euvs_satellite', 'line'], keep='last')
+    value_frame = records.pivot(
         index=["timestamp", "goes_euvs_satellite"],
         columns="line",
         values="value",
-        aggfunc="last",
     ).rename(columns=EUVS_LINE_COLUMNS)
 
     required_columns = list(EUVS_LINE_COLUMNS.values())
     value_frame = value_frame.reindex(columns=required_columns).dropna(
-        subset=required_columns
+        subset=required_columns, how='all'
     )
     if value_frame.empty:
-        raise RuntimeError("GOES EUVS response contains no complete observation")
+        raise RuntimeError("GOES EUVS response contains no usable observation")
 
     metadata = records.groupby(
         ["timestamp", "goes_euvs_satellite"],
         sort=True,
     ).agg({
         "goes_au_factor": "last",
-        **{f"goes_{flag}": "max" for flag in QUALITY_FLAGS},
     })
 
     frame = value_frame.join(metadata).reset_index()
     frame.columns.name = None
-    frame["goes_euvs_quality_valid"] = ~frame[
-        [f"goes_{flag}" for flag in QUALITY_FLAGS]
-    ].any(axis=1)
-    return frame.sort_values("timestamp").reset_index(drop=True)
+    return frame.loc[frame.goes_au_factor.gt(0)].sort_values("timestamp").reset_index(drop=True)
 
 
 def _parse_xray_background_json(payload: Any) -> pd.DataFrame:
@@ -121,7 +114,7 @@ def _parse_xray_background_json(payload: Any) -> pd.DataFrame:
             continue
 
         timestamp = pd.to_datetime(record.get("time_tag"), utc=True, errors="coerce")
-        if pd.isna(timestamp) or not np.isfinite(background):
+        if pd.isna(timestamp) or not np.isfinite(background) or background < 0:
             continue
 
         rows.append({
@@ -168,7 +161,7 @@ def fetch_goes(
 
     X-ray background is a daily product. Each minute-level EUVS row receives
     the most recent background value whose timestamp is not later than the
-    EUVS timestamp. ``start`` and ``end`` are inclusive and may be timezone-
+    EUVS timestamp. The range is [``start``, ``end``); boundaries may be timezone-
     aware or naive; naive values are interpreted as UTC.
     """
     euvs = _parse_euvs_json(_fetch_json(euvs_url, timeout=timeout))
@@ -187,6 +180,6 @@ def fetch_goes(
     if start is not None:
         records = records.loc[records["timestamp"] >= _utc_timestamp(start)]
     if end is not None:
-        records = records.loc[records["timestamp"] <= _utc_timestamp(end)]
+        records = records.loc[records["timestamp"] < _utc_timestamp(end)]
 
     return records.reset_index(drop=True)

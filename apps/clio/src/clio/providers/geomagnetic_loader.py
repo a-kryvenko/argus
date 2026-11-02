@@ -1,17 +1,19 @@
 """Native NOAA estimated Kp and Kyoto real-time Dst, without gap filling."""
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 import math
 
+import pandas as pd
 import requests
+
+from clio.providers.contract import dataset
 
 SOURCES = {
     'kp': 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',
     'dst': 'https://services.swpc.noaa.gov/products/kyoto-dst.json',
 }
-INTERVAL_SECONDS = {'kp': 10800, 'dst': 3600}
 
 
-def parse_records(metric: str, payload: object, received_at: datetime) -> list[dict]:
+def parse_records(metric: str, payload: object, received_at: datetime) -> pd.DataFrame:
     if not isinstance(payload, list) or not payload:
         raise ValueError(f'{metric}: expected a nonempty JSON record list')
     field = 'Kp' if metric == 'kp' else 'dst'
@@ -34,18 +36,20 @@ def parse_records(metric: str, payload: object, received_at: datetime) -> list[d
             value = None
         if value is not None and (not math.isfinite(value) or abs(value) >= 9999 or (metric == 'kp' and not 0 <= value <= 9)):
             value = None
-        quality = 'missing' if value is None else 'unverified'
-        if value is not None and metric == 'kp' and row.get('station_count') == 0:
-            quality = 'flagged'
-        records[start] = {'metric': metric, 'interval_start': start,
-                          'interval_end': start + timedelta(seconds=INTERVAL_SECONDS[metric]),
-                          'value': value, 'quality': quality, 'received_at': received_at, 'raw': row}
-    if not records:
-        raise ValueError(f'{metric}: no usable timestamps')
-    return list(records.values())
+        values = {metric: value}
+        if metric == 'kp':
+            try:
+                ap = row.get('a_running')
+                values['ap'] = float(ap) if ap is not None and not isinstance(ap, bool) else None
+            except (ValueError, TypeError):
+                values['ap'] = None
+            if row.get('station_count') == 0:
+                values = dict.fromkeys(values)
+        records[start] = {'timestamp': start, **values}
+    return dataset(pd.DataFrame(records.values()), ('kp', 'ap') if metric == 'kp' else ('dst',))
 
 
-def fetch_records(metric: str) -> list[dict]:
+def fetch_records(metric: str) -> pd.DataFrame:
     response = requests.get(SOURCES[metric], timeout=(5, 25))
     response.raise_for_status()
     return parse_records(metric, response.json(), datetime.now(UTC))

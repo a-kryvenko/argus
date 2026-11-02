@@ -10,8 +10,8 @@ def test_column_specific_fill_and_fractional_kp():
     result = OMNIWeb_Loader._parse_omni_text(
         '2025 001 00 999.9 999.9 999.9 9999999 999.9 9999 99 99999 999 999.9\n'
         '2025 001 01 1 2 -3 10000 5 400 27 -20 12 123.4')
-    assert result.iloc[0].drop('issue_time').isna().all()
-    row = result.iloc[1]
+    assert len(result) == 1
+    row = result.iloc[0]
     assert row.kp == pytest.approx(2.7)
     assert row.t == 10000  # Real temperature, not the old generic fill mask.
     assert row.f10_7 == 123.4
@@ -21,9 +21,9 @@ def test_requested_end_day_includes_last_hour():
     response = Mock(text='2025 365 23 1 2 -3 10000 5 400 27 -20 12 123.4')
     with patch('clio.providers.omniweb_loader.requests.post', return_value=response):
         result = OMNIWeb_Loader.load(pd.Timestamp('2025-12-31', tz='UTC'),
-                                    pd.Timestamp('2025-12-31', tz='UTC'))
+                                    pd.Timestamp('2026-01-01', tz='UTC'))
     assert len(result) == 1
-    assert result.issue_time.iloc[0].hour == 23
+    assert result.timestamp.iloc[0].hour == 23
 
 
 def test_missing_records_report_provider_message():
@@ -47,7 +47,7 @@ def test_unpublished_range_is_empty_not_source_failure():
         result = OMNIWeb_Loader.load(pd.Timestamp('2026-09-22', tz='UTC'),
                                     pd.Timestamp('2026-09-22', tz='UTC'))
     assert result.empty
-    assert 'v' in result and 'issue_time' in result
+    assert 'v' in result and 'timestamp' in result
     assert post.call_count == 1
 
 

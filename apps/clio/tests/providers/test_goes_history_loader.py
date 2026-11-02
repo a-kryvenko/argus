@@ -42,10 +42,11 @@ def _xrs_file(path: Path, satellite=16):
 def test_normalization_uses_standard_mgii_flags_and_previous_day_background(tmp_path):
     euvs = loader.read_euvs_archive(_euvs_file(tmp_path / "euvs.nc"), 16)
     xrs = loader.read_xrs_archive(_xrs_file(tmp_path / "xrs.nc"), 16)
-    assert euvs.goes_mgii_index.tolist() == [0.28] * 4
-    assert euvs.goes_euvs_quality_valid.tolist() == [True, False, False, False]
-    assert euvs.goes_eclipse.tolist() == [False, True, False, False]
-    assert euvs.goes_geocorona.tolist() == [False, False, True, False]
+    assert euvs.goes_mgii_index.dropna().tolist() == [0.28, 0.28]
+    assert euvs.goes_euv_284.isna().tolist() == [False, True, False]
+    assert euvs.timestamp.tolist() == [pd.Timestamp('2025-01-01T00:00Z'),
+        pd.Timestamp('2025-01-01T00:01Z'), pd.Timestamp('2025-01-01T00:03Z')]
+    assert not any('quality' in name or 'flag' in name for name in euvs)
     assert len(xrs) == 2
     joined = loader.join_archive_background(euvs, xrs)
     assert joined.goes_xray_background.eq(1e-7).all()  # Neither today's final value nor daily average.
@@ -64,8 +65,7 @@ def test_satellite_selection_uses_validity_before_priority():
     frame = pd.DataFrame({
         "timestamp": pd.to_datetime(["2025-01-01T00:00Z"] * 2 + ["2025-01-01T00:01Z"] * 2),
         "goes_euvs_satellite": [18, 16, 18, 16],
-        "goes_euvs_quality_valid": [False, True, True, True],
-        "goes_xray_background": [1e-7] * 4,
+        "goes_xray_background": [float("nan"), 1e-7, 1e-7, 1e-7],
     })
     chosen = loader.select_satellite_records(frame, [18, 16])
     assert chosen.goes_euvs_satellite.tolist() == [16, 18]
@@ -146,7 +146,7 @@ def test_cached_archives_covering_missing_snapshot_days_need_no_http_refresh(tmp
     session = Mock()
     frames = list(loader.iter_goes_history(files, pd.date_range('2025-01-01', periods=1, tz='UTC'),
                                           [16], tmp_path, session, refresh=True))
-    assert len(frames) == 1 and len(frames[0][1]) == 4
+    assert len(frames) == 1 and len(frames[0]) == 3
     session.get.assert_not_called()
 
 

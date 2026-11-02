@@ -7,7 +7,7 @@ from pathlib import Path
 
 import requests
 
-from clio.providers.sdo_images import download_observation, observation_url, prepare_observation
+from clio.providers.sdo_images import download_observation, fetch, prepare_observation
 from clio.observations.sdo_archive import (OBSERVED_CHANNELS, ORIGINAL_CHANNELS, archive_root, hourly_slots,
                                image_path, original_path, prune, save_image, save_original, utc)
 
@@ -20,7 +20,8 @@ def collect_one(root, slot, channel, *, clock):
     if existing and (not keep_original or original_path(root, slot, channel).exists()):
         return 'existing'
     try:
-        result = download_observation(observation_url(channel, slot), channel,
+        reference = fetch(channel, slot)
+        result = download_observation(reference[channel + '_url'], channel,
                                       slot=slot, now=clock(), include_original=keep_original)
         image, metadata = result[:2]
         original = result[2] if keep_original else None

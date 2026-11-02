@@ -29,7 +29,6 @@ async def read_measurements(session, *, start, end, metrics, aggregation='raw',
                            available.label('available_at'))
     statement = statement.where(
         Measurement.metric.in_(metrics), Measurement.observed_at >= start, Measurement.observed_at < end,
-        or_(Measurement.quality.is_(None), Measurement.quality.not_in(['flagged', 'missing'])),
         Measurement.value > float('-inf'), Measurement.value < float('inf'),
     )
     if min_value is not None:
@@ -51,8 +50,7 @@ async def load_measurements(
     source_products: list[str] | None = None,
 ) -> pd.DataFrame:
     statement = (select(Measurement.metric, Measurement.value, Measurement.observed_at)
-                 .where(Measurement.observed_at >= since,
-                        or_(Measurement.quality.is_(None), Measurement.quality.not_in(["flagged", "missing"])))
+                 .where(Measurement.observed_at >= since)
                  .order_by(Measurement.observed_at))
     if until is not None:
         statement = statement.where(Measurement.observed_at < until)
@@ -117,15 +115,15 @@ async def upsert_measurements(
         elif repair_missing:
             from clio.ingestion.products import OBSERVATIONS
             nonnegative = [name for name, definition in OBSERVATIONS.items()
-                           if definition.kind == 'numeric' and definition.quality != 'finite']
+                           if definition.kind == 'numeric' and definition.signed is False]
             missing = or_(Measurement.value.is_(None), Measurement.value <= float('-inf'),
-                          Measurement.value >= float('inf'), Measurement.quality.in_(['missing', 'flagged']),
+                          Measurement.value >= float('inf'),
                           and_(Measurement.metric.in_(nonnegative), Measurement.value < 0),
                           and_(Measurement.metric == 'kp', Measurement.value > 9))
             statement = statement.on_conflict_do_update(
                 constraint='uq_measurement_metric',
                 set_={'value': statement.excluded.value, 'source_product': statement.excluded.source_product,
-                      'received_at': statement.excluded.received_at, 'quality': None}, where=missing)
+                      'received_at': statement.excluded.received_at}, where=missing)
         else:
             statement = statement.on_conflict_do_nothing(constraint="uq_measurement_metric")
         await session.execute(statement)
@@ -133,7 +131,7 @@ async def upsert_measurements(
 
 async def store_native(session, records, *, source_priorities=None):
     # New polling timestamps alone do not revise an observation's receipt.
-    fields = ('value', 'source_product', 'quality')
+    fields = ('value', 'source_product')
     for offset in range(0, len(records), 1000):
         statement = insert(Measurement).values(records[offset:offset + 1000])
         changed = or_(*(getattr(Measurement, name).is_distinct_from(statement.excluded[name]) for name in fields))

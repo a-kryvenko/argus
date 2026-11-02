@@ -9,6 +9,7 @@ from zipfile import BadZipFile, ZipFile
 import numpy as np
 import pandas as pd
 import requests
+from clio.providers.contract import dataset
 
 URL = 'https://l1.umd.edu/data/{year}_CELIAS_Proton_Monitor_5min.zip'
 TEMPERATURE_FACTOR = 1.67262192369e-27 * 1e6 / (2 * 1.380649e-23)
@@ -19,7 +20,7 @@ MONTHS = {name: i for i, name in enumerate(
 
 
 def empty_frame():
-    return pd.DataFrame({'issue_time': pd.Series(dtype='datetime64[ns, UTC]'),
+    return pd.DataFrame({'timestamp': pd.Series(dtype='datetime64[ns, UTC]'),
                          **{m: pd.Series(dtype=float) for m in ('v', 'n', 't')}})
 
 
@@ -43,15 +44,15 @@ def parse_soho(text, year):
         rows.append((at, speed, density, thermal))
     if not rows:
         raise ValueError('No SOHO/CELIAS observations parsed')
-    frame = pd.DataFrame(rows, columns=['issue_time', 'v', 'n', 'vth'])
-    if frame.issue_time.duplicated().any():
+    frame = pd.DataFrame(rows, columns=['timestamp', 'v', 'n', 'vth'])
+    if frame.timestamp.duplicated().any():
         raise ValueError('Duplicate SOHO observation timestamps')
     for metric in ('v', 'n', 'vth'):
         frame[metric] = frame[metric].where(np.isfinite(frame[metric]) & frame[metric].gt(0))
     # Convert each observed thermal speed before averaging; mean(vth)**2 is wrong.
     frame['t'] = TEMPERATURE_FACTOR * frame.pop('vth') ** 2
-    grouped = frame.set_index('issue_time').sort_index().resample('1h')
-    return grouped.mean().where(grouped.count() >= MIN_SAMPLES).reset_index()
+    grouped = frame.set_index('timestamp').sort_index().resample('1h')
+    return dataset(grouped.mean().where(grouped.count() >= MIN_SAMPLES).reset_index(), ('v', 'n', 't'))
 
 
 class SOHOLoader:
@@ -84,7 +85,7 @@ class SOHOLoader:
         return self._years[year]
 
     def load(self, start, end):
-        """Inclusive date/time range, matching the historical wide adapter."""
+        """UTC observations in [start, end)."""
         frames = [self._year(year) for year in range(start.year, end.year + 1)]
         frame = pd.concat(frames, ignore_index=True) if frames else empty_frame()
-        return frame.loc[frame.issue_time.between(start, end)].copy()
+        return frame.loc[frame.timestamp.ge(start) & frame.timestamp.lt(end)].copy()

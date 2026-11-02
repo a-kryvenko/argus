@@ -13,7 +13,7 @@ def test_live_f107_preserves_observed_values_and_source_timestamps(monkeypatch):
     get = Mock(return_value=response)
     monkeypatch.setattr(f107.requests, 'get', get)
     result = f107.fetch_f107()
-    assert result.issue_time.tolist() == [first, second]
+    assert result.timestamp.tolist() == [first, second]
     assert result.f10_7.tolist() == [110.5, 120.25]
     get.assert_called_once_with(f107.F10_7_FLUX_URL, timeout=60)
     response.raise_for_status.assert_called_once()

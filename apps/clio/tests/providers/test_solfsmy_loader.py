@@ -8,6 +8,7 @@ import pytest
 from clio.config import load_observation_config
 from clio.ingestion import numeric_live
 from clio.ingestion.adapters import SOLFSMYHistoryAdapter
+from clio.ingestion.conversion import wide_to_measurements
 from clio.ingestion.live import load_solfsmy_means
 from clio.providers import solfsmy_loader as loader
 from contextlib import asynccontextmanager
@@ -20,10 +21,10 @@ NOW = datetime(2026, 11, 1, tzinfo=UTC)
 
 def test_published_means_use_actual_window_end_without_recalculation():
     frame = loader.parse_solfsmy_means(TEXT)
-    last = frame.loc[frame.observed_at.eq(pd.Timestamp('2026-10-26T12:00Z'))]
-    assert dict(zip(last.metric, last.value)) == {
+    last = frame.loc[frame.timestamp.eq(pd.Timestamp('2026-10-26T12:00Z'))]
+    assert last.drop(columns="timestamp").iloc[0].to_dict() == {
         'f10_7_81mean': 111.2, 's10_81mean': 111.8, 'm10_81mean': 134.7, 'y10_81mean': 133.5}
-    assert len(frame) == 8
+    assert len(frame) == 2
 
 
 @pytest.mark.parametrize('text', ['2026 259 1 2', TEXT + TEXT.splitlines()[-1],
@@ -35,8 +36,8 @@ def test_invalid_or_duplicate_dates_and_format_fail(text):
 
 def test_invalid_mean_is_not_filled_from_daily_value():
     frame = loader.parse_solfsmy_means(TEXT.replace('134.7', '-1').replace('133.5', 'NaN'))
-    last = frame.loc[frame.observed_at.eq(pd.Timestamp('2026-10-26T12:00Z'))]
-    assert set(last.metric) == {'f10_7_81mean', 's10_81mean'}
+    last = frame.loc[frame.timestamp.eq(pd.Timestamp('2026-10-26T12:00Z'))]
+    assert set(last.drop(columns='timestamp').iloc[0].dropna().index) == {'f10_7_81mean', 's10_81mean'}
 
 
 def test_archive_download_once_and_live_receipt_keeps_window_date(monkeypatch):
@@ -55,7 +56,7 @@ def test_archive_download_once_and_live_receipt_keeps_window_date(monkeypatch):
 
 
 def test_collection_reads_delayed_mean_and_batches_solar_metrics(monkeypatch):
-    frame = loader.parse_solfsmy_means(TEXT).assign(received_at=NOW)
+    frame = wide_to_measurements(loader.parse_solfsmy_means(TEXT)).assign(received_at=NOW)
     source = AsyncMock(return_value=frame)
     monkeypatch.setattr(numeric_live, 'collect_product', source)
     metrics = ['s10_81mean', 'm10_81mean', 'y10_81mean']

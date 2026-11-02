@@ -5,11 +5,10 @@ apps/clio/.venv/bin/python apps/clio/tests/integration/test_observation_recovery
 import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from dotenv import load_dotenv
+import pandas as pd
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -29,7 +28,6 @@ def get_database_url():
 
 
 async def verify():
-    root = Path(__file__).resolve().parents[4]
     schema = 'recovery_test_' + uuid4().hex
     admin = create_async_engine(get_database_url())
     db = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'})
@@ -46,7 +44,7 @@ async def verify():
             provider = solar_wind if solar else geomagnetic
             product = f'swpc.rtsw_{source}' if solar else f'swpc.{source}'
             model = Measurement
-            step = timedelta(seconds=60 if solar else geomagnetic.INTERVAL_SECONDS[source])
+            step = timedelta(seconds=60 if solar else {'kp': 10800, 'dst': 3600}[source])
             # More than one SQL batch for solar wind, eight hours of downtime.
             count = 601 if solar else 12
             start = datetime(2026, 9, 1, tzinfo=UTC)
@@ -54,13 +52,8 @@ async def verify():
             records = []
             for index in range(count):
                 at = start + step * index
-                raw = {'sample': index, 'value': 1}
-                if solar:
-                    records.append(dict(kind=source, observed_at=at, spacecraft='test', active=True,
-                        received_at=receipt, values={key: 1 for key in solar_wind.FIELDS[source]}, raw=raw))
-                else:
-                    records.append(dict(metric=source, interval_start=at, interval_end=at+step,
-                        received_at=receipt, value=1, quality='unverified', raw=raw))
+                variables = list(solar_wind.FIELDS[source]) if solar else ['kp', 'ap'] if source == 'kp' else ['dst']
+                records.append(dict(timestamp=at, **{key: 1. for key in variables}))
             source_filter = model.metric == (next(iter(solar_wind.FIELDS[source])) if solar else source)
             time_field = 'observed_at'
 
@@ -69,9 +62,11 @@ async def verify():
                     return {getattr(row, time_field): row for row in
                             (await session.execute(select(model).where(source_filter))).scalars()}
 
-            async def poll(payload):
+            async def poll(payload, received_at=receipt):
                 with patch.object(live, 'get_db_session', side_effect=factory), \
-                     patch.object(provider, 'fetch_records', return_value=deepcopy(payload)):
+                     patch.object(provider, 'fetch_records', return_value=pd.DataFrame(payload)), \
+                     patch('clio.ingestion.live.datetime') as clock:
+                    clock.now.return_value = received_at
                     metrics = list(solar_wind.FIELDS[source]) if solar else ['kp', 'ap'] if source == 'kp' else ['dst']
                     await live.collect_product(product, {metric: [product] for metric in metrics}, start, receipt)
 
@@ -86,26 +81,20 @@ async def verify():
 
             # A repeated response has a new receipt time but identical source content.
             repeated = deepcopy(records[1:3] + records[4:])
-            for row in repeated:
-                row['received_at'] += timedelta(hours=8)
-            await poll(repeated)
+            await poll(repeated, receipt+timedelta(hours=8))
             rows = await stored()
             assert len(rows) == count-1, 'Repeat must not create duplicates'
             assert all(row.received_at == receipt for row in rows.values())
 
             # Late publication repairs the remaining hole; revisions replace old values.
             revision = deepcopy(records[2])
-            revision['raw']['value'] = 2
-            revision['received_at'] += timedelta(hours=9)
-            if solar:
-                revision['values'] = {key: 2 for key in solar_wind.FIELDS[source]}
-            else:
-                revision['value'] = 2
-            await poll([records[3], revision])
+            revision.update({key: 2. for key in variables})
+            revised_at = receipt+timedelta(hours=9)
+            await poll([records[3], revision], revised_at)
             rows = await stored()
             assert len(rows) == count
             revised = rows[start+step*2]
-            assert revised.received_at == revision['received_at']
+            assert revised.received_at == revised_at
             assert revised.value == 2
             print(f'PASS {source}: downtime recovery, internal gaps, retained history, no duplicates, stable receipts, late data and revisions')
     finally:

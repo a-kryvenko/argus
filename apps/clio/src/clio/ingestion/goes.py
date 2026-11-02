@@ -27,7 +27,7 @@ def source_frames(start, end, historical, *, days=None):
     days = days if days is not None else pd.date_range(start, end - timedelta(microseconds=1), freq='D')
     with archive_session() as session:
         files = discover_goes_history(sorted(set(days.year)), satellites, session)
-        for _, frame in iter_goes_history(files, days, satellites, archive_root('goes') / 'source', session, refresh=True):
+        for frame in iter_goes_history(files, days, satellites, archive_root('goes') / 'source', session, refresh=True):
             yield frame
 
 
@@ -61,7 +61,10 @@ def download_snapshots(start, end, historical, expected=None):
             slot = slot.to_pydatetime()
             if samples.empty or slot not in pending:
                 continue
-            content = samples.to_json(orient='records', date_format='iso').encode()
+            # Older Prophet processes require this field in the archived wire format.
+            # Provider datasets already contain only usable values.
+            content = samples.assign(goes_euvs_quality_valid=True).to_json(
+                orient='records', date_format='iso').encode()
             saved = expected.get((slot, source))
             values = store_original('goes', slot, samples.timestamp.max().to_pydatetime(), source, lambda: content,
                 relative=Path(saved['raw_path']) if saved else Path(source) / f'{slot:%Y/%m/%d/%H}.json',

@@ -48,6 +48,10 @@ def read_native_fits(path, channel, *, slot, now, tolerance_seconds=120):
         if hdu is None:
             raise ValueError('FITS has no 2D image')
         header = hdu.header.copy()
+        # Match downstream AIA acceptance of informational bit 30.
+        allowed = 1 << 30 if channel.startswith('aia') else 0
+        if int(header.get('QUALITY', 0)) & ~allowed:
+            raise ValueError('FITS quality flags reject this observation')
         observed = fits_observed_at(header)
         if observed > now or abs((observed - slot).total_seconds()) > tolerance_seconds:
             raise ValueError('Stale/future FITS or observation does not match requested slot')
@@ -69,7 +73,7 @@ def read_native_fits(path, channel, *, slot, now, tolerance_seconds=120):
         digest = hashlib.file_digest(stream, 'sha256').hexdigest()
     return data, dict(channel=channel, slot_at=slot.isoformat(), observed_at=observed.isoformat(),
                       available_at=now.isoformat(), sha256=digest, native_shape=list(data.shape),
-                      quality=header.get('QUALITY'), header=dict(header),
+                      header=dict(header),
                       preprocessing='fits-unregistered-v1')
 
 
@@ -154,3 +158,8 @@ def prepare_observation(image, metadata):
                          units='Gauss' if metadata['channel'] == 'hmi_m' else 'DN',
                          missing_pixels='NaN; finite-only block mean; no imputation',
                          valid_fraction=float(np.isfinite(reduced).mean()))
+
+
+def fetch(channel, slot):
+    """Return a file reference; download_observation validates the referenced FITS."""
+    return {'timestamp': utc(slot), channel + '_url': observation_url(channel, slot)}

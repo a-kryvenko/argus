@@ -30,11 +30,9 @@ NOW = datetime(2026, 11, 1, tzinfo=UTC)
 
 def test_observed_flux_and_published_trailing_mean_without_forecasts_or_interpolation():
     frame = loader.parse_celestrak_f107(CSV)
-    assert frame.metric.tolist() == ['f10_7', 'f10_7_81mean'] * 2
-    assert frame.value.tolist() == [91., 111., 92., 112.]
-    assert frame.observed_at.tolist() == [
-        pd.Timestamp('2026-10-30T20:00Z'), pd.Timestamp('2026-10-30T20:00Z'),
-        pd.Timestamp('2026-10-31T20:00Z'), pd.Timestamp('2026-10-31T20:00Z')]
+    assert frame.f10_7.tolist() == [91., 92.]
+    assert frame.f10_7_81mean.tolist() == [111., 112.]
+    assert frame.timestamp.tolist() == [pd.Timestamp('2026-10-30T20:00Z'), pd.Timestamp('2026-10-31T20:00Z')]
 
 
 def test_missing_or_invalid_values_are_filtered_independently():
@@ -43,20 +41,21 @@ def test_missing_or_invalid_values_are_filtered_independently():
         '2026-10-29,91,1,OBS,2,inf\n'
         '2026-10-30,-1,1,OBS,2,0\n'
         '2026-10-31,NaN,1,OBS,2,bad\n'))
-    assert frame.metric.tolist() == ['f10_7_81mean', 'f10_7']
-    assert frame.value.tolist() == [110., 91.]
+    assert frame.f10_7.dropna().tolist() == [91.]
+    assert frame.f10_7_81mean.dropna().tolist() == [110.]
+    assert len(frame) == 2
 
 
 def test_forecast_only_file_returns_empty_typed_frame():
     frame = loader.parse_celestrak_f107(HEADER + '2026-11-01,93,193,PRD,293,113\n')
     assert frame.empty
-    assert str(frame.observed_at.dtype) == 'datetime64[ns, UTC]'
+    assert str(frame.timestamp.dtype) == 'datetime64[ns, UTC]'
 
 
 def test_historical_observation_times():
     frame = loader.parse_celestrak_f107(HEADER + (
         '1991-05-31,91,191,OBS,291,111\n1991-06-01,92,192,OBS,292,112\n'))
-    assert frame.observed_at.dt.hour.tolist() == [17, 17, 20, 20]
+    assert frame.timestamp.dt.hour.tolist() == [17, 20]
 
 
 @pytest.mark.parametrize('text, match', [

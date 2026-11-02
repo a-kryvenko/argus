@@ -38,4 +38,3 @@ class Measurement(Base):
     )
     source_product: Mapped[str | None] = mapped_column(String(80), nullable=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    quality: Mapped[str | None] = mapped_column(String(16))

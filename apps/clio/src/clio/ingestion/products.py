@@ -16,25 +16,26 @@ class ObservationDefinition:
     unit: str
     resolution: str = '1h'
     kind: Literal['numeric', 'file'] = 'numeric'
-    quality: str = 'finite_nonnegative'
+    signed: bool = False
+    max_value: float | None = None
     live_resolution: str = '1min'
     coverage: Literal['slots', 'latest'] = 'slots'
 
     def accepts(self, value: float) -> bool:
-        return math.isfinite(value) and (self.quality == 'finite' or value >= 0) and (
-            self.quality != 'kp' or value <= 9)
+        return math.isfinite(value) and (self.signed or value >= 0) and (
+            self.max_value is None or value <= self.max_value)
 
 
 OBSERVATIONS = {
-    'bx': ObservationDefinition('nT', quality='finite'),
-    'by': ObservationDefinition('nT', quality='finite'),
-    'bz': ObservationDefinition('nT', quality='finite'),
+    'bx': ObservationDefinition('nT', signed=True),
+    'by': ObservationDefinition('nT', signed=True),
+    'bz': ObservationDefinition('nT', signed=True),
     'v': ObservationDefinition('km/s'),
     'n': ObservationDefinition('cm^-3'),
     't': ObservationDefinition('K'),
-    'kp': ObservationDefinition('index', resolution='3h', quality='kp', live_resolution='3h'),
+    'kp': ObservationDefinition('index', resolution='3h', max_value=9, live_resolution='3h'),
     'ap': ObservationDefinition('nT', resolution='3h', live_resolution='3h'),
-    'dst': ObservationDefinition('nT', quality='finite', live_resolution='1h'),
+    'dst': ObservationDefinition('nT', signed=True, live_resolution='1h'),
     'f10_7': ObservationDefinition('sfu', resolution='1D', live_resolution='1D'),
     'f10_7_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', coverage='latest'),
     **{name + '_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', coverage='latest')

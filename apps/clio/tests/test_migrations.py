@@ -23,3 +23,40 @@ def test_legacy_file_cleanup_drops_only_retired_tables(tmp_path):
     dropped = [line.strip() for line in result.stdout.splitlines() if line.startswith('DROP TABLE')]
     assert dropped == [f'DROP TABLE clio.{table};' for table in (
         'gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt', 'scheduled_job')]
+
+
+def test_provider_contract_keeps_legacy_column_and_allows_rolling_upgrade(tmp_path):
+    from pathlib import Path
+    from alembic.script import ScriptDirectory
+    from tests.deployment.test_migrations import status
+
+    result = migration_sql('clio', '20261101_drop_source_status:head', tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert 'SET value = NULL, quality = NULL' in result.stdout
+    assert "WHERE quality IN ('flagged', 'missing')" in result.stdout
+    assert 'DROP' not in result.stdout and 'DELETE' not in result.stdout
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
+    assert status.revision_status(scripts, {'20261101_drop_source_status'}, online=True) == 'pending'
+
+
+def test_provider_migration_preserves_legacy_reads_and_valid_measurements():
+    from pathlib import Path
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
+    revision = scripts.get_revision('20261102_provider_contract')
+    engine = sa.create_engine('sqlite://')
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ATTACH DATABASE ':memory:' AS clio")
+        connection.exec_driver_sql('CREATE TABLE clio.measurement (metric TEXT, value FLOAT, quality TEXT)')
+        connection.exec_driver_sql("""INSERT INTO clio.measurement VALUES
+            ('v', 400, 'unverified'), ('bz', -3, NULL), ('kp', 5, 'flagged'), ('n', NULL, 'missing')""")
+        with Operations.context(MigrationContext.configure(connection)):
+            revision.module.upgrade()
+        # The old HTTP process can still select quality; new readers see no rejected values.
+        rows = connection.exec_driver_sql('SELECT metric, value, quality FROM clio.measurement').all()
+        assert rows == [('v', 400., 'unverified'), ('bz', -3., None), ('kp', None, None), ('n', None, None)]
+    engine.dispose()

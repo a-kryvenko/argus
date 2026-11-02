@@ -1,5 +1,6 @@
 """OMNI parsing and provider missing values."""
 import pandas as pd
+from clio.providers.contract import dataset
 
 # Hourly OMNI2 fill values; Kp in persisted CSVs is already divided by ten.
 # https://omniweb.gsfc.nasa.gov/html/ow_data.html
@@ -36,7 +37,7 @@ def parse_annual(text, year):
         raise ValueError('Duplicate or invalid observation timestamps')
     frame = pd.DataFrame({key: pd.to_numeric(table[word-1], errors='raise') for key, word in OMNI_WORDS.items()})
     frame['kp'] = frame['kp'] / 10
-    frame = clean_omni_values(frame)
-    frame.insert(0, 'issue_time', times)
-    return frame.sort_values('issue_time').reset_index(drop=True)
+    frame.insert(0, 'timestamp', times)
+    frame = dataset(clean_omni_values(frame), OMNI_FILL_VALUES)
+    return frame.sort_values('timestamp').reset_index(drop=True)
 

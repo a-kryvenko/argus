@@ -62,12 +62,13 @@ DEFAULT_VARS = {
 }
 
 from clio.providers.omni import clean_omni_values
+from clio.providers.contract import dataset
 
 
 class OMNIWeb_Loader:
     def load(start_date: datetime, end_date: datetime) -> pd.DataFrame:
         start_date_omni = start_date.strftime("%Y%m%d")
-        end_date_omni = end_date.strftime("%Y%m%d")
+        end_date_omni = (pd.Timestamp(end_date) - pd.Timedelta(microseconds=1)).strftime("%Y%m%d")
     
         payload = {
             "activity": "retrieve",
@@ -102,7 +103,7 @@ class OMNIWeb_Loader:
             clipped_end = min(end_date_omni, upper)
             if clipped_start > clipped_end:
                 return pd.DataFrame({
-                    'issue_time': pd.Series(dtype='datetime64[ns, UTC]'),
+                    'timestamp': pd.Series(dtype='datetime64[ns, UTC]'),
                     **{name: pd.Series(dtype=float) for name in DEFAULT_VARS},
                 })
             if (clipped_start, clipped_end) != (start_date_omni, end_date_omni):
@@ -112,7 +113,7 @@ class OMNIWeb_Loader:
     
         omni_records = OMNIWeb_Loader._parse_omni_text(response.text)
     
-        mask = (omni_records["issue_time"] >= start_date_omni) & (omni_records["issue_time"] < pd.Timestamp(end_date_omni, tz="UTC") + pd.Timedelta(days=1))
+        mask = (omni_records["timestamp"] >= start_date) & (omni_records["timestamp"] < end_date)
     
         omni_records = omni_records.loc[mask]
 
@@ -157,15 +158,13 @@ class OMNIWeb_Loader:
             )
             + pd.to_timedelta(df["hr"].astype(int), unit="h")
         )
-        df["issue_time"] = ts
-        df = df.set_index("issue_time", drop=False)
+        df["timestamp"] = ts
 
         df = df.drop(columns=["year", "doy", "hr"])
 
         df["kp"] = df["kp"] / 10.0
-        df = clean_omni_values(df)
+        df = dataset(clean_omni_values(df), DEFAULT_VARS)
 
-        df = df.sort_index()
-        df = df.resample('1h').mean()
+        df = df.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
 
-        return df[["issue_time", "bx", "by", "bz", "v", "n", "t", "kp", "dst", "ap", "f10_7"]]
+        return df[["timestamp", "bx", "by", "bz", "v", "n", "t", "kp", "dst", "ap", "f10_7"]]

@@ -152,7 +152,7 @@ def cache_archive_file(
 
 
 def read_euvs_archive(path: Path, satellite: int) -> pd.DataFrame:
-    """Read measured line irradiances and standardized Mg II, preserving quality."""
+    """Read usable measured line irradiances and standardized Mg II."""
     import xarray as xr
 
     mapping = {f"irr_{line}": column for line, column in EUVS_LINE_COLUMNS.items()
@@ -172,18 +172,14 @@ def read_euvs_archive(path: Path, satellite: int) -> pd.DataFrame:
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
     numeric = [*mapping.values(), "goes_mgii_index", "goes_au_factor"]
     frame[numeric] = frame[numeric].astype(float)
-    combined_flags = np.bitwise_or.reduce(
-        frame[flags].fillna(4).to_numpy(dtype=np.int64), axis=1,
-    )
-    frame["goes_eclipse"] = (combined_flags & 1) != 0
-    frame["goes_lunar_transit"] = (combined_flags & 2) != 0
-    frame["goes_geocorona"] = frame["geocorona_flag"].ne(0)
-    frame["goes_euvs_quality_valid"] = (
-        frame[flags].eq(0).all(axis=1) & ~frame["goes_geocorona"]
-        & np.isfinite(frame[numeric]).all(axis=1) & frame["goes_au_factor"].gt(0)
-    )
+    for original, column in {**mapping, 'MgII': 'goes_mgii_index'}.items():
+        values = frame[column]
+        valid = (frame[original + '_flag'].eq(0) & frame.geocorona_flag.eq(0)
+                 & np.isfinite(values) & values.ge(0))
+        frame[column] = values.where(valid)
+    frame = frame.loc[np.isfinite(frame.goes_au_factor) & frame.goes_au_factor.gt(0)]
+    frame = frame.dropna(subset=[*mapping.values(), 'goes_mgii_index'], how='all').copy()
     frame["goes_euvs_satellite"] = np.int16(satellite)
-    frame["goes_euvs_file"] = pd.Series(path.name, index=frame.index, dtype="string")
     return frame.drop(columns=[*flags, "geocorona_flag"]).sort_values("timestamp").reset_index(drop=True)
 
 
@@ -195,12 +191,11 @@ def read_xrs_archive(path: Path, satellite: int) -> pd.DataFrame:
         if data.attrs.get("platform") != f"g{satellite}":
             raise ValueError(f"{path.name}: unexpected satellite platform")
         frame = data[["bkd1d_xrsb_flux", "bkd1d_xrsb_flag"]].to_dataframe().reset_index()
-    frame = frame.loc[frame.bkd1d_xrsb_flag.eq(0) & np.isfinite(frame.bkd1d_xrsb_flux)].copy()
+    frame = frame.loc[frame.bkd1d_xrsb_flag.eq(0) & np.isfinite(frame.bkd1d_xrsb_flux) & frame.bkd1d_xrsb_flux.ge(0)].copy()
     frame = frame.rename(columns={"time": "goes_xray_background_timestamp", "bkd1d_xrsb_flux": "goes_xray_background"})
     frame["goes_xray_background_timestamp"] = pd.to_datetime(frame["goes_xray_background_timestamp"], utc=True)
     frame["goes_xray_background"] = frame["goes_xray_background"].astype(float)
     frame["goes_xray_satellite"] = satellite
-    frame["goes_xray_file"] = path.name
     return frame.drop(columns="bkd1d_xrsb_flag").drop_duplicates("goes_xray_background_timestamp", keep="last")
 
 
@@ -216,18 +211,19 @@ def join_archive_background(euvs: pd.DataFrame, xrs: pd.DataFrame) -> pd.DataFra
     frame["goes_xray_background_timestamp"] = frame.timestamp.dt.floor("D") - pd.Timedelta(days=1)
     frame = frame.merge(xrs, on="goes_xray_background_timestamp", how="left", validate="many_to_one")
     frame["goes_xray_satellite"] = frame["goes_xray_satellite"].astype("Int16")
-    frame["goes_xray_file"] = frame["goes_xray_file"].astype("string")
     return frame
 
 
 def select_satellite_records(frame: pd.DataFrame, satellites: Sequence[int]) -> pd.DataFrame:
-    """One row per minute: complete quality-valid records, then configured priority."""
+    """One row per minute: complete measurements, available background, then satellite priority."""
     frame = frame.copy()
-    frame["_usable"] = frame.goes_euvs_quality_valid & np.isfinite(frame.goes_xray_background)
+    variables = [name for name in EUVS_LINE_COLUMNS.values() if name in frame]
+    frame['_complete'] = frame[variables].notna().all(axis=1)
+    frame["_usable"] = np.isfinite(frame.goes_xray_background)
     frame["_priority"] = frame.goes_euvs_satellite.map({sat: i for i, sat in enumerate(satellites)})
     return frame.sort_values(
-        ["timestamp", "_usable", "_priority"], ascending=[True, False, True],
-    ).drop_duplicates("timestamp").drop(columns=["_usable", "_priority"]).reset_index(drop=True)
+        ["timestamp", "_complete", "_usable", "_priority"], ascending=[True, False, False, True],
+    ).drop_duplicates("timestamp").drop(columns=["_complete", "_usable", "_priority"]).reset_index(drop=True)
 
 
 def iter_goes_history(
@@ -238,7 +234,7 @@ def iter_goes_history(
     session: requests.Session,
     *,
     refresh: bool = False,
-) -> Iterator[tuple[int, pd.DataFrame]]:
+) -> Iterator[pd.DataFrame]:
     """Download and normalize one year at a time to bound memory use."""
     xrs = {}
     active = {s.satellite for s in files if s.product == EUVS_PRODUCT and s.year in set(days.year)}
@@ -268,4 +264,4 @@ def iter_goes_history(
             euvs = euvs.loc[euvs.timestamp.dt.floor("D").isin(days) & euvs.timestamp.dt.year.eq(year)]
             frames.append(join_archive_background(euvs, xrs[source.satellite]))
         if frames:
-            yield year, select_satellite_records(pd.concat(frames, ignore_index=True), satellites)
+            yield select_satellite_records(pd.concat(frames, ignore_index=True), satellites)

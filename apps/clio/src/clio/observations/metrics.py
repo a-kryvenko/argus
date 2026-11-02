@@ -16,8 +16,8 @@ SOLAR_ESTIMATES = {'s10', 'm10', 'y10'}
 MAX_ROWS = 250_000
 
 
-def value(metric, number, quality=None):
-    if number is None or quality in ('flagged', 'missing') or metric in SOLAR_ESTIMATES:
+def value(metric, number):
+    if number is None or metric in SOLAR_ESTIMATES:
         return None
     definition = OBSERVATIONS.get(metric)
     return float(number) if math.isfinite(number) and (definition.accepts(number) if definition else number >= 0) else None
@@ -42,7 +42,7 @@ async def latest(session, metrics, as_of):
     grouped = {}
     for record in records:
         grouped.setdefault(record.observed_at, {'time': record.observed_at})[record.metric] = value(
-            record.metric, record.value, record.quality)
+            record.metric, record.value)
     return {'points': [row for _, row in sorted(grouped.items())]}
 
 
@@ -92,11 +92,11 @@ async def history(session, metrics, start, end, interval, as_of):
                     continue
                 # A minute contributes at most once, even for off-grid native samples.
                 minute = record.observed_at.replace(second=0, microsecond=0)
-                buckets.setdefault((time, record.metric), {})[minute] = value(record.metric, record.value, record.quality)
+                buckets.setdefault((time, record.metric), {})[minute] = value(record.metric, record.value)
             for (time, metric), samples in buckets.items():
                 valid = [v for v in samples.values() if v is not None]
                 rows.append((time, metric, sum(valid) / len(valid) if valid else None))
         else:
-            rows.extend((record.observed_at, record.metric, value(record.metric, record.value, record.quality))
+            rows.extend((record.observed_at, record.metric, value(record.metric, record.value))
                         for record in records)
     return {'interval': interval, 'points': points(rows, metrics)}

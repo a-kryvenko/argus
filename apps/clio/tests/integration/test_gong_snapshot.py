@@ -78,7 +78,7 @@ def test_goes_source_files_are_persisted_and_served_without_calibration(database
     from common.db.session import dispose_engine
     now = datetime.now(UTC)
     samples = pd.DataFrame([dict(timestamp=pd.Timestamp(now-timedelta(minutes=10)),
-                                goes_euv_256=2.5, goes_euvs_quality_valid=True)])
+                                goes_euv_256=2.5)])
     source = Mock(return_value=[samples])
     monkeypatch.setattr(goes, 'source_frames', source)
     config = SimpleNamespace(observations={'goes': SimpleNamespace(backfill_days=88, freshness_minutes=120)})

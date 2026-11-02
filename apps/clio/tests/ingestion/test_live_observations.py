@@ -89,13 +89,12 @@ def test_independent_feeds_start_concurrently():
 
 def test_geomagnetic_loader_returns_native_values_without_storage(monkeypatch):
     received = NOW - timedelta(minutes=1)
-    fetch = Mock(return_value=[dict(interval_start=NOW, value=3.33, quality='unverified',
-                                   received_at=received, raw={'a_running': 18})])
+    fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'kp': [3.33], 'ap': [18.]}))
     monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', fetch)
     result = loaders.load_geomagnetic('kp', NOW - timedelta(days=1), NOW)
     fetch.assert_called_once_with('kp')
     assert result.value.tolist() == [3.33, 18.]
-    assert set(result.received_at) == {received}
+    assert result.received_at.min() >= NOW
     assert set(result.source_product) == {'swpc.kp'}
 
 
@@ -120,7 +119,7 @@ def test_live_saves_partial_results_without_normalization(monkeypatch):
 def test_live_noop_does_not_refresh_receipt_and_update_requires_priority():
     session = AsyncMock()
     session.execute.return_value = Mock(all=lambda: [])
-    records = frame(('v', 450., NOW)).assign(source_product='backup', quality=None).to_dict('records')
+    records = frame(('v', 450., NOW)).assign(source_product='backup').to_dict('records')
     asyncio.run(store_native(session, records, source_priorities={'v': ['primary', 'backup']}))
     session.execute.assert_awaited_once()
     compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
@@ -136,7 +135,7 @@ def test_live_receipt_uses_actual_changed_record_time():
     received = NOW - timedelta(seconds=20)
     session.execute.return_value = Mock(all=lambda: [('v', NOW - timedelta(minutes=1), received)])
     records = frame(('v', 450., NOW - timedelta(minutes=1))).assign(
-        source_product='primary', received_at=received, quality=None).to_dict('records')
+        source_product='primary', received_at=received).to_dict('records')
     asyncio.run(store_native(session, records, source_priorities={'v': ['primary']}))
     assert session.execute.await_count == 1
     receipt = session.execute.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
@@ -165,8 +164,7 @@ def test_locked_product_does_not_fetch_or_write(monkeypatch):
 
 def test_collection_writes_full_feed_once_and_reports_only_usable_selected_values(monkeypatch):
     session = storage(monkeypatch)
-    fetch = Mock(return_value=[dict(observed_at=NOW, received_at=NOW, active=True,
-                                   values={'bx': 1., 'by': None, 'bz': -4., 'bt': 6.}, raw={})])
+    fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'bx': [1.], 'by': [None], 'bz': [-4.], 'bt': [6.]}))
     monkeypatch.setattr(loaders.solar_wind_loader, 'fetch_records', fetch)
     report = asyncio.run(live.collect_live(load_observation_config(), ['bz', 'by'], now=NOW))
     fetch.assert_called_once_with('mag')
@@ -175,10 +173,9 @@ def test_collection_writes_full_feed_once_and_reports_only_usable_selected_value
     # Advisory lock and one measurement insert; no diagnostic writes.
     assert session.execute.await_count == 2
     insert = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
-    assert [insert.params[f'metric_m{i}'] for i in range(4)] == ['bx', 'by', 'bz', 'bt']
-    assert insert.params['value_m1'] is None
-    assert insert.params['quality_m1'] == 'missing'
-    assert insert.params['received_at_m2'] == NOW
+    assert [insert.params[f'metric_m{i}'] for i in range(3)] == ['bx', 'bz', 'bt']
+    assert not any('quality' in name for name in insert.params)
+    assert insert.params['received_at_m2'] >= NOW
     session.commit.assert_awaited_once()
 
 
@@ -186,8 +183,7 @@ def test_storage_failure_rolls_back_records_and_reports_failure(monkeypatch, cap
     from sqlalchemy.exc import SQLAlchemyError
     session = storage(monkeypatch)
     session.execute.side_effect = [Mock(scalar_one=Mock(return_value=True)), SQLAlchemyError('write failed')]
-    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(return_value=[dict(
-        interval_start=NOW, value=-20., quality='unverified', received_at=NOW, raw={})]))
+    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'dst': [-20.]})))
     report = asyncio.run(live.collect_live(load_observation_config(), ['dst'], now=NOW))
     assert report['failed_metrics'] == ['dst']
     assert 'swpc.dst' in caplog.text and 'write failed' in caplog.text
@@ -195,22 +191,20 @@ def test_storage_failure_rolls_back_records_and_reports_failure(monkeypatch, cap
     session.commit.assert_not_awaited()
 
 
-def test_flagged_latest_values_are_saved_but_not_accepted_as_usable(monkeypatch):
+def test_rejected_provider_records_are_not_written(monkeypatch):
     session = storage(monkeypatch)
-    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(return_value=[dict(
-        interval_start=NOW, value=2., quality='flagged', received_at=NOW, raw={'a_running': 8})]))
+    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(
+        return_value=pd.DataFrame(columns=['timestamp', 'kp', 'ap'])))
     report = asyncio.run(live.collect_live(load_observation_config(), ['kp'], now=NOW))
     assert report['downloaded_measurements'] == 0
     assert report['failed_metrics'] == ['kp']
-    insert = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
-    assert insert.params['quality_m0'] == 'flagged'
-    assert insert.params['metric_m1'] == 'ap'
+    assert session.execute.await_count == 1  # Lock only; no invalid measurements inserted.
 
 
 def test_f107_uses_common_persistence_and_keeps_last_duplicate(monkeypatch):
     session = storage(monkeypatch)
     monkeypatch.setattr(loaders.f107, 'fetch_f107', Mock(return_value=pd.DataFrame({
-        'issue_time': [NOW, NOW, NOW + timedelta(days=1)], 'f10_7': [150., 160., 999.]})))
+        'timestamp': [NOW, NOW, NOW + timedelta(days=1)], 'f10_7': [150., 160., 999.]})))
     config = load_observation_config().model_copy(deep=True)
     config.observations['f10_7'].sources.live = ['swpc.f107']
     report = asyncio.run(live.collect_live(config, ['f10_7'], now=NOW))
@@ -220,5 +214,5 @@ def test_f107_uses_common_persistence_and_keeps_last_duplicate(monkeypatch):
     insert = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     assert insert.params['value_m0'] == 160.
     assert insert.params['source_product_m0'] == 'swpc.f107'
-    assert 'quality IS DISTINCT FROM' in str(insert)
+    assert 'quality' not in str(insert)
     session.commit.assert_awaited_once()

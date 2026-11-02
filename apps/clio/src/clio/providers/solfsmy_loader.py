@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from clio.providers.contract import from_measurements
+
 SOLFSMY_URL = 'https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT'
 MEAN_COLUMNS = {'f10_7_81mean': 4, 's10_81mean': 6, 'm10_81mean': 8, 'y10_81mean': 10}
 
@@ -26,7 +28,7 @@ def parse_solfsmy_means(text):
         values = pd.to_numeric(raw[column], errors='coerce')
         valid = np.isfinite(values) & values.gt(0)
         frames.append(pd.DataFrame(dict(metric=metric, value=values[valid], observed_at=window_end[valid])))
-    return pd.concat(frames, ignore_index=True).sort_values(['observed_at', 'metric']).reset_index(drop=True)
+    return from_measurements(pd.concat(frames, ignore_index=True), MEAN_COLUMNS)
 
 
 def fetch_solfsmy_means():

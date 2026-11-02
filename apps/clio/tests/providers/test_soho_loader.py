@@ -17,7 +17,7 @@ def row(minute, v=400, n=5, thermal=20, hour=9):
 def test_temperature_converted_before_averaging_and_independent_validity():
     text = '\n'.join(row(i*5, n=-1, thermal=20 if i<3 else 40) for i in range(6))
     frame = parse_soho(text, 2026)
-    assert frame.issue_time.iloc[0] == pd.Timestamp('2026-08-04T09:00Z')
+    assert frame.timestamp.iloc[0] == pd.Timestamp('2026-08-04T09:00Z')
     assert frame.v.iloc[0] == 400
     assert np.isnan(frame.n.iloc[0])
     assert frame.t.iloc[0] == pytest.approx(TEMPERATURE_FACTOR * 1000)

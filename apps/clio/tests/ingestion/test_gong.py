@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 import pytest
+import pandas as pd
 from sqlalchemy.dialects import postgresql
 
 from clio.ingestion import gong
@@ -25,13 +26,13 @@ def test_provider_candidates_use_observed_time_and_bound_range(monkeypatch):
         <a href="mrzqs260928t1154c.fits.gz">old</a>''')
     monkeypatch.setattr('requests.get', Mock(return_value=response))
     result = provider.candidates(NOW-timedelta(hours=3), NOW)
-    assert result == [(NOW-timedelta(minutes=6), provider.LIVE_URL+'mrzqs260929t1154c.fits.gz')]
+    assert result.to_dict('records') == [dict(timestamp=NOW-timedelta(minutes=6), gong_url=provider.LIVE_URL+'mrzqs260929t1154c.fits.gz')]
 
 
 def test_archive_404_is_an_unpublished_gap(monkeypatch):
     response = Mock(status_code=404)
     monkeypatch.setattr('requests.get', Mock(return_value=response))
-    assert provider.candidates(NOW-timedelta(days=1), NOW, historical=True) == []
+    assert provider.candidates(NOW-timedelta(days=1), NOW, historical=True).empty
     response.raise_for_status.assert_not_called()
 
 
@@ -107,7 +108,7 @@ def test_gong_lists_only_days_with_missing_hours_and_downloads_only_gap(monkeypa
     start = end-timedelta(hours=6)
     archive_rows(monkeypatch, tmp_path, [start+timedelta(hours=i) for i in range(5)])
     observed = end-timedelta(minutes=6)
-    candidates = Mock(return_value=[(observed, 'https://provider/missing.fits.gz')])
+    candidates = Mock(return_value=pd.DataFrame({'timestamp': [observed], 'gong_url': ['https://provider/missing.fits.gz']}))
     download = Mock(return_value=b'missing original FITS')
     monkeypatch.setattr(provider, 'candidates', candidates)
     monkeypatch.setattr(provider, 'download', download)

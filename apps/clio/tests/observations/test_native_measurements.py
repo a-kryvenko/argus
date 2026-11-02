@@ -1,45 +1,31 @@
 import asyncio
-from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, Mock
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
+import pandas as pd
 from sqlalchemy.dialects import postgresql
 
-from clio.ingestion.conversion import wind_measurements, geomagnetic_measurements
+from clio.ingestion.conversion import wide_to_measurements
 from clio.observations.measurements import store_native
-from clio.db.models.measurement import Measurement
 
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 
 
-def wind(source, value, active=True):
-    return dict(observed_at=NOW, received_at=NOW, spacecraft=source, active=active,
-                values={'bz': value}, raw={'overall_quality': 0})
+def test_dataset_conversion_keeps_independent_values_and_solar_means():
+    frame = pd.DataFrame({'timestamp': [NOW], 'bz': [-2.], 'bx': [float('nan')],
+                          'f10_7_81mean': [110.], 'bt': [3.]})
+    rows = wide_to_measurements(frame)
+    assert dict(zip(rows.metric, rows.value)) == {'bz': -2., 'f10_7_81mean': 110., 'bt': 3.}
+    assert rows.observed_at.eq(NOW).all()
 
 
-def test_wind_selects_one_active_spacecraft_and_preserves_missing_metrics():
-    rows = wind_measurements('mag', [wind('A', -2), wind('B', -3), wind('C', 99, False)])
-    assert len(rows) == 4
-    assert next(row for row in rows if row['metric'] == 'bz')['value'] == -2
-    assert next(row for row in rows if row['metric'] == 'bx')['quality'] == 'missing'
-    assert wind_measurements('mag', [wind('C', 99, False)]) == []
-
-
-def test_geomagnetic_ap_is_a_measurement_with_the_native_interval():
-    point = dict(interval_start=NOW, interval_end=NOW+timedelta(hours=3), value=3.33,
-                 quality='unverified', received_at=NOW, raw={'a_running': '18', 'station_count': 8})
-    rows = geomagnetic_measurements('kp', [point])
-    assert [(r['metric'], r['value']) for r in rows] == [('kp', 3.33), ('ap', 18.)]
-    assert all(r['observed_at'] == NOW for r in rows)
-    assert all(not {'interval_end', 'spacecraft', 'provider_quality', 'station_count'} & r.keys() for r in rows)
-    point['raw']['a_running'] = float('inf')
-    assert geomagnetic_measurements('kp', [point])[1]['quality'] == 'missing'
-
-
-def test_upsert_updates_quality_but_receipt_alone_is_not_a_revision():
+def test_receipt_alone_is_not_a_revision():
     session = AsyncMock()
-    asyncio.run(store_native(session, wind_measurements('mag', [wind('A', -2)])))
+    asyncio.run(store_native(session, [dict(metric='bz', value=-2., observed_at=NOW,
+        received_at=NOW, source_product='swpc.rtsw_mag')]))
     query = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
     where = query.split(' WHERE ')[1]
-    assert 'quality IS DISTINCT FROM' in where
+    assert 'value IS DISTINCT FROM' in where
     assert 'received_at IS DISTINCT FROM' not in where
+    assert 'quality' not in query
     assert 'ON CONFLICT ON CONSTRAINT uq_measurement_metric' in query

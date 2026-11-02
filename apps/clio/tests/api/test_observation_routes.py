@@ -15,8 +15,8 @@ from clio.main import app as application
 NOW = datetime(2026, 9, 12, 12, tzinfo=UTC)
 
 
-def record(metric, minute, value, quality=None):
-    return SimpleNamespace(metric=metric, observed_at=NOW+timedelta(minutes=minute), value=value, quality=quality)
+def record(metric, minute, value):
+    return SimpleNamespace(metric=metric, observed_at=NOW+timedelta(minutes=minute), value=value)
 
 
 def result(records):
@@ -32,7 +32,7 @@ def test_only_two_numeric_routes_and_file_routes_remain():
 
 def test_latest_keeps_independent_times_and_null_latest_values():
     session = AsyncMock()
-    session.execute.return_value = result([record('v', 1, 400), record('bx', 2, -3), record('n', 2, 10, 'flagged')])
+    session.execute.return_value = result([record('v', 1, 400), record('bx', 2, -3), record('n', 2, None)])
     data = asyncio.run(reads.latest(session, ['v', 'bx', 'n'], NOW+timedelta(minutes=3)))
     assert data == {'points': [{'time': NOW+timedelta(minutes=1), 'v': 400.},
                                {'time': NOW+timedelta(minutes=2), 'bx': -3., 'n': None}]}
@@ -56,7 +56,7 @@ def test_hourly_uses_normalized_storage_and_preserves_published_mean_dates():
 def test_five_minute_windows_use_valid_unique_minutes_and_exclude_partial_window():
     session = AsyncMock()
     session.execute.return_value = result([record('v', 0, 100), record('v', 1, 300),
-        record('v', 2, float('nan')), record('v', 3, 900, 'flagged'), record('v', 5, 500)])
+        record('v', 2, float('nan')), record('v', 3, None), record('v', 5, 500)])
     data = asyncio.run(reads.history(session, ['v'], NOW, NOW+timedelta(minutes=7), '5m', NOW+timedelta(minutes=7)))
     assert data == {'interval': '5m', 'points': [{'time': NOW, 'v': 200.}]}
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))

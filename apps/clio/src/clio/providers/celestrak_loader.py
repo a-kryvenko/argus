@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from clio.providers.contract import from_measurements
+
 CELESTRAK_RECENT_URL = 'https://celestrak.org/SpaceData/SW-Last5Years.csv'
 CELESTRAK_HISTORY_URL = 'https://celestrak.org/SpaceData/SW-All.csv'
 METRICS = {'f10_7': 'F10.7_OBS', 'f10_7_81mean': 'F10.7_OBS_LAST81'}
@@ -32,7 +34,7 @@ def parse_celestrak_f107(text: str) -> pd.DataFrame:
         valid = np.isfinite(values) & values.gt(0)
         frames.append(pd.DataFrame({'metric': metric, 'value': values[valid],
                                     'observed_at': observed_at[valid]}))
-    return pd.concat(frames, ignore_index=True).sort_values(['observed_at', 'metric']).reset_index(drop=True)
+    return from_measurements(pd.concat(frames, ignore_index=True), METRICS)
 
 
 def fetch_celestrak_f107(*, url=CELESTRAK_RECENT_URL) -> pd.DataFrame:

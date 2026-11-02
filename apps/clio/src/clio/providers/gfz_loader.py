@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import requests
 
+from clio.providers.contract import from_measurements
+
 GFZ_URL = "https://kp.gfz.de/app/files/Kp_ap_Ap_SN_F107_since_1932.txt"
 
 
@@ -20,8 +22,8 @@ def parse_gfz_f107(text: str) -> pd.DataFrame:
     dates = pd.to_datetime(dict(year=raw[0], month=raw[1], day=raw[2]), utc=True)
     values = pd.to_numeric(raw[25], errors="coerce")
     valid = np.isfinite(values) & values.gt(0)
-    return pd.DataFrame({"metric": "f10_7", "value": values[valid],
-                         "observed_at": dates[valid] + pd.Timedelta(hours=12)})
+    return from_measurements(pd.DataFrame({"metric": "f10_7", "value": values[valid],
+                         "observed_at": dates[valid] + pd.Timedelta(hours=12)}), ("f10_7",))
 
 
 
@@ -29,4 +31,4 @@ def load_gfz_f107(start, end) -> pd.DataFrame:
     response = requests.get(GFZ_URL, timeout=120)
     response.raise_for_status()
     frame = parse_gfz_f107(response.text)
-    return frame.loc[frame.observed_at.between(start, end)]
+    return frame.loc[frame.timestamp.ge(start) & frame.timestamp.lt(end)]

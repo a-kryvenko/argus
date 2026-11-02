@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from clio.providers.omni import OMNI_WORDS as WORDS, parse_annual
+from clio.providers.omni import OMNI_WORDS as WORDS, parse_annual, clean_omni_values, OMNI_FILL_VALUES
 
 
 def record(year=2000, day=1, hour=0, fills=False):
@@ -18,14 +18,25 @@ def record(year=2000, day=1, hour=0, fills=False):
 
 def test_word_mapping_kp_and_missing_values():
     d = parse_annual(record()+'\n'+record(hour=1, fills=True), 2000)
-    assert d.issue_time.iloc[0] == pd.Timestamp('2000-01-01', tz='UTC')
+    assert d.timestamp.iloc[0] == pd.Timestamp('2000-01-01', tz='UTC')
     assert d.v.iloc[0] == 675
     assert d.by.iloc[0] == 2.2 and d.bz.iloc[0] == 1.6
     assert d.kp.iloc[0] == 5.3
-    assert d.iloc[1].drop('issue_time').isna().all()
+    assert len(d) == 1
 
 
 def test_leap_year_and_invalid_records():
-    assert parse_annual(record(day=366,hour=23),2000).issue_time.iloc[0] == pd.Timestamp('2000-12-31 23:00',tz='UTC')
+    assert parse_annual(record(day=366,hour=23),2000).timestamp.iloc[0] == pd.Timestamp('2000-12-31 23:00',tz='UTC')
     for text in [record()+'\n'+record(), record(year=2001), record(hour=24), '2000 1 0']:
         with pytest.raises(ValueError): parse_annual(text,2000)
+
+
+def test_cleaner_preserves_research_timestamps_rows_and_extra_columns():
+    times = pd.to_datetime(['2024-01-01T00:00Z'] * 2)
+    raw = pd.DataFrame({'issue_time': times, 'experiment': ['a', 'b'],
+                        **{name: [fill, 1.] for name, fill in OMNI_FILL_VALUES.items()}})
+    result = clean_omni_values(raw)
+    assert result.issue_time.tolist() == times.tolist()
+    assert result.experiment.tolist() == ['a', 'b']
+    assert result.drop(columns=['issue_time', 'experiment']).iloc[0].isna().all()
+    assert raw.v.iloc[0] == 9999

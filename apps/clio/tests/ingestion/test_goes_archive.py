@@ -33,7 +33,7 @@ def test_live_goes_uses_configured_freshness(monkeypatch, tmp_path, freshness, e
 def test_live_archives_source_columns_without_calibration(monkeypatch, tmp_path):
     monkeypatch.setenv('ARGUS_GOES_ARCHIVE', str(tmp_path))
     frame = pd.DataFrame([{'timestamp': pd.Timestamp(NOW-timedelta(minutes=10)),
-                           'goes_euv_256': 2.5, 'goes_euvs_quality_valid': True}])
+                           'goes_euv_256': 2.5}])
     fetch = Mock(return_value=[frame])
     monkeypatch.setattr(goes, 'source_frames', fetch)
     records = goes.download_snapshots(NOW-timedelta(days=1), NOW, False)
@@ -41,6 +41,8 @@ def test_live_archives_source_columns_without_calibration(monkeypatch, tmp_path)
     row = records[0]
     samples = json.loads(gzip.decompress((tmp_path / row['raw_path']).read_bytes()))
     assert samples[0]['goes_euv_256'] == 2.5
+    assert samples[0]['goes_euvs_quality_valid'] is True  # Legacy Prophet wire compatibility.
+    assert 'goes_euvs_quality_valid' not in frame  # Absent from the provider contract.
     assert not {'s10', 'm10', 'y10'} & samples[0].keys()
     monkeypatch.setattr(goes, 'source_frames', Mock(side_effect=AssertionError('Fetched retained snapshot')))
     assert goes.download_snapshots(NOW-timedelta(days=1), NOW, False,

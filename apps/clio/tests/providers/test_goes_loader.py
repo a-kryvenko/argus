@@ -33,19 +33,21 @@ def test_parse_euvs_json_returns_complete_wide_records() -> None:
 
     frame = _parse_euvs_json(payload)
 
-    assert len(frame) == 1
+    assert len(frame) == 2
+    assert pd.isna(frame.loc[1, "goes_mgii_index"])
     assert frame.loc[0, "timestamp"] == pd.Timestamp("2026-08-27T12:00:00Z")
     assert frame.loc[0, "goes_euvs_satellite"] == 19
     assert frame.loc[0, "goes_lya_1216"] == 5.0
     assert frame.loc[0, "goes_mgii_index"] == 8.0
-    assert bool(frame.loc[0, "goes_euvs_quality_valid"]) is True
+    assert not any("quality" in column for column in frame)
 
 
-def test_parse_euvs_json_rejects_incomplete_response() -> None:
+def test_parse_euvs_json_keeps_usable_values_in_incomplete_response() -> None:
     payload = _euvs_observation("2026-08-27T12:00:00Z")[:-1]
 
-    with pytest.raises(RuntimeError, match="no complete observation"):
-        _parse_euvs_json(payload)
+    frame = _parse_euvs_json(payload)
+    assert len(frame) == 1 and frame.goes_mgii_index.isna().all()
+    assert frame.goes_euv_256.tolist() == [1.]
 
 
 def test_parse_xray_background_json_sorts_and_deduplicates() -> None:
@@ -88,10 +90,27 @@ def test_fetch_goes_merges_background_and_filters(monkeypatch) -> None:
 
     frame = fetch_goes(
         start="2026-08-27T12:01:00Z",
-        end="2026-08-27T12:01:00Z",
+        end="2026-08-27T12:02:00Z",
     )
 
     assert len(frame) == 1
     assert frame.loc[0, "timestamp"] == pd.Timestamp("2026-08-27T12:01:00Z")
     assert frame.loc[0, "goes_xray_background"] == 6.2e-7
     assert frame.loc[0, "goes_xray_satellite"] == 18
+
+
+def test_flagged_euvs_observations_are_rejected():
+    payload = _euvs_observation('2026-08-27T12:00:00Z')
+    payload[0]['flags']['eclipse'] = True
+    frame = _parse_euvs_json(payload)
+    assert frame.goes_euv_256.isna().all()
+    assert frame.goes_euv_284.tolist() == [2.]
+    assert not any('quality' in name or 'flag' in name for name in frame)
+
+
+def test_flagged_revision_does_not_restore_older_valid_value():
+    payload = _euvs_observation('2026-08-27T12:00:00Z')
+    payload.append({**payload[0], 'flags': {'eclipse': True}})
+    frame = _parse_euvs_json(payload)
+    assert frame.goes_euv_256.isna().all()
+    assert frame.goes_euv_284.tolist() == [2.]

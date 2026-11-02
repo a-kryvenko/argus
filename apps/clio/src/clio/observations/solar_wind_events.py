@@ -138,7 +138,6 @@ async def hourly_speeds(session, as_of):
             WHERE metric='v' AND observed_at >= :start
               AND observed_at < date_trunc('hour', CAST(:cutoff AS timestamptz))
               AND received_at <= :cutoff
-              AND quality IS DISTINCT FROM 'flagged' AND quality IS DISTINCT FROM 'missing'
               AND value > 0 AND value < 3000
               AND source_product IN ('swpc.rtsw_plasma','omni.hourly','ace.plasma_hourly','soho.plasma_hourly')
         ), native AS (
@@ -181,7 +180,7 @@ async def load_event_inputs(session, as_of, now):
         polls=polls, latest_attempts=attempts,
         l1_samples=[L1Sample(observed_at=p.observed_at,
             available_at=max(p.observed_at, p.received_at),
-            metric=p.metric, value=p.value, quality=p.quality)
+            metric=p.metric, value=p.value)
             for p in rows])
 
     result.events, result.enlil_arrivals = normalize_event_inputs(result)

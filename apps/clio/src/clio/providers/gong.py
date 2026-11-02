@@ -5,6 +5,9 @@ import re
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin, urlparse
 
+import pandas as pd
+from clio.providers.contract import dataset
+
 ARCHIVE_URL = 'https://gong.nso.edu/archive/oQR/zqs/'
 LIVE_URL = 'https://services.swpc.noaa.gov/products/gong/zqs/'
 
@@ -41,7 +44,7 @@ def candidates(start, end, *, historical=False):
             if observed is not None and start <= observed < end:
                 # Stable choice when several stations advertise one timestamp.
                 found[observed] = min(url, found.get(observed, url))
-    return sorted(found.items(), reverse=True)
+    return dataset(pd.DataFrame([{'timestamp': at, 'gong_url': url} for at, url in found.items()]), ('gong_url',)).sort_values('timestamp', ascending=False).reset_index(drop=True)
 
 
 def download(url):

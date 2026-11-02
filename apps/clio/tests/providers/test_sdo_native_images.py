@@ -46,3 +46,27 @@ def test_los_keeps_source_pixels_and_provenance(tmp_path):
     data, metadata = read_native_fits(path, 'hmi_m', slot=SLOT, now=SLOT + timedelta(minutes=1))
     np.testing.assert_array_equal(data, values)
     assert metadata['native_shape'] == [1024, 1024] and len(metadata['sha256']) == 64
+
+
+@pytest.mark.parametrize('channel, flags, accepted', [
+    ('aia193', 1, False), ('aia193', 1 << 30, True), ('hmi_m', 1 << 30, False),
+])
+def test_fits_flags_are_checked_before_returning_pixels(tmp_path, channel, flags, accepted):
+    path = tmp_path / 'flagged.fits'
+    header = fits.Header({'DATE-OBS': SLOT.isoformat().replace('+00:00', ''), 'INSTRUME': 'AIA' if channel == 'aia193' else 'HMI',
+                          'WAVELNTH': 193, 'BUNIT': 'Gauss', 'QUALITY': flags})
+    fits.writeto(path, np.ones((1024, 1024), dtype=np.float32), header)
+    if accepted:
+        _, metadata = read_native_fits(path, channel, slot=SLOT, now=SLOT + timedelta(minutes=1))
+        assert 'quality' not in metadata
+    else:
+        with pytest.raises(ValueError, match='quality flags'):
+            read_native_fits(path, channel, slot=SLOT, now=SLOT + timedelta(minutes=1))
+
+
+def test_file_reference_uses_internal_channel_name():
+    from clio.providers.sdo_images import fetch
+    result = fetch('aia193', SLOT)
+    assert set(result) == {'timestamp', 'aia193_url'}
+    assert result['timestamp'] == SLOT
+    assert result['aia193_url'].endswith('AIA20260930_060000_0193.fits')

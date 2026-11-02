@@ -74,10 +74,12 @@ async def collect(config, *, mode, now=None, start=None, end=None):
             pending = required - hours
             candidates = []
             for day in sorted({hour.replace(hour=0) for hour in pending}):
-                candidates.extend(await asyncio.to_thread(provider.candidates, max(start, day),
-                    min(end, day + timedelta(days=1)), historical=True))
+                frame = await asyncio.to_thread(provider.candidates, max(start, day),
+                    min(end, day + timedelta(days=1)), historical=True)
+                candidates.extend(frame.itertuples(index=False, name=None))
         else:
-            candidates = await asyncio.to_thread(provider.candidates, start, end, historical=False)
+            frame = await asyncio.to_thread(provider.candidates, start, end, historical=False)
+            candidates = frame.itertuples(index=False, name=None)
         for observed, url in candidates:
             hour = observed.replace(minute=0, second=0, microsecond=0)
             if hour in hours or (historical and hour not in required):

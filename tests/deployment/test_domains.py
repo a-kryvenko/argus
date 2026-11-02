@@ -87,7 +87,7 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
               'prophet-api': 'PROPHET', 'intelligence': 'INTELLIGENCE',
               'intelligence-api': 'INTELLIGENCE', 'api': 'API'}
     allowed_data = {
-        'clio': {'observations': False},
+        'clio': {'observations': False, **({'media': False} if filename == 'docker-compose.override.yml' else {})},
         'prophet': {'models': True, 'prophet': False, 'demo': False},
         'proswin': {'models': True, 'prophet': False},
         'prophet-api': {}, 'intelligence': {}, 'intelligence-api': {},
@@ -133,3 +133,15 @@ def test_api_status_does_not_require_a_worker_or_traffic_log(filename):
     services = load_compose(filename)['services']
     assert 'api-worker' not in services
     assert 'MONITORING_TRAFFIC_LOG' not in services['api']['environment']
+
+
+def test_media_storage_is_local_in_dev_and_s3_in_production():
+    for filename, storage in [('docker-compose.override.yml', 'local'),
+                              ('.deploy/docker-compose.yml', 's3')]:
+        services = load_compose(filename)['services']
+        assert not {'minio', 'minio-init'} & services.keys()
+        for name in ('clio', 'clio-worker'):
+            assert services[name]['environment']['DATA_STORAGE'] == storage
+            if storage == 'local':
+                assert './data/media:/var/www/data/media' in services[name]['volumes']
+                assert not any(key.startswith('S3_') for key in services[name]['environment'])

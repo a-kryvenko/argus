@@ -10,12 +10,14 @@ x-clio-runtime: &clio-runtime
   volumes:
     - ./apps/clio/src:/var/www/apps/clio/src
     - ./packages/common/src:/var/www/packages/common/src
+    - ./data/media:/var/www/data/media
   environment: &clio-environment
     CLIO_DB_HOST: postgres
     CLIO_DB_PORT: '5432'
     XDG_CONFIG_HOME: /tmp/clio-config
     XDG_CACHE_HOME: /tmp/clio-cache
     SDO_EMAIL: ${SDO_EMAIL:-}
+    DATA_STORAGE: local
 
 x-prophet-runtime: &prophet-runtime
   build: &prophet-build

@@ -2,6 +2,12 @@
 
 x-clio-runtime: &clio-runtime
   restart: unless-stopped
+  environment:
+    DATA_STORAGE: s3
+    S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+    S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+    S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+    S3_REGION: ${S3_REGION:-auto}
   healthcheck: &clio-healthcheck
     start_interval: 1s
 

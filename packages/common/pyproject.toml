@@ -10,6 +10,8 @@ dependencies = [
     "pandas>=2.2",
     "alembic>=1.16,<2",
     "sqlalchemy[asyncio]>=2.0,<3",
+    "pillow>=11",
+    "boto3>=1.43.123",
 ]
 
 [tool.setuptools.package-dir]

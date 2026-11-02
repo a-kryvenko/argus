@@ -34,6 +34,10 @@ pnpm dev
 ```
 
 Frontend/API/Clio/Prophet: localhost ports 3000/8000/8001/8002.
+File uploads default to `DATA_STORAGE=local`: `data/media/{bucket}/{key}`.
+Dev Clio uses local storage; production uses S3 with `S3_ENDPOINT_URL`,
+`S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and optional `S3_REGION` (default `auto`).
+
 Workers collect and generate automatically. [Manual commands](docs/commands.md).
 
 Data mounts follow [service ownership](docs/architecture.md#runtime-ownership).

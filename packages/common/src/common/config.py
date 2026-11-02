@@ -1,9 +1,10 @@
 import os
-import yaml
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from typing import Literal
+
+import yaml
 from dotenv import load_dotenv
-from typing import Dict
+from pydantic_settings import BaseSettings
 
 _config = None
 
@@ -12,8 +13,10 @@ class _CommonConfig(BaseSettings):
     workdir: Path 
     data_root: Path
     config_root: Path
-    project_config: Dict
-    models_registry: Dict
+    project_config: dict
+    models_registry: dict
+    data_storage: Literal["local", "s3"] = "local"
+    s3: dict
 
 def get_config() -> _CommonConfig:
     global _config
@@ -29,10 +32,17 @@ def get_config() -> _CommonConfig:
         _config = _CommonConfig(
             debug=os.getenv("DEBUG", "false").lower() == "true",
             workdir=workdir,
-            data_root= workdir / "data",
+            data_root=workdir / "data",
             config_root=config_root,
             project_config=_load_yml_config( config_root / "project.yaml"),
-            models_registry=_load_yml_config( config_root / "models_registry.yaml")
+            models_registry=_load_yml_config( config_root / "models_registry.yaml"),
+            data_storage=os.getenv("DATA_STORAGE", "local"),
+            s3={
+                "endpoint": os.getenv("S3_ENDPOINT_URL", ""),
+                "key": os.getenv("S3_ACCESS_KEY_ID", ""),
+                "secret": os.getenv("S3_SECRET_ACCESS_KEY", ""),
+                "region": os.getenv("S3_REGION", "auto"),
+            }
         )
     
     return _config

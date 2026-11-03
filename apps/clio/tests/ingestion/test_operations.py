@@ -132,7 +132,7 @@ def test_catalog_collection_selection_and_independent_failures(monkeypatch, sele
     assert result['status'] == ('partial' if result['failed_metrics'] else 'complete')
 
 
-def test_cleanup_removes_only_expired_numeric_data(monkeypatch):
+def test_cleanup_expires_numeric_data_and_runs_file_retention(storage, monkeypatch):
     from clio.ingestion import sdo_images
     from clio.config import ClioObservations
     session = session_factory(monkeypatch, cleanup_operation)
@@ -143,7 +143,8 @@ def test_cleanup_removes_only_expired_numeric_data(monkeypatch):
     monkeypatch.setattr(sdo_images, 'cycle', cycle)
     now = datetime(2026, 10, 27, tzinfo=UTC)
     result = asyncio.run(cleanup_operation.cleanup(config, now))
-    assert result == {'live_removed': 3, 'normalized_removed': 3}
+    assert result['live_removed'] == result['normalized_removed'] == 3
+    assert set(result['files']) == {'sdo', 'sdo_browse', 'gong', 'goes', 'donki', 'enlil'}
     from datetime import timedelta
     live_delete, hourly_delete = [call.args[0].compile() for call in session.execute.call_args_list]
     assert live_delete.params['observed_at_1'] == now - timedelta(days=8)

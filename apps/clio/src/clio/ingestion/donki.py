@@ -2,17 +2,20 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
-
-from clio.db.models.file_observation import FileObservation
-from clio.db.session import get_db_session
-from clio.observations.archive import store_receipt
+from clio.observations.donki import record_poll, lock
 from clio.providers import donki
 
 logger = logging.getLogger(__name__)
 
 
 async def collect(policy, *, now=None):
+    with lock() as acquired:
+        if not acquired:
+            return False
+        return await _collect(policy, now=now)
+
+
+async def _collect(policy, *, now=None):
     now = now or datetime.now(UTC)
     start = (now - timedelta(days=policy.lookback_days)).replace(hour=0, minute=0, second=0, microsecond=0)
     end = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
@@ -25,13 +28,9 @@ async def collect(policy, *, now=None):
             failed.append(endpoint)
             error = type(exc).__name__
             logger.warning('DONKI %s failed: %s', endpoint, error)
-        receipt_id = uuid4()
-        values = await asyncio.to_thread(store_receipt, 'donki', endpoint, str(receipt_id),
-            id=receipt_id, raw=raw, error=error, metadata=dict(request_start=start, request_end=end,
+        await asyncio.to_thread(record_poll, endpoint,
+            raw=raw, error=error, metadata=dict(request_start=start, request_end=end,
                 source_url=donki.BASE_URL + endpoint))
-        async with get_db_session() as session:
-            session.add(FileObservation(**values))
-            await session.commit()
     if failed:
         raise RuntimeError('DONKI collection failed: ' + ', '.join(failed))
     return True

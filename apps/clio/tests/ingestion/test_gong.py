@@ -76,7 +76,7 @@ def test_original_is_published_without_local_archive(storage, monkeypatch):
     assert again['sha256'] == row['sha256']
 
 
-def test_complete_backfill_uses_db_references_without_source_download(monkeypatch):
+def test_complete_backfill_uses_db_references_without_source_download(storage, monkeypatch):
     from clio.config import load_observation_config
     config = load_observation_config()
     start = NOW-timedelta(hours=2)

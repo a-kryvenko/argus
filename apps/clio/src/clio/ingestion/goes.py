@@ -65,6 +65,14 @@ def download_snapshots(start, end, historical, expected=None):
 
 
 async def collect(config, *, mode, now=None, start=None, end=None):
+    from clio.db.locks import ingestion_lock, FILE_LOCKS
+    with ingestion_lock('goes', FILE_LOCKS['goes']) as acquired:
+        if not acquired:
+            return {'status': 'busy', 'files': {'goes': {'status': 'busy'}}, 'failed_metrics': []}
+        return await _collect(config, mode=mode, now=now, start=start, end=end)
+
+
+async def _collect(config, *, mode, now=None, start=None, end=None):
     now = now or datetime.now(UTC)
     if mode not in ('live', 'backfill') or now.tzinfo is None or (start is None) != (end is None):
         raise ValueError('Use live/backfill and aware range boundaries')

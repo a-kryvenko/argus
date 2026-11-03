@@ -34,6 +34,7 @@ class SDOImages(StrictModel):
 class SolarWindEvents(StrictModel):
     enabled: bool = False
     lookback_days: int = Field(default=30, strict=True, ge=7, le=90)
+    retention_days: int = Field(default=30, strict=True, ge=1, le=90)
 
 
 class Retention(StrictModel):

@@ -182,6 +182,10 @@ def read_file(bucket: str, key: str, *, max_bytes: int | None = None) -> bytes:
     return content
 
 
+def delete_file(bucket: str, key: str) -> None:
+    _get_client().delete_object(Bucket=bucket, Key=key)
+
+
 def _upload_s3(
         content: bytes,
         bucket: str,

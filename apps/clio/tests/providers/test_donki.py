@@ -48,11 +48,6 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
     monkeypatch.setenv("ARGUS_DONKI_ARCHIVE", str(tmp_path))
     import asyncio
     from clio.ingestion import donki as collector
-    saved = []
-    session = AsyncMock()
-    session.add = lambda row: saved.append(row)
-    session.__aenter__.return_value = session
-    monkeypatch.setattr(collector, 'get_db_session', lambda: session)
     policy = SimpleNamespace(lookback_days=30)
     raw = b'[ {"activityID": "cme1"} ]'
     def fetch(endpoint, *_):
@@ -63,10 +58,16 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
     before = datetime.now(UTC)
     with pytest.raises(RuntimeError, match='IPS'):
         asyncio.run(collector.collect(policy))
-    assert len(saved) == 4 and session.commit.await_count == 4
+    from sqlalchemy import select
+    from clio.db.models.file_observation import FileObservation
+    from clio.observations import files
+    with storage.engine.connect() as connection:
+        saved = [SimpleNamespace(**row) for row in connection.execute(
+            select(FileObservation.__table__).order_by(FileObservation.received_at)).mappings()]
+    assert len(saved) == 4
     cme = saved[0]
-    assert next(value[0] for (bucket,key),value in storage.objects.items() if str(cme.id) in key) == raw
-    assert cme.details['sha256'] == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
-    assert next(value[0] for (bucket,key),value in storage.objects.items() if str(saved[1].id) in key) == b'[]' and saved[1].error is None
+    assert storage.objects['argus-private', files.find(id=cme.file_id)[0]['key']][0] == raw
+    assert cme.details['sha256'] == hashlib.sha256(raw).hexdigest() and cme.received_at.replace(tzinfo=UTC) >= before
+    assert storage.objects['argus-private', files.find(id=saved[1].file_id)[0]['key']][0] == b'[]' and saved[1].error is None
     assert saved[-1].raw_path is None and saved[-1].error == 'Timeout'
 

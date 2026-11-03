@@ -82,9 +82,12 @@ def fits_bytes(image, metadata):
     for name, value in metadata.get('header', {}).items():
         if name in ('SIMPLE', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'EXTEND', 'CHECKSUM', 'DATASUM'):
             continue
-        if isinstance(value, list) and name in ('COMMENT', 'HISTORY'):
-            for entry in value:
-                header[name] = str(entry)
+        if name in ('COMMENT', 'HISTORY'):
+            entries = value if isinstance(value, (list, tuple)) else [value]
+            for entry in entries:
+                # Older immutable NPZ receipts contain newline-joined commentary.
+                for line in str(entry).splitlines() or ['']:
+                    header[name] = line
         elif value is None or isinstance(value, (str, int, float, bool)):
             header[name] = value
     output = io.BytesIO()

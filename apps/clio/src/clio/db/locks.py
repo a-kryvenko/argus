@@ -11,6 +11,9 @@ SOURCE_LOCKS = {
     'dst': 730111,
 }
 
+FILE_LOCKS = {'sdo-live': 730200, 'sdo-warmup': 730201, 'sdo-browse': 730210,
+              'donki': 730220, 'gong': 730230, 'goes': 730231, 'enlil': 730232}
+
 
 _lane_locks = {}
 

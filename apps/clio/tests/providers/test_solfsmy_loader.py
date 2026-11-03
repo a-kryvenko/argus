@@ -67,7 +67,7 @@ def test_collection_reads_delayed_mean_and_batches_solar_metrics(monkeypatch):
     assert source.call_args.args[-2] == NOW-timedelta(days=14)
 
 
-def test_cleanup_retains_published_means_for_their_collection_horizon(monkeypatch):
+def test_cleanup_retains_published_means_for_their_collection_horizon(storage, monkeypatch):
     from clio.ingestion import cleanup
     session = AsyncMock()
     session.execute.return_value = Mock(rowcount=0)
@@ -78,6 +78,7 @@ def test_cleanup_retains_published_means_for_their_collection_horizon(monkeypatc
     config = load_observation_config().model_copy(deep=True)
     config.sdo_images.enabled = False
     config.sdo_browse_enabled = False
+    config.solar_wind_events.enabled = False
     asyncio.run(cleanup.cleanup(config, NOW))
     statement = session.execute.call_args_list[0].args[0].compile()
     assert NOW-timedelta(days=14) in statement.params.values()

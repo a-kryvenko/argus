@@ -38,6 +38,7 @@ clio:
   solar_wind_events:
     enabled: true
     lookback_days: 30
+    retention_days: 30
   sdo_images:
     enabled: true
     backfill_days: 4

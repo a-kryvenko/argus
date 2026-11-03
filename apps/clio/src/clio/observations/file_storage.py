@@ -1,7 +1,7 @@
 """Physical object storage shared by all Clio file observations."""
 from botocore.exceptions import BotoCoreError, ClientError
 
-from common.data.datamanager import create_immutable_file, read_file
+from common.data.datamanager import create_immutable_file, read_file, delete_file
 from clio.observations import files
 
 PRIVATE_BUCKET = 'argus-private'
@@ -18,6 +18,10 @@ def upload(content, bucket, key, *, content_type):
 
 def publish(content, bucket, key, *, content_type):
     return upload(content, bucket, key, content_type=content_type)[0]
+
+
+def delete(reference):
+    delete_file(reference['bucket'], reference['key'])
 
 
 def read(reference):

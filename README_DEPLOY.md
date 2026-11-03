@@ -53,6 +53,9 @@ One-time local archive migration (after migrating Clio):
 Scientific SDO migration selects only AIA171/AIA211 in the latest 96 hourly slots; other NPZs are counted as `skipped`.
 Both commands accept `--kind` and `--limit`. Errors produce exit code 1; reruns preserve uploaded objects. Local files are retained.
 
+Hourly cleanup retains scientific SDO for 96 hours, latest public AIA per channel, GONG/GOES for their configured backfill windows, and DONKI/ENLIL for `clio.solar_wind_events.retention_days` (30 by default).
+DONKI stores unchanged polls without duplicate payloads; cleanup also compacts existing duplicates. Unreferenced objects older than 15 minutes are deleted in batches of up to 1000 per source; failed deletions are retried.
+
 Workers collect and generate automatically. [Manual commands](docs/commands.md).
 
 Data mounts follow [service ownership](docs/architecture.md#runtime-ownership).

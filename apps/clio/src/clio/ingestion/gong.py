@@ -19,6 +19,14 @@ def snapshot_values(observed, url, source):
 
 
 async def collect(config, *, mode, now=None, start=None, end=None):
+    from clio.db.locks import ingestion_lock, FILE_LOCKS
+    with ingestion_lock('gong', FILE_LOCKS['gong']) as acquired:
+        if not acquired:
+            return {'status': 'busy', 'files': {'gong': {'status': 'busy'}}, 'failed_metrics': []}
+        return await _collect(config, mode=mode, now=now, start=start, end=end)
+
+
+async def _collect(config, *, mode, now=None, start=None, end=None):
     from clio.providers import gong as provider
     now = now or datetime.now(UTC)
     if now.tzinfo is None:

@@ -235,14 +235,18 @@ async def donki_inputs(session, as_of):
 
     polls = await asyncio.to_thread(decode)
     attempts = await latest_attempts(session, 'donki', as_of)
-    return polls, {endpoint: dict(received_at=row.received_at.isoformat(), error=row.error)
-                   for endpoint, row in attempts.items()}
+    successes = await latest_attempts(session, 'donki', as_of, successful=True)
+    return polls, {endpoint: dict(received_at=row.received_at.isoformat(), error=row.error,
+        last_success_at=successes[endpoint].received_at.isoformat() if endpoint in successes else None)
+        for endpoint, row in attempts.items()}
 
 
-async def latest_attempts(session, kind, as_of):
+async def latest_attempts(session, kind, as_of, *, successful=False):
     new = (await session.execute(select(FileObservation.source_product.label('source'), FileObservation.id,
         FileObservation.received_at, FileObservation.error)
-        .where(FileObservation.kind == kind, FileObservation.received_at <= as_of)
+        .where(FileObservation.kind.in_(('donki', 'donki_poll') if kind == 'donki' else (kind,)),
+               FileObservation.received_at <= as_of,
+               FileObservation.error.is_(None) if successful else True)
         .distinct(FileObservation.source_product)
         .order_by(FileObservation.source_product, FileObservation.received_at.desc(), FileObservation.id.desc()))).all()
     return _latest(new, lambda r: r.source if kind == 'donki' else kind)

@@ -28,8 +28,9 @@ def file_fields(kind, record):
 def publish_original(kind, timestamp, source, content, record, *, id=None):
     content_type = {'gong': 'application/fits', 'goes': 'application/json',
                     'donki': 'application/json', 'enlil': 'application/x-netcdf'}[kind]
-    reference = file_storage.publish(content, file_storage.PRIVATE_BUCKET,
-        remote_key(kind, timestamp, source, id), content_type=content_type)
+    key = (f'observations/DONKI/{source}/{record["sha256"]}.json' if kind == 'donki'
+           else remote_key(kind, timestamp, source, id))
+    reference = file_storage.publish(content, file_storage.PRIVATE_BUCKET, key, content_type=content_type)
     record['file_id'] = str(reference['id'])
     return reference
 

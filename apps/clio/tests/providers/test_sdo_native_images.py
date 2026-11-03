@@ -99,3 +99,32 @@ def test_browse_download_is_bounded_and_preserves_source_time(monkeypatch, limit
     else:
         with pytest.raises(ValueError, match='size/time limit'):
             sdo.download_browse('193')
+
+
+def test_commentary_survives_native_fits_json_receipt_and_reduced_fits(tmp_path):
+    import io
+    import json
+    from clio.providers.sdo import prepare_observation
+    from clio.observations.sdo import fits_bytes
+    path = tmp_path / 'aia.fits'
+    header = fits.Header({'DATE-OBS': SLOT.isoformat().replace('+00:00', ''),
+                          'INSTRUME': 'AIA_1', 'WAVELNTH': 171, 'CRPIX1': 512.5})
+    comments = ['  This FITS file may contain long string keyword values that are',
+                '  continued across multiple cards.']
+    history = ['First processing step', 'Second processing step']
+    for value in comments:
+        header.add_comment(value)
+    for value in history:
+        header.add_history(value)
+    fits.writeto(path, np.ones((1024, 1024), dtype=np.float32), header)
+    image, metadata = read_native_fits(path, 'aia171', slot=SLOT, now=SLOT+timedelta(hours=1))
+    metadata = json.loads(json.dumps(metadata))
+    assert metadata['header']['COMMENT'] == comments
+    image, metadata = prepare_observation(image, metadata)
+    metadata = json.loads(json.dumps(metadata))
+    assert metadata['source_header']['HISTORY'] == history
+    with fits.open(io.BytesIO(fits_bytes(image, metadata))) as hdus:
+        assert list(hdus[0].header['COMMENT']) == comments
+        assert list(hdus[0].header['HISTORY']) == history
+        assert hdus[0].data.shape == (512, 512)
+        assert hdus[0].header['CRPIX1'] == 256.5

@@ -7,7 +7,7 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.exc import SQLAlchemyError
 
-from clio.db.locks import ingestion_lock
+from clio.db.locks import ingestion_lock, FILE_LOCKS
 from clio.providers import sdo as provider
 from clio.observations import sdo
 from clio.observations.sdo import COLLECTED_CHANNELS, hourly_slots
@@ -46,7 +46,7 @@ def cycle(mode, *, batch_hours=6, clock=lambda: datetime.now(UTC), full=False, s
     global _warmup_cursor
     if mode not in ('live', 'warmup'):
         raise ValueError('Unknown SDO mode')
-    with ingestion_lock('sdo-' + mode, 730200 if mode == 'live' else 730201) as acquired:
+    with ingestion_lock('sdo-' + mode, FILE_LOCKS['sdo-' + mode]) as acquired:
         if not acquired:
             return {'busy': True}
         slots = hourly_slots(now if now is not None else clock())

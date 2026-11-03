@@ -69,3 +69,26 @@ def test_upload_failure_does_not_register_a_file(storage):
     with pytest.raises(OSError):
         sdo.publish(b'npz', 'aia171', SLOT, 'npz.512', details={}, content_type='application/octet-stream')
     assert not files.find()
+
+
+def test_partial_publication_resumes_legacy_multiline_header_without_replacing_npz(storage, scientific_source, monkeypatch):
+    metadata = scientific_source.download.return_value[1]
+    metadata['header'].update(COMMENT='First comment\nSecond comment', HISTORY='First step\nSecond step')
+    encode = sdo.fits_bytes
+    monkeypatch.setattr(sdo, 'fits_bytes', Mock(side_effect=ValueError('Invalid multiline FITS header')))
+    assert collector.collect_one(SLOT, 'aia171', clock=lambda: NOW) == 'failed'
+    assert {row['entity'] for row in file_observations.find()} == {'npz.512'}
+    first_npz = dict(storage.objects)
+    monkeypatch.setattr(sdo, 'fits_bytes', encode)
+    later = NOW+timedelta(minutes=15)
+    storage.clock[0] = later
+    assert collector.collect_one(SLOT, 'aia171', clock=lambda: later) == 'saved'
+    for key, content in first_npz.items():
+        assert storage.objects[key] == content
+    prefix = 'images/SDO/aia171/202611021000/'
+    with fits.open(io.BytesIO(storage.objects['argus-private', prefix+'512.fits'][0])) as hdus:
+        assert list(hdus[0].header['COMMENT']) == ['First comment', 'Second comment']
+        assert list(hdus[0].header['HISTORY']) == ['First step', 'Second step']
+    assert storage.objects['argus-private', prefix+'original.fits'][0] == scientific_source.content
+    assert sdo.scientific_complete(SLOT, 'aia171')
+    assert file_observations.find(entity='npz.512')[0]['details']['available_at'] == NOW.isoformat()

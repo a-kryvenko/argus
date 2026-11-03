@@ -13,7 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.exc import SQLAlchemyError
 
 from common.schemas.sdo_browse import CHANNELS, SIZES, SDOBrowseCatalog
-from clio.db.locks import ingestion_lock
+from clio.db.locks import ingestion_lock, FILE_LOCKS
 from clio.observations import file_storage, file_observations, sdo
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ def snapshot(channel, now):
 
 
 def collect(now):
-    with ingestion_lock('sdo-browse', 730210) as acquired:
+    with ingestion_lock('sdo-browse', FILE_LOCKS['sdo-browse']) as acquired:
         if not acquired:
             return {'status': 'busy', 'failed': []}
         def fetch(channel):

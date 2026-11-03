@@ -141,6 +141,12 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
     from clio.ingestion import normalize as normalized
     from clio.ingestion import cleanup as cleanup_operation
     from clio.observations.schema import REQUIRED_METRICS
+    from clio.observations import files
+    from clio.db.models.file import File
+    from clio.db.models.file_observation import FileObservation
+
+    file_engine = sa.create_engine(database_url)
+    monkeypatch.setattr(files, "engine", lambda: file_engine)
 
     config = load_observation_config().model_copy(deep=True)
     config.sdo_images.enabled = False
@@ -164,7 +170,7 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
         monkeypatch.setattr(normalized, 'get_db_session', factory)
         try:
             async with engine.begin() as conn:
-                for model in (Measurement, NormalizedObservation):
+                for model in (Measurement, NormalizedObservation, File, FileObservation):
                     await conn.run_sync(model.__table__.create)
             existing = start + timedelta(hours=3)
             async with factory() as session:
@@ -208,7 +214,7 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
                 ])
                 await session.commit()
             report = await cleanup_operation.cleanup(config, now)
-            assert report == {'live_removed': 1, 'normalized_removed': 1}
+            assert report['live_removed'] == report['normalized_removed'] == 1
             async with factory() as session:
                 rows = (await session.scalars(sa.select(Measurement).where(Measurement.observed_at <= boundary))).all()
                 assert {(r.metric, r.observed_at) for r in rows} == {('bz', boundary), ('bz', ancient), ('v', ancient)}
@@ -217,3 +223,4 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
         finally:
             await engine.dispose()
     asyncio.run(verify())
+    file_engine.dispose()

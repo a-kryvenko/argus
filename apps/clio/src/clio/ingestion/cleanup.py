@@ -29,5 +29,9 @@ async def cleanup(config, now: datetime):
         await session.commit()
     
     result = {'live_removed': live.rowcount, 'normalized_removed': normalized.rowcount}
+    from clio.observations.retention import cleanup as cleanup_files
+    result['files'] = await asyncio.to_thread(cleanup_files, config, now)
+    if any(report['failed'] for report in result['files'].values()):
+        result['status'] = 'partial'
     
     return result

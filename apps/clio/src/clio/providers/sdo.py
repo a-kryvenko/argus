@@ -75,7 +75,8 @@ def read_native_fits(path, channel, *, slot, now, tolerance_seconds=120):
         digest = hashlib.file_digest(stream, 'sha256').hexdigest()
     return data, dict(channel=channel, slot_at=slot.isoformat(), observed_at=observed.isoformat(),
                       available_at=now.isoformat(), sha256=digest, native_shape=list(data.shape),
-                      header=dict(header),
+                      header={name: list(header[name]) if name in ('COMMENT', 'HISTORY') else header[name]
+                              for name in header},
                       preprocessing='fits-unregistered-v1')
 
 
@@ -136,6 +137,8 @@ def prepare_observation(image, metadata):
     reduced = np.full((512, 512), np.nan, dtype=np.float32)
     np.divide(sums, counts, out=reduced, where=counts > 0)
     def scalar(value):
+        if isinstance(value, (list, tuple)):
+            return [scalar(entry) for entry in value]
         if isinstance(value, np.generic):
             value = value.item()
         if isinstance(value, float) and not np.isfinite(value):

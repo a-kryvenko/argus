@@ -19,6 +19,14 @@ async def store(values):
 
 
 async def collect(*, now=None):
+    from clio.db.locks import ingestion_lock, FILE_LOCKS
+    with ingestion_lock('enlil', FILE_LOCKS['enlil']) as acquired:
+        if not acquired:
+            return False
+        return await _collect(now=now)
+
+
+async def _collect(*, now=None):
     try:
         objects = await asyncio.to_thread(enlil.discover, now or datetime.now(UTC))
         if not objects:

@@ -198,3 +198,17 @@ def test_old_clio_snapshot_preserves_background_and_marks_cme_unavailable(tmp_pa
     assert result.frame.v_q50.tolist() == [400.]
     outlook = json.loads(result.frame.cme_speed_json.iloc[0])
     assert outlook['state'] == 'unavailable' and 'Normalized' in outlook['reason']
+
+
+@pytest.mark.parametrize('failed', [False, True])
+def test_unchanged_donki_response_freshness_uses_last_successful_check(failed):
+    snapshot = source(poll('CME', [], NOW-timedelta(days=2)))
+    snapshot.latest_attempts = {'CME': dict(received_at=NOW.isoformat(),
+        error='Timeout' if failed else None,
+        last_success_at=(NOW-timedelta(minutes=15)).isoformat())}
+    inputs = ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[]),
+        solar_wind_events=snapshot)
+    status = forecast(inputs).source_status['CME']
+    assert status['state'] == 'available'
+    assert status['age_hours'] == .25
+    assert status['poll_id'] == str(snapshot.polls[0].poll_id)

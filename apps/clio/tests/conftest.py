@@ -34,6 +34,7 @@ def object_store(monkeypatch, tmp_path):
     client.put_object.side_effect = put
     client.head_object.side_effect = lambda Bucket, Key: {'LastModified': objects[Bucket, Key][1]}
     client.get_object.side_effect = get
+    client.delete_object.side_effect = lambda Bucket, Key: objects.pop((Bucket, Key), None)
     monkeypatch.setattr(datamanager, 's3_client', client)
     yield SimpleNamespace(objects=objects, client=client, clock=clock, root=tmp_path, put=put)
     if hasattr(files.engine, 'cache_info'):

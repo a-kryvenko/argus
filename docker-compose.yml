@@ -4,7 +4,6 @@ x-clio-runtime: &clio-runtime
   init: true
   volumes:
     - ./configs:/var/www/configs:ro
-    - ./data/observations:/var/www/data/observations
   stop_grace_period: 10m
   depends_on: &clio-depends_on
     postgres:
@@ -120,8 +119,8 @@ services:
     <<: *clio-runtime
     healthcheck:
       <<: *clio-healthcheck
-      test: [CMD, .venv/bin/python, -m, clio.scheduler.healthcheck, /var/www/data/observations/worker-state.json]
-    command: [.venv/bin/python, -m, clio.scheduler.worker, --heartbeat-file, /var/www/data/observations/worker-state.json]
+      test: [CMD, .venv/bin/python, -m, clio.scheduler.healthcheck, /tmp/clio/worker-state.json]
+    command: [.venv/bin/python, -m, clio.scheduler.worker, --heartbeat-file, /tmp/clio/worker-state.json]
 
   prophet:
     <<: *prophet-runtime

@@ -58,77 +58,34 @@ assert 'astropy' not in sys.modules
     assert result.returncode == 0, result.stderr
 
 
-def test_original_is_archived_without_features(monkeypatch, tmp_path):
-    monkeypatch.setenv('ARGUS_GONG_ARCHIVE', str(tmp_path))
-    original = b'original FITS bytes'
-    download = Mock(return_value=original)
-    monkeypatch.setattr(provider, 'download', download)
-    row = gong.snapshot_values(NOW-timedelta(minutes=6), 'https://provider/file.fits.gz', 'gong.live')
-    assert gzip.decompress((tmp_path / row['raw_path']).read_bytes()) == original
-    assert row['sha256'] == hashlib.sha256(original).hexdigest()
-    assert row['slot_at'] == NOW-timedelta(hours=1)
-    assert 'features' not in row and 'fits_gzip' not in row
-    assert gong.snapshot_values(NOW-timedelta(minutes=6), 'https://provider/file.fits.gz', 'gong.live') == row
-    download.assert_called_once()
-
-
-def archive_rows(monkeypatch, tmp_path, hours):
-    monkeypatch.setenv('ARGUS_GONG_ARCHIVE', str(tmp_path))
+def test_original_is_published_without_local_archive(storage, monkeypatch):
+    from clio.observations import file_observations, archive
+    from sqlalchemy import insert
+    from clio.db.models.file_observation import FileObservation
     monkeypatch.setattr(provider, 'download', Mock(return_value=b'original FITS'))
-    rows = [SimpleNamespace(**gong.snapshot_values(hour+timedelta(minutes=54),
-             f'https://provider/{hour:%Y%m%d%H}.fits.gz', 'gong.archive')) for hour in hours]
+    row = gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
+    values = archive.observation_values('gong', row)
+    assert values['raw_path'] is None and values['sha256'] is None
+    with storage.engine.begin() as connection:
+        connection.execute(insert(FileObservation).values(**values))
+    metadata = file_observations.find(kind='gong')[0]
+    assert metadata['entity'] == 'fits.original'
+    assert metadata['details']['source_url'] == 'https://example.test/gong.fits'
+    provider.download.side_effect = AssertionError('Do not redownload a stored observation')
+    again = gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
+    assert again['sha256'] == row['sha256']
+
+
+def test_complete_backfill_uses_db_references_without_source_download(monkeypatch):
+    from clio.config import load_observation_config
+    config = load_observation_config()
+    start = NOW-timedelta(hours=2)
+    rows = [SimpleNamespace(observed_at=start+timedelta(hours=i), slot_at=start+timedelta(hours=i),
+                           source_product='gong.archive') for i in range(2)]
     session = AsyncMock()
-    session.execute.return_value = Mock(scalar_one_or_none=lambda: 1)
-    @asynccontextmanager
-    async def connection():
-        yield session
-    monkeypatch.setattr(gong, 'get_db_session', connection)
+    session.__aenter__.return_value = session
+    monkeypatch.setattr(gong, 'get_db_session', lambda: session)
     monkeypatch.setattr(gong, 'snapshots', AsyncMock(return_value=rows))
-    return rows
-
-
-def test_complete_gong_backfill_does_not_list_or_download_from_provider(monkeypatch, tmp_path):
-    from clio.config import load_observation_config
-    start = NOW-timedelta(hours=3)
-    archive_rows(monkeypatch, tmp_path, [start+timedelta(hours=i) for i in range(3)])
-    candidates = Mock(side_effect=AssertionError('Complete archive must not be listed again'))
-    download = Mock(side_effect=AssertionError('Complete original must not be downloaded again'))
-    monkeypatch.setattr(provider, 'candidates', candidates)
-    monkeypatch.setattr(provider, 'download', download)
-    result = asyncio.run(gong.collect(load_observation_config(), mode='backfill', now=NOW, start=start, end=NOW))
-    assert result['status'] == 'complete'
-    assert result['files']['gong']['retained'] == 3
-    candidates.assert_not_called()
-    download.assert_not_called()
-
-
-def test_gong_lists_only_days_with_missing_hours_and_downloads_only_gap(monkeypatch, tmp_path):
-    from clio.config import load_observation_config
-    end = NOW.replace(hour=2)
-    start = end-timedelta(hours=6)
-    archive_rows(monkeypatch, tmp_path, [start+timedelta(hours=i) for i in range(5)])
-    observed = end-timedelta(minutes=6)
-    candidates = Mock(return_value=pd.DataFrame({'timestamp': [observed], 'gong_url': ['https://provider/missing.fits.gz']}))
-    download = Mock(return_value=b'missing original FITS')
-    monkeypatch.setattr(provider, 'candidates', candidates)
-    monkeypatch.setattr(provider, 'download', download)
-    result = asyncio.run(gong.collect(load_observation_config(), mode='backfill', now=NOW, start=start, end=end))
-    assert result['status'] == 'complete'
-    candidates.assert_called_once_with(end.replace(hour=0), end, historical=True)
-    download.assert_called_once_with('https://provider/missing.fits.gz')
-
-
-def test_gong_restores_missing_original_without_listing_archive(monkeypatch, tmp_path):
-    from clio.config import load_observation_config
-    start = NOW-timedelta(hours=1)
-    row, = archive_rows(monkeypatch, tmp_path, [start])
-    (tmp_path / row.raw_path).unlink()
-    candidates = Mock(side_effect=AssertionError('Original URL is already recorded'))
-    download = Mock(return_value=b'original FITS')
-    monkeypatch.setattr(provider, 'candidates', candidates)
-    monkeypatch.setattr(provider, 'download', download)
-    result = asyncio.run(gong.collect(load_observation_config(), mode='backfill', now=NOW, start=start, end=NOW))
-    assert result['status'] == 'complete'
-    assert result['files']['gong']['restored'] == 1
-    candidates.assert_not_called()
-    download.assert_called_once_with(row.source_url)
+    monkeypatch.setattr(provider, 'candidates', Mock(side_effect=AssertionError('No provider listing')))
+    result = asyncio.run(gong.collect(config, mode='backfill', now=NOW, start=start, end=NOW))
+    assert result['status'] == 'complete' and result['files']['gong']['retained'] == 2

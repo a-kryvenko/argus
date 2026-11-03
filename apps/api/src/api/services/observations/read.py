@@ -105,7 +105,7 @@ async def latest(metrics, now):
 
 
 async def history(metrics, start, end, interval, now, *, indices=False):
-    rows = await numeric('metrics', {'metrics': ','.join(metrics), 'from': start-timedelta(hours=3) if indices else start,
+    rows = await numeric('history', {'metrics': ','.join(metrics), 'from': start-timedelta(hours=3) if indices else start,
                                      'to': end, 'interval': '1m' if indices else interval})
     seconds = {'1m': 60, '5m': 300, '1h': 3600}[interval]
     grouped = samples(rows, metrics, intervals=indices)
@@ -127,7 +127,7 @@ async def history(metrics, start, end, interval, now, *, indices=False):
 async def read_observations(resource, params=None):
     params = params or {}
     now = datetime.now(UTC)
-    if resource == 'sdo-browse':
+    if resource == 'sdo':
         return await read(resource, params)
     if resource in ('solar-wind/latest', 'geomagnetic/latest', 'current-indices'):
         defaults = WIND if resource.startswith('solar-wind') else INDICES if resource.startswith('geomagnetic') else HOURLY
@@ -147,7 +147,7 @@ async def read_observations(resource, params=None):
         end = aware(params['to']) if params.get('to') else now
         start = aware(params['from']) if params.get('from') else end-timedelta(hours=params.get('limit', 24))
         metrics = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', *HOURLY)
-        rows = await numeric('metrics', {'metrics': ','.join(metrics), 'from': start, 'to': end, 'interval': '1h'})
+        rows = await numeric('history', {'metrics': ','.join(metrics), 'from': start, 'to': end, 'interval': '1h'})
         data = {'points': [{'issue_time': row['time'], **{m: row.get(m) for m in metrics}} for row in rows][-params.get('limit', 24):]}
     elif resource == 'summary':
         metrics = (*WIND, *INDICES)

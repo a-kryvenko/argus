@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from clio.providers.goes_loader import (
+from clio.providers.goes import (
     EUVS_LINE_COLUMNS,
     _parse_euvs_json,
     _parse_xray_background_json,
@@ -84,7 +84,7 @@ def test_fetch_goes_merges_background_and_filters(monkeypatch) -> None:
         ],
     ]
     monkeypatch.setattr(
-        "clio.providers.goes_loader._fetch_json",
+        "clio.providers.goes._fetch_json",
         lambda _url, **kwargs: responses.pop(0),
     )
 

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from clio.providers.contract import from_measurements
+from clio.providers._contract import from_measurements
 
 SOLFSMY_URL = 'https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT'
 MEAN_COLUMNS = {'f10_7_81mean': 4, 's10_81mean': 6, 'm10_81mean': 8, 'y10_81mean': 10}

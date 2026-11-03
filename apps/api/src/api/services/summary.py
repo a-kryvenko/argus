@@ -97,9 +97,10 @@ async def observation_read(resource, params=None, *, optional=False):
 
 
 async def sdo_images_read():
-    data = await observation_read('sdo-browse', optional=True)
+    data = await observation_read('sdo', optional=True)
     try:
-        return {image.channel: image.asset_id for image in SDOBrowseCatalog.model_validate(data).images}
+        return {image.channel: dict(asset_id=image.asset_id, urls=image.urls)
+                for image in SDOBrowseCatalog.model_validate(data).images}
     except ValueError:
         logger.warning('Summary SDO images are unavailable')
         return {}

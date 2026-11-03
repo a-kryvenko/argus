@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from clio.db.models.measurement import Measurement
 from clio.ingestion import numeric_live as live
-from clio.providers import solar_wind_loader as solar_wind, geomagnetic_loader as geomagnetic
+from clio.providers import solar_wind as solar_wind, geomagnetic as geomagnetic
 
 
 

@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urljoin, urlparse
 
 import pandas as pd
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 ARCHIVE_URL = 'https://gong.nso.edu/archive/oQR/zqs/'
 LIVE_URL = 'https://services.swpc.noaa.gov/products/gong/zqs/'

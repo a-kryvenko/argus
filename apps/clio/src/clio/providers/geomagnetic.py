@@ -5,7 +5,7 @@ import math
 import pandas as pd
 import requests
 
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 SOURCES = {
     'kp': 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',

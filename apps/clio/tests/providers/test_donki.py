@@ -44,7 +44,7 @@ def test_unrecognized_records_cannot_silently_become_a_quiet_feed(row):
         donki.validate('CME', [row])
 
 
-def test_collection_retains_exact_bytes_empty_success_and_failure_independently(monkeypatch, tmp_path):
+def test_collection_retains_exact_bytes_empty_success_and_failure_independently(storage, monkeypatch, tmp_path):
     monkeypatch.setenv("ARGUS_DONKI_ARCHIVE", str(tmp_path))
     import asyncio
     from clio.ingestion import donki as collector
@@ -65,8 +65,8 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
         asyncio.run(collector.collect(policy))
     assert len(saved) == 4 and session.commit.await_count == 4
     cme = saved[0]
-    assert gzip.decompress((tmp_path / cme.raw_path).read_bytes()) == raw
-    assert cme.sha256 == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
-    assert gzip.decompress((tmp_path / saved[1].raw_path).read_bytes()) == b'[]' and saved[1].error is None
+    assert next(value[0] for (bucket,key),value in storage.objects.items() if str(cme.id) in key) == raw
+    assert cme.details['sha256'] == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
+    assert next(value[0] for (bucket,key),value in storage.objects.items() if str(saved[1].id) in key) == b'[]' and saved[1].error is None
     assert saved[-1].raw_path is None and saved[-1].error == 'Timeout'
 

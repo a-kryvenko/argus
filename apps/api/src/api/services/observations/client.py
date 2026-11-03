@@ -6,7 +6,7 @@ import httpx
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-READS = frozenset({'latest', 'metrics', 'sdo-browse'})
+READS = frozenset({'latest', 'history', 'sdo'})
 
 
 async def read_observations(

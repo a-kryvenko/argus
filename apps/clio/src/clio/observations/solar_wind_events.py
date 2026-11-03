@@ -8,7 +8,7 @@ from sqlalchemy import select, text
 from clio.db.models.measurement import Measurement
 from clio.observations.errors import ObservationUnavailable
 from clio.db.models.file_observation import FileObservation
-from clio.observations.archive import read_original, read_receipt
+from clio.observations.archive import read_receipt
 
 from common.schemas.solar_wind_events import (SolarWindEvent, EnlilArrivalInput, ArrivalSourceReceipt,
                                                EventInputs, HourlyWindSpeed, L1Sample, EnlilProfile, SourcePoll)
@@ -224,14 +224,13 @@ async def donki_inputs(session, as_of):
     candidates = _latest(new, lambda r: r.source_product)
 
     def decode():
-        from clio.providers.donki import decode as decode_raw
         polls = []
         for endpoint, row in sorted(candidates.items()):
             metadata = read_receipt(row)
-            records = decode_raw(read_original('donki', row.raw_path, row.sha256))
+            records = metadata['records']
             start, end = metadata['request_start'], metadata['request_end']
             polls.append(SourcePoll(endpoint=endpoint, poll_id=row.id, received_at=row.received_at,
-                sha256=row.sha256, request_start=start, request_end=end, records=records))
+                sha256=metadata['sha256'], request_start=start, request_end=end, records=records))
         return polls
 
     polls = await asyncio.to_thread(decode)
@@ -264,8 +263,7 @@ async def enlil_input(session, as_of):
         if not candidates:
             return None
         _, _, _, row, metadata = max(candidates, key=lambda c: c[:3])
-        read_original('enlil', row.raw_path, row.sha256)
-        return EnlilProfile(receipt_id=row.id, received_at=row.received_at, sha256=row.sha256,
+        return EnlilProfile(receipt_id=row.id, received_at=row.received_at, sha256=metadata['sha256'],
             **{key: metadata[key] for key in ('source_key', 'source_url', 'source_modified_at', 'model_created_at')},
             **metadata['payload'])
 

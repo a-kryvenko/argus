@@ -12,7 +12,7 @@ from clio.ingestion.adapters import WideHistoryAdapter, historical_adapters
 from clio.ingestion.products import PRODUCTS
 from clio.ingestion import numeric_backfill as service
 from clio.observations.measurements import upsert_measurements
-from clio.providers.spdf_loader import SPDF_Loader
+from clio.providers.spdf import SPDF_Loader
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
 END = START + timedelta(hours=3)

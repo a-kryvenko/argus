@@ -33,7 +33,4 @@ def test_storage_configuration(monkeypatch, tmp_path):
         'endpoint': 'https://s3.example.com', 'key': 'dev-key',
         'secret': 'dev-secret', 'region': 'us-east-1',
     }
-    assert config.get_config().data_storage == 'local'
-    monkeypatch.setattr(config, '_config', None)
-    monkeypatch.setenv('DATA_STORAGE', 's3')
-    assert config.get_config().data_storage == 's3'
+    assert not hasattr(config.get_config(), 'data_storage')

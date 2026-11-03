@@ -1,4 +1,4 @@
-"""Observation reads go exclusively through the owner's versioned HTTP API."""
+"""Read observation catalogs over HTTP and original files from object storage."""
 import os
 import logging
 from datetime import UTC, datetime
@@ -23,7 +23,7 @@ def load_inputs(as_of: datetime | None = None, *, prepare_proswin=False, include
         if not inputs.observations.points:
             raise RuntimeError('No stored observations available in the requested history range; check ingestion')
         from prophet.services.inputs.solar_indices import enrich_inputs
-        inputs = enrich_inputs(inputs, client, url, token)
+        inputs = enrich_inputs(inputs)
         if include_events:
             try:
                 inputs.solar_wind_events = read_event_inputs(client, url, token, as_of)

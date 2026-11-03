@@ -163,3 +163,14 @@ def test_live_normalization_uses_configured_retention(monkeypatch, storage):
         asyncio.run(service.refresh_normalized_observations(config, now))
     assert load.call_args.args[1] == now - timedelta(days=8)
     assert 'omni.hourly' not in load.call_args.kwargs['source_products']
+
+
+def test_normalized_reader_converts_indices_to_contract_integers():
+    from clio.observations.normalized import load_normalized_observations
+    expected = dict(kp=1.33, dst=-10.75, ap=5.666666666666667, f10_7=98.39285714285714)
+    row = SimpleNamespace(observed_at=datetime(2026, 11, 3, tzinfo=UTC),
+        bx=1., by=2., bz=-3., v=420., n=5., t=100000., **expected)
+    session = AsyncMock()
+    session.execute.return_value = Mock(scalars=lambda: Mock(all=lambda: [row]))
+    result = asyncio.run(load_normalized_observations(session))
+    assert {metric: getattr(result.points[0], metric) for metric in expected} == {metric: int(value) for metric, value in expected.items()}

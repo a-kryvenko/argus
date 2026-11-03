@@ -40,7 +40,7 @@ class CelesTrakHistoryAdapter:
         self.frame = None
 
     def fetch(self, start, end):
-        from clio.providers.celestrak_loader import CELESTRAK_HISTORY_URL, fetch_celestrak_f107, METRICS
+        from clio.providers.celestrak import CELESTRAK_HISTORY_URL, fetch_celestrak_f107, METRICS
         if self.frame is None:
             self.frame = fetch_celestrak_f107(url=CELESTRAK_HISTORY_URL)
         return clean_records(wide_to_measurements(self.frame), start, end, METRICS)
@@ -51,17 +51,17 @@ class SOLFSMYHistoryAdapter:
         self.frame = None
 
     def fetch(self, start, end):
-        from clio.providers.solfsmy_loader import fetch_solfsmy_means, MEAN_COLUMNS
+        from clio.providers.solfsmy import fetch_solfsmy_means, MEAN_COLUMNS
         if self.frame is None:
             self.frame = fetch_solfsmy_means()
         return clean_records(wide_to_measurements(self.frame), start, end, MEAN_COLUMNS)
 
 
 def historical_adapters():
-    from clio.providers.omniweb_loader import OMNIWeb_Loader
-    from clio.providers.spdf_loader import SPDF_Loader
-    from clio.providers.gfz_loader import load_gfz_f107
-    from clio.providers.soho_loader import SOHOLoader
+    from clio.providers.omniweb import OMNIWeb_Loader
+    from clio.providers.spdf import SPDF_Loader
+    from clio.providers.gfz import load_gfz_f107
+    from clio.providers.soho import SOHOLoader
     return {
         'omni.hourly': WideHistoryAdapter(OMNIWeb_Loader.load, PRODUCTS['omni.hourly'].metrics),
         'ace.plasma_hourly': WideHistoryAdapter(SPDF_Loader.load_plasma, ('v', 'n', 't')),

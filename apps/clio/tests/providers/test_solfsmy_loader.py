@@ -10,7 +10,7 @@ from clio.ingestion import numeric_live
 from clio.ingestion.adapters import SOLFSMYHistoryAdapter
 from clio.ingestion.conversion import wide_to_measurements
 from clio.ingestion.live import load_solfsmy_means
-from clio.providers import solfsmy_loader as loader
+from clio.providers import solfsmy as loader
 from contextlib import asynccontextmanager
 
 TEXT = '# YYYY DDD JD F10 F81c S10 S81c M10 M81c Y10 Y81c Ssrc\n' + (

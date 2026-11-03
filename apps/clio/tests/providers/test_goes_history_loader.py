@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 import xarray as xr
 
-from clio.providers import goes_history_loader as loader
+from clio.providers import goes_history as loader
 
 
 def _euvs_file(path: Path, satellite=16):

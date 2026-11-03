@@ -87,7 +87,7 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
               'prophet-api': 'PROPHET', 'intelligence': 'INTELLIGENCE',
               'intelligence-api': 'INTELLIGENCE', 'api': 'API'}
     allowed_data = {
-        'clio': {'observations': False, **({'media': False} if filename == 'docker-compose.override.yml' else {})},
+        'clio': {},
         'prophet': {'models': True, 'prophet': False, 'demo': False},
         'proswin': {'models': True, 'prophet': False},
         'prophet-api': {}, 'intelligence': {}, 'intelligence-api': {},
@@ -104,7 +104,7 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
                 actual[target.removeprefix('/var/www/data/')] = len(parts) == 3 and parts[2] == 'ro'
         assert actual == allowed, (filename, name, actual)
         for dependency, settings in service.get('depends_on', {}).items():
-            if dependency not in {'postgres', 'redis'}:
+            if dependency not in {'postgres', 'redis', 'storage'}:
                 assert settings['condition'] == 'service_started', (filename, name, dependency)
         if name in owners:
             environment = service['environment']
@@ -135,13 +135,21 @@ def test_api_status_does_not_require_a_worker_or_traffic_log(filename):
     assert 'MONITORING_TRAFFIC_LOG' not in services['api']['environment']
 
 
-def test_media_storage_is_local_in_dev_and_s3_in_production():
-    for filename, storage in [('docker-compose.override.yml', 'local'),
-                              ('.deploy/docker-compose.yml', 's3')]:
+def test_observation_storage_uses_s3_in_both_environments():
+    for filename in ('docker-compose.override.yml', '.deploy/docker-compose.yml'):
         services = load_compose(filename)['services']
         assert not {'minio', 'minio-init'} & services.keys()
-        for name in ('clio', 'clio-worker'):
-            assert services[name]['environment']['DATA_STORAGE'] == storage
-            if storage == 'local':
-                assert './data/media:/var/www/data/media' in services[name]['volumes']
-                assert not any(key.startswith('S3_') for key in services[name]['environment'])
+        for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
+            assert 'DATA_STORAGE' not in services[name]['environment']
+            assert services[name]['environment']['S3_ENDPOINT_URL']
+    dev = load_compose('docker-compose.override.yml')
+    storage = dev['services']['storage']
+    assert storage['image'] == 'chrislusf/seaweedfs:4.52'
+    assert '-bucket=argus-private,argus-public' in storage['command']
+    assert 'seaweed-data:/data' in storage['volumes']
+    assert all(port.startswith('127.0.0.1:') for port in storage['ports'])
+    assert set(dev['services']['clio']['environment']) >= {'S3_PUBLIC_BASE_URL', 'S3_ACCESS_KEY_ID'}
+    assert dev['services']['clio']['environment']['S3_ACCESS_KEY_ID'] != dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
+    for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
+        assert dev['services'][name]['depends_on']['storage']['condition'] == 'service_healthy'
+    assert 'storage' not in load_compose('.deploy/docker-compose.yml')['services']

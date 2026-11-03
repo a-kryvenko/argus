@@ -90,7 +90,7 @@ def test_independent_feeds_start_concurrently():
 def test_geomagnetic_loader_returns_native_values_without_storage(monkeypatch):
     received = NOW - timedelta(minutes=1)
     fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'kp': [3.33], 'ap': [18.]}))
-    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', fetch)
+    monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', fetch)
     result = loaders.load_geomagnetic('kp', NOW - timedelta(days=1), NOW)
     fetch.assert_called_once_with('kp')
     assert result.value.tolist() == [3.33, 18.]
@@ -99,7 +99,7 @@ def test_geomagnetic_loader_returns_native_values_without_storage(monkeypatch):
 
 
 def test_native_error_propagates(monkeypatch):
-    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(side_effect=OSError('offline')))
+    monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', Mock(side_effect=OSError('offline')))
     with pytest.raises(OSError):
         loaders.load_geomagnetic('dst', NOW - timedelta(days=1), NOW)
 
@@ -165,7 +165,7 @@ def test_locked_product_does_not_fetch_or_write(monkeypatch):
 def test_collection_writes_full_feed_once_and_reports_only_usable_selected_values(monkeypatch):
     session = storage(monkeypatch)
     fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'bx': [1.], 'by': [None], 'bz': [-4.], 'bt': [6.]}))
-    monkeypatch.setattr(loaders.solar_wind_loader, 'fetch_records', fetch)
+    monkeypatch.setattr(loaders.solar_wind, 'fetch_records', fetch)
     report = asyncio.run(live.collect_live(load_observation_config(), ['bz', 'by'], now=NOW))
     fetch.assert_called_once_with('mag')
     assert report['downloaded_measurements'] == 1
@@ -183,7 +183,7 @@ def test_storage_failure_rolls_back_records_and_reports_failure(monkeypatch, cap
     from sqlalchemy.exc import SQLAlchemyError
     session = storage(monkeypatch)
     session.execute.side_effect = [Mock(scalar_one=Mock(return_value=True)), SQLAlchemyError('write failed')]
-    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'dst': [-20.]})))
+    monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'dst': [-20.]})))
     report = asyncio.run(live.collect_live(load_observation_config(), ['dst'], now=NOW))
     assert report['failed_metrics'] == ['dst']
     assert 'swpc.dst' in caplog.text and 'write failed' in caplog.text
@@ -193,7 +193,7 @@ def test_storage_failure_rolls_back_records_and_reports_failure(monkeypatch, cap
 
 def test_rejected_provider_records_are_not_written(monkeypatch):
     session = storage(monkeypatch)
-    monkeypatch.setattr(loaders.geomagnetic_loader, 'fetch_records', Mock(
+    monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', Mock(
         return_value=pd.DataFrame(columns=['timestamp', 'kp', 'ap'])))
     report = asyncio.run(live.collect_live(load_observation_config(), ['kp'], now=NOW))
     assert report['downloaded_measurements'] == 0

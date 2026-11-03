@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import numpy as np
 import pandas as pd
 
-from clio.providers.spdf_loader import SPDF_Loader
+from clio.providers.spdf import SPDF_Loader
 
 
 def test_cdf_fill_and_invalid_values_are_masked_before_hourly_selection():

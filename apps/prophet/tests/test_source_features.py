@@ -8,6 +8,9 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pandas as pd
 import pytest
+from uuid import uuid4
+from common.data import datamanager as object_files
+from common.schemas.files import FileReference
 
 from prophet.services.inputs import solar_indices as service
 from prophet.services.inputs import cache as source_cache
@@ -19,6 +22,8 @@ NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 
 
 def reference(content, *, kind='goes', **kwargs):
+    kwargs.setdefault('file', FileReference(id=uuid4(), timestamp=NOW, bucket='argus-private',
+        key=kind + '/' + hashlib.sha256(content).hexdigest()))
     return RawObservationFile(kind=kind, slot_at=NOW, observed_at=NOW,
         available_at=NOW, sha256=hashlib.sha256(content).hexdigest(), source_product=kind+'.live', **kwargs)
 
@@ -29,14 +34,15 @@ def inputs(*refs):
     return ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[point]), files=list(refs))
 
 
-def test_original_cache_detects_corruption_and_refetches(tmp_path, monkeypatch):
+def test_original_reads_s3_bytes_and_rejects_corrupt_content(monkeypatch):
     content = b'raw observation'
     ref = reference(content)
-    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
-    with httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200, content=content))) as client:
-        path = source_cache.original(client, 'http://clio', 'secret', ref)
-        path.write_bytes(b'broken cache')
-        assert source_cache.original(client, 'http://clio', 'secret', ref).read_bytes() == content
+    read = Mock(return_value=content)
+    monkeypatch.setattr(object_files, 'read_file', read)
+    assert source_cache.original(ref) == content
+    read.return_value = b'corrupt'
+    with pytest.raises(ValueError, match='checksum'):
+        source_cache.original(ref)
 
 
 @pytest.fixture
@@ -81,33 +87,17 @@ def test_wire_features_and_legacy_calibrations_are_not_trusted():
     source = inputs().model_dump()
     source['gong'] = {'invalid': 'Clio must not supply features'}
     parsed = ObservationInputs.model_validate(source)
-    result = service.enrich_inputs(ForecastInputs.model_validate(parsed.model_dump()), None, '', '')
+    result = service.enrich_inputs(ForecastInputs.model_validate(parsed.model_dump()))
     assert 'gong' not in result.model_dump()
     assert result.observations.points[0].s10 is None
 
 
 def test_retired_aia_inputs_do_not_download_or_load_sunpy(monkeypatch):
-    ref = RawObservationFile(kind='aia', slot_at=NOW, observed_at=NOW,
-        available_at=NOW, sha256='a'*64, source_product='aia.nrt_193')
+    ref = reference(b'aia',kind='aia')
     monkeypatch.setattr(service, 'original', lambda *args: pytest.fail('Retired AIA must not be downloaded'))
-    result = service.enrich_inputs(inputs(ref), None, 'http://clio', 'secret')
+    result = service.enrich_inputs(inputs(ref))
     assert 'aia_frames' not in result.model_dump()
 
-
-def test_source_cache_prunes_old_files_only(tmp_path, monkeypatch):
-    import os
-    from datetime import datetime
-    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path)
-    folder = tmp_path / 'aia'
-    folder.mkdir()
-    old = folder / 'old.features-v1.npz'
-    old.write_bytes(b'old')
-    current = folder / 'current.fits'
-    current.write_bytes(b'current')
-    expired = datetime.now(UTC).timestamp() - timedelta(days=46).total_seconds()
-    os.utime(old, (expired, expired))
-    source_cache.prune_source_cache()
-    assert not old.exists() and current.read_bytes() == b'current'
 
 
 @pytest.mark.parametrize('available_at', [NOW-timedelta(days=1), NOW, NOW+timedelta(hours=1)])
@@ -115,8 +105,7 @@ def test_retired_gong_inputs_are_never_downloaded(monkeypatch, available_at):
     ref = reference(b'old magnetogram', kind='gong')
     ref.available_at = available_at
     monkeypatch.setattr(service, 'original', lambda *args: pytest.fail('Retired GONG must not be downloaded'))
-    monkeypatch.setattr(service, 'prune_source_cache', lambda: None)
-    result = service.enrich_inputs(inputs(ref), None, 'http://clio', 'secret')
+    result = service.enrich_inputs(inputs(ref))
     assert 'gong' not in result.model_dump()
     assert result.observations.points[0].v == 420
 
@@ -127,14 +116,12 @@ def test_goes_enrichment_remains_active_without_gong(calibrated_goes, tmp_path, 
     ref = reference(content)
     gong = reference(b'old magnetogram', kind='gong')
     calls = []
-    monkeypatch.setattr(source_cache, 'cache_root', lambda: tmp_path/'cache')
-    def handler(request):
-        calls.append(request)
-        assert request.url.path == '/internal/v1/observations/files/goes/'+ref.sha256
-        assert request.headers['Authorization'] == 'Bearer secret'
-        return httpx.Response(200, content=content)
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = service.enrich_inputs(inputs(gong, ref), client, 'http://clio', 'secret')
+    def read(bucket, key, **kwargs):
+        calls.append(key)
+        assert bucket == 'argus-private' and key == ref.file.key
+        return content
+    monkeypatch.setattr(object_files, 'read_file', read)
+    result = service.enrich_inputs(inputs(gong, ref))
     assert len(calls) == 1
     assert {row.metric for row in result.measurements} == {'s10', 'm10', 'y10'}
     assert result.observations.points[0].s10 == 101.
@@ -157,3 +144,18 @@ async def test_legacy_snapshot_drops_gong_features_before_storage(monkeypatch):
 
 
 pytestmark = pytest.mark.anyio
+
+
+def test_original_reads_object_reference_without_http(tmp_path, monkeypatch):
+    content = b'original GOES samples'
+    ref = reference(content, file=FileReference(id=uuid4(), timestamp=NOW,
+        bucket='argus-private', key='observations/GOES/example.json'))
+    read = Mock(return_value=content)
+    monkeypatch.setattr(object_files, 'read_file', read)
+    assert source_cache.original(ref) == content
+    assert read.call_count == 1
+
+
+def test_missing_reference_never_falls_back_to_file_http():
+    with pytest.raises(ValueError):
+        reference(b'old original', file=None)

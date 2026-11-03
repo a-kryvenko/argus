@@ -16,6 +16,7 @@ class SDOBrowseImage(BaseModel):
     asset_id: str = Field(pattern='^' + ASSET_PATTERN + '$')
     captured_at: AwareDatetime
     source_updated_at: AwareDatetime | None = None
+    urls: dict[str, str] = Field(default_factory=dict)
 
 
 class SDOBrowseCatalog(BaseModel):

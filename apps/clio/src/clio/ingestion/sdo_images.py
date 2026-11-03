@@ -1,89 +1,70 @@
-"""Bounded hourly SDO collection with independent live, warmup and retention lanes."""
+"""Schedule SDO collection and persist prepared provider observations."""
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-import fcntl
 import logging
-from pathlib import Path
 
 import requests
+from botocore.exceptions import BotoCoreError, ClientError
+from sqlalchemy.exc import SQLAlchemyError
 
-from clio.providers.sdo_images import download_observation, fetch, prepare_observation
-from clio.observations.sdo_archive import (OBSERVED_CHANNELS, ORIGINAL_CHANNELS, archive_root, hourly_slots,
-                               image_path, original_path, prune, save_image, save_original, utc)
+from clio.db.locks import ingestion_lock
+from clio.providers import sdo as provider
+from clio.observations import sdo
+from clio.observations.sdo import COLLECTED_CHANNELS, hourly_slots
 
 logger = logging.getLogger(__name__)
+_warmup_cursor = None
 
 
-def collect_one(root, slot, channel, *, clock):
-    existing = image_path(root, slot, channel).exists()
-    keep_original = channel in ORIGINAL_CHANNELS
-    if existing and (not keep_original or original_path(root, slot, channel).exists()):
-        return 'existing'
+def collect_one(slot, channel, *, clock):
     try:
-        reference = fetch(channel, slot)
-        result = download_observation(reference[channel + '_url'], channel,
-                                      slot=slot, now=clock(), include_original=keep_original)
-        image, metadata = result[:2]
-        original = result[2] if keep_original else None
-        image, metadata = prepare_observation(image, metadata)
+        now = clock()
+        if channel not in COLLECTED_CHANNELS:
+            return 'unavailable'
+        if slot not in hourly_slots(now):
+            return 'expired'
+        if sdo.scientific_complete(slot, channel):
+            return 'existing'
+        image, metadata, original = provider.load_observation(channel, slot, now=now)
         now = clock()
         if slot not in hourly_slots(now):
             return 'expired'
-        saved = save_image(root, slot, channel, image, metadata, now=now)
-        if original is not None:
-            restored = save_original(root, slot, channel, original, now=now)
-            if restored and not saved:
-                return 'restored'
-        return 'saved' if saved else 'existing'
+        metadata = dict(metadata, version=sdo.VERSION, slot_at=slot.isoformat(), channel=channel,
+                        available_at=now.isoformat())
+        sdo.publish_scientific(image, metadata, original)
+        return 'saved'
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code == 404:
             return 'unavailable'
         logger.warning('SDO download failed: %s %s: %s', slot, channel, exc)
-    except (requests.RequestException, ValueError, OSError) as exc:
+    except (requests.RequestException, ValueError, OSError, BotoCoreError, ClientError, SQLAlchemyError) as exc:
         logger.warning('SDO observation failed: %s %s: %s', slot, channel, exc)
     return 'failed'
 
 
-def cycle(root, mode, *, batch_hours=6, clock=lambda: datetime.now(UTC),
-          full=False, start=None, end=None, now=None):
-    """A persistent per-lane lock prevents duplicate workers; publication has its own lock."""
-    if mode not in ('live', 'warmup', 'cleanup'):
+def cycle(mode, *, batch_hours=6, clock=lambda: datetime.now(UTC), full=False, start=None, end=None, now=None):
+    global _warmup_cursor
+    if mode not in ('live', 'warmup'):
         raise ValueError('Unknown SDO mode')
-    root = Path(root)
-    root.mkdir(parents=True, exist_ok=True)
-    with (root / f'.{mode}.lock').open('a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+    with ingestion_lock('sdo-' + mode, 730200 if mode == 'live' else 730201) as acquired:
+        if not acquired:
             return {'busy': True}
-        if mode == 'cleanup':
-            report = {'removed': prune(root, now=clock())}
-        else:
-            # Fix the requested slots while download/publication clocks advance.
-            slots = hourly_slots(now if now is not None else clock())
-            cursor = root / '.warmup-cursor'
-            if mode == 'live':
-                slots = slots[:4]
-            elif not full:
-                slots = slots[4:]
-                if cursor.exists():
-                    previous = utc(cursor.read_text().strip())
-                    # Continue toward older hours, wrapping even across missing source files.
-                    older = [s for s in slots if s < previous]
-                    slots = older + [s for s in slots if s >= previous]
-                slots = slots[:batch_hours]
-            if start is not None:
-                slots = [slot for slot in slots if start <= slot < end]
-            report = dict(saved=0, existing=0, restored=0, unavailable=0, expired=0, failed=0)
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                for slot in slots:
-                    results = pool.map(lambda channel: collect_one(root, slot, channel, clock=clock),
-                                       OBSERVED_CHANNELS)
-                    for result in results:
-                        report[result] += 1
-                    if mode == 'warmup' and not full:
-                        temporary = root / '.warmup-cursor.part'
-                        temporary.write_text(slot.isoformat())
-                        temporary.replace(cursor)
+        slots = hourly_slots(now if now is not None else clock())
+        if mode == 'live':
+            slots = slots[:4]
+        elif not full:
+            slots = slots[4:]
+            if _warmup_cursor is not None:
+                slots = [s for s in slots if s < _warmup_cursor] + [s for s in slots if s >= _warmup_cursor]
+            slots = slots[:batch_hours]
+        if start is not None:
+            slots = [slot for slot in slots if start <= slot < end]
+        report = dict(saved=0, existing=0, unavailable=0, expired=0, failed=0)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for slot in slots:
+                for result in pool.map(lambda channel: collect_one(slot, channel, clock=clock), COLLECTED_CHANNELS):
+                    report[result] += 1
+                if mode == 'warmup' and not full:
+                    _warmup_cursor = slot
         logger.info('SDO %s: %s', mode, report)
         return report

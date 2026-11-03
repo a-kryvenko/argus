@@ -40,7 +40,7 @@ tokens. Observation, forecast and Intelligence tokens must differ.
 
 | Process | Data mounts |
 | --- | --- |
-| Clio HTTP/worker | `data/observations`, writable |
+| Clio HTTP/worker | none; temporary worker heartbeat in `/tmp` |
 | Prophet cron jobs | `data/prophet` and `data/demo`, writable; `data/models`, read-only |
 | PROSWIN executor | Prophet cache, writable; models, read-only |
 | API | Metrics and demo exports, read-only |
@@ -50,6 +50,10 @@ Readiness checks local resources. Upstream startup uses `service_started`;
 unavailable inputs do not block reading stored results. Separate DB owners enforce
 access within a shared PostgreSQL instance. Development source mounts and shared
 infrastructure are not a hostile-code security boundary.
+
+Observation APIs return object references. Services read private files directly from S3;
+browsers read public files directly. Development uses SeaweedFS with the same contract.
+Research and notebooks use local datasets without S3 access.
 
 ## Independent service development
 

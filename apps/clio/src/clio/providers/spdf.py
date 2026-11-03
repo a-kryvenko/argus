@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import cdflib
 import tempfile
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 SOLAR_WIND_URL_PATTERN = "https://spdf.gsfc.nasa.gov/pub/data/ace/swepam/level_2_cdaweb/swe_k0/{year}/ac_k0_swe_{ymd}_v01.cdf"
 

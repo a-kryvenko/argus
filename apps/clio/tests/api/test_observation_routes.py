@@ -25,9 +25,13 @@ def result(records):
 
 def test_only_two_numeric_routes_and_file_routes_remain():
     paths = set(application.openapi()['paths'])
-    numeric = {path for path in paths if path.startswith('/internal/v1/observations')
-               and not any(part in path for part in ('/files', '/sdo-', '/solar-wind-events/'))}
-    assert numeric == {'/internal/v1/observations/latest', '/internal/v1/observations/metrics'}
+    assert {path for path in paths if path.startswith('/internal/v1/')} == {
+        '/internal/v1/files',
+        '/internal/v1/observations/latest',
+        '/internal/v1/observations/history',
+        '/internal/v1/observations/sdo',
+        '/internal/v1/observations/solar-wind-events/inputs',
+    }
 
 
 def test_latest_keeps_independent_times_and_null_latest_values():
@@ -80,7 +84,7 @@ def client(monkeypatch):
 def test_route_has_compact_payload_and_passes_selection(monkeypatch):
     read = AsyncMock(return_value={'interval': '5m', 'points': [{'time': NOW, 'v': 400.}]})
     monkeypatch.setattr(reads, 'history', read)
-    response = client(monkeypatch).get('/internal/v1/observations/metrics', params={
+    response = client(monkeypatch).get('/internal/v1/observations/history', params={
         'metrics': 'v,v', 'from': NOW.isoformat(), 'to': (NOW+timedelta(hours=1)).isoformat(), 'interval': '5m'})
     assert response.status_code == 200
     assert response.headers['cache-control'] == 'no-store'
@@ -95,7 +99,42 @@ def test_route_has_compact_payload_and_passes_selection(monkeypatch):
 def test_invalid_numeric_reads_fail_before_storage(monkeypatch, query):
     read = AsyncMock()
     monkeypatch.setattr(reads, 'history', read)
-    response = client(monkeypatch).get('/internal/v1/observations/metrics', params={
+    response = client(monkeypatch).get('/internal/v1/observations/history', params={
         'metrics': 'v', 'from': NOW.isoformat(), 'to': (NOW+timedelta(hours=1)).isoformat(), **query})
     assert response.status_code == 422
     read.assert_not_awaited()
+
+
+def test_hourly_indices_conform_to_integer_observation_contract():
+    from clio.observations.schema import REQUIRED_METRICS
+    from common.schemas.observation import Observation
+    values = dict(bx=1., by=2., bz=-3., v=420., n=5., t=100000.,
+                  kp=1.5533333333333332, dst=-10.75, ap=5.666666666666667, f10_7=98.39285714285714)
+    session = AsyncMock()
+    session.execute.return_value = result([(NOW, *(values[m] for m in REQUIRED_METRICS))])
+    data = asyncio.run(reads.history(session, REQUIRED_METRICS, NOW, NOW+timedelta(hours=1),
+                                    '1h', NOW+timedelta(hours=2)))
+    point = data['points'][0]
+    assert {metric: point[metric] for metric in reads.INTEGER_METRICS} == dict(kp=1, dst=-10, ap=5, f10_7=98)
+    assert all(type(point[metric]) is int for metric in reads.INTEGER_METRICS)
+    assert point['v'] == 420.
+    Observation.model_validate({'points': [dict(issue_time=point['time'], **{m: point[m] for m in REQUIRED_METRICS})]})
+
+
+def test_indices_are_converted_after_five_minute_aggregation():
+    session = AsyncMock()
+    session.execute.return_value = result([record('ap', 0, 1.9), record('ap', 1, 2.9),
+                                          record('v', 0, 420.5), record('v', 1, 421.5)])
+    data = asyncio.run(reads.history(session, ['ap', 'v'], NOW, NOW+timedelta(minutes=5),
+                                    '5m', NOW+timedelta(minutes=5)))
+    assert data['points'] == [dict(time=NOW, ap=2, v=421.)]
+    assert type(data['points'][0]['ap']) is int
+
+
+def test_latest_indices_are_integers_and_missing_values_stay_null():
+    session = AsyncMock()
+    session.execute.return_value = result([record('kp', 0, 1.33), record('ap', 0, None),
+                                          record('dst', 0, -10.75), record('f10_7', 0, 98.39)])
+    data = asyncio.run(reads.latest(session, ['kp', 'ap', 'dst', 'f10_7'], NOW))
+    assert data['points'] == [dict(time=NOW, kp=1, ap=None, dst=-10, f10_7=98)]
+    assert type(data['points'][0]['kp']) is int

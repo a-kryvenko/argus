@@ -3,17 +3,21 @@
 x-clio-runtime: &clio-runtime
   restart: unless-stopped
   environment:
-    DATA_STORAGE: s3
     S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
     S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
     S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
     S3_REGION: ${S3_REGION:-auto}
+    S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-https://media.argussun.com}
   healthcheck: &clio-healthcheck
     start_interval: 1s
 
 x-prophet-runtime: &prophet-runtime
   environment: &prophet-environment
     OBSERVATIONS_URL: http://observations-router:8101
+    S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+    S3_ACCESS_KEY_ID: ${S3_READ_ACCESS_KEY_ID:-}
+    S3_SECRET_ACCESS_KEY: ${S3_READ_SECRET_ACCESS_KEY:-}
+    S3_REGION: ${S3_REGION:-auto}
 
 x-intelligence-runtime: &intelligence-runtime
   restart: unless-stopped
@@ -47,7 +51,6 @@ services:
       ARGUS_WORKDIR: /var/www
     volumes:
       - ./configs:/var/www/configs:ro
-      - ./data/observations:/var/www/data/observations
     networks: [backend]
 
   prophet:
@@ -91,6 +94,10 @@ services:
     environment:
       OBSERVATIONS_URL: http://observations-router:8101
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_ACCESS_KEY_ID: ${S3_READ_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_READ_SECRET_ACCESS_KEY:-}
+      S3_REGION: ${S3_REGION:-auto}
     networks: [observations]
 
   intelligence:

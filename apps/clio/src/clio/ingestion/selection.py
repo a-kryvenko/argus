@@ -24,9 +24,8 @@ async def merge_sdo(result, config, *, now, mode, metrics=None):
         return result
     import asyncio
     from clio.ingestion.sdo_images import cycle
-    from clio.observations.sdo_archive import archive_root
     report = await asyncio.to_thread(
-        cycle, archive_root(), mode,
+        cycle, mode,
         full=True, now=now,
         start=now - timedelta(days=config.sdo_images.backfill_days) if mode == 'warmup' else None,
         end=now if mode == 'warmup' else None)

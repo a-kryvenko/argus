@@ -1,104 +1,32 @@
+"""Validate the scientific SDO contract independently of its storage backend."""
 from datetime import UTC, datetime, timedelta
-
 import numpy as np
 import pytest
+from clio.observations import sdo
 
-from clio.observations.sdo_archive import hourly_slots, image_path, prune, read_image, save_image
-
-
-NOW = datetime(2026, 9, 30, 12, 30, tzinfo=UTC)
+NOW = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
 
 
-def receipt(slot):
-    return dict(observed_at=slot.isoformat(), available_at=(slot + timedelta(minutes=20)).isoformat(),
-                source='test', preprocessing='test-v1', units='DN', sha256='test-digest')
+def test_hourly_collection_window():
+    slots = sdo.hourly_slots(NOW)
+    assert len(slots) == 96 and len(set(slots)) == 96
+    assert slots[0] == NOW.replace(minute=0) and slots[-1] == slots[0]-timedelta(hours=95)
 
 
-def test_retention_boundary_and_unrelated_files(tmp_path):
-    slots = hourly_slots(NOW)
-    assert len(slots) == 1080 and len(set(slots)) == 1080
-    image = np.ones((512, 512), dtype=np.float32)
-    for slot in (slots[0], slots[-1]):
-        assert save_image(tmp_path, slot, 'aia94', image, receipt(slot), now=NOW)
-    unrelated = tmp_path / 'notes.txt'
-    unrelated.write_text('keep')
-    assert prune(tmp_path, now=NOW + timedelta(hours=1)) == 1
-    assert image_path(tmp_path, slots[0], 'aia94').exists()
-    assert unrelated.exists()
-    with pytest.raises(ValueError, match='window'):
-        save_image(tmp_path, slots[-1], 'aia94', image, receipt(slots[-1]), now=NOW + timedelta(hours=1))
+def test_metadata_and_pixel_validation(scientific_source):
+    from clio.providers.sdo import prepare_observation
+    image, metadata = prepare_observation(scientific_source.image, scientific_source.download.return_value[1])
+    metadata.update(version=1, slot_at=scientific_source.slot.isoformat())
+    sdo.validate(image, metadata)
+    with pytest.raises(ValueError):
+        sdo.validate(image.astype(np.float64), metadata)
+    image[0, 0] = np.inf
+    with pytest.raises(ValueError):
+        sdo.validate(image, metadata)
 
 
-def test_first_receipt_and_causal_reads(tmp_path):
-    slot = hourly_slots(NOW)[0]
-    image = np.ones((512, 512), dtype=np.float32)
-    assert save_image(tmp_path, slot, 'aia94', image, receipt(slot), now=NOW)
-    assert not save_image(tmp_path, slot, 'aia94', image * 2, receipt(slot), now=NOW)
-    actual, meta = read_image(tmp_path, slot, 'aia94', as_of=NOW)
-    np.testing.assert_array_equal(actual, image)
-    assert meta['preprocessing'] == 'test-v1'
-    with pytest.raises(ValueError, match='not available'):
-        read_image(tmp_path, slot, 'aia94', as_of=slot)
-    with pytest.raises(FileNotFoundError):
-        read_image(tmp_path, slot, 'hmi_m')
-
-
-def test_reject_invalid_observations(tmp_path):
-    slot = hourly_slots(NOW)[0]
-    for image in (np.zeros((256, 256)), np.full((512, 512), np.nan)):
-        with pytest.raises(ValueError, match='512x512'):
-            save_image(tmp_path, slot, 'aia94', image, receipt(slot), now=NOW)
-    with pytest.raises(ValueError, match='timezone'):
-        hourly_slots(NOW.replace(tzinfo=None))
-    with pytest.raises(ValueError, match='whole UTC hour'):
-        image_path(tmp_path, NOW, 'aia94')
-
-
-def test_archive_accepts_only_configured_observation_channels(tmp_path):
-    from clio.observations.sdo_archive import OBSERVED_CHANNELS
-    slot = hourly_slots(NOW)[0]
-    image = np.ones((512, 512), dtype=np.float32)
-    assert len(OBSERVED_CHANNELS) == 9 and {'aia1600', 'hmi_m'}.issubset(OBSERVED_CHANNELS)
-    assert save_image(tmp_path, slot, 'hmi_m', image, receipt(slot), now=NOW)
-    for channel in ('halpha', 'hmi_v', 'hmi_bx', 'hmi_by', 'hmi_bz'):
-        with pytest.raises(ValueError, match='schema/channel'):
-            save_image(tmp_path, slot, channel, image, receipt(slot), now=NOW)
-    assert prune(tmp_path, now=NOW + timedelta(hours=1080)) == 1
-
-
-def test_native_original_matches_first_receipt_and_expires_with_image(tmp_path):
-    import hashlib
-    from clio.observations.sdo_archive import original_path, save_original
-    slot = hourly_slots(NOW)[0]
-    content = b'native FITS pixels'
-    metadata = {**receipt(slot), 'sha256': hashlib.sha256(content).hexdigest()}
-    save_image(tmp_path, slot, 'aia193', np.ones((512, 512), np.float32), metadata, now=NOW)
-    with pytest.raises(ValueError, match='SHA256'):
-        save_original(tmp_path, slot, 'aia193', b'other pixels', now=NOW)
-    assert save_original(tmp_path, slot, 'aia193', content, now=NOW)
-    assert not save_original(tmp_path, slot, 'aia193', content, now=NOW)
-    assert original_path(tmp_path, slot, 'aia193').read_bytes() == content
-    assert prune(tmp_path, now=NOW + timedelta(hours=1080)) == 1
-    assert not original_path(tmp_path, slot, 'aia193').exists()
-
-
-def test_archive_override_does_not_load_configuration_or_replace_credentials(tmp_path, monkeypatch):
-    from common import config
-    from clio.observations.sdo_archive import archive_root
-    import os
-    monkeypatch.setenv('ARGUS_SDO_ARCHIVE', str(tmp_path))
-    monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
-    def unexpected_config():
-        raise AssertionError('Explicit archive path must not load .env.local')
-    monkeypatch.setattr(config, 'get_config', unexpected_config)
-    assert archive_root() == tmp_path
-    assert os.environ['OBSERVATIONS_SERVICE_TOKEN'] == 'test-token'
-
-
-def test_archive_default_uses_configured_data_root(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-    from common import config
-    from clio.observations.sdo_archive import archive_root
-    monkeypatch.delenv('ARGUS_SDO_ARCHIVE', raising=False)
-    monkeypatch.setattr(config, 'get_config', lambda: SimpleNamespace(data_root=tmp_path))
-    assert archive_root() == tmp_path / 'observations/sdo'
+def test_object_keys_do_not_include_local_paths():
+    assert sdo.object_key('aia193', NOW, 'npz.512') == 'images/SDO/aia193/202611021030/512.npz'
+    assert sdo.object_key('aia193', NOW, 'jpg.original', public=True) == 'images/AIA/193/202611021030/original.jpg'
+    with pytest.raises(ValueError):
+        sdo.object_key('other', NOW, 'npz.512')

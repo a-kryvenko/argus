@@ -26,8 +26,8 @@ def configure(monkeypatch, handler):
 
 
 def resource_response(request, payload):
-    resource = request.url.path.removeprefix('/internal/v1/observations/')
-    if resource == 'metrics':
+    resource = request.url.path.removeprefix('/internal/v1/observations/') if request.url.path != '/internal/v1/files' else 'files'
+    if resource == 'history':
         interval = request.url.params['interval']
         data = {'interval': payload.get('interval', interval), 'points': [
             dict(time=point['issue_time'], **{k: v for k, v in point.items() if k != 'issue_time'})
@@ -47,13 +47,13 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
         return resource_response(request, stored_inputs().model_dump(mode='json'))
     configure(monkeypatch, handler)
     assert observations.load_inputs(NOW).observations.points[0].v == 420
-    assert len(calls) == 5
+    assert len(calls) == 4
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
     assert calls[0].url.params['interval'] == '1h'
     assert set(calls[0].url.params['metrics'].split(',')) >= {'f10_7', 'dst', 'ap', 's10_81mean'}
     assert calls[1].url.params['interval'] == '1m'
     assert calls[1].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
-    assert [request.url.params['kind'] for request in calls[2:]] == ['gong', 'goes', 'aia']
+    assert [request.url.params['kind'] for request in calls[2:]] == ['gong', 'goes']
     assert calls[3].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
 
 
@@ -87,7 +87,7 @@ def test_verification_reads_compact_live_metrics_and_excludes_end(monkeypatch):
     calls = []
     def handler(request):
         calls.append(request)
-        assert request.url.path == '/internal/v1/observations/metrics'
+        assert request.url.path == '/internal/v1/observations/history'
         assert request.headers['Authorization'] == 'Bearer test-token'
         assert request.url.params['interval'] == '1m'
         assert request.url.params['from'] == times[0].isoformat()
@@ -216,14 +216,15 @@ def test_runtime_catalog_selects_explicit_services():
 def test_assembles_native_measurements_and_originals(monkeypatch):
     from prophet.services.inputs.observations import read_observations
     def handler(request):
-        if request.url.path.endswith('/metrics'):
+        if request.url.path.endswith('/history'):
             payload = stored_inputs().model_dump(mode='json')
             payload['observations']['points'][0].update(v=430., n=4.5, dst=-20.)
             return resource_response(request, payload)
         if request.url.path.endswith('/files') and request.url.params['kind'] == 'gong':
             return httpx.Response(200, json={'success': True, 'data': [{
                 'kind': 'gong', 'slot_at': NOW.isoformat(), 'observed_at': NOW.isoformat(),
-                'available_at': NOW.isoformat(), 'sha256': 'a'*64, 'source_product': 'gong.live'}]})
+                'available_at': NOW.isoformat(), 'sha256': 'a'*64, 'source_product': 'gong.live',
+                'file': {'id':'00000000-0000-0000-0000-000000000001','timestamp':NOW.isoformat(),'bucket':'argus-private','key':'observations/GONG/source.fits'}}]})
         return resource_response(request, stored_inputs().model_dump(mode='json'))
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         result = read_observations(client, 'http://observations', 'test-token', NOW)

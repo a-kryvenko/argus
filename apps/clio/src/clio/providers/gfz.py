@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from clio.providers.contract import from_measurements
+from clio.providers._contract import from_measurements
 
 GFZ_URL = "https://kp.gfz.de/app/files/Kp_ap_Ap_SN_F107_since_1932.txt"
 

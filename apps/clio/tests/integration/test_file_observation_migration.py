@@ -60,9 +60,12 @@ def seed_legacy(database, monkeypatch, tmp_path):
 def archive_stage1(settings):
     """Prepare the on-disk format and identities produced by the stage 1 release."""
     from psycopg.rows import dict_row
-    from clio.db.models.file_observation import FileObservation
+    import sqlalchemy as sa
     from clio.db.session import get_db_session
-    from clio.observations.archive import observation_values, store_original, store_receipt
+    from uuid import UUID
+    import hashlib
+    import json
+    from clio import migrate_local_files as legacy
     from common.db.session import dispose_engine
 
     dsns, urls, _, _, raw = settings
@@ -74,19 +77,32 @@ def archive_stage1(settings):
         for row in rows:
             if kind in ('gong', 'goes'):
                 metadata = {k: v for k, v in row.items() if k not in ('fits_gzip', 'raw_path')}
-                receipt = store_original(kind, row['slot_at'], row['observed_at'], row['source_product'],
-                    lambda: raw[kind], expected=metadata, relative=Path('migrated') / (kind + '.gz'))
-                values.append(observation_values(kind, receipt))
+                identity = f'{kind}:{row["slot_at"].astimezone(UTC):%Y-%m-%dT%H:%M:%S.%f}:{row["source_product"]}'
+                id = UUID(hashlib.md5(identity.encode(), usedforsecurity=False).hexdigest())
+                source, key, received = row['source_product'], row['slot_at'].isoformat()+':'+row['source_product'], row['available_at']
             else:
-                metadata = {k: v for k, v in row.items() if k not in ('id', 'raw_gzip', 'sha256', 'error')}
-                values.append(store_receipt(kind, row['endpoint'] if kind == 'donki' else 'noaa.enlil',
-                    str(row['id']), id=row['id'], raw=raw[kind] if row['raw_gzip'] is not None else None,
-                    metadata=metadata, received_at=row['received_at'], error=row['error']))
+                metadata = {k: v for k, v in row.items() if k not in ('id', 'raw_gzip', 'error')}
+                id, source, key, received = row['id'], row['endpoint'] if kind == 'donki' else 'noaa.enlil', str(row['id']), row['received_at']
+            content = raw[kind] if row.get('error') is None else None
+            relative = (str(Path('migrated')/(kind+'.gz')) if kind in ('gong','goes') else str(id)+'.gz') if content is not None else None
+            if content is not None:
+                path = legacy.archive_path(kind,relative)
+                path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_bytes(gzip.compress(content))
+                metadata['sha256'] = hashlib.sha256(content).hexdigest()
+                path.with_suffix('.gz.receipt.json').write_text(json.dumps(metadata,default=str))
+            values.append(dict(id=id,kind=kind,source_product=source,source_key=key,received_at=received,
+                raw_path=relative,sha256=hashlib.sha256(content).hexdigest() if content is not None else None,error=row.get('error')))
 
     async def save():
         try:
             async with get_db_session() as session:
-                session.add_all([FileObservation(**record) for record in values])
+                columns = {'id': sa.Uuid(), 'kind': sa.String(), 'source_product': sa.String(),
+                    'source_key': sa.Text(), 'received_at': sa.DateTime(timezone=True),
+                    'raw_path': sa.Text(), 'sha256': sa.String(), 'error': sa.Text()}
+                legacy = sa.table('file_observation', *[sa.column(name, type) for name, type in columns.items()])
+                for record in values:
+                    await session.execute(sa.insert(legacy).values(**record))
                 await session.commit()
         finally:
             await dispose_engine()

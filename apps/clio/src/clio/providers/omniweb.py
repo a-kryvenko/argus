@@ -62,7 +62,7 @@ DEFAULT_VARS = {
 }
 
 from clio.providers.omni import clean_omni_values
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 
 class OMNIWeb_Loader:

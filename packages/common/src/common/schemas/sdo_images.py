@@ -1,11 +1,13 @@
-"""References to individual image observations on shared service storage."""
+"""References to individual image observations in object storage."""
 from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field
+from common.schemas.files import FileReference
 
 
 class SDOImageReference(BaseModel):
-    path: str = Field(description='Absolute NPZ path in the shared service filesystem')
+    file: FileReference
+    original: FileReference | None = None
     shape: tuple[Literal[512], Literal[512]] = (512, 512)
     dtype: Literal['float32'] = 'float32'
     metadata: dict[str, Any] = Field(description='Observation receipt; sha256 identifies the original FITS, not the NPZ')

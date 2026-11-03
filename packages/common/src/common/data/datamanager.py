@@ -1,14 +1,18 @@
-"""Store source files and responsive image variants locally or in S3."""
+"""Store source files and responsive image variants in S3."""
 import io
 import mimetypes
-import tempfile
 import uuid
+from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from contextlib import contextmanager
+from tempfile import TemporaryDirectory
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from botocore.config import Config
 from common.config import get_config
+from common.schemas.files import FileReference
 from PIL import Image, ImageOps
 
 IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
@@ -135,46 +139,47 @@ def upload_file(
     prefix = prefix.strip("/")
     key = f"{prefix}/{name}" if prefix else name
 
-    storage = get_config().data_storage
-
-    if storage == "local":
-        _upload_local(file, bucket, key)
-    elif storage == "s3":
-        _upload_s3(
-            file,
-            bucket,
-            key,
-            content_type or mimetypes.guess_type(name)[0] or "application/octet-stream",
-            cache_control
-        )
-    else:
-        raise ValueError(f"Unknown storage: {storage}")
-    
+    _upload_s3(file, bucket, key, content_type or mimetypes.guess_type(name)[0] or "application/octet-stream", cache_control)
     return key
 
 
-def _upload_local(content: bytes, bucket: str, key: str) -> None:
-    if not bucket or bucket in {".", ".."} or "/" in bucket:
-        raise ValueError("Invalid bucket name")
-    
-    root = (get_config().data_root / "media").resolve()
-    bucket_root = root / bucket
-    path = (bucket_root / key).resolve()
+def put_immutable_file(content: bytes, bucket: str, key: str, *, content_type: str) -> datetime:
+    """Create an object once and return its stored upload time."""
+    return create_immutable_file(content, bucket, key, content_type=content_type)[0]
 
-    if not path.is_relative_to(bucket_root) or path == bucket_root:
-        raise ValueError("File path is outside its bucket")
-    
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
 
+def create_immutable_file(content: bytes, bucket: str, key: str, *, content_type: str) -> tuple[datetime, bool]:
+    """Return the upload time and whether this call created the immutable object."""
+    created = False
+    client = _get_client()
+    for attempt in range(3):
+        try:
+            client.put_object(Bucket=bucket, Key=key, Body=content, ContentType=content_type,
+                              CacheControl=IMMUTABLE_CACHE if bucket == 'argus-public' else 'private',
+                              IfNoneMatch='*')
+            created = True
+            break
+        except ClientError as exc:
+            status = exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode')
+            if status == 412:
+                break
+            if status != 409 or attempt == 2:
+                raise
+    return client.head_object(Bucket=bucket, Key=key)['LastModified'], created
+
+
+def read_file(bucket: str, key: str, *, max_bytes: int | None = None) -> bytes:
     try:
-        with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(content)
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        result = _get_client().get_object(Bucket=bucket, Key=key)
+    except ClientError as exc:
+        if exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode') == 404:
+            raise FileNotFoundError(key) from None
+        raise
+    with result['Body'] as stream:
+        content = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
+    if max_bytes is not None and len(content) > max_bytes:
+        raise ValueError('Object exceeds the size limit')
+    return content
 
 
 def _upload_s3(
@@ -191,3 +196,21 @@ def _upload_s3(
         ContentType=content_type,
         CacheControl=cache_control,
     )
+
+
+def read_reference(reference: FileReference | dict, *, max_bytes=128 * 1024 * 1024) -> bytes:
+    reference = FileReference.model_validate(reference)
+    try:
+        return read_file(reference.bucket, reference.key, max_bytes=max_bytes)
+    except (BotoCoreError, ClientError) as exc:
+        raise OSError('Object storage is unavailable') from exc
+
+
+@contextmanager
+def temporary_file(reference: FileReference | dict, *, max_bytes=128 * 1024 * 1024):
+    reference = FileReference.model_validate(reference)
+    content = read_reference(reference, max_bytes=max_bytes)
+    with TemporaryDirectory(prefix='argus-object-') as directory:
+        path = Path(directory) / Path(reference.key).name
+        path.write_bytes(content)
+        yield path

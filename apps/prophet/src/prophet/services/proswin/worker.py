@@ -8,12 +8,12 @@ import logging
 import os
 import time
 from pathlib import Path
-from tempfile import TemporaryDirectory
 import fcntl
 import httpx
 import numpy as np
 import pandas as pd
 from common.config import get_config
+from common.data.datamanager import temporary_file
 from forecast.observation_inputs import ObservationInputs
 from prophet.services.inputs.observations import read_observations
 from forecast.inputs import ProswinPrediction
@@ -60,13 +60,13 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
     sunspots=pd.read_csv(ssn,sep=';',header=None)
     groups={}
     for channel in ['aia171','aia211']:
-        response=get(client,url+'/internal/v1/observations/sdo-images',headers=headers,params={
+        response=get(client,url+'/internal/v1/files',headers=headers,params={
             'start':(hour-pd.Timedelta(hours=95)).isoformat(),'end':(hour+pd.Timedelta(hours=1)).isoformat(),
-            'as_of':now.isoformat(),'channel':channel})
-        for item in response.json()['data']['items']:
-            m=item['metadata'];slot=pd.Timestamp(m['slot_at'])
+            'as_of':now.isoformat(),'kind':'aia','channel':channel})
+        for item in response.json()['data']:
+            m={key:value for key,value in item.items() if key != 'file'};slot=pd.Timestamp(m['slot_at'])
             if pd.Timestamp(m['available_at'])<=now and pd.Timestamp(m['observed_at'])<=now:
-                groups.setdefault(slot,{})[channel[3:]]=m
+                groups.setdefault(slot,{})[channel[3:]]={**m, 'file': item['file']}
     completed=0
     for slot,images in sorted(groups.items(),reverse=True):
         valid=slot+pd.Timedelta(hours=96);dest=root/'predictions'/f'{valid:%Y%m%dT%H}.json'
@@ -84,16 +84,15 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
                 if runtime_factory is None: raise RuntimeError('PROSWIN runtime factory required')
                 runtime = runtime_factory()
             features=physical_features(inputs,slot,sunspots)
-            with TemporaryDirectory(prefix='proswin-') as temporary:
-                crops={}
-                for wl,m in images.items():
-                    response=get(client,url+'/internal/v1/observations/files/aia/'+m['sha256'],headers=headers,
-                        params={'slot_at':slot.isoformat(),'channel':'aia'+wl})
-                    if len(response.content)>128*1024*1024: raise ValueError('Oversized AIA original')
-                    path=Path(temporary)/f'{wl}.fits';path.write_bytes(response.content)
-                    if digest(path)!=m['sha256']: raise ValueError('AIA checksum mismatch')
+            crops={}
+            for wl,m in images.items():
+                if not m.get('file'):
+                    raise ValueError('AIA original has no object reference; run Clio file migration')
+                with temporary_file(m['file']) as path:
+                    if digest(path)!=m['sha256']:
+                        raise ValueError('AIA checksum mismatch')
                     crops[wl]=runtime.crop(path,wl,slot)
-                value=runtime.predict(crops,features)
+            value=runtime.predict(crops,features)
             record={'valid_time':valid.isoformat(),'image_slot':slot.isoformat(),
                 'available_at':pd.Timestamp.now(tz='UTC').isoformat(),'value':value,'model_version':'proswin-fold1-nrt-v1',
                 'source_cutoff':now.isoformat(), 'inputs_read_at':inputs.read_at.isoformat(),'image_receipts':images,'features':features,

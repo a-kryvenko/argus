@@ -5,11 +5,15 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { LoaderCircle, Play, X } from 'lucide-react';
 import styles from './sdo.module.css';
 
-type SolarImage = { channel: string; asset_id: string };
+type ImageAsset = { asset_id: string; urls: Record<string, string> };
+type SolarImage = ImageAsset & { channel: string };
 const channels = ['094', '131', '171', '193', '211', '304', '335', '1600', '1700'];
 const small = [128, 256, 512];
 const large = [1024, 2048, 4096];
-const url = (image: SolarImage, size: number, format: string) => `/api/v1/sdo/images/${image.asset_id}_${size}.${format}`;
+const url = (image: SolarImage, size: number, format: string) => {
+  const entity = format === 'jpg' && size === 4096 ? 'jpg.original' : `${format}.${size}`;
+  return image.urls[entity];
+};
 
 function Picture({ image, full = false, onUnavailable }: { image: SolarImage; full?: boolean; onUnavailable?: () => void }) {
   const [failed, setFailed] = useState(false);
@@ -78,13 +82,13 @@ function Viewer({ image }: { image: SolarImage }) {
   </>;
 }
 
-export default function SDOChannels({ assets, onViewerOpenChange }: { assets: Record<string, string>; onViewerOpenChange: (open: boolean) => void }) {
+export default function SDOChannels({ assets, onViewerOpenChange }: { assets: Record<string, ImageAsset>; onViewerOpenChange: (open: boolean) => void }) {
   const [selected, setSelected] = useState<SolarImage | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const opener = useRef<HTMLButtonElement | null>(null);
   const images = channels.flatMap(channel => {
-    const asset_id = assets[channel];
-    return asset_id ? [{ channel, asset_id }] : [];
+    const asset = assets[channel];
+    return asset?.urls['jpg.256'] && asset.urls['webp.256'] ? [{ channel, ...asset }] : [];
   });
   if (images.length !== channels.length || images.some(image => image.asset_id === unavailable)) return null;
   return <section className={styles.section} aria-label="SDO AIA">

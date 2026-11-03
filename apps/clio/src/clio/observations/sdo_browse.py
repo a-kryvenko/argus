@@ -1,147 +1,107 @@
-"""Hourly AIA display snapshots and their immutable JPEG/WebP derivatives."""
+"""Collect public AIA JPEGs, publish their derivatives and list stored references."""
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
+from datetime import datetime
 import hashlib
 import io
-import json
 import logging
-import re
-from time import monotonic
+import os
+from urllib.parse import quote
 
 from PIL import Image
 import requests
+from botocore.exceptions import BotoCoreError, ClientError
+from sqlalchemy.exc import SQLAlchemyError
 
-from common.schemas.sdo_browse import CHANNELS, SIZES, IMAGE_PATTERN, ASSET_PATTERN, SDOBrowseCatalog
-from clio.observations.archive import archive_root, atomic_write, file_lock
+from common.schemas.sdo_browse import CHANNELS, SIZES, SDOBrowseCatalog
+from clio.db.locks import ingestion_lock
+from clio.observations import file_storage, file_observations, sdo
 
 logger = logging.getLogger(__name__)
-MAX_BYTES = 32 * 1024 * 1024
 
 
-def root():
-    return archive_root('sdo_browse')
-
-
-def read_latest(directory):
-    try:
-        return json.loads((directory / 'latest.json').read_text())
-    except FileNotFoundError:
-        return {}
+def public_entities(sizes):
+    return {'jpg.original', *{f'jpg.{size}' for size in sizes if size != 4096}, *{f'webp.{size}' for size in sizes}}
 
 
 def catalog():
-    latest = read_latest(root())
-    return SDOBrowseCatalog(images=[latest[c]['image'] for c in CHANNELS if c in latest])
+    base = os.getenv('S3_PUBLIC_BASE_URL', '').rstrip('/')
+    rows = file_observations.find(kind='sdo_browse', entity='jpg.original')
+    images = {}
+    for row in rows:
+        metadata = row['details'] or {}
+        channel = metadata.get('channel')
+        if channel not in CHANNELS or channel in images or not metadata.get('complete'):
+            continue
+        if not base.startswith(('https://', 'http://')):
+            raise ValueError('Set S3_PUBLIC_BASE_URL to the public bucket origin')
+        timestamp = sdo.utc(metadata['captured_at'])
+        images[channel] = {name: metadata.get(name) for name in ('channel', 'asset_id', 'captured_at', 'source_updated_at')}
+        images[channel]['urls'] = {entity: base + '/' + quote(sdo.object_key(row['variable'], timestamp, entity, public=True), safe='/')
+                                  for entity in public_entities(SIZES)}
+    return SDOBrowseCatalog(images=[images[channel] for channel in CHANNELS if channel in images])
 
 
-def image_path(name):
-    if not re.fullmatch(IMAGE_PATTERN, name):
-        raise FileNotFoundError('Unknown SDO browse image')
-    path = root() / name
-    if not path.is_file():
-        raise FileNotFoundError('SDO browse image is unavailable')
-    return path
-
-
-def download(channel):
-    url = f'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_4096_{int(channel):04d}.jpg'
-    started = monotonic()
-    with requests.get(url, stream=True, timeout=(10, 45)) as response:
-        response.raise_for_status()
-        blocks, length = [], 0
-        for block in response.iter_content(1024 * 1024):
-            length += len(block)
-            if length > MAX_BYTES or monotonic()-started > 90:
-                raise ValueError('SDO browse download exceeds size/time limit')
-            blocks.append(block)
-        updated = response.headers.get('last-modified')
-        try:
-            updated = parsedate_to_datetime(updated).astimezone(UTC) if updated else None
-        except (TypeError, ValueError, OverflowError):
-            updated = None
-        return b''.join(blocks), updated
-
-
-def snapshot(directory, channel, now, previous):
-    hour = now.strftime('%Y%m%d%H')
-    if previous and previous['checked_hour'] == hour:
-        return previous
-    content, updated = download(channel)
-    digest = hashlib.sha256(b'sdo-browse-v1\0'+content).hexdigest()
-    if previous and previous['image']['asset_id'].endswith('_'+digest):
-        return {**previous, 'checked_hour': hour}
-    # Last-Modified is publication metadata, not an observation timestamp.
-    if previous and updated and previous['image'].get('source_updated_at'):
-        if updated <= datetime.fromisoformat(previous['image']['source_updated_at']):
-            return {**previous, 'checked_hour': hour}
+def publish_image(content, metadata):
+    metadata = {**metadata, 'complete': False}
+    timestamp, variable = sdo.utc(metadata['captured_at']), 'aia' + str(int(metadata['channel']))
     with Image.open(io.BytesIO(content)) as source:
         if source.format != 'JPEG' or source.size != (4096, 4096):
             raise ValueError('Expected NASA 4096x4096 JPEG')
         original = source.convert('RGB')
-    asset = f'{hour}_{channel}_{digest}'
+    # Publish the unchanged original first; an interrupted batch never becomes the current image.
+    sdo.publish(content, variable, timestamp, 'jpg.original', details=metadata, public=True, content_type='image/jpeg')
     for size in SIZES:
         resized = original if size == 4096 else original.resize((size, size), Image.Resampling.LANCZOS)
-        for extension, format in (('webp', 'WEBP'), ('jpg', 'JPEG')):
-            if size == 4096 and extension == 'jpg':
-                encoded = content
-            else:
-                buffer = io.BytesIO()
-                resized.save(buffer, format=format, quality=85 if size <= 512 else 90)
-                encoded = buffer.getvalue()
-            atomic_write(directory / f'{asset}_{size}.{extension}', encoded)
-    image = dict(channel=channel, asset_id=asset, captured_at=now.isoformat(),
-                 source_updated_at=updated.isoformat() if updated else None)
-    atomic_write(directory / f'{asset}.json', json.dumps(image).encode())
-    return {'image': image, 'checked_hour': hour}
+        for format in ('jpg', 'webp'):
+            if (size, format) == (4096, 'jpg'):
+                continue
+            output = io.BytesIO()
+            resized.save(output, format='JPEG' if format == 'jpg' else 'WEBP', quality=85 if size <= 512 else 90)
+            sdo.publish(output.getvalue(), variable, timestamp, f'{format}.{size}', details=metadata,
+                public=True, content_type='image/jpeg' if format == 'jpg' else 'image/webp')
+    file_observations.set_details('sdo_browse', variable, timestamp, {**metadata, 'complete': True})
+
+
+def snapshot(channel, now):
+    variable = 'aia' + str(int(channel))
+    hour = now.strftime('%Y%m%d%H')
+    rows = file_observations.find(kind='sdo_browse', variable=variable, entity='jpg.original')
+    previous = next((row for row in rows if (row['details'] or {}).get('complete')), None)
+    if previous and previous['details'].get('checked_hour') == hour:
+        return
+    pending = next((row for row in rows if not (row['details'] or {}).get('complete')
+                    and (row['details'] or {}).get('checked_hour') == hour), None)
+    if pending:
+        # Resume processing an interrupted upload in memory, without a local archive.
+        publish_image(file_storage.read(pending['file']), pending['details'])
+        return
+    from clio.providers.sdo import download_browse
+    content, updated = download_browse(channel)
+    digest = hashlib.sha256(b'sdo-browse-v1\0' + content).hexdigest()
+    if previous:
+        metadata = previous['details']
+        unchanged = metadata['asset_id'].endswith('_' + digest)
+        if updated and metadata.get('source_updated_at'):
+            unchanged |= updated <= sdo.utc(metadata['source_updated_at'])
+        if unchanged:
+            file_observations.set_details('sdo_browse', variable, previous['timestamp'], {**metadata, 'checked_hour': hour})
+            return
+    captured = now.replace(second=0, microsecond=0)
+    publish_image(content, dict(channel=channel, asset_id=f'{hour}_{channel}_{digest}',
+        captured_at=captured.isoformat(), source_updated_at=updated.isoformat() if updated else None, checked_hour=hour))
 
 
 def collect(now):
-    directory = root()
-    with file_lock(directory / 'collection'):
-        latest = read_latest(directory)
-        failed = []
+    with ingestion_lock('sdo-browse', 730210) as acquired:
+        if not acquired:
+            return {'status': 'busy', 'failed': []}
         def fetch(channel):
             try:
-                return channel, snapshot(directory, channel, now, latest.get(channel))
-            except (requests.RequestException, OSError, ValueError):
+                snapshot(channel, now)
+            except (requests.RequestException, OSError, ValueError, BotoCoreError, ClientError, SQLAlchemyError):
                 logger.exception('SDO browse collection failed for AIA %s', channel)
-                return channel, None
+                return channel
+            return None
         with ThreadPoolExecutor(max_workers=3) as pool:
-            for channel, record in pool.map(fetch, CHANNELS):
-                if record is None:
-                    failed.append(channel)
-                else:
-                    latest[channel] = record
-        atomic_write(directory / 'latest.json', json.dumps(latest).encode())
-        _cleanup(directory, latest)
+            failed = [channel for channel in pool.map(fetch, CHANNELS) if channel is not None]
         return {'status': 'partial' if failed else 'complete', 'failed': failed}
-
-
-def _cleanup(directory, latest):
-    records = {}
-    for receipt in directory.glob('*.json'):
-        if not re.fullmatch(ASSET_PATTERN, receipt.stem):
-            continue
-        image = json.loads(receipt.read_text())
-        records.setdefault(image['channel'], []).append((image['captured_at'], receipt))
-    keep = {record['image']['asset_id'] for record in latest.values()}
-    for channel, images in records.items():
-        current = latest.get(channel, {}).get('image', {}).get('asset_id')
-        # Always retain the published image, including after an interrupted publish.
-        previous = sorted((record for record in images if record[1].stem != current), reverse=True)
-        keep.update(receipt.stem for _, receipt in previous[:1 if current else 2])
-    removed = set()
-    for path in directory.iterdir():
-        asset = path.stem if re.fullmatch(ASSET_PATTERN, path.stem) else (
-            path.stem.rsplit('_', 1)[0] if re.fullmatch(IMAGE_PATTERN, path.name) else None)
-        if asset and asset not in keep:
-            path.unlink(missing_ok=True)
-            removed.add(asset)
-    return len(removed)
-
-
-def cleanup():
-    directory = root()
-    with file_lock(directory / 'collection'):
-        return _cleanup(directory, read_latest(directory))

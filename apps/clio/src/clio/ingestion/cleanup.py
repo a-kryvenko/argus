@@ -30,13 +30,4 @@ async def cleanup(config, now: datetime):
     
     result = {'live_removed': live.rowcount, 'normalized_removed': normalized.rowcount}
     
-    if config.sdo_browse_enabled:
-        from clio.observations.sdo_browse import cleanup
-        result['sdo_browse_removed'] = await asyncio.to_thread(cleanup)
-    
-    if config.sdo_images.enabled:
-        from clio.ingestion.sdo_images import cycle
-        from clio.observations.sdo_archive import archive_root
-        result['sdo'] = await asyncio.to_thread(cycle, archive_root(), 'cleanup', clock=lambda: now)
-
     return result

@@ -2,6 +2,7 @@
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, Field
+from common.schemas.files import FileReference
 
 
 class RawObservationFile(BaseModel):
@@ -11,5 +12,6 @@ class RawObservationFile(BaseModel):
     available_at: AwareDatetime
     sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     source_product: str
+    file: FileReference
 
 

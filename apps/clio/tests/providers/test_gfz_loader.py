@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from clio.providers.gfz_loader import parse_gfz_f107
+from clio.providers.gfz import parse_gfz_f107
 
 
 def test_gfz_uses_observed_flux_and_rejects_missing_values():

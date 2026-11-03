@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -15,7 +14,6 @@ class _CommonConfig(BaseSettings):
     config_root: Path
     project_config: dict
     models_registry: dict
-    data_storage: Literal["local", "s3"] = "local"
     s3: dict
 
 def get_config() -> _CommonConfig:
@@ -36,7 +34,6 @@ def get_config() -> _CommonConfig:
             config_root=config_root,
             project_config=_load_yml_config( config_root / "project.yaml"),
             models_registry=_load_yml_config( config_root / "models_registry.yaml"),
-            data_storage=os.getenv("DATA_STORAGE", "local"),
             s3={
                 "endpoint": os.getenv("S3_ENDPOINT_URL", ""),
                 "key": os.getenv("S3_ACCESS_KEY_ID", ""),

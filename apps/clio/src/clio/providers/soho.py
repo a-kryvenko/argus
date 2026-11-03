@@ -9,7 +9,7 @@ from zipfile import BadZipFile, ZipFile
 import numpy as np
 import pandas as pd
 import requests
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 URL = 'https://l1.umd.edu/data/{year}_CELIAS_Proton_Monitor_5min.zip'
 TEMPERATURE_FACTOR = 1.67262192369e-27 * 1e6 / (2 * 1.380649e-23)

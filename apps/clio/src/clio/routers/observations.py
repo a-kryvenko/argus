@@ -31,8 +31,8 @@ async def latest(response: Response, metrics: list[str] = Depends(selected_metri
     return success_response(await reads.latest(session, metrics, as_of or now))
 
 
-@router.get('/metrics')
-async def metrics(response: Response, start: AwareDatetime = Query(alias='from'),
+@router.get('/history')
+async def history(response: Response, start: AwareDatetime = Query(alias='from'),
                   end: AwareDatetime = Query(alias='to'),
                   interval: Literal['1m', '5m', '1h'] = '1h',
                   metrics: list[str] = Depends(selected_metrics), as_of: AwareDatetime | None = None,

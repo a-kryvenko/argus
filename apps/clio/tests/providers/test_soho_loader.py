@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 import requests
 
-from clio.providers.soho_loader import SOHOLoader, parse_soho, TEMPERATURE_FACTOR
+from clio.providers.soho import SOHOLoader, parse_soho, TEMPERATURE_FACTOR
 
 
 def row(minute, v=400, n=5, thermal=20, hour=9):
@@ -46,7 +46,7 @@ def test_year_download_reused_only_within_loader(monkeypatch):
     response.__exit__ = Mock(return_value=False)
     response.iter_content = lambda *_: iter([stream.getvalue()])
     get = Mock(return_value=response)
-    monkeypatch.setattr('clio.providers.soho_loader.requests.get', get)
+    monkeypatch.setattr('clio.providers.soho.requests.get', get)
     loader = SOHOLoader()
     start, end = pd.Timestamp('2026-08-04T09:00Z'), pd.Timestamp('2026-08-04T10:00Z')
     assert len(loader.load(start, end)) == 1
@@ -61,7 +61,7 @@ def test_http_failure_not_treated_as_missing(monkeypatch):
     response.__enter__ = Mock(return_value=response)
     response.__exit__ = Mock(return_value=False)
     response.raise_for_status.side_effect = requests.HTTPError('503')
-    monkeypatch.setattr('clio.providers.soho_loader.requests.get', Mock(return_value=response))
+    monkeypatch.setattr('clio.providers.soho.requests.get', Mock(return_value=response))
     with pytest.raises(requests.HTTPError):
         SOHOLoader()._year(2026)
 
@@ -71,6 +71,6 @@ def test_non_zip_response_is_reported_as_adapter_error(monkeypatch):
     response.__enter__ = Mock(return_value=response)
     response.__exit__ = Mock(return_value=False)
     response.iter_content = lambda *_: iter([b'<html>temporary service error</html>'])
-    monkeypatch.setattr('clio.providers.soho_loader.requests.get', Mock(return_value=response))
+    monkeypatch.setattr('clio.providers.soho.requests.get', Mock(return_value=response))
     with pytest.raises(ValueError, match='Invalid SOHO ZIP'):
         SOHOLoader()._year(2026)

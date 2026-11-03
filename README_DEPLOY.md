@@ -26,7 +26,7 @@ Tables and Alembic version records remain in the existing service schemas until 
 pnpm install --frozen-lockfile
 mkdir -p data
 ./argus compose build
-./argus compose up -d --wait postgres redis
+./argus compose up -d --wait postgres redis storage
 ./argus db provision --apply
 ./argus db migrate
 ./argus compose up -d --wait
@@ -34,9 +34,24 @@ pnpm dev
 ```
 
 Frontend/API/Clio/Prophet: localhost ports 3000/8000/8001/8002.
-File uploads default to `DATA_STORAGE=local`: `data/media/{bucket}/{key}`.
-Dev Clio uses local storage; production uses S3 with `S3_ENDPOINT_URL`,
+Dev uses SeaweedFS (`storage`, persistent `seaweed-data` volume), with automatic
+`argus-private`/`argus-public` buckets and separate writer/reader keys. Public files:
+`http://localhost:8333/argus-public`; override with `DEV_S3_PORT` and `DEV_S3_PUBLIC_BASE_URL`.
+Services use S3 directly in both environments. Production uses `S3_ENDPOINT_URL`,
 `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and optional `S3_REGION` (default `auto`).
+Clio stores file observations in S3: private SDO under `argus-private/images/SDO`,
+public AIA under `argus-public/images/AIA`, other sources under `argus-private/observations`.
+`clio.files` stores object references; `clio.file_observation` stores their context. Catalogs read metadata from PostgreSQL; file content stays in S3.
+Production `S3_PUBLIC_BASE_URL` defaults to `https://media.argussun.com`. Prophet/PROSWIN use
+`S3_READ_ACCESS_KEY_ID` and `S3_READ_SECRET_ACCESS_KEY` with read access to private observations.
+
+One-time local archive migration (after migrating Clio):
+```bash
+./argus compose run --rm --no-deps -v ./data/observations:/legacy/observations:ro clio-worker .venv/bin/python -m clio.migrate_local_files --root /legacy/observations
+./argus compose run --rm --no-deps -v ./data/observations:/legacy/observations:ro clio-worker .venv/bin/python -m clio.migrate_local_files --root /legacy/observations --apply
+```
+Scientific SDO migration selects only AIA171/AIA211 in the latest 96 hourly slots; other NPZs are counted as `skipped`.
+Both commands accept `--kind` and `--limit`. Errors produce exit code 1; reruns preserve uploaded objects. Local files are retained.
 
 Workers collect and generate automatically. [Manual commands](docs/commands.md).
 

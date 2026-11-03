@@ -95,7 +95,7 @@ def test_common_operations_include_sdo_without_numeric_storage(monkeypatch, name
     result = asyncio.run(collection_operation.collect(config, selected, now=now) if name == 'collect'
                          else backfill_operation.backfill(config, now=now))
     assert result['sdo']['saved'] == 1
-    assert cycle.call_args.args[1] == mode
+    assert cycle.call_args.args[0] == mode
     assert cycle.call_args.kwargs['full'] is True
     assert cycle.call_args.kwargs['now'] == now
     assert 'clock' not in cycle.call_args.kwargs
@@ -132,7 +132,7 @@ def test_catalog_collection_selection_and_independent_failures(monkeypatch, sele
     assert result['status'] == ('partial' if result['failed_metrics'] else 'complete')
 
 
-def test_cleanup_removes_expired_data_and_runs_sdo_retention(monkeypatch):
+def test_cleanup_removes_only_expired_numeric_data(monkeypatch):
     from clio.ingestion import sdo_images
     from clio.config import ClioObservations
     session = session_factory(monkeypatch, cleanup_operation)
@@ -143,13 +143,12 @@ def test_cleanup_removes_expired_data_and_runs_sdo_retention(monkeypatch):
     monkeypatch.setattr(sdo_images, 'cycle', cycle)
     now = datetime(2026, 10, 27, tzinfo=UTC)
     result = asyncio.run(cleanup_operation.cleanup(config, now))
-    assert result == {'live_removed': 3, 'normalized_removed': 3, 'sdo': {'removed': 4}}
+    assert result == {'live_removed': 3, 'normalized_removed': 3}
     from datetime import timedelta
     live_delete, hourly_delete = [call.args[0].compile() for call in session.execute.call_args_list]
     assert live_delete.params['observed_at_1'] == now - timedelta(days=8)
     assert hourly_delete.params['observed_at_1'] == now - timedelta(days=90)
     assert 'omni.hourly' not in live_delete.params['source_product_1']
     assert 'swpc.rtsw_mag' in live_delete.params['source_product_1']
-    assert cycle.call_args.args[1] == 'cleanup'
-    assert cycle.call_args.kwargs['clock']() == now
+    cycle.assert_not_called()
     session.commit.assert_awaited_once()

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from clio.providers.contract import from_measurements
+from clio.providers._contract import from_measurements
 
 CELESTRAK_RECENT_URL = 'https://celestrak.org/SpaceData/SW-Last5Years.csv'
 CELESTRAK_HISTORY_URL = 'https://celestrak.org/SpaceData/SW-All.csv'

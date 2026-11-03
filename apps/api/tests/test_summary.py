@@ -75,7 +75,7 @@ def sources():
     result = dict(zip(('solar-wind/latest', 'geomagnetic/latest', 'current-indices',
                      'solar-wind/history', 'geomagnetic/history', 'history'),
                     (wind, geo, additional, wind_history, geo_history, hourly)))
-    result['sdo-browse'] = {'images': [dict(channel=channel, asset_id=f'2026103012_{channel}_{"a"*64}',
+    result['sdo'] = {'images': [dict(channel=channel, asset_id=f'2026103012_{channel}_{"a"*64}',
                                           captured_at=NOW.isoformat()) for channel in CHANNELS]}
     return result
 
@@ -112,7 +112,7 @@ def test_summary_uses_live_observations_and_generates_images_once_per_variable(m
     assert len(names) == len(set(names)) == len(images) == 12
     assert all(name in images for name in names)
     assert reads.await_count == 7
-    assert data['sdo_images'] == {channel: f'2026103012_{channel}_{"a"*64}' for channel in CHANNELS}
+    assert data['sdo_images'] == {channel: dict(asset_id=f'2026103012_{channel}_{"a"*64}', urls={}) for channel in CHANNELS}
     assert data['cme_events_available'] is False
     svg = ET.fromstring(images[plasma[0]['image_name']])
     circles = svg.findall('{http://www.w3.org/2000/svg}circle')
@@ -143,7 +143,7 @@ def test_quantiles_win_over_thresholds_and_current_point_is_not_old_forecast_inp
 @pytest.mark.parametrize('catalog', [{}, {'images': []}, {'images': [{'channel': '094', 'asset_id': '../invalid'}]}])
 def test_missing_or_invalid_sdo_catalog_does_not_hide_observations(monkeypatch, catalog):
     data, _, _ = install_sources(monkeypatch)
-    data['sdo-browse'] = catalog
+    data['sdo'] = catalog
     result, _ = asyncio.run(summary.build_summary(SummarySettings(critical_levels=LEVELS)))
     assert result['sdo_images'] == {}
     assert result['observations']['plasma']['items'][0]['value'] == 455.
@@ -366,3 +366,12 @@ def test_invalid_image_names_do_not_access_redis(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(summary.read_image('../outside.svg'))
     assert error.value.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_public_sdo_links_are_passed_to_browser_without_image_proxy(monkeypatch):
+    image = dict(channel='193', asset_id='2026103012_193_' + 'a'*64,
+        captured_at=NOW.isoformat(), urls={'webp.512': 'https://media.argussun.com/images/AIA/193/202610301230/512.webp'})
+    monkeypatch.setattr(summary, 'observation_read', AsyncMock(return_value={'images': [image]}))
+    result = await summary.sdo_images_read()
+    assert result['193']['urls'] == image['urls']

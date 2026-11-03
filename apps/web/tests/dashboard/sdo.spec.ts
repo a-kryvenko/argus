@@ -2,13 +2,33 @@ import { test, expect, type Page } from '@playwright/test';
 import { mockSDO, sdoChannels, sdoFixture } from '../fixtures/sdo';
 import { captureScreenshot } from './screenshot';
 
-async function mock(page: Page, assets = sdoFixture()) {
+async function mock(page: Page, assets: Record<string, { asset_id: string; urls: Record<string, string> }> = sdoFixture()) {
   await mockSDO(page);
   await page.route('**/api/v1/summary', route => route.fulfill({ json: { success: true, error: null, data: {
     generated_at: '2026-10-30T12:00:00Z', cme_events: [], cme_events_available: true, sdo_images: assets,
     observations: Object.fromEntries(['plasma', 'geo', 'hmf', 'radio'].map(group => [group, { title: group, items: [] }])),
   } } }));
 }
+
+test('public images load directly from media storage without the image API', async ({ page }) => {
+  const assets = Object.fromEntries(Object.entries(sdoFixture()).map(([channel, image]) => [channel, {
+    asset_id: image.asset_id,
+    urls: Object.fromEntries(['jpg', 'webp'].flatMap(format => [128, 256, 512, 1024, 2048, 4096].map(size =>
+      [format === 'jpg' && size === 4096 ? 'jpg.original' : `${format}.${size}`,
+        `https://media.argussun.com/images/AIA/${Number(channel)}/202610301230/${format === 'jpg' && size === 4096 ? 'original' : size}.${format}`]))),
+  }]));
+  const requests: string[] = [];
+  page.on('request', request => requests.push(request.url()));
+  await page.route('https://media.argussun.com/**', route => route.fulfill({ contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="orange"/></svg>' }));
+  await mock(page, assets);
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Open AIA 193 Å' })).toBeVisible();
+  await expect.poll(() => requests.some(url => url.startsWith('https://media.argussun.com/'))).toBe(true);
+  await page.getByRole('button', { name: 'Open AIA 193 Å' }).click();
+  await expect(page.getByRole('dialog').locator('img')).toHaveAttribute('srcset', /https:\/\/media.argussun.com\/.*original.jpg 4096w/);
+  expect(requests.some(url => url.includes('/api/v1/sdo/images/'))).toBe(false);
+});
 
 test('nine AIA thumbnails stay in one row on desktop and mobile with JPEG fallback', async ({ page }) => {
   await mock(page);
@@ -25,8 +45,8 @@ test('nine AIA thumbnails stay in one row on desktop and mobile with JPEG fallba
   for (const channel of sdoChannels) {
     const picture = strip.getByRole('button', { name: `Open AIA ${channel} Å` }).locator('picture');
     await expect(picture.locator('source')).toHaveAttribute('type', 'image/webp');
-    await expect(picture.locator('source')).toHaveAttribute('srcset', /_128.webp 128w, .*_256.webp 256w, .*_512.webp 512w/);
-    await expect(picture.locator('img')).toHaveAttribute('srcset', /_128.jpg 128w, .*_256.jpg 256w, .*_512.jpg 512w/);
+    await expect(picture.locator('source')).toHaveAttribute('srcset', /\/128.webp 128w, .*\/256.webp 256w, .*\/512.webp 512w/);
+    await expect(picture.locator('img')).toHaveAttribute('srcset', /\/128.jpg 128w, .*\/256.jpg 256w, .*\/512.jpg 512w/);
   }
   await captureScreenshot(page, { path: 'test-results/sdo-mobile.png', fullPage: true });
 });
@@ -40,14 +60,14 @@ test('large images and direct NASA movies load only after user actions; Escape r
   await page.goto('/');
   const button = page.getByRole('button', { name: 'Open AIA 131 Å' });
   await expect(button).toBeEnabled();
-  expect(requested.some(url => /_(1024|2048|4096)\.(webp|jpg)/.test(url))).toBe(false);
+  expect(requested.some(url => /\/(1024|2048|4096|original)\.(webp|jpg)/.test(url))).toBe(false);
   expect(requested.some(url => url.endsWith('.mp4'))).toBe(false);
   await button.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'SDO · AIA 131 Å' })).toBeVisible();
-  await expect.poll(() => requested.some(url => /_(1024|2048|4096)\.webp/.test(url))).toBe(true);
-  await expect(dialog.locator('img')).toHaveAttribute('srcset', /_4096.jpg 4096w/);
+  await expect.poll(() => requested.some(url => /\/(1024|2048|4096)\.webp/.test(url))).toBe(true);
+  await expect(dialog.locator('img')).toHaveAttribute('srcset', /\/original.jpg 4096w/);
   expect(requested.some(url => url.endsWith('.mp4'))).toBe(false);
   await captureScreenshot(page, { path: 'test-results/sdo-viewer.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Play 48h' }).click();
@@ -252,8 +272,8 @@ test('one missing SDO channel hides the whole block without hiding observations'
 
 test('a failed thumbnail hides the whole SDO block', async ({ page }) => {
   await mock(page);
-  await page.route('**/api/v1/sdo/images/*_131_*', route => route.fulfill({ status: 404 }));
-  const failed = page.waitForResponse(response => response.url().includes('/sdo/images/') && response.status() === 404);
+  await page.route('http://localhost:8333/argus-public/images/AIA/131/**', route => route.fulfill({ status: 404 }));
+  const failed = page.waitForResponse(response => response.url().includes('/argus-public/images/') && response.status() === 404);
   await page.goto('/');
   await failed;
   await expect(page.getByRole('region', { name: 'plasma', exact: true })).toBeVisible();
@@ -273,7 +293,7 @@ test('an open page periodically discovers new hourly images', async ({ page }) =
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Open AIA 094 Å' })).toBeEnabled();
   expect(reads).toBe(1);
-  expect(requests.filter(path => !path.startsWith('/api/v1/sdo/images/'))).toEqual(['/api/v1/summary']);
+  expect(requests).toEqual(['/api/v1/summary']);
   await page.clock.fastForward(5 * 60 * 1000);
   await expect.poll(() => reads).toBe(2);
   await expect(page.getByRole('button', { name: 'Open AIA 094 Å' })).toBeEnabled();

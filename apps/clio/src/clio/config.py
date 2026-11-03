@@ -28,7 +28,7 @@ class ObservationPolicy(StrictModel):
 
 class SDOImages(StrictModel):
     enabled: bool = False
-    backfill_days: int = Field(default=45, strict=True, ge=1, le=45)
+    backfill_days: int = Field(default=4, strict=True, ge=1, le=4)
 
 
 class SolarWindEvents(StrictModel):

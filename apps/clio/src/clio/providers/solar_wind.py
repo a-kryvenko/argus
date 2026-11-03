@@ -7,7 +7,7 @@ import math
 import pandas as pd
 import requests
 
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 SOURCES = {
     "mag": "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",

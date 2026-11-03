@@ -2,14 +2,13 @@
 import io
 import logging
 
-import httpx
 import numpy as np
 import pandas as pd
 
 from common.config import get_config
 from forecast.observation_inputs import SourceMeasurement
 
-from prophet.services.inputs.cache import original, prune_source_cache
+from prophet.services.inputs.cache import original
 
 logger = logging.getLogger(__name__)
 
@@ -59,17 +58,16 @@ def select_sources(inputs):
     return sorted(selected_goes.values(), key=lambda r: r.available_at)
 
 
-def enrich_inputs(inputs, client, url, token):
+def enrich_inputs(inputs):
     """Keep optional-product failures isolated; model policies enforce coverage."""
     goes = []
     for ref in select_sources(inputs):
         try:
-            path = original(client, url, token, ref)
-            goes.append(pd.read_json(io.StringIO(path.read_text()), orient='records'))
-        except (OSError, ValueError, KeyError, TypeError, RuntimeError, httpx.HTTPError):
+            content = original(ref)
+            goes.append(pd.read_json(io.StringIO(content.decode()), orient='records').assign(goes_euvs_quality_valid=True))
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError):
             logger.exception('Cannot prepare %s model inputs from %s', ref.kind, ref.sha256)
     apply_solar_measurements(inputs, solar_measurements(goes, inputs.as_of) if goes else [])
-    prune_source_cache()
     return inputs
 
 

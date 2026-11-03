@@ -22,7 +22,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from clio.providers.goes_loader import EUVS_LINE_COLUMNS
+from clio.providers.goes import EUVS_LINE_COLUMNS
 
 
 ARCHIVE_URL = "https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes/"

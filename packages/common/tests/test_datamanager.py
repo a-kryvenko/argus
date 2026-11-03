@@ -9,6 +9,7 @@ from PIL import Image
 import pytest
 
 from common.data import datamanager as manager
+from datetime import UTC, datetime
 
 
 @pytest.fixture
@@ -102,51 +103,49 @@ def test_upload_failure_propagates(client):
     with pytest.raises(ClientError):
         manager.upload_file(b'video', 'media', name='movie.mp4')
 
-
-def test_local_upload_never_contacts_s3(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(manager, 'get_config', lambda: SimpleNamespace(
-        data_storage='local', data_root=tmp_path,
-        s3={'endpoint': 'https://production.example.com', 'key': 'key', 'secret': 'secret'}))
-    key = manager.upload_file(b'video', 'media', '/sdo/171/', '/movie.mp4/')
-    assert key == 'sdo/171/movie.mp4'
-    path = tmp_path / 'media' / 'media' / key
-    assert path.read_bytes() == b'video'
-    manager.upload_file(b'updated', 'media', 'sdo/171', 'movie.mp4')
-    assert path.read_bytes() == b'updated'
-    assert list(path.parent.iterdir()) == [path]
-    client.put_object.assert_not_called()
-
-
-def test_local_responsive_images(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(manager, 'get_config', lambda: SimpleNamespace(
-        data_storage='local', data_root=tmp_path))
-    source = io.BytesIO()
-    Image.new('RGB', (80, 40), 'red').save(source, format='JPEG')
-    keys = manager.upload_responsive_image(source.getvalue(), 'media', name='171.jpg',
-        variants=[manager.ImageVariant('web', 40, 'WEBP')])
-    root = tmp_path / 'media' / 'media'
-    assert (root / keys['original']).read_bytes() == source.getvalue()
-    with Image.open(root / keys['web']) as image:
-        assert image.format == 'WEBP'
-        assert image.size == (40, 20)
-    client.put_object.assert_not_called()
+def test_immutable_s3_upload_uses_conditional_create_and_recovers_existing_object(monkeypatch):
+    client = boto3.client('s3', region_name='us-east-1', aws_access_key_id='test', aws_secret_access_key='test')
+    monkeypatch.setattr(manager, 's3_client', client)
+    monkeypatch.setattr(manager, 'get_config', lambda: SimpleNamespace(data_storage='s3'))
+    uploaded = datetime(2026, 11, 2, 10, tzinfo=UTC)
+    location = dict(Bucket='argus-private', Key='images/SDO/aia193/202611021000/512.npz')
+    with Stubber(client) as stub:
+        stub.add_response('put_object', {}, {**location, 'Body': b'first', 'IfNoneMatch': '*',
+            'ContentType': 'application/octet-stream', 'CacheControl': 'private'})
+        stub.add_response('head_object', {'LastModified': uploaded}, location)
+        stub.add_client_error('put_object', service_error_code='PreconditionFailed', http_status_code=412,
+            expected_params={**location, 'Body': b'revision', 'IfNoneMatch': '*',
+                'ContentType': 'application/octet-stream', 'CacheControl': 'private'})
+        stub.add_response('head_object', {'LastModified': uploaded}, location)
+        for content in (b'first', b'revision'):
+            assert manager.put_immutable_file(content, location['Bucket'], location['Key'],
+                                               content_type='application/octet-stream') == uploaded
+        stub.assert_no_pending_responses()
 
 
-@pytest.mark.parametrize('bucket,key', [('media', '../escape.mp4'), ('../escape', 'movie.mp4')])
-def test_local_upload_rejects_escape(client, monkeypatch, tmp_path, bucket, key):
-    monkeypatch.setattr(manager, 'get_config', lambda: SimpleNamespace(
-        data_storage='local', data_root=tmp_path))
-    with pytest.raises(ValueError):
-        manager.upload_file(b'video', bucket, name=key)
-    assert not list(tmp_path.iterdir())
+def test_immutable_s3_permission_failure_does_not_report_success(client):
+    client.put_object.side_effect = ClientError(
+        {'Error': {'Code': 'AccessDenied'}, 'ResponseMetadata': {'HTTPStatusCode': 403}}, 'PutObject')
+    with pytest.raises(ClientError):
+        manager.put_immutable_file(b'image', 'argus-public', 'images/AIA/193/202611021000/original.jpg',
+                                  content_type='image/jpeg')
+    client.head_object.assert_not_called()
 
 
-def test_local_upload_rejects_symlink_escape(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(manager, 'get_config', lambda: SimpleNamespace(
-        data_storage='local', data_root=tmp_path))
-    root = tmp_path / 'media' / 'media'
-    root.mkdir(parents=True)
-    (root / 'outside').symlink_to(tmp_path, target_is_directory=True)
-    with pytest.raises(ValueError):
-        manager.upload_file(b'video', 'media', 'outside', 'movie.mp4')
-    assert not (tmp_path / 'movie.mp4').exists()
+def test_bounded_read_rejects_oversized_object_and_closes_stream(client):
+    stream = io.BytesIO(b'123456789')
+    client.get_object.return_value = {'Body': stream}
+    with pytest.raises(ValueError, match='size limit'):
+        manager.read_file('argus-private', 'image.fits', max_bytes=4)
+    assert stream.closed
+
+
+def test_temporary_source_file_is_removed_after_processing(monkeypatch):
+    from uuid import uuid4
+    reference = dict(id=uuid4(), timestamp=datetime.now(UTC), bucket='argus-private', key='image.fits')
+    monkeypatch.setattr(manager, 'read_file', Mock(return_value=b'fits'))
+    with pytest.raises(RuntimeError):
+        with manager.temporary_file(reference) as path:
+            assert path.read_bytes() == b'fits'
+            raise RuntimeError('processing failed')
+    assert not path.exists() and not path.parent.exists()

@@ -13,6 +13,7 @@ from clio.observations.schema import OBSERVATION_METRICS, MEASUREMENT_METRICS
 METRICS = (*MEASUREMENT_METRICS, 'bt')
 LIVE_PRODUCTS = tuple(name for name, product in PRODUCTS.items() if product.kind == 'numeric' and 'live' in product.modes)
 SOLAR_ESTIMATES = {'s10', 'm10', 'y10'}
+INTEGER_METRICS = {'kp', 'dst', 'ap', 'f10_7'}
 MAX_ROWS = 250_000
 
 
@@ -23,11 +24,16 @@ def value(metric, number):
     return float(number) if math.isfinite(number) and (definition.accepts(number) if definition else number >= 0) else None
 
 
+def output_value(metric, number):
+    """Apply the integer observation contract after validation and aggregation."""
+    return int(number) if metric in INTEGER_METRICS and number is not None else number
+
+
 def points(rows, metrics):
     grouped = {}
     for time, metric, number in rows:
         grouped.setdefault(time, {'time': time})[metric] = number
-    return [dict(time=time, **{metric: row.get(metric) for metric in metrics})
+    return [dict(time=time, **{metric: output_value(metric, row.get(metric)) for metric in metrics})
             for time, row in sorted(grouped.items())]
 
 
@@ -41,8 +47,8 @@ async def latest(session, metrics, as_of):
     # which would overwrite a different metric's last observation in consumers.
     grouped = {}
     for record in records:
-        grouped.setdefault(record.observed_at, {'time': record.observed_at})[record.metric] = value(
-            record.metric, record.value)
+        grouped.setdefault(record.observed_at, {'time': record.observed_at})[record.metric] = output_value(
+            record.metric, value(record.metric, record.value))
     return {'points': [row for _, row in sorted(grouped.items())]}
 
 

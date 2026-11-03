@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import pytest
-from clio.providers.geomagnetic_loader import parse_records
+from clio.providers.geomagnetic import parse_records
 
 NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 

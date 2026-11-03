@@ -46,7 +46,7 @@ def read_observations(client, url, token, as_of, *, request=None):
     read_at = datetime.now(UTC)
 
     def read(resource, **params):
-        response = request(url.rstrip('/') + '/internal/v1/observations/' + resource,
+        response = request(url.rstrip('/') + ('/internal/v1/files' if resource == 'files' else '/internal/v1/observations/' + resource),
                            params=params, headers=headers)
         response.raise_for_status()
         payload = response.json()
@@ -56,7 +56,7 @@ def read_observations(client, url, token, as_of, *, request=None):
 
     end = (as_of + timedelta(microseconds=1)).isoformat()
     start = (as_of - timedelta(days=HISTORY_DAYS)).isoformat()
-    hourly = read('metrics', metrics=','.join((*CORE, *MEANS)), interval='1h',
+    hourly = read('history', metrics=','.join((*CORE, *MEANS)), interval='1h',
                   as_of=as_of.isoformat(), **{'from': start, 'to': end})
     if hourly.get('interval') != '1h' or not isinstance(hourly.get('points'), list):
         raise ValueError('Expected Clio hourly metric history')
@@ -72,12 +72,12 @@ def read_observations(client, url, token, as_of, *, request=None):
     density = [dict(issue_time=row['time'], n=row['n']) for row in rows
                if row.get('n') is not None and row['n'] >= 0 and row['n'] != 999.9]
     issue = as_of.replace(minute=0, second=0, microsecond=0)
-    native = read('metrics', metrics=','.join(WIND), interval='1m', as_of=as_of.isoformat(),
+    native = read('history', metrics=','.join(WIND), interval='1m', as_of=as_of.isoformat(),
                   **{'from': (issue-timedelta(hours=168)).isoformat(), 'to': issue.isoformat()})
     if native.get('interval') != '1m' or not isinstance(native.get('points'), list):
         raise ValueError('Expected Clio minute metric history')
     files = []
-    for kind, days in (('gong', 2), ('goes', 35), ('aia', 45)):
+    for kind, days in (('gong', 2), ('goes', 35)):
         files.extend(read('files', kind=kind, start=(as_of-timedelta(days=days)).isoformat(),
                           end=end, as_of=as_of.isoformat()))
     return ObservationInputs(as_of=as_of, read_at=read_at, observations=observations,

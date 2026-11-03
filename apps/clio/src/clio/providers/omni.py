@@ -1,6 +1,6 @@
 """OMNI parsing and provider missing values."""
 import pandas as pd
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 # Hourly OMNI2 fill values; Kp in persisted CSVs is already divided by ten.
 # https://omniweb.gsfc.nasa.gov/html/ow_data.html

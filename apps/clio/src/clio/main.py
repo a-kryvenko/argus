@@ -14,7 +14,6 @@ from clio.db.session import get_db_session
 from clio.routers import (
     observation_files,
     observations,
-    sdo_images,
     sdo_browse,
     solar_wind_events,
 )
@@ -32,6 +31,8 @@ async def lifespan(_):
         yield
     finally:
         await dispose_engine()
+        from clio.observations.files import dispose
+        dispose()
 
 
 app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)
@@ -39,7 +40,6 @@ app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)
 for module in (
     observations,
     solar_wind_events,
-    sdo_images,
     sdo_browse,
     observation_files
 ):

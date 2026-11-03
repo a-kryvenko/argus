@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from clio.db.models.measurement import Measurement
 from clio.ingestion.conversion import wide_to_measurements
-from clio.providers.solar_wind_loader import parse_records
+from clio.providers.solar_wind import parse_records
 from clio.observations.measurements import store_native
 from clio.observations.metrics import history
 from clio.observations.measurements import load_measurements

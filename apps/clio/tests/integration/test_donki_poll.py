@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from tests.support.database import database, migrate
 
 
-def test_donki_versions_are_causal_and_empty_responses_replace_old_events(database, monkeypatch):
+def test_donki_versions_are_causal_and_empty_responses_replace_old_events(database, monkeypatch, object_store):
     _, _, environment = database
     migrate(environment)
     for key, value in environment.items():
@@ -47,7 +47,7 @@ def test_donki_versions_are_causal_and_empty_responses_replace_old_events(databa
     asyncio.run(check())
 
 
-def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypatch):
+def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypatch, object_store):
     _, _, environment = database
     migrate(environment)
     for key, value in environment.items():
@@ -87,7 +87,7 @@ def test_enlil_profiles_replay_receipts_versions_and_failures(database, monkeypa
     asyncio.run(check())
 
 
-def test_closed_hourly_speed_history_prefers_covered_native_data_and_gates_receipts(database, monkeypatch):
+def test_closed_hourly_speed_history_prefers_covered_native_data_and_gates_receipts(database, monkeypatch, object_store):
     _, _, environment = database
     migrate(environment)
     for key, value in environment.items():

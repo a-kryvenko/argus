@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from clio.providers import solar_wind_loader as loader
+from clio.providers import solar_wind as loader
 
 NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
 

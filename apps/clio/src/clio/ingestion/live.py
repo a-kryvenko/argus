@@ -4,7 +4,7 @@ from functools import partial
 
 import pandas as pd
 
-from clio.providers import f107, geomagnetic_loader, solar_wind_loader
+from clio.providers import f107, geomagnetic, solar_wind
 from clio.ingestion.conversion import wide_to_measurements
 from clio.ingestion.adapters import clean_records
 
@@ -12,11 +12,11 @@ COLUMNS = ['metric', 'value', 'observed_at', 'received_at', 'source_product']
 
 
 def load_wind(kind, start, now):
-    return measurements(solar_wind_loader.fetch_records(kind), start, now, f'swpc.rtsw_{kind}')
+    return measurements(solar_wind.fetch_records(kind), start, now, f'swpc.rtsw_{kind}')
 
 
 def load_geomagnetic(metric, start, now):
-    return measurements(geomagnetic_loader.fetch_records(metric), start, now, f'swpc.{metric}')
+    return measurements(geomagnetic.fetch_records(metric), start, now, f'swpc.{metric}')
 
 
 def measurements(dataset, start, now, product):
@@ -32,12 +32,12 @@ def load_f107(start, now):
 
 
 def load_celestrak_f107(start, now):
-    from clio.providers.celestrak_loader import fetch_celestrak_f107
+    from clio.providers.celestrak import fetch_celestrak_f107
     return measurements(fetch_celestrak_f107(), start, now, 'celestrak.f107')
 
 
 def load_solfsmy_means(start, now):
-    from clio.providers.solfsmy_loader import fetch_solfsmy_means
+    from clio.providers.solfsmy import fetch_solfsmy_means
     return measurements(fetch_solfsmy_means(), start, now, 'solfsmy.means')
 
 

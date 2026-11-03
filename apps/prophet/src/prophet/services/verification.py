@@ -83,7 +83,7 @@ def read_targets(start, end, *, deadline=None):
         while left < end:
             check_progress(deadline)
             right = min(end, left+timedelta(days=1))
-            response = client.get(url.rstrip('/') + '/internal/v1/observations/metrics',
+            response = client.get(url.rstrip('/') + '/internal/v1/observations/history',
                 params={'from': left.isoformat(), 'to': right.isoformat(), 'interval': '1m',
                         'metrics': 'v,n,t,kp,ap,dst,bt,bx,by,bz'},
                 headers={'Authorization': f'Bearer {token}'},

@@ -1,0 +1,15 @@
+{
+  "identities": [
+    {
+      "name": "clio-dev",
+      "credentials": [{"accessKey": "argus-dev-writer", "secretKey": "argus-dev-writer-secret"}],
+      "actions": ["Read:argus-private", "Write:argus-private", "List:argus-private", "Read:argus-public", "Write:argus-public", "List:argus-public"]
+    },
+    {
+      "name": "models-dev",
+      "credentials": [{"accessKey": "argus-dev-reader", "secretKey": "argus-dev-reader-secret"}],
+      "actions": ["Read:argus-private"]
+    },
+    {"name": "anonymous", "actions": ["Read:argus-public"]}
+  ]
+}

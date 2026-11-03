@@ -13,7 +13,7 @@ from clio.ingestion.live import load_celestrak_f107
 from clio.ingestion.numeric_backfill import fetch_missing
 from clio.ingestion.numeric_live import fetch_live
 from clio.observations.measurements import upsert_measurements
-from clio.providers import celestrak_loader as loader
+from clio.providers import celestrak as loader
 
 
 HEADER = 'DATE,F10.7_OBS,F10.7_ADJ,F10.7_DATA_TYPE,F10.7_OBS_CENTER81,F10.7_OBS_LAST81\n'

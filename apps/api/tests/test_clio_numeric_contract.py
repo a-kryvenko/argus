@@ -21,7 +21,7 @@ def configure(monkeypatch, respond):
     def handler(request):
         calls.append(request)
         assert request.headers['authorization'] == 'Bearer secret'
-        assert request.url.path.rsplit('/', 1)[-1] in {'latest', 'metrics'}
+        assert request.url.path.rsplit('/', 1)[-1] in {'latest', 'history'}
         return httpx.Response(200, json={'success': True, 'data': respond(request)})
     monkeypatch.setattr(transport.httpx, 'AsyncClient', lambda **kwargs: original(transport=httpx.MockTransport(handler)))
     app = FastAPI()
@@ -55,7 +55,7 @@ def test_api_selects_hourly_history_and_clio_only_returns_points(monkeypatch):
     data = response.json()['data']
     assert data['series']['bz']['points'][0]['value'] == -3.
     assert data['resolution_seconds'] == 3600
-    assert len(calls) == 1 and calls[0].url.path.endswith('/metrics')
+    assert len(calls) == 1 and calls[0].url.path.endswith('/history')
 
 
 def test_dashboard_status_is_derived_from_values_and_configured_freshness(monkeypatch):

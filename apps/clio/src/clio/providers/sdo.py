@@ -1,10 +1,11 @@
-"""Download individual scientific images for eight AIA channels and HMI LOS.
+"""Download public AIA browse images and scientific AIA/HMI observations.
 
 Scientific 1024-pixel NRT and 4096-pixel FITS preserve their source resolution.
 Neither is labelled as calibrated or as a ready-to-use encoder input.
 Calibration and construction of a registered encoder tensor are separate steps.
 """
 from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 import hashlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -13,9 +14,10 @@ from time import monotonic
 import numpy as np
 import requests
 
-from clio.observations.sdo_archive import OBSERVED_CHANNELS, utc
+from clio.observations.sdo import OBSERVED_CHANNELS, utc
 
 MAX_DOWNLOAD_BYTES = 128 * 1024 * 1024
+MAX_BROWSE_BYTES = 32 * 1024 * 1024
 
 
 def fits_observed_at(header):
@@ -163,3 +165,32 @@ def prepare_observation(image, metadata):
 def fetch(channel, slot):
     """Return a file reference; download_observation validates the referenced FITS."""
     return {'timestamp': utc(slot), channel + '_url': observation_url(channel, slot)}
+
+
+def load_observation(channel, slot, *, now):
+    """Download, validate and reduce a scientific observation, retaining its original."""
+    reference = fetch(channel, slot)
+    image, metadata, original = download_observation(reference[channel + '_url'], channel,
+        slot=slot, now=now, include_original=True)
+    image, metadata = prepare_observation(image, metadata)
+    return image, metadata, original
+
+
+def download_browse(channel):
+    url = f'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_4096_{int(channel):04d}.jpg'
+    started = monotonic()
+    with requests.get(url, stream=True, timeout=(10, 45)) as response:
+        response.raise_for_status()
+        blocks, length = [], 0
+        for block in response.iter_content(1024 * 1024):
+            length += len(block)
+            if length > MAX_BROWSE_BYTES or monotonic()-started > 90:
+                raise ValueError('SDO browse download exceeds size/time limit')
+            blocks.append(block)
+        updated = response.headers.get('last-modified')
+        try:
+            updated = parsedate_to_datetime(updated) if updated else None
+        except (TypeError, ValueError, OverflowError):
+            updated = None
+        return b''.join(blocks), updated
+

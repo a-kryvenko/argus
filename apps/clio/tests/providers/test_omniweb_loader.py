@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
 
-from clio.providers.omniweb_loader import OMNIWeb_Loader
+from clio.providers.omniweb import OMNIWeb_Loader
 
 
 def test_column_specific_fill_and_fractional_kp():
@@ -19,7 +19,7 @@ def test_column_specific_fill_and_fractional_kp():
 
 def test_requested_end_day_includes_last_hour():
     response = Mock(text='2025 365 23 1 2 -3 10000 5 400 27 -20 12 123.4')
-    with patch('clio.providers.omniweb_loader.requests.post', return_value=response):
+    with patch('clio.providers.omniweb.requests.post', return_value=response):
         result = OMNIWeb_Loader.load(pd.Timestamp('2025-12-31', tz='UTC'),
                                     pd.Timestamp('2026-01-01', tz='UTC'))
     assert len(result) == 1
@@ -33,17 +33,17 @@ def test_missing_records_report_provider_message():
 
 def test_ace_http_error_is_not_reported_as_missing():
     import requests
-    from clio.providers.spdf_loader import SPDF_Loader
+    from clio.providers.spdf import SPDF_Loader
     response = Mock(status_code=503)
     response.raise_for_status.side_effect = requests.HTTPError('503 unavailable')
-    with patch('clio.providers.spdf_loader.requests.get', return_value=response):
+    with patch('clio.providers.spdf.requests.get', return_value=response):
         with pytest.raises(requests.HTTPError):
             SPDF_Loader._load_cdf_from_url('https://example.org/test.cdf')
 
 
 def test_unpublished_range_is_empty_not_source_failure():
     response = Mock(text='Error INVALID START DATE, correct range: 19631128 - 20260916')
-    with patch('clio.providers.omniweb_loader.requests.post', return_value=response) as post:
+    with patch('clio.providers.omniweb.requests.post', return_value=response) as post:
         result = OMNIWeb_Loader.load(pd.Timestamp('2026-09-22', tz='UTC'),
                                     pd.Timestamp('2026-09-22', tz='UTC'))
     assert result.empty
@@ -58,7 +58,7 @@ def test_partial_coverage_retries_only_available_dates():
     def post(url, data, **kwargs):
         calls.append(dict(data))
         return responses.pop(0)
-    with patch('clio.providers.omniweb_loader.requests.post', side_effect=post):
+    with patch('clio.providers.omniweb.requests.post', side_effect=post):
         result = OMNIWeb_Loader.load(pd.Timestamp('2026-09-15', tz='UTC'),
                                     pd.Timestamp('2026-09-22', tz='UTC'))
     assert calls[1]['start_date'] == '20260915'
@@ -67,7 +67,7 @@ def test_partial_coverage_retries_only_available_dates():
 
 
 def test_unrecognized_error_still_fails():
-    with patch('clio.providers.omniweb_loader.requests.post', return_value=Mock(text='Service unavailable')):
+    with patch('clio.providers.omniweb.requests.post', return_value=Mock(text='Service unavailable')):
         with pytest.raises(RuntimeError, match='Service unavailable'):
             OMNIWeb_Loader.load(pd.Timestamp('2026-09-22', tz='UTC'),
                                 pd.Timestamp('2026-09-22', tz='UTC'))

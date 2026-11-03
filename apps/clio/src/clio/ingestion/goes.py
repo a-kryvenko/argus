@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 import os
 import logging
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 from sqlalchemy.dialects.postgresql import insert
@@ -12,22 +13,22 @@ from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_db_session
 from clio.observations.archive import observation_values
 from clio.observations.file_catalog import snapshots
-from clio.observations.archive import archive_root, store_original
+from clio.observations.archive import store_original
 
 logger = logging.getLogger(__name__)
 
 
 def source_frames(start, end, historical, *, days=None):
     if not historical:
-        from clio.providers.goes_loader import fetch_goes
+        from clio.providers.goes import fetch_goes
         yield fetch_goes(end=end, timeout=25)
         return
-    from clio.providers.goes_history_loader import archive_session, discover_goes_history, iter_goes_history
+    from clio.providers.goes_history import archive_session, discover_goes_history, iter_goes_history
     satellites = [int(value) for value in os.getenv('GOES_ARCHIVE_SATELLITES', '18,16').split(',')]
     days = days if days is not None else pd.date_range(start, end - timedelta(microseconds=1), freq='D')
-    with archive_session() as session:
+    with archive_session() as session, TemporaryDirectory(prefix='clio-goes-') as temporary:
         files = discover_goes_history(sorted(set(days.year)), satellites, session)
-        for frame in iter_goes_history(files, days, satellites, archive_root('goes') / 'source', session, refresh=True):
+        for frame in iter_goes_history(files, days, satellites, Path(temporary), session, refresh=True):
             yield frame
 
 
@@ -40,12 +41,8 @@ def download_snapshots(start, end, historical, expected=None):
     for slot in slots:
         slot = slot.to_pydatetime()
         saved = expected.get((slot, source))
-        relative = Path(saved['raw_path']) if saved else Path(source) / f'{slot:%Y/%m/%d/%H}.json.gz'
-        path = archive_root('goes') / relative
-        if path.is_file() and (saved or path.with_suffix(path.suffix + '.receipt.json').is_file()):
-            record = store_original('goes', slot, saved['observed_at'] if saved else slot, source,
-                lambda: None, relative=relative, expected=saved)
-            records.append(record)
+        if saved is not None:
+            records.append(saved)
         else:
             pending.add(slot)
     logger.info('GOES %s: retained=%d, missing=%d', 'backfill' if historical else 'live', len(records), len(pending))
@@ -61,14 +58,8 @@ def download_snapshots(start, end, historical, expected=None):
             slot = slot.to_pydatetime()
             if samples.empty or slot not in pending:
                 continue
-            # Older Prophet processes require this field in the archived wire format.
-            # Provider datasets already contain only usable values.
-            content = samples.assign(goes_euvs_quality_valid=True).to_json(
-                orient='records', date_format='iso').encode()
-            saved = expected.get((slot, source))
-            values = store_original('goes', slot, samples.timestamp.max().to_pydatetime(), source, lambda: content,
-                relative=Path(saved['raw_path']) if saved else Path(source) / f'{slot:%Y/%m/%d/%H}.json',
-                expected=saved)
+            content = samples.to_json(orient='records', date_format='iso').encode()
+            values = store_original('goes', slot, samples.timestamp.max().to_pydatetime(), source, lambda: content)
             records.append(values)
     return records
 
@@ -93,7 +84,7 @@ async def collect(config, *, mode, now=None, start=None, end=None):
         async with get_db_session() as session:
             rows = await snapshots(session, 'goes', start=start, end=end+timedelta(microseconds=1))
         expected = {(row.slot_at, row.source_product): {key: getattr(row, key) for key in (
-            'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'raw_path')} for row in rows}
+            'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'file_id')} for row in rows}
         records = await asyncio.to_thread(download_snapshots, start, end, historical, expected)
         async with get_db_session() as session:
             for record in records:

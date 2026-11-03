@@ -1,7 +1,7 @@
 """Observed F10.7 flux from NOAA SWPC, preserving source timestamps."""
 import pandas as pd
 import requests
-from clio.providers.contract import dataset
+from clio.providers._contract import dataset
 
 F10_7_FLUX_URL = "https://services.swpc.noaa.gov/json/f107_cm_flux.json"
 

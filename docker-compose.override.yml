@@ -1,6 +1,15 @@
 # Development: local builds, source mounts and reload.
 name: argus-sunwatch-dev
 
+x-object-storage: &object-storage
+  S3_ENDPOINT_URL: http://storage:8333
+  S3_REGION: us-east-1
+
+x-object-reader: &object-reader
+  <<: *object-storage
+  S3_ACCESS_KEY_ID: argus-dev-reader
+  S3_SECRET_ACCESS_KEY: argus-dev-reader-secret
+
 x-clio-runtime: &clio-runtime
   build: &clio-build
     context: .
@@ -10,14 +19,19 @@ x-clio-runtime: &clio-runtime
   volumes:
     - ./apps/clio/src:/var/www/apps/clio/src
     - ./packages/common/src:/var/www/packages/common/src
-    - ./data/media:/var/www/data/media
+  depends_on:
+    storage:
+      condition: service_healthy
   environment: &clio-environment
+    <<: *object-storage
     CLIO_DB_HOST: postgres
     CLIO_DB_PORT: '5432'
     XDG_CONFIG_HOME: /tmp/clio-config
     XDG_CACHE_HOME: /tmp/clio-cache
     SDO_EMAIL: ${SDO_EMAIL:-}
-    DATA_STORAGE: local
+    S3_ACCESS_KEY_ID: argus-dev-writer
+    S3_SECRET_ACCESS_KEY: argus-dev-writer-secret
+    S3_PUBLIC_BASE_URL: ${DEV_S3_PUBLIC_BASE_URL:-http://localhost:${DEV_S3_PORT:-8333}/argus-public}
 
 x-prophet-runtime: &prophet-runtime
   build: &prophet-build
@@ -31,8 +45,12 @@ x-prophet-runtime: &prophet-runtime
     - ./packages/forecast/src:/var/www/packages/forecast/src
     - ./packages/forecast-core/src:/var/www/packages/forecast-core/src
   environment: &prophet-environment
+    <<: *object-reader
     PROPHET_DB_HOST: postgres
     PROPHET_DB_PORT: '5432'
+  depends_on:
+    storage:
+      condition: service_healthy
 
 x-intelligence-runtime: &intelligence-runtime
   build: &intelligence-build
@@ -69,6 +87,23 @@ x-api-runtime: &api-runtime
     - ./packages/common/src:/var/www/packages/common/src
 
 services:
+  storage:
+    image: chrislusf/seaweedfs:4.52
+    entrypoint: [weed]
+    command: [mini, -dir=/data, -ip=storage, -ip.bind=0.0.0.0, -s3.config=/etc/seaweedfs/s3.json, '-bucket=argus-private,argus-public']
+    restart: unless-stopped
+    volumes:
+      - seaweed-data:/data
+      - ./.deploy/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    ports:
+      - 127.0.0.1:${DEV_S3_PORT:-8333}:8333
+    healthcheck:
+      test: [CMD, nc, -z, 127.0.0.1, '8333']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
   postgres:
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -106,14 +141,19 @@ services:
     image: argus-proswin-dev
     user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
     environment:
+      <<: *object-reader
       XDG_CACHE_HOME: /tmp/proswin-cache
       TORCHINDUCTOR_CACHE_DIR: /tmp/torchinductor
       SUNPY_DOWNLOADDIR: /tmp/sunpy-downloads
       OBSERVATIONS_URL: http://clio:8000
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:-}
+    depends_on:
+      storage:
+        condition: service_healthy
     volumes:
       - ./apps/prophet/src:/var/www/apps/prophet/src
       - ./packages/common/src:/var/www/packages/common/src
+
       - ./packages/forecast/src:/var/www/packages/forecast/src
       - ./packages/forecast-core/src/forecast_core/models/proswin.py:/var/www/packages/forecast-core/src/forecast_core/models/proswin.py:ro
 
@@ -158,3 +198,6 @@ services:
       - ./apps/api/src:/var/www/apps/api/src
       - ./scripts/db/provision.py:/var/www/scripts/db/provision.py:ro
       - ./packages/common/src:/var/www/packages/common/src
+
+volumes:
+  seaweed-data:

@@ -40,7 +40,7 @@ clio:
     lookback_days: 30
   sdo_images:
     enabled: true
-    backfill_days: 45
+    backfill_days: 4
   observations:
     gong:
       sources:

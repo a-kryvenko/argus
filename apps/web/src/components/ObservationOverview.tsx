@@ -28,7 +28,7 @@ type Summary = {
   observations: Record<'plasma' | 'geo' | 'hmf' | 'radio', Group>;
   cme_events: CmeEvent[];
   cme_events_available: boolean;
-  sdo_images: Record<string, string>;
+  sdo_images: Record<string, { asset_id: string; urls: Record<string, string> }>;
 };
 
 const groups = ['plasma', 'geo', 'hmf', 'radio'] as const;

@@ -36,8 +36,8 @@ import clio.ingestion.collect
 import clio.ingestion.backfill
 heavy = {'pandas', 'numpy', 'pyarrow', 'scipy', 'astropy', 'sunpy'}
 assert not heavy.intersection(sys.modules), heavy.intersection(sys.modules)
-assert 'clio.ingestion.numeric_live' not in sys.modules
-assert 'clio.ingestion.numeric_backfill' not in sys.modules
+assert 'clio.ingestion.collect_numeric' not in sys.modules
+assert 'clio.ingestion.backfill_numeric' not in sys.modules
 """],
         capture_output=True, text=True, timeout=30,
     )

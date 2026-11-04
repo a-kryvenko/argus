@@ -14,7 +14,10 @@ from sqlalchemy import insert, select
 
 from clio import migrate_local_files as migration
 from clio.db.models.file_observation import FileObservation
-from clio.observations import files, file_observations, sdo, sdo_browse
+from clio.ingestion.utils import file_observations
+from clio.ingestion.extras import sdo
+from clio.routers import sdo_browse as browse_routes
+from clio.ingestion.extras import sdo_browse
 
 SLOT = datetime(2026,11,2,10,tzinfo=UTC)
 NOW = SLOT+timedelta(minutes=30)
@@ -43,7 +46,7 @@ def test_one_time_migration_is_read_only_until_apply_and_preserves_observation_i
     root, values, raw = seed_receipt(storage,monkeypatch,kind)
     before = {str(path):path.read_bytes() for path in root.iterdir()}
     dry = migration.run(kinds=[kind])
-    assert not dry['errors'] and not storage.objects and not files.find()
+    assert not dry['errors'] and not storage.objects and not storage.files()
     for _ in range(2):
         report = migration.run(kinds=[kind],apply=True)
         assert not report['errors'], report
@@ -97,7 +100,7 @@ def test_migration_builds_public_variants_from_old_jpeg(storage,monkeypatch):
     (root/(asset+'.json')).write_text(json.dumps(dict(channel='193',asset_id=asset,
         captured_at=NOW.isoformat(),source_updated_at=None)))
     assert not migration.run(kinds=['sdo_browse'],apply=True)['errors']
-    assert len(storage.objects) == 6 and sdo_browse.catalog().images[0].asset_id == asset
+    assert len(storage.objects) == 6 and browse_routes._catalog().images[0].asset_id == asset
 
 
 def test_corrupted_legacy_file_is_reported_without_upload(storage,monkeypatch):

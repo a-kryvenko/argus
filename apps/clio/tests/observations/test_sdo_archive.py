@@ -2,13 +2,13 @@
 from datetime import UTC, datetime, timedelta
 import numpy as np
 import pytest
-from clio.observations import sdo
+from clio.ingestion.extras import sdo
 
 NOW = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
 
 
 def test_hourly_collection_window():
-    slots = sdo.hourly_slots(NOW)
+    slots = sdo.observation_slots(NOW, days=4, resolution_minutes=60)
     assert len(slots) == 96 and len(set(slots)) == 96
     assert slots[0] == NOW.replace(minute=0) and slots[-1] == slots[0]-timedelta(hours=95)
 

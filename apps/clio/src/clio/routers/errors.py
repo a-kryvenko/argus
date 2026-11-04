@@ -3,7 +3,3 @@
 
 class ObservationUnavailable(RuntimeError):
     pass
-
-
-class ObservationNotFound(LookupError):
-    pass

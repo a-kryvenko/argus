@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 from sqlalchemy.dialects import postgresql
-from clio.observations import solar_wind_events as service
+from clio.routers import solar_wind_events as service
 from common.schemas.solar_wind_events import SourcePoll
 
 NOW = datetime(2026, 10, 13, 12, tzinfo=UTC)
 
 
-def test_input_reads_gate_native_samples_and_forward_cutoff_to_file_readers(monkeypatch):
+def test_input_reads_current_samples_and_latest_files(monkeypatch):
     poll = SimpleNamespace(endpoint='CME', id=uuid4(), received_at=NOW, sha256='a'*64,
         request_start=NOW-timedelta(days=30), request_end=NOW+timedelta(days=1), payload=[])
     sample = SimpleNamespace(observed_at=NOW-timedelta(minutes=1), received_at=NOW,
@@ -26,13 +26,13 @@ def test_input_reads_gate_native_samples_and_forward_cutoff_to_file_readers(monk
     monkeypatch.setattr(service, 'donki_inputs', polls)
     monkeypatch.setattr(service, 'enlil_input', profiles)
     session.execute.side_effect = [result([sample]), Mock(mappings=lambda: Mock(all=lambda: []))]
-    inputs = asyncio.run(service.load_event_inputs(session, NOW, NOW))
+    inputs = asyncio.run(service.load_event_inputs(session, NOW))
     assert inputs.schema_version == 2 and inputs.enlil_arrivals == [] and inputs.events == []
     assert inputs.polls[0].records == [] and inputs.l1_samples[0].value == 500
     queries = [c.args[0].compile(dialect=postgresql.dialect()) for c in session.execute.call_args_list]
-    polls.assert_awaited_once_with(session, NOW)
-    profiles.assert_awaited_once_with(session, NOW)
-    assert queries[0].params['received_at_1'] == NOW
+    polls.assert_awaited_once_with(session)
+    profiles.assert_awaited_once_with(session)
+    assert 'received_at <=' not in str(queries[0])
     assert set(queries[0].params['source_product_1']) == {'swpc.rtsw_mag', 'swpc.rtsw_plasma'}
     assert queries[0].params['observed_at_1'] == NOW-timedelta(hours=6)
 
@@ -42,12 +42,12 @@ def test_event_http_read_rolls_back_snapshot_on_success_and_failure(monkeypatch,
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from clio.routers import solar_wind_events as routes
-    from clio.observations.errors import ObservationUnavailable
+    from clio.routers.errors import ObservationUnavailable
     from common.schemas.solar_wind_events import EventInputs
 
     cutoff = datetime.now(UTC) - timedelta(seconds=1)
     session = AsyncMock()
-    load = AsyncMock(return_value=EventInputs(schema_version=2, as_of=cutoff, read_at=cutoff,
+    load = AsyncMock(return_value=EventInputs(schema_version=2, read_at=cutoff,
                                               events=[], enlil_arrivals=[]))
     if unavailable:
         load.side_effect = ObservationUnavailable('DONKI original or receipt is unavailable or corrupt')
@@ -56,7 +56,7 @@ def test_event_http_read_rolls_back_snapshot_on_success_and_failure(monkeypatch,
     app.include_router(routes.router)
     app.dependency_overrides[routes.get_request_db_session] = lambda: session
     with TestClient(app) as client:
-        response = client.get('/internal/v1/observations/solar-wind-events/inputs', params={'as_of': cutoff.isoformat()})
+        response = client.get('/internal/v1/observations/solar-wind-events/inputs')
     assert response.status_code == (503 if unavailable else 200)
     if not unavailable:
         assert response.json()['schema_version'] == 2
@@ -66,3 +66,19 @@ def test_event_http_read_rolls_back_snapshot_on_success_and_failure(monkeypatch,
     assert 'statement_timeout' in str(session.execute.call_args_list[1].args[0])
     session.rollback.assert_awaited_once()
     session.commit.assert_not_awaited()
+
+
+def test_database_failure_rolls_back_and_returns_503():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from sqlalchemy.exc import SQLAlchemyError
+
+    session = AsyncMock()
+    session.execute.side_effect = SQLAlchemyError('private connection details')
+    app = FastAPI()
+    app.include_router(service.router)
+    app.dependency_overrides[service.get_request_db_session] = lambda: session
+    response = TestClient(app).get('/internal/v1/observations/solar-wind-events/inputs')
+    assert response.status_code == 503
+    assert 'private connection details' not in response.text
+    session.rollback.assert_awaited_once()

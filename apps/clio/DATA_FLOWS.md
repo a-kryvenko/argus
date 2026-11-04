@@ -2,13 +2,15 @@
 
 ```mermaid
 flowchart TD
-    wind[Нативный RTSW: активный аппарат] --> measurement
-    geo[Kp, Ap, Dst] --> measurement
-    collectors[Другие числовые источники и backfill] --> measurement
-    measurement -->|Подготовка часовых входов модели| normalized_observation
-    measurement -->|Чтение исходных значений| api[API истории и мониторинга]
-    measurement -->|Статистики окон при запросе| charts[Графики и IMF forecast]
-    sdo[Общий сборщик AIA/HMI] --> archive[Файловый архив SDO: 45 дней]
-    files[Сборщики GONG, GOES, DONKI, ENLIL] --> file_observation
-    files --> originals[Исходники gzip и метаданные на диске]
+    providers[Числовые источники] --> measurement
+    measurement --> normalize[Нормализация] --> normalized_observation
+    measurement --> api[API]
+    normalized_observation --> api
+    files[Файловые продукты из observations] --> s3[Оригиналы и производные в S3]
+    files --> metadata[Метаданные и ссылки в PostgreSQL]
+    metadata --> api
+    policies[Политики observations] --> files
+    policies --> cleanup[Очистка по retention_days]
+    cleanup --> metadata
+    cleanup --> s3
 ```

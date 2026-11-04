@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from common.schemas.solar_wind_events import EventInputs, SourcePoll
-from clio.observations.solar_wind_events import normalize_events as external_events, normalize_event_inputs
+from clio.ingestion.extras.solar_wind_events import normalize_event_inputs
 
 NOW = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
 
@@ -24,7 +24,7 @@ def simulation(ids=('cme1',), arrival='2026-10-14T12:00Z', completed='2026-10-13
 
 
 def source(*polls, samples=()):
-    return EventInputs(as_of=NOW, read_at=NOW, polls=list(polls), l1_samples=list(samples))
+    return EventInputs(read_at=NOW, polls=list(polls), l1_samples=list(samples))
 
 
 def test_external_predictions_are_inputs_without_forecast_status_or_quantiles():
@@ -59,12 +59,10 @@ def test_nested_simulations_restore_missing_standalone_ids_without_order_depende
     assert unknown[0].cme_ids == []
 
 
-@pytest.mark.parametrize('change', ['receipt', 'completion', 'submission', 'invalid_arrival'])
+@pytest.mark.parametrize('change', ['completion', 'submission', 'invalid_arrival'])
 def test_future_or_invalid_information_is_not_used(change):
     row = simulation()
     received = NOW
-    if change == 'receipt':
-        received += timedelta(minutes=1)
     if change == 'completion':
         row['modelCompletionTime'] = '2026-10-13T13:00Z'
     if change == 'submission':
@@ -82,11 +80,12 @@ def test_future_or_invalid_information_is_not_used(change):
 def test_hss_and_ips_are_observations_only_and_other_targets_are_excluded():
     hss = dict(hssID='hss1', eventTime='2026-10-13T01:00Z', instruments=[{'displayName': 'ACE: SWEPAM'}])
     ips = dict(activityID='ips1', eventTime='2026-10-13T01:00Z', location='STEREO A')
-    result = external_events(source(poll('HSS', [hss]), poll('IPS', [ips])))
+    result, predictions = normalize_event_inputs(source(poll('HSS', [hss]), poll('IPS', [ips])))
+    assert predictions == []
     assert len(result) == 1 and result[0].kind == 'hss' and result[0].status == 'observed'
     assert result[0].arrival_at is None
     hss['eventTime'] = '2026-10-14T01:00Z'
-    assert external_events(source(poll('HSS', [hss]))) == []
+    assert normalize_event_inputs(source(poll('HSS', [hss]))) == ([], [])
 
 
 def test_initial_speed_uses_causal_analysis_and_merged_receipt_time():

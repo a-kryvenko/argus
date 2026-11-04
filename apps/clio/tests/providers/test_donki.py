@@ -44,10 +44,10 @@ def test_unrecognized_records_cannot_silently_become_a_quiet_feed(row):
         donki.validate('CME', [row])
 
 
-def test_collection_retains_exact_bytes_empty_success_and_failure_independently(storage, monkeypatch, tmp_path):
+def test_collection_retains_exact_bytes_and_empty_success_but_skips_failures(storage, monkeypatch, tmp_path):
     monkeypatch.setenv("ARGUS_DONKI_ARCHIVE", str(tmp_path))
     import asyncio
-    from clio.ingestion import donki as collector
+    from clio.ingestion.extras import donki as collector
     policy = SimpleNamespace(lookback_days=30)
     raw = b'[ {"activityID": "cme1"} ]'
     def fetch(endpoint, *_):
@@ -60,14 +60,14 @@ def test_collection_retains_exact_bytes_empty_success_and_failure_independently(
         asyncio.run(collector.collect(policy))
     from sqlalchemy import select
     from clio.db.models.file_observation import FileObservation
-    from clio.observations import files
     with storage.engine.connect() as connection:
         saved = [SimpleNamespace(**row) for row in connection.execute(
             select(FileObservation.__table__).order_by(FileObservation.received_at)).mappings()]
-    assert len(saved) == 4
+    assert len(saved) == 3
     cme = saved[0]
-    assert storage.objects['argus-private', files.find(id=cme.file_id)[0]['key']][0] == raw
-    assert cme.details['sha256'] == hashlib.sha256(raw).hexdigest() and cme.received_at.replace(tzinfo=UTC) >= before
-    assert storage.objects['argus-private', files.find(id=saved[1].file_id)[0]['key']][0] == b'[]' and saved[1].error is None
-    assert saved[-1].raw_path is None and saved[-1].error == 'Timeout'
+    assert storage.objects['argus-private', storage.files(id=cme.file_id)[0]['key']][0] == raw
+    assert cme.details['sha256'] == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
+    assert storage.objects['argus-private', storage.files(id=saved[1].file_id)[0]['key']][0] == b'[]'
+    assert 'IPS' not in {row.source_product for row in saved}
+    assert len(storage.objects) == 3
 

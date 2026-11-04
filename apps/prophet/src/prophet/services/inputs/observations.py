@@ -30,8 +30,7 @@ def native_hourly(points, issue, as_of):
         for hour, samples in sorted(grouped[metric].items()):
             numbers = list(samples.values())
             rows.append(dict(observed_at=hour, interval_end=hour+timedelta(hours=1),
-                # Clio filters source receipts by this cutoff. It is an availability
-                # bound for this snapshot, not a claimed original source receipt.
+                # Snapshot time; the compact history has no per-sample receipt.
                 received_at=as_of, quality='unverified', value=sum(numbers)/len(numbers),
                 count=len(numbers), expected_count=60, min=min(numbers), max=max(numbers)))
         series[metric] = dict(points=rows, unit={'v': 'km/s', 'n': 'cm⁻³', 't': 'K'}.get(metric, 'nT'),
@@ -57,7 +56,7 @@ def read_observations(client, url, token, as_of, *, request=None):
     end = (as_of + timedelta(microseconds=1)).isoformat()
     start = (as_of - timedelta(days=HISTORY_DAYS)).isoformat()
     hourly = read('history', metrics=','.join((*CORE, *MEANS)), interval='1h',
-                  as_of=as_of.isoformat(), **{'from': start, 'to': end})
+                  **{'from': start, 'to': end})
     if hourly.get('interval') != '1h' or not isinstance(hourly.get('points'), list):
         raise ValueError('Expected Clio hourly metric history')
     rows = hourly['points']
@@ -72,14 +71,14 @@ def read_observations(client, url, token, as_of, *, request=None):
     density = [dict(issue_time=row['time'], n=row['n']) for row in rows
                if row.get('n') is not None and row['n'] >= 0 and row['n'] != 999.9]
     issue = as_of.replace(minute=0, second=0, microsecond=0)
-    native = read('history', metrics=','.join(WIND), interval='1m', as_of=as_of.isoformat(),
+    native = read('history', metrics=','.join(WIND), interval='1m',
                   **{'from': (issue-timedelta(hours=168)).isoformat(), 'to': issue.isoformat()})
     if native.get('interval') != '1m' or not isinstance(native.get('points'), list):
         raise ValueError('Expected Clio minute metric history')
     files = []
-    for kind, days in (('gong', 2), ('goes', 35)):
-        files.extend(read('files', kind=kind, start=(as_of-timedelta(days=days)).isoformat(),
-                          end=end, as_of=as_of.isoformat()))
+    for observation, days in (('gong', 2), ('goes', 35)):
+        files.extend(read('files', observation=observation, start=(as_of-timedelta(days=days)).isoformat(),
+                          end=end))
     return ObservationInputs(as_of=as_of, read_at=read_at, observations=observations,
         measurements=indices, speed_observations=speed, density_observations=density,
         files=files, solar_wind_hourly=native_hourly(native['points'], issue, as_of))

@@ -39,7 +39,6 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
     headers={'Authorization':f'Bearer {token}'}
     if inputs is None:
         inputs=read_observations(client,url,token,now.to_pydatetime(),request=lambda url, **kwargs: get(client,url,**kwargs))
-        if pd.Timestamp(inputs.as_of)!=now: raise ValueError('Clio returned wrong input time')
     # Preserve first-seen timing of the snapshot actually used. It is never backdated.
     ssn=root/'sunspots.csv';meta=root/'sunspots.json'
     try:
@@ -53,20 +52,16 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
         pd.read_csv(io.BytesIO(response.content),sep=';',header=None)
         atomic_write(ssn,response.content)
         atomic_write(meta,json.dumps({'retrieved_at':pd.Timestamp.now(tz='UTC').isoformat(), 'sha256': hashlib.sha256(response.content).hexdigest()}).encode())
-    snapshot = json.loads(meta.read_text())
-    if pd.Timestamp(snapshot['retrieved_at']) > now:
-        logger.info('SILSO snapshot arrived after input cutoff; available for the next request')
-        return
     sunspots=pd.read_csv(ssn,sep=';',header=None)
     groups={}
-    for channel in ['aia171','aia211']:
+    for channel in ('171', '211'):
         response=get(client,url+'/internal/v1/files',headers=headers,params={
             'start':(hour-pd.Timedelta(hours=95)).isoformat(),'end':(hour+pd.Timedelta(hours=1)).isoformat(),
-            'as_of':now.isoformat(),'kind':'aia','channel':channel})
+            'observation':f'aia_{channel}_nrt'})
         for item in response.json()['data']:
             m={key:value for key,value in item.items() if key != 'file'};slot=pd.Timestamp(m['slot_at'])
-            if pd.Timestamp(m['available_at'])<=now and pd.Timestamp(m['observed_at'])<=now:
-                groups.setdefault(slot,{})[channel[3:]]={**m, 'file': item['file']}
+            if pd.Timestamp(m['observed_at'])<=now:
+                groups.setdefault(slot,{})[channel]={**m, 'file': item['file']}
     completed=0
     for slot,images in sorted(groups.items(),reverse=True):
         valid=slot+pd.Timedelta(hours=96);dest=root/'predictions'/f'{valid:%Y%m%dT%H}.json'

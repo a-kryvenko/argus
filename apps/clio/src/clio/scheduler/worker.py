@@ -12,11 +12,13 @@ from apscheduler.events import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from common.runtime import setup_sentry
 
 from clio.scheduler import warmup
 from clio.scheduler.jobs import run_backfill, run_cleanup, run_collect, run_normalize
-from clio.scheduler.schedule import COLLECTING_SCHEDULES
+from clio.scheduler.schedule import collecting_schedules
+from clio.config import load_observation_config
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +36,15 @@ def _init_job(scheduler, func, job_id, args=(), **schedule):
         scheduler.modify_job(job_id, **options)
 
 
-def _init_collect_job(scheduler, metrics, minute):
-    _init_job(
-        scheduler,
-        run_collect,
-        "collect:" + "|".join(metrics),
-        args=(metrics,),
-        minute=minute,
-    )
+def _init_collect_job(scheduler, metrics, minutes):
+    job_id = 'collect:' + '|'.join(metrics)
+    options = dict(func=run_collect, args=(metrics,),
+        trigger=IntervalTrigger(minutes=minutes, timezone=scheduler.timezone), name=job_id)
+    if scheduler.get_job(job_id) is None:
+        scheduler.add_job(id=job_id, **options)
+    else:
+        scheduler.modify_job(job_id, **options)
+
 
 def on_job_finished(event):
     with sentry_sdk.isolation_scope() as scope:
@@ -119,8 +122,9 @@ async def main(heartbeat_path: Path):
     The Core of worker.
     Scheduled jobs
     """
-    for metrics, minute in COLLECTING_SCHEDULES:
-        _init_collect_job(scheduler, metrics, minute)
+    schedules = collecting_schedules(load_observation_config())
+    for metrics, minutes in schedules:
+        _init_collect_job(scheduler, metrics, minutes)
 
     _init_job(scheduler, run_backfill, "backfill", hour="*/6", minute=0)
     _init_job(scheduler, run_normalize, "normalize", minute=0)
@@ -162,7 +166,7 @@ async def main(heartbeat_path: Path):
     try:
         if required:
             await warmup.run(
-                [metrics for metrics, _ in COLLECTING_SCHEDULES],
+                [metrics for metrics, _ in schedules],
                 on_job_finished
             )
             state["warmup_pending"] = False

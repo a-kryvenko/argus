@@ -8,11 +8,11 @@ import requests
 from sqlalchemy.dialects import postgresql
 
 from clio.config import load_observation_config
-from clio.ingestion.adapters import CelesTrakHistoryAdapter
-from clio.ingestion.live import load_celestrak_f107
-from clio.ingestion.numeric_backfill import fetch_missing
-from clio.ingestion.numeric_live import fetch_live
-from clio.observations.measurements import upsert_measurements
+from clio.ingestion.utils.adapters import CelesTrakHistoryAdapter
+from clio.ingestion.collect_numeric import load_celestrak_f107
+from clio.ingestion.backfill_numeric import fetch_missing
+from clio.ingestion.collect_numeric import fetch_live
+from clio.ingestion.utils.measurements import upsert_measurements
 from clio.providers import celestrak as loader
 
 

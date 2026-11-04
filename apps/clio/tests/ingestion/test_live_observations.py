@@ -8,9 +8,9 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from clio.config import load_observation_config
-from clio.ingestion import live as loaders
-from clio.ingestion import numeric_live as live
-from clio.observations.measurements import store_native
+from clio.ingestion import collect_numeric as loaders
+from clio.ingestion import collect_numeric as live
+from clio.ingestion.utils.measurements import store_native
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
 
@@ -20,7 +20,7 @@ def frame(*rows):
 
 
 def policies(**sources):
-    return {metric: SimpleNamespace(sources=SimpleNamespace(live=names),
+    return {metric: SimpleNamespace(live_resolution_minutes=load_observation_config().observations[metric].live_resolution_minutes, sources=SimpleNamespace(live=names),
                                     freshness_minutes=load_observation_config().observations[metric].freshness_minutes) for metric, names in sources.items()}
 
 
@@ -108,7 +108,7 @@ def test_live_saves_partial_results_without_normalization(monkeypatch):
     config = load_observation_config()
     collect = AsyncMock(return_value=frame(('v', 450., NOW)))
     monkeypatch.setattr(live, 'collect_product', collect)
-    report = asyncio.run(live.collect_live(config, ['v', 'n'], now=NOW))
+    report = asyncio.run(live.collect_numeric(config, ['v', 'n'], now=NOW))
     assert report['failed_metrics'] == ['n']
     assert report['downloaded_measurements'] == 1
     collect.assert_awaited_once()
@@ -166,7 +166,7 @@ def test_collection_writes_full_feed_once_and_reports_only_usable_selected_value
     session = storage(monkeypatch)
     fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'bx': [1.], 'by': [None], 'bz': [-4.], 'bt': [6.]}))
     monkeypatch.setattr(loaders.solar_wind, 'fetch_records', fetch)
-    report = asyncio.run(live.collect_live(load_observation_config(), ['bz', 'by'], now=NOW))
+    report = asyncio.run(live.collect_numeric(load_observation_config(), ['bz', 'by'], now=NOW))
     fetch.assert_called_once_with('mag')
     assert report['downloaded_measurements'] == 1
     assert report['failed_metrics'] == ['by']
@@ -184,7 +184,7 @@ def test_storage_failure_rolls_back_records_and_reports_failure(monkeypatch, cap
     session = storage(monkeypatch)
     session.execute.side_effect = [Mock(scalar_one=Mock(return_value=True)), SQLAlchemyError('write failed')]
     monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'dst': [-20.]})))
-    report = asyncio.run(live.collect_live(load_observation_config(), ['dst'], now=NOW))
+    report = asyncio.run(live.collect_numeric(load_observation_config(), ['dst'], now=NOW))
     assert report['failed_metrics'] == ['dst']
     assert 'swpc.dst' in caplog.text and 'write failed' in caplog.text
     session.rollback.assert_awaited_once()
@@ -195,7 +195,7 @@ def test_rejected_provider_records_are_not_written(monkeypatch):
     session = storage(monkeypatch)
     monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', Mock(
         return_value=pd.DataFrame(columns=['timestamp', 'kp', 'ap'])))
-    report = asyncio.run(live.collect_live(load_observation_config(), ['kp'], now=NOW))
+    report = asyncio.run(live.collect_numeric(load_observation_config(), ['kp'], now=NOW))
     assert report['downloaded_measurements'] == 0
     assert report['failed_metrics'] == ['kp']
     assert session.execute.await_count == 1  # Lock only; no invalid measurements inserted.
@@ -207,7 +207,7 @@ def test_f107_uses_common_persistence_and_keeps_last_duplicate(monkeypatch):
         'timestamp': [NOW, NOW, NOW + timedelta(days=1)], 'f10_7': [150., 160., 999.]})))
     config = load_observation_config().model_copy(deep=True)
     config.observations['f10_7'].sources.live = ['swpc.f107']
-    report = asyncio.run(live.collect_live(config, ['f10_7'], now=NOW))
+    report = asyncio.run(live.collect_numeric(config, ['f10_7'], now=NOW))
     assert report['failed_metrics'] == []
     assert report['downloaded_measurements'] == 1
     session.execute.assert_awaited_once()

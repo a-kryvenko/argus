@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from clio.db.models.measurement import Measurement
-from clio.ingestion import numeric_live as live
+from clio.ingestion import collect_numeric as live
 from clio.providers import solar_wind as solar_wind, geomagnetic as geomagnetic
 
 
@@ -65,7 +65,7 @@ async def verify():
             async def poll(payload, received_at=receipt):
                 with patch.object(live, 'get_db_session', side_effect=factory), \
                      patch.object(provider, 'fetch_records', return_value=pd.DataFrame(payload)), \
-                     patch('clio.ingestion.live.datetime') as clock:
+                     patch('clio.ingestion.collect_numeric.datetime') as clock:
                     clock.now.return_value = received_at
                     metrics = list(solar_wind.FIELDS[source]) if solar else ['kp', 'ap'] if source == 'kp' else ['dst']
                     await live.collect_product(product, {metric: [product] for metric in metrics}, start, receipt)

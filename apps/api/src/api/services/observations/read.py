@@ -134,9 +134,11 @@ async def read_observations(resource, params=None):
         metrics = params.get('metrics', ','.join(defaults)).split(',')
         data = await latest(metrics, now)
         if resource == 'current-indices' and params.get('trends'):
-            old = await numeric('latest', {'metrics': ','.join(metrics), 'as_of': now-timedelta(hours=1)})
+            old = await numeric('history', {'metrics': ','.join(metrics), 'interval': '1m',
+                'from': now-timedelta(days=2), 'to': now-timedelta(hours=1)+timedelta(microseconds=1)})
             previous = samples(old, metrics)
-            data['changes_1h'] = {m: value_change(data['series'][m], previous[m][-1] if previous[m] else None) for m in metrics}
+            data['changes_1h'] = {m: value_change(data['series'][m],
+                next((point for point in reversed(previous[m]) if point['value'] is not None), None)) for m in metrics}
     elif resource in ('solar-wind/history', 'geomagnetic/history'):
         end = aware(params['to']) if params.get('to') else now
         start = aware(params['from']) if params.get('from') else end-timedelta(hours=24)

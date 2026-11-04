@@ -11,9 +11,9 @@ from sqlalchemy.dialects.postgresql import insert
 
 from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_db_session
-from clio.observations.archive import observation_values
-from clio.observations.file_catalog import snapshots
-from clio.observations.archive import store_original
+from clio.ingestion.utils.archive import observation_values
+from clio.ingestion.utils.archive import snapshots
+from clio.ingestion.utils.archive import store_original
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ def source_frames(start, end, historical, *, days=None):
             yield frame
 
 
-def download_snapshots(start, end, historical, expected=None):
+def download_snapshots(start, end, historical, expected=None, *, resolution_minutes):
     expected = expected or {}
     records = []
     source = 'goes.archive' if historical else 'goes.live'
-    slots = pd.date_range(start, end - timedelta(microseconds=1), freq='D') if historical else [pd.Timestamp(end).floor('h')]
+    slots = pd.date_range(pd.Timestamp(start).ceil(f'{resolution_minutes}min'), end - timedelta(microseconds=1), freq=f'{resolution_minutes}min') if historical else [pd.Timestamp(end).floor(f'{resolution_minutes}min')]
     pending = set()
     for slot in slots:
         slot = slot.to_pydatetime()
@@ -53,7 +53,7 @@ def download_snapshots(start, end, historical, expected=None):
         frame = frame.loc[frame.timestamp.le(end)].copy()
         if historical:
             frame = frame.loc[frame.timestamp.ge(start) & frame.timestamp.lt(end)]
-        groups = frame.groupby(frame.timestamp.dt.floor('D')) if historical else [(pd.Timestamp(end).floor('h'), frame)]
+        groups = frame.groupby(frame.timestamp.dt.floor('D')) if historical else [(pd.Timestamp(end).floor(f'{resolution_minutes}min'), frame)]
         for slot, samples in groups:
             slot = slot.to_pydatetime()
             if samples.empty or slot not in pending:
@@ -81,8 +81,8 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
     historical = mode == 'backfill'
     end = end or (now.replace(hour=0, minute=0, second=0, microsecond=0) if historical else now)
     start = start or end - timedelta(days=policy.backfill_days if historical else 1)
-    if start.tzinfo is None or end.tzinfo is None or not start < end <= now or end - start > timedelta(days=90):
-        raise ValueError('Choose a past GOES range up to 90 days')
+    if start.tzinfo is None or end.tzinfo is None or not start < end <= now:
+        raise ValueError('Choose a past timezone-aware GOES range')
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if historical and any(t.hour or t.minute or t.second or t.microsecond for t in (start, end)):
         raise ValueError('GOES archive ranges must use whole UTC days')
@@ -93,11 +93,12 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
             rows = await snapshots(session, 'goes', start=start, end=end+timedelta(microseconds=1))
         expected = {(row.slot_at, row.source_product): {key: getattr(row, key) for key in (
             'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'file_id')} for row in rows}
-        records = await asyncio.to_thread(download_snapshots, start, end, historical, expected)
+        records = await asyncio.to_thread(download_snapshots, start, end, historical, expected,
+            resolution_minutes=policy.resolution_minutes if historical else policy.live_resolution_minutes)
         async with get_db_session() as session:
             for record in records:
                 inserted = (await session.execute(insert(FileObservation).values(**observation_values('goes', record))
-                    .on_conflict_do_nothing(index_elements=['kind', 'source_key'], index_where=FileObservation.error.is_(None)).returning(FileObservation.id))).scalar_one_or_none()
+                    .on_conflict_do_nothing().returning(FileObservation.id))).scalar_one_or_none()
                 report['received' if inserted else 'retained'] += 1
             await session.commit()
         latest = max((r['observed_at'] for r in records), default=None)

@@ -1,50 +1,23 @@
-"""Fetch configured numeric/file observations without running normalization."""
-import logging
-
-from clio.ingestion.selection import partition, merge_files, merge_sdo
-
-logger = logging.getLogger(__name__)
+"""Collect configured live observations."""
+from clio.ingestion.utils.products import OBSERVATIONS
 
 
 async def collect(config, metrics=None, *, now):
-    browse = config.sdo_browse_enabled and (metrics is None or 'sdo-browse' in metrics)
-    if metrics is not None:
-        metrics = [metric for metric in metrics if metric != 'sdo-browse']
-    catalogs = ('donki', 'enlil')
-    selected = catalogs if metrics is None else [kind for kind in catalogs if kind in metrics]
-    metrics = None if metrics is None else [metric for metric in metrics if metric not in catalogs]
-    numeric, files = partition(config, metrics)
+    extras = {'donki', 'enlil'}
+    selected = list(config.observations) if metrics is None else list(dict.fromkeys(metrics))
+    if any(metric not in config.observations and metric not in extras for metric in selected):
+        raise ValueError('Select observations configured in clio.observations')
+    numeric = [metric for metric in selected if metric not in extras and OBSERVATIONS[metric].kind == 'numeric' and config.observations[metric].sources.live]
+    files = [metric for metric in selected if metric in extras or OBSERVATIONS[metric].kind == 'file' and config.observations[metric].sources.live]
     result = {'status': 'complete', 'failed_metrics': [], 'downloaded_measurements': 0}
     if numeric:
-        from clio.ingestion.numeric_live import collect_live
-        result = await collect_live(config, numeric, now=now)
-    if files:
-        from clio.ingestion.files import collect_file_observations
-        result = merge_files(result, await collect_file_observations(config, files, mode='live', now=now))
-    result = await merge_sdo(result, config, metrics=metrics, now=now, mode='live')
-    if browse:
-        import asyncio
-        from clio.observations.sdo_browse import collect as collect_browse
-        report = await asyncio.to_thread(collect_browse, now)
-        result['sdo_browse'] = report
-        if report['failed']:
+        from clio.ingestion.collect_numeric import collect_numeric
+        result = await collect_numeric(config, numeric, now=now)
+    if files or metrics is None:
+        from clio.ingestion.collect_files import collect_files
+        report = await collect_files(config, None if metrics is None else files, now=now)
+        result.update({key: value for key, value in report.items() if key not in ('status', 'failed_metrics')})
+        result['failed_metrics'] = sorted(set(result['failed_metrics']) | set(report['failed_metrics']))
+        if report['status'] == 'partial':
             result['status'] = 'partial'
-            result['failed_metrics'] = sorted(set(result['failed_metrics']) | {'sdo-browse'})
-    for kind in selected:
-        if not config.solar_wind_events.enabled:
-            result[kind] = {'status': 'disabled'}
-            continue
-        from clio.ingestion import donki, enlil
-        try:
-            if kind == 'donki':
-                await donki.collect(config.solar_wind_events, now=now)
-            else:
-                await enlil.collect(now=now)
-        except RuntimeError as exc:
-            logger.warning('%s collection failed: %s', kind, exc)
-            result[kind] = {'status': 'failed'}
-            result['status'] = 'partial'
-            result['failed_metrics'] = sorted(set(result['failed_metrics']) | {kind})
-        else:
-            result[kind] = {'status': 'complete'}
     return result

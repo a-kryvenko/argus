@@ -18,15 +18,13 @@ def load_inputs(as_of: datetime | None = None, *, prepare_proswin=False, include
                       trust_env=False) as client:
         source = read_observations(client, url, token, as_of)
         inputs = ForecastInputs.model_validate(source.model_dump())
-        if inputs.as_of != as_of:
-            raise RuntimeError('Observation service returned a different as_of')
         if not inputs.observations.points:
             raise RuntimeError('No stored observations available in the requested history range; check ingestion')
         from prophet.services.inputs.solar_indices import enrich_inputs
         inputs = enrich_inputs(inputs)
         if include_events:
             try:
-                inputs.solar_wind_events = read_event_inputs(client, url, token, as_of)
+                inputs.solar_wind_events = read_event_inputs(client, url, token)
             except (httpx.HTTPError, ValueError, RuntimeError):
                 logging.getLogger(__name__).exception('Event inputs unavailable; retaining background forecast')
             # Current event release is CME-only; no optional HSS image enrichment.
@@ -41,16 +39,12 @@ def load_inputs(as_of: datetime | None = None, *, prepare_proswin=False, include
     return inputs
 
 
-def read_event_inputs(client, url, token, as_of):
+def read_event_inputs(client, url, token):
     from common.schemas.solar_wind_events import EventInputs
     response = client.get(url.rstrip('/') + '/internal/v1/observations/solar-wind-events/inputs',
-                          params={'as_of': as_of.isoformat()},
                           headers={'Authorization': f'Bearer {token}'})
     response.raise_for_status()
-    source = EventInputs.model_validate(response.json())
-    if source.as_of != as_of:
-        raise RuntimeError('Observation service returned a different event cutoff')
-    return source
+    return EventInputs.model_validate(response.json())
 
 
 def load_event_inputs(as_of: datetime | None = None, *, include_speed=False):
@@ -61,7 +55,7 @@ def load_event_inputs(as_of: datetime | None = None, *, include_speed=False):
         raise RuntimeError('OBSERVATIONS_URL and OBSERVATIONS_SERVICE_TOKEN are required')
     as_of = as_of or datetime.now(UTC)
     with httpx.Client(timeout=httpx.Timeout(60, connect=10), follow_redirects=False, trust_env=False) as client:
-        source = read_event_inputs(client, url, token, as_of)
+        source = read_event_inputs(client, url, token)
         inputs = ForecastInputs(as_of=as_of, read_at=source.read_at,
                                 observations=Observation(points=[]), solar_wind_events=source)
         if include_speed:

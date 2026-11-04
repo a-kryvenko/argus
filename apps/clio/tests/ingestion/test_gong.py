@@ -11,7 +11,7 @@ import pytest
 import pandas as pd
 from sqlalchemy.dialects import postgresql
 
-from clio.ingestion import gong
+from clio.ingestion.extras import gong
 from clio.providers import gong as provider
 from contextlib import asynccontextmanager
 
@@ -50,7 +50,7 @@ def test_compressed_original_has_bounded_expansion(monkeypatch):
 def test_http_read_module_does_not_import_private_code_or_downloader():
     result = subprocess.run([sys.executable, '-c', '''
 import sys
-import clio.ingestion.gong
+import clio.ingestion.extras.gong
 assert not any(name.startswith('forecast_core') for name in sys.modules)
 assert 'clio.providers.gong' not in sys.modules
 assert 'astropy' not in sys.modules
@@ -59,13 +59,14 @@ assert 'astropy' not in sys.modules
 
 
 def test_original_is_published_without_local_archive(storage, monkeypatch):
-    from clio.observations import file_observations, archive
+    from clio.ingestion.utils import file_observations
+    from clio.ingestion.utils import archive
     from sqlalchemy import insert
     from clio.db.models.file_observation import FileObservation
     monkeypatch.setattr(provider, 'download', Mock(return_value=b'original FITS'))
     row = gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
     values = archive.observation_values('gong', row)
-    assert values['raw_path'] is None and values['sha256'] is None
+    assert not {'raw_path', 'sha256', 'error'}.intersection(values)
     with storage.engine.begin() as connection:
         connection.execute(insert(FileObservation).values(**values))
     metadata = file_observations.find(kind='gong')[0]

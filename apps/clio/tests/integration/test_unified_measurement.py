@@ -1,3 +1,4 @@
+from clio.db import session as db
 """Migration and canonical observation contracts on a disposable database."""
 import asyncio
 import os
@@ -13,11 +14,11 @@ from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from clio.db.models.measurement import Measurement
-from clio.ingestion.conversion import wide_to_measurements
+from clio.ingestion.utils.adapters import wide_to_measurements
 from clio.providers.solar_wind import parse_records
-from clio.observations.measurements import store_native
-from clio.observations.metrics import history
-from clio.observations.measurements import load_measurements
+from clio.ingestion.utils.measurements import store_native
+from clio.routers.observations import _read_history as history
+from clio.ingestion.utils.measurements import load_measurements
 
 pytestmark = pytest.mark.skipif(not os.getenv('TEST_DATABASE_ADMIN_DSN'), reason='Disposable PostgreSQL required')
 NOW = datetime(2026, 9, 1, tzinfo=UTC)
@@ -137,20 +138,17 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
 
     from clio.config import load_observation_config
     from clio.db.models.normalized_observation import NormalizedObservation
-    from clio.ingestion import numeric_backfill as backfill
+    from clio.ingestion import backfill_numeric as backfill
     from clio.ingestion import normalize as normalized
     from clio.ingestion import cleanup as cleanup_operation
-    from clio.observations.schema import REQUIRED_METRICS
-    from clio.observations import files
+    from clio.db.models.measurement import REQUIRED_METRICS
     from clio.db.models.file import File
     from clio.db.models.file_observation import FileObservation
 
     file_engine = sa.create_engine(database_url)
-    monkeypatch.setattr(files, "engine", lambda: file_engine)
+    monkeypatch.setattr(db, "get_sync_engine", lambda: file_engine)
 
     config = load_observation_config().model_copy(deep=True)
-    config.sdo_images.enabled = False
-    config.sdo_browse_enabled = False
     config.observations = {m: config.observations[m] for m in REQUIRED_METRICS}
     for policy in config.observations.values():
         policy.backfill_days = 2

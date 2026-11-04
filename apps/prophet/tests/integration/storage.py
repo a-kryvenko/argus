@@ -36,7 +36,7 @@ def product_artifacts(names=('dst_quantile',), issue='2026-09-13T00:00:00+00:00'
             from prophet.services.generation.calculation import CalculationRequest, calculate_product
             time = datetime.fromisoformat(issue)
             inputs = ForecastInputs(as_of=time, read_at=time, observations=Observation(points=[]),
-                                    solar_wind_events=EventInputs(as_of=time, read_at=time))
+                                    solar_wind_events=EventInputs(read_at=time))
             artifact = calculate_product(CalculationRequest('solar-wind-events', inputs, Path('/unused'), {}))[0]
             yield artifact
             content = artifact.content.decode()

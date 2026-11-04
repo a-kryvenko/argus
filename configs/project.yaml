@@ -31,111 +31,268 @@ api:
 
 # Observation sources and historical horizons.
 clio:
-  sdo_browse_enabled: true
   retention:
     live_days: 6
     normalized_days: 60
   solar_wind_events:
     enabled: true
+    poll_minutes: 15
     lookback_days: 30
     retention_days: 30
-  sdo_images:
-    enabled: true
-    backfill_days: 4
   observations:
+    aia_171_nrt:
+      sources:
+        live: [aia.nrt_171]
+        historical: [aia.nrt_171]
+      retention_days: 4
+      backfill_days: 4
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 5
+      freshness_minutes: 120
+    aia_211_nrt:
+      sources:
+        live: [aia.nrt_211]
+        historical: [aia.nrt_211]
+      retention_days: 4
+      backfill_days: 4
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 5
+      freshness_minutes: 120
+    aia_094_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_131_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_171_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_193_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_211_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_304_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_335_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_1600_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
+    aia_1700_browse:
+      sources:
+        live: [nasa.aia_browse]
+        historical: []
+      retention_days: 1
+      backfill_days: 0
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 15
+      freshness_minutes: 120
     gong:
       sources:
         live: [gong.live]
         historical: [gong.archive]
       backfill_days: 2
+      retention_days: 2
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 60
       freshness_minutes: 180
     bx:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
       freshness_minutes: 10
     by:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
       freshness_minutes: 10
     bz:
       sources:
         live: [swpc.rtsw_mag]
         historical: [omni.hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
       freshness_minutes: 10
     v:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
       freshness_minutes: 10
     n:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
       freshness_minutes: 10
     t:
       sources:
         live: [swpc.rtsw_plasma]
         historical: [omni.hourly, ace.plasma_hourly, soho.plasma_hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
       freshness_minutes: 10
     kp:
       sources:
         live: [swpc.kp]
         historical: [omni.hourly]
       backfill_days: 60
+      resolution_minutes: 180
+      live_resolution_minutes: 180
+      poll_minutes: 1
       freshness_minutes: 240
     ap:
       sources:
         live: [swpc.kp]
         historical: [omni.hourly]
       backfill_days: 60
+      resolution_minutes: 180
+      live_resolution_minutes: 180
+      poll_minutes: 1
       freshness_minutes: 240
     dst:
       sources:
         live: [swpc.dst]
         historical: [omni.hourly]
       backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 60
+      poll_minutes: 5
       freshness_minutes: 120
     f10_7:
       sources:
         live: [celestrak.f107, swpc.f107]
         historical: [celestrak.f107_archive, gfz.f107, omni.hourly]
       backfill_days: 35
+      resolution_minutes: 1440
+      live_resolution_minutes: 1440
+      poll_minutes: 60
       freshness_minutes: 2880
     f10_7_81mean:
       sources:
         live: [celestrak.f107]
         historical: [celestrak.f107_archive]
       backfill_days: 6
+      resolution_minutes: 1440
+      live_resolution_minutes: 1440
+      poll_minutes: 60
       freshness_minutes: 2880
     s10_81mean:
       sources:
         live: [solfsmy.means]
         historical: [solfsmy.means_archive]
       backfill_days: 14
+      resolution_minutes: 1440
+      live_resolution_minutes: 1440
+      poll_minutes: 60
       freshness_minutes: 20160
     m10_81mean:
       sources:
         live: [solfsmy.means]
         historical: [solfsmy.means_archive]
       backfill_days: 14
+      resolution_minutes: 1440
+      live_resolution_minutes: 1440
+      poll_minutes: 60
       freshness_minutes: 20160
     y10_81mean:
       sources:
         live: [solfsmy.means]
         historical: [solfsmy.means_archive]
       backfill_days: 14
+      resolution_minutes: 1440
+      live_resolution_minutes: 1440
+      poll_minutes: 60
       freshness_minutes: 20160
     goes:
       sources:
         live: [goes.live]
         historical: [goes.archive]
       backfill_days: 35
+      retention_days: 35
+      resolution_minutes: 1440
+      live_resolution_minutes: 60
+      poll_minutes: 60
       freshness_minutes: 120

@@ -4,43 +4,47 @@ import numpy as np
 import pytest
 import requests
 
-from clio.ingestion import sdo_images as collector
+from clio.ingestion.extras import sdo as collector
 from clio.db.locks import ingestion_lock
-from clio.observations import sdo, file_observations
+from clio.ingestion.extras import sdo
+from clio.ingestion.utils import file_observations
 from clio.providers.sdo import observation_url, prepare_observation
 
 
-def test_live_collection_is_idempotent(storage, scientific_source, monkeypatch):
-    monkeypatch.setattr(collector, 'COLLECTED_CHANNELS', ('aia171',))
-    monkeypatch.setattr(collector, 'hourly_slots', lambda now: [scientific_source.slot])
-    first = collector.cycle('live', clock=lambda: scientific_source.now)
+@pytest.fixture
+def policy():
+    from clio.config import load_observation_config
+    return load_observation_config().observations['aia_171_nrt'].model_copy(update={'freshness_minutes': 60})
+
+
+def collect(policy, now, mode='live'):
+    return collector.collect(policy, channel='aia171', source='aia.nrt_171', mode=mode, now=now)
+
+
+def test_live_collection_is_idempotent(storage, scientific_source, policy):
+    first = collect(policy, scientific_source.now)
     assert first['saved'] == 1 and not first['failed']
     before = dict(storage.objects)
-    assert collector.cycle('live', clock=lambda: scientific_source.now)['existing'] == 1
+    assert collect(policy, scientific_source.now)['existing'] == 1
     assert before == storage.objects and scientific_source.download.call_count == 1
 
 
-def test_duplicate_lane_is_skipped(storage):
+def test_duplicate_lane_is_skipped(storage, policy, scientific_source):
     with ingestion_lock('sdo-live', 730200):
-        assert collector.cycle('live') == {'busy': True}
+        assert collect(policy, scientific_source.now)['status'] == 'busy'
 
 
-def test_warmup_rotates_past_unavailable_sources(storage, scientific_source, monkeypatch):
-    monkeypatch.setattr(collector, 'COLLECTED_CHANNELS', ('aia171',))
-    monkeypatch.setattr(collector, '_warmup_cursor', None)
-    visited = []
-    def collect(slot, channel, **kwargs):
-        visited.append(slot)
-        return 'unavailable'
-    monkeypatch.setattr(collector, 'collect_one', collect)
-    for _ in range(3):
-        assert collector.cycle('warmup', batch_hours=2, now=scientific_source.now)['unavailable'] == 2
-    assert len(set(visited)) == 6
+def test_backfill_uses_policy_window_and_channel(storage, policy, scientific_source, monkeypatch):
+    policy = policy.model_copy(update={'retention_days': 2, 'backfill_days': 1})
+    collect_one = Mock(return_value='existing')
+    monkeypatch.setattr(collector, 'collect_one', collect_one)
+    report = collector.collect(policy, channel='aia1600', source='aia.nrt_1600', mode='backfill', now=scientific_source.now)
+    assert report['existing'] == 24
+    assert {call.args[1] for call in collect_one.call_args_list} == {'aia1600'}
+    assert all(call.args[0] >= scientific_source.now-timedelta(days=1) for call in collect_one.call_args_list)
 
 
-def test_requested_slots_stay_fixed_while_download_time_advances(storage, scientific_source, monkeypatch):
-    monkeypatch.setattr(collector, 'COLLECTED_CHANNELS', ('aia171',))
-    monkeypatch.setattr(collector, 'hourly_slots', lambda now: [scientific_source.slot])
+def test_requested_slots_stay_fixed_while_download_time_advances(storage, scientific_source):
     clocks = iter([scientific_source.now, scientific_source.now+timedelta(minutes=1)])
     assert collector.collect_one(scientific_source.slot, 'aia171', clock=lambda: next(clocks)) == 'saved'
     metadata = file_observations.find(entity='npz.512')[0]['details']
@@ -62,28 +66,21 @@ def test_reduction_retains_nan_and_rescales_wcs(scientific_source):
     assert observation_url('aia171', scientific_source.slot).endswith('_0171.fits')
 
 
-def test_full_warmup_only_collects_proswin_channels_for_96_hours(storage, scientific_source, monkeypatch):
-    collect = Mock(return_value='existing')
-    monkeypatch.setattr(collector, 'collect_one', collect)
-    report = collector.cycle('warmup', full=True, now=scientific_source.now)
-    assert report['existing'] == 192
-    assert {call.args[1] for call in collect.call_args_list} == {'aia171', 'aia211'}
-    slots = {call.args[0] for call in collect.call_args_list}
-    assert len(slots) == 96
-    assert min(slots) == scientific_source.slot - timedelta(hours=95)
-    assert max(slots) == scientific_source.slot
-
-
-@pytest.mark.parametrize('channel, hours, status', [('aia193', 0, 'unavailable'), ('aia171', 96, 'expired')])
-def test_unneeded_observations_are_rejected_before_download(scientific_source, channel, hours, status):
-    assert collector.collect_one(scientific_source.slot-timedelta(hours=hours), channel,
-        clock=lambda: scientific_source.now) == status
+def test_unknown_channel_is_rejected_before_download(scientific_source):
+    assert collector.collect_one(scientific_source.slot, 'other', clock=lambda: scientific_source.now) == 'unavailable'
     scientific_source.download.assert_not_called()
 
 
-def test_sdo_configuration_rejects_a_45_day_backfill():
-    from clio.config import SDOImages
+def test_sdo_configuration_uses_independent_product_policies():
+    from clio.config import ClioObservations, load_observation_config
     from pydantic import ValidationError
-    assert SDOImages().backfill_days == 4
+    config = load_observation_config()
+    policy = config.observations['aia_171_nrt'].model_dump()
+    policy.update(retention_days=45, backfill_days=45)
+    assert ClioObservations(observations={'aia_171_nrt': policy}).observations['aia_171_nrt'].retention_days == 45
+    with pytest.raises(ValidationError, match='backfill exceeds retention'):
+        ClioObservations(observations={'aia_171_nrt': {**policy, 'retention_days': 4}})
+    with pytest.raises(ValidationError, match='incompatible'):
+        ClioObservations(observations={'aia_171_nrt': {**policy, 'backfill_days': 0, 'sources': {'live': ['nasa.aia_browse'], 'historical': []}}})
     with pytest.raises(ValidationError):
-        SDOImages(backfill_days=45)
+        ClioObservations(observations={}, sdo_images={'enabled': True})

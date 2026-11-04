@@ -10,14 +10,59 @@ from sqlalchemy.exc import SQLAlchemyError
 import pandas as pd
 from requests import RequestException
 
-from clio.ingestion.products import OBSERVATIONS, SOURCE_IDS
-from clio.ingestion.live import LIVE_LOADERS, COLUMNS
+from clio.providers import f107, geomagnetic, solar_wind
+from clio.ingestion.utils.adapters import wide_to_measurements, clean_records
+from clio.ingestion.utils.products import OBSERVATIONS, SOURCE_IDS
 from clio.db.session import get_db_session
 from clio.db.locks import SOURCE_LOCKS
-from clio.observations.measurements import store_native
-from clio.observations.intervals import INTERVALS
+from clio.ingestion.utils.measurements import store_native
+from clio.db.models.measurement import INTERVALS
 
 logger = logging.getLogger(__name__)
+
+COLUMNS = ['metric', 'value', 'observed_at', 'received_at', 'source_product']
+
+
+def load_wind(kind, start, now):
+    return measurements(solar_wind.fetch_records(kind), start, now, f'swpc.rtsw_{kind}')
+
+
+def load_geomagnetic(metric, start, now):
+    return measurements(geomagnetic.fetch_records(metric), start, now, f'swpc.{metric}')
+
+
+def measurements(dataset, start, now, product):
+    received = datetime.now(UTC)
+    frame = clean_records(wide_to_measurements(dataset), start,
+                          pd.Timestamp(now) + pd.Timedelta(microseconds=1), dataset.columns)
+    return frame.drop_duplicates(['metric', 'observed_at'], keep='last').assign(
+        received_at=received, source_product=product)
+
+
+def load_f107(start, now):
+    return measurements(f107.fetch_f107(), start, now, 'swpc.f107')
+
+
+def load_celestrak_f107(start, now):
+    from clio.providers.celestrak import fetch_celestrak_f107
+    return measurements(fetch_celestrak_f107(), start, now, 'celestrak.f107')
+
+
+def load_solfsmy_means(start, now):
+    from clio.providers.solfsmy import fetch_solfsmy_means
+    return measurements(fetch_solfsmy_means(), start, now, 'solfsmy.means')
+
+
+LIVE_LOADERS = {
+    'swpc.rtsw_mag': partial(load_wind, 'mag'),
+    'swpc.rtsw_plasma': partial(load_wind, 'plasma'),
+    'swpc.kp': partial(load_geomagnetic, 'kp'),
+    'swpc.dst': partial(load_geomagnetic, 'dst'),
+    'swpc.f107': load_f107,
+    'celestrak.f107': load_celestrak_f107,
+    'solfsmy.means': load_solfsmy_means,
+}
+
 
 async def collect_product(product, priorities, start, now):
     async with get_db_session() as session:
@@ -29,6 +74,10 @@ async def collect_product(product, priorities, start, now):
                 return pd.DataFrame(columns=COLUMNS)
         try:
             frame = await asyncio.to_thread(LIVE_LOADERS[product], start, now)
+            allowed = {metric for metric, sources in priorities.items() if product in sources}
+            if allowed.intersection({'bx', 'by', 'bz'}):
+                allowed.add('bt')
+            frame = frame.loc[frame.metric.isin(allowed)]
             records = frame.astype(object).where(pd.notna(frame), None).to_dict('records')
             await store_native(session, records, source_priorities=priorities)
             await session.commit()
@@ -40,9 +89,9 @@ async def collect_product(product, priorities, start, now):
 
 async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
     start = now - timedelta(days=lookback_days)
-    pending = {m: set(pd.date_range(pd.Timestamp(start).ceil(OBSERVATIONS[m].live_resolution),
-                                   pd.Timestamp(now).floor(OBSERVATIONS[m].live_resolution),
-                                   freq=OBSERVATIONS[m].live_resolution)) for m in metrics}
+    pending = {m: set(pd.date_range(pd.Timestamp(start).ceil(f'{policies[m].live_resolution_minutes}min'),
+                                   pd.Timestamp(now).floor(f'{policies[m].live_resolution_minutes}min'),
+                                   freq=f'{policies[m].live_resolution_minutes}min')) for m in metrics}
     rows, attempts, cache = [], [], {}
     async def receive(key, fetch):
         try:
@@ -74,7 +123,7 @@ async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
                     if observed.tzinfo is None:
                         raise ValueError('Loader returned a timezone-naive observation')
                     observed = observed.tz_convert('UTC')
-                    slot = observed.floor(definition.live_resolution)
+                    slot = observed.floor(f'{policies[row.metric].live_resolution_minutes}min')
                     if (not start <= observed <= now or slot not in requested[row.metric]
                             or pd.isna(row.value) or not definition.accepts(row.value)):
                         continue
@@ -95,7 +144,7 @@ async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
                    'missing_live_slots': {m: len(slots) for m, slots in pending.items()}, 'source_attempts': attempts}
 
 
-async def collect_live(config, metrics, *, now=None):
+async def collect_numeric(config, metrics, *, now=None):
     metrics = list(dict.fromkeys(metrics))
     if not metrics or any(m not in config.observations or OBSERVATIONS[m].kind != 'numeric' for m in metrics):
         raise ValueError('Select observations configured in clio.observations')

@@ -14,10 +14,17 @@ from time import monotonic
 import numpy as np
 import requests
 
-from clio.observations.sdo import OBSERVED_CHANNELS, utc
+from common.schemas.sdo_images import OBSERVED_CHANNELS
 
 MAX_DOWNLOAD_BYTES = 128 * 1024 * 1024
 MAX_BROWSE_BYTES = 32 * 1024 * 1024
+
+
+def _utc(value):
+    value = datetime.fromisoformat(value) if isinstance(value, str) else value
+    if value.tzinfo is None:
+        raise ValueError('Expected timezone-aware timestamp')
+    return value.astimezone(UTC)
 
 
 def fits_observed_at(header):
@@ -42,7 +49,7 @@ def read_native_fits(path, channel, *, slot, now, tolerance_seconds=120):
     from astropy.io import fits
     if channel not in OBSERVED_CHANNELS:
         raise ValueError('Clio accepts real observations only')
-    slot, now = utc(slot), utc(now)
+    slot, now = _utc(slot), _utc(now)
     if slot.minute or slot.second or slot.microsecond or tolerance_seconds < 0:
         raise ValueError('Expected whole UTC hour and nonnegative time tolerance')
     with fits.open(path, memmap=False) as hdus:
@@ -111,7 +118,7 @@ def download_observation(url, channel, *, slot, now, session=None, include_origi
 
 def observation_url(channel, slot):
     """Public numeric NRT products; HMI filenames use nominal TAI hours."""
-    slot = utc(slot)
+    slot = _utc(slot)
     if channel not in OBSERVED_CHANNELS or slot.minute or slot.second or slot.microsecond:
         raise ValueError('Expected observed channel and whole UTC hour')
     base = 'https://jsoc1.stanford.edu/data'
@@ -167,7 +174,7 @@ def prepare_observation(image, metadata):
 
 def fetch(channel, slot):
     """Return a file reference; download_observation validates the referenced FITS."""
-    return {'timestamp': utc(slot), channel + '_url': observation_url(channel, slot)}
+    return {'timestamp': _utc(slot), channel + '_url': observation_url(channel, slot)}
 
 
 def load_observation(channel, slot, *, now):

@@ -10,7 +10,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from clio.config import load_observation_config
-from clio.db.session import get_db_session
+from clio.db.session import dispose_sync_engine, get_db_session
 from clio.routers import (
     observation_files,
     observations,
@@ -31,8 +31,7 @@ async def lifespan(_):
         yield
     finally:
         await dispose_engine()
-        from clio.observations.files import dispose
-        dispose()
+        dispose_sync_engine()
 
 
 app = FastAPI(title='Clio observation service', version='1', lifespan=lifespan)

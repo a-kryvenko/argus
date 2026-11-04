@@ -8,10 +8,10 @@ from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
 from clio.config import ClioObservations, load_observation_config
-from clio.ingestion.adapters import WideHistoryAdapter, historical_adapters
-from clio.ingestion.products import PRODUCTS
-from clio.ingestion import numeric_backfill as service
-from clio.observations.measurements import upsert_measurements
+from clio.ingestion.utils.adapters import WideHistoryAdapter, historical_adapters
+from clio.ingestion.utils.products import PRODUCTS
+from clio.ingestion import backfill_numeric as service
+from clio.ingestion.utils.measurements import upsert_measurements
 from clio.providers.spdf import SPDF_Loader
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
@@ -25,8 +25,8 @@ def config(metrics=('v', 'n', 't')):
                       ['omni.hourly', 'ace.plasma_hourly'] if metric in ('v', 'n', 't') else ['omni.hourly'])
         return {'live': live, 'historical': historical}
     return ClioObservations.model_validate({'observations': {
-        metric: {'sources': sources(metric),
-                 'backfill_days': 2, 'freshness_minutes': load_observation_config().observations[metric].freshness_minutes}
+        metric: {**load_observation_config().observations[metric].model_dump(),
+                 'sources': sources(metric), 'backfill_days': 2}
         for metric in metrics}})
 
 
@@ -38,7 +38,7 @@ def frame(*rows):
     lambda p: p['sources'].update(historical=['typo']),
     lambda p: p['sources'].update(historical=['swpc.rtsw_plasma']),
     lambda p: p['sources'].update(historical=['omni.hourly', 'omni.hourly']),
-    lambda p: p['sources'].update(historical=[]),
+    lambda p: p['sources'].update(live=[], historical=[]),
     lambda p: p.pop('freshness_minutes'),
     lambda p: p.update(freshness_minutes=0),
     lambda p: p.update(freshness_minutes=-1),
@@ -52,8 +52,7 @@ def frame(*rows):
     lambda p: p.update(unknown=True),
 ])
 def test_invalid_policy_rejected(change):
-    policy = {'sources': {'live': ['swpc.rtsw_plasma'], 'historical': ['omni.hourly']},
-              'backfill_days': 60, 'freshness_minutes': 10}
+    policy = load_observation_config().observations['v'].model_dump()
     change(policy)
     with pytest.raises(ValidationError):
         ClioObservations.model_validate({'observations': {'v': policy}})
@@ -183,9 +182,9 @@ def test_legacy_repoll_does_not_erase_provenance_for_unchanged_values():
 
 def test_invalid_observation_does_not_close_hour_but_valid_off_grid_value_does():
     stored = frame(('v', float('nan'), START + timedelta(minutes=5)))
-    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1), freshness_minutes=load_observation_config().observations['v'].freshness_minutes) == {pd.Timestamp(START)}
+    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1), freshness_minutes=load_observation_config().observations['v'].freshness_minutes, resolution_minutes=load_observation_config().observations['v'].resolution_minutes) == {pd.Timestamp(START)}
     stored['value'] = 400.
-    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1), freshness_minutes=load_observation_config().observations['v'].freshness_minutes) == set()
+    assert service.missing_slots(stored, 'v', START, START + timedelta(hours=1), freshness_minutes=load_observation_config().observations['v'].freshness_minutes, resolution_minutes=load_observation_config().observations['v'].resolution_minutes) == set()
 
 
 def test_all_sources_failing_does_not_commit(monkeypatch):
@@ -205,10 +204,10 @@ def test_coverage_uses_three_hour_and_daily_slots_and_only_closed_intervals():
     end = START + timedelta(days=1, hours=2)
     stored = frame(('kp', 3., START), ('kp', 2., START + timedelta(hours=3)),
                    ('f10_7', 150., START + timedelta(hours=12)))
-    assert len(service.missing_slots(stored, 'kp', START, end, freshness_minutes=load_observation_config().observations['kp'].freshness_minutes)) == 6
-    assert not service.missing_slots(stored, 'f10_7', START, end, freshness_minutes=load_observation_config().observations['f10_7'].freshness_minutes)
-    assert len(service.missing_slots(stored, 'ap', START, end, freshness_minutes=load_observation_config().observations['ap'].freshness_minutes)) == 8
-    assert not service.missing_slots(stored, 'f10_7', START + timedelta(hours=1), end, freshness_minutes=load_observation_config().observations['f10_7'].freshness_minutes)
+    assert len(service.missing_slots(stored, 'kp', START, end, freshness_minutes=load_observation_config().observations['kp'].freshness_minutes, resolution_minutes=load_observation_config().observations['kp'].resolution_minutes)) == 6
+    assert not service.missing_slots(stored, 'f10_7', START, end, freshness_minutes=load_observation_config().observations['f10_7'].freshness_minutes, resolution_minutes=load_observation_config().observations['f10_7'].resolution_minutes)
+    assert len(service.missing_slots(stored, 'ap', START, end, freshness_minutes=load_observation_config().observations['ap'].freshness_minutes, resolution_minutes=load_observation_config().observations['ap'].resolution_minutes)) == 8
+    assert not service.missing_slots(stored, 'f10_7', START + timedelta(hours=1), end, freshness_minutes=load_observation_config().observations['f10_7'].freshness_minutes, resolution_minutes=load_observation_config().observations['f10_7'].resolution_minutes)
 
 
 def test_omni_adapter_retains_signed_fields_and_filters_invalid_indices():
@@ -246,7 +245,7 @@ def test_three_hour_coverage_stores_one_original_per_missing_slot():
 
 
 def test_numeric_ingestion_does_not_register_calibration_products():
-    from clio.ingestion.live import LIVE_LOADERS
+    from clio.ingestion.collect_numeric import LIVE_LOADERS
     assert not any('calibrated' in name for name in historical_adapters())
     assert not any('calibrated' in name for name in LIVE_LOADERS)
 
@@ -292,9 +291,9 @@ def test_second_backfill_of_complete_history_makes_no_provider_requests(monkeypa
 def test_held_solfsmy_mean_does_not_create_daily_gaps_through_publication_delay():
     end = START+timedelta(days=14)
     stored = frame(('s10_81mean', 110., end-timedelta(days=6, hours=12)))
-    assert service.missing_slots(stored, 's10_81mean', START, end, freshness_minutes=load_observation_config().observations['s10_81mean'].freshness_minutes) == set()
+    assert service.missing_slots(stored, 's10_81mean', START, end, freshness_minutes=load_observation_config().observations['s10_81mean'].freshness_minutes, resolution_minutes=load_observation_config().observations['s10_81mean'].resolution_minutes) == set()
     stored['value'] = float('nan')
-    assert len(service.missing_slots(stored, 's10_81mean', START, end, freshness_minutes=load_observation_config().observations['s10_81mean'].freshness_minutes)) == 14
+    assert len(service.missing_slots(stored, 's10_81mean', START, end, freshness_minutes=load_observation_config().observations['s10_81mean'].freshness_minutes, resolution_minutes=load_observation_config().observations['s10_81mean'].resolution_minutes)) == 14
 
 
 def test_shared_historical_response_is_reused_when_fallback_needs_another_metric():
@@ -322,8 +321,8 @@ def test_backfill_repairs_only_unusable_stored_values():
 
 
 def test_magnetic_config_cannot_use_ace_gse_as_gsm_fallback():
-    policy = {'sources': {'live': ['swpc.rtsw_mag'], 'historical': ['ace.plasma_hourly']},
-              'backfill_days': 60, 'freshness_minutes': 10}
+    policy = {**load_observation_config().observations['bz'].model_dump(),
+              'sources': {'live': ['swpc.rtsw_mag'], 'historical': ['ace.plasma_hourly']}}
     with pytest.raises(ValidationError, match='incompatible'):
         ClioObservations.model_validate({'observations': {'bz': policy}})
 

@@ -8,8 +8,8 @@ import pytest
 
 from clio.config import load_observation_config
 from clio.db.models.measurement import Measurement
-from clio.ingestion.numeric_live import fetch_live
-from clio.ingestion.numeric_backfill import missing_slots
+from clio.ingestion.collect_numeric import fetch_live
+from clio.ingestion.backfill_numeric import missing_slots
 
 NOW = datetime(2026, 10, 3, 12, tzinfo=UTC)
 
@@ -32,5 +32,5 @@ def test_configured_threshold_controls_ingestion_and_reads(monkeypatch, metric, 
 def test_mean_backfill_uses_configured_freshness():
     start, end = NOW - timedelta(days=14), NOW.replace(hour=0)
     frame = pd.DataFrame([dict(metric='s10_81mean', value=110, observed_at=end-timedelta(days=6))])
-    assert not missing_slots(frame, 's10_81mean', start, end, freshness_minutes=7 * 1440)
-    assert missing_slots(frame, 's10_81mean', start, end, freshness_minutes=5 * 1440)
+    assert not missing_slots(frame, 's10_81mean', start, end, freshness_minutes=7 * 1440, resolution_minutes=load_observation_config().observations['s10_81mean'].resolution_minutes)
+    assert missing_slots(frame, 's10_81mean', start, end, freshness_minutes=5 * 1440, resolution_minutes=load_observation_config().observations['s10_81mean'].resolution_minutes)

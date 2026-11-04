@@ -21,13 +21,13 @@ _lane_locks = {}
 @contextmanager
 def ingestion_lock(name, number):
     """Coordinate threads locally and worker processes through PostgreSQL."""
-    from clio.observations import files
+    from clio.db import session as db
     lock = _lane_locks.setdefault(name, Lock())
     if not lock.acquire(blocking=False):
         yield False
         return
     try:
-        with files.engine().begin() as connection:
+        with db.get_sync_engine().begin() as connection:
             acquired = connection.dialect.name != 'postgresql' or connection.scalar(
                 text('SELECT pg_try_advisory_xact_lock(:number)'), {'number': number})
             yield acquired

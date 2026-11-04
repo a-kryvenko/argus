@@ -1,20 +1,22 @@
-"""Backfill configured observations without changing existing records."""
-
+"""Backfill configured observations without replacing existing measurements."""
 from clio.db.session import get_db_session
-from clio.ingestion.selection import partition, merge_files, merge_sdo
+from clio.ingestion.utils.products import OBSERVATIONS
 
 
 async def backfill(config, *, now):
-    numeric, files = partition(config, None)
+    metrics = [metric for metric, policy in config.observations.items() if policy.sources.historical]
+    numeric = [metric for metric in metrics if OBSERVATIONS[metric].kind == 'numeric']
+    files = [metric for metric in metrics if OBSERVATIONS[metric].kind == 'file']
     result = {'status': 'complete', 'failed_metrics': [], 'downloaded_measurements': 0}
     if numeric:
-        from clio.ingestion.numeric_backfill import backfill_numeric
+        from clio.ingestion.backfill_numeric import backfill_numeric
         async with get_db_session() as session:
-            result = await backfill_numeric(session, config, numeric, now=now,
-                                             raise_on_failure=False)
+            result = await backfill_numeric(session, config, numeric, now=now, raise_on_failure=False)
     if files:
-        from clio.ingestion.files import collect_file_observations
-        result = merge_files(result, await collect_file_observations(
-            config, files, mode='backfill', now=now))
-    result = await merge_sdo(result, config, now=now, mode='warmup')
+        from clio.ingestion.backfill_files import backfill_files
+        report = await backfill_files(config, files, now=now)
+        result.update({key: value for key, value in report.items() if key not in ('status', 'failed_metrics')})
+        result['failed_metrics'] = sorted(set(result['failed_metrics']) | set(report['failed_metrics']))
+        if report['status'] == 'partial':
+            result['status'] = 'partial'
     return result

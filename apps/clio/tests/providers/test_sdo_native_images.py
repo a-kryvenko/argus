@@ -105,7 +105,7 @@ def test_commentary_survives_native_fits_json_receipt_and_reduced_fits(tmp_path)
     import io
     import json
     from clio.providers.sdo import prepare_observation
-    from clio.observations.sdo import fits_bytes
+    from clio.ingestion.extras.sdo import fits_bytes
     path = tmp_path / 'aia.fits'
     header = fits.Header({'DATE-OBS': SLOT.isoformat().replace('+00:00', ''),
                           'INSTRUME': 'AIA_1', 'WAVELNTH': 171, 'CRPIX1': 512.5})

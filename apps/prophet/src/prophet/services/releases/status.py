@@ -69,7 +69,7 @@ def input_diagnostics(inputs):
         'density_sources': sources,
         'solar_wind_events': ({'poll_count': len(inputs.solar_wind_events.polls),
                               'l1_sample_count': len(inputs.solar_wind_events.l1_samples),
-                              'as_of': inputs.solar_wind_events.as_of.isoformat()}
+                              'read_at': inputs.solar_wind_events.read_at.isoformat()}
                              if inputs.solar_wind_events else None),
     }
 

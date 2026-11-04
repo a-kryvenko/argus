@@ -3,14 +3,16 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from clio.config import load_observation_config
-from clio.ingestion.products import PRODUCTS
-from clio.observations.measurements import load_measurements
-from clio.observations.normalized import load_normalized_observations, upsert_normalized_observations
-from clio.observations.schema import REQUIRED_METRICS, SOLAR_INDEX_METRICS, OBSERVATION_METRICS
-from common.schemas.observation import Observation
+from clio.db.models.normalized_observation import NormalizedObservation
+
+from clio.ingestion.utils.products import PRODUCTS
+from clio.ingestion.utils.measurements import load_measurements
+from clio.db.models.measurement import REQUIRED_METRICS, SOLAR_INDEX_METRICS, OBSERVATION_METRICS
+from common.schemas.observation import Observation, ObservationPoint
 from clio.db.session import get_db_session
 
 
@@ -84,3 +86,61 @@ async def refresh_normalized_observations(
         result = await load_normalized_observations(session, since=since, until=now)
     
     return result
+
+
+async def load_normalized_observations(
+    session: AsyncSession, *, since: datetime, until: datetime,
+) -> Observation:
+    statement = select(NormalizedObservation).where(
+        NormalizedObservation.observed_at >= since,
+        NormalizedObservation.observed_at <= until,
+    ).order_by(NormalizedObservation.observed_at)
+    records = (await session.execute(statement)).scalars().all()
+    return Observation(points=[
+        ObservationPoint(
+            issue_time=record.observed_at,
+            bx=record.bx,
+            by=record.by,
+            bz=record.bz,
+            v=record.v,
+            n=record.n,
+            t=record.t,
+            kp=int(record.kp),
+            dst=int(record.dst),
+            ap=int(record.ap),
+            f10_7=int(record.f10_7),
+            s10=None,
+            m10=None,
+            y10=None,
+        )
+        for record in records
+    ])
+
+
+async def upsert_normalized_observations(
+    session: AsyncSession,
+    observations: pd.DataFrame,
+    *, replace_existing: bool = True,
+) -> None:
+    if observations.empty:
+        return
+
+    records = []
+    for row in observations.itertuples(index=False):
+        record = {"observed_at": row.observed_at.to_pydatetime()}
+        record.update({
+            metric: float(value) if pd.notna(value) else None
+            for metric in OBSERVATION_METRICS
+            for value in [getattr(row, metric)]
+        })
+        records.append(record)
+
+    statement = insert(NormalizedObservation).values(records)
+    if replace_existing:
+        statement = statement.on_conflict_do_update(
+            index_elements=[NormalizedObservation.observed_at],
+            set_={metric: getattr(statement.excluded, metric) for metric in OBSERVATION_METRICS},
+        )
+    else:
+        statement = statement.on_conflict_do_nothing(index_elements=[NormalizedObservation.observed_at])
+    await session.execute(statement)

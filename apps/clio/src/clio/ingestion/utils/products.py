@@ -7,6 +7,9 @@ from pathlib import Path
 import math
 from typing import TYPE_CHECKING, Literal, Protocol
 
+from common.schemas.sdo_images import OBSERVED_CHANNELS
+from common.schemas.sdo_browse import CHANNELS as BROWSE_CHANNELS
+
 if TYPE_CHECKING:
     import pandas as pd
 
@@ -14,12 +17,14 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class ObservationDefinition:
     unit: str
-    resolution: str = '1h'
     kind: Literal['numeric', 'file'] = 'numeric'
     signed: bool = False
     max_value: float | None = None
-    live_resolution: str = '1min'
     coverage: Literal['slots', 'latest'] = 'slots'
+    handler: str | None = None
+    channel: str | None = None
+    file_kind: str | None = None
+    file_entity: str | None = None
 
     def accepts(self, value: float) -> bool:
         return math.isfinite(value) and (self.signed or value >= 0) and (
@@ -33,15 +38,15 @@ OBSERVATIONS = {
     'v': ObservationDefinition('km/s'),
     'n': ObservationDefinition('cm^-3'),
     't': ObservationDefinition('K'),
-    'kp': ObservationDefinition('index', resolution='3h', max_value=9, live_resolution='3h'),
-    'ap': ObservationDefinition('nT', resolution='3h', live_resolution='3h'),
-    'dst': ObservationDefinition('nT', signed=True, live_resolution='1h'),
-    'f10_7': ObservationDefinition('sfu', resolution='1D', live_resolution='1D'),
-    'f10_7_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', coverage='latest'),
-    **{name + '_81mean': ObservationDefinition('sfu', resolution='1D', live_resolution='1D', coverage='latest')
+    'kp': ObservationDefinition('index', max_value=9),
+    'ap': ObservationDefinition('nT'),
+    'dst': ObservationDefinition('nT', signed=True),
+    'f10_7': ObservationDefinition('sfu'),
+    'f10_7_81mean': ObservationDefinition('sfu', coverage='latest'),
+    **{name + '_81mean': ObservationDefinition('sfu', coverage='latest')
        for name in ('s10', 'm10', 'y10')},
-    'goes': ObservationDefinition('JSON', kind='file', live_resolution='1h'),
-    'gong': ObservationDefinition('FITS', kind='file', live_resolution='1h'),
+    'goes': ObservationDefinition('JSON', kind='file', file_entity='json.original'),
+    'gong': ObservationDefinition('FITS', kind='file', file_entity='fits.original'),
 }
 
 
@@ -50,6 +55,7 @@ class Product:
     metrics: frozenset[str]
     modes: frozenset[str]
     kind: Literal['numeric', 'file'] = 'numeric'
+    slot_minutes: int | None = None
 
 
 # All numeric products feed measurement; live wind uses native minute RTSW.
@@ -68,11 +74,27 @@ PRODUCTS = {
     'celestrak.f107_archive': Product(frozenset({'f10_7', 'f10_7_81mean'}), frozenset({'historical'})),
     'solfsmy.means': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'live'})),
     'solfsmy.means_archive': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'historical'})),
-    'goes.live': Product(frozenset({'goes'}), frozenset({'live'}), kind='file'),
-    'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file'),
-    'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file'),
-    'gong.archive': Product(frozenset({'gong'}), frozenset({'historical'}), kind='file'),
+    'goes.live': Product(frozenset({'goes'}), frozenset({'live'}), kind='file', slot_minutes=60),
+    'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file', slot_minutes=1440),
+    'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file', slot_minutes=60),
+    'gong.archive': Product(frozenset({'gong'}), frozenset({'historical'}), kind='file', slot_minutes=60),
 }
+
+
+for channel in OBSERVED_CHANNELS:
+    name = f'aia_{int(channel[3:]):03d}_nrt' if channel.startswith('aia') else 'hmi_m_nrt'
+    source = 'aia.nrt_' + channel[3:] if channel.startswith('aia') else 'hmi.nrt_m'
+    OBSERVATIONS[name] = ObservationDefinition('FITS', kind='file',
+        handler='sdo_nrt', channel=channel, file_kind='sdo', file_entity='fits.original')
+    PRODUCTS[source] = Product(frozenset({name}), frozenset({'live', 'historical'}), kind='file', slot_minutes=60)
+
+browse_metrics = set()
+for channel in BROWSE_CHANNELS:
+    name = f'aia_{channel}_browse'
+    OBSERVATIONS[name] = ObservationDefinition('JPEG', kind='file', coverage='latest',
+        handler='sdo_browse', channel='aia' + str(int(channel)), file_kind='sdo_browse', file_entity='jpg.original')
+    browse_metrics.add(name)
+PRODUCTS['nasa.aia_browse'] = Product(frozenset(browse_metrics), frozenset({'live'}), kind='file')
 
 
 SOURCE_IDS = {

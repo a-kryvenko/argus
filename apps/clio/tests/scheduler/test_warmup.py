@@ -81,7 +81,7 @@ def test_cold_start_backfills_before_collect_and_persists_state(monkeypatch, sta
 
     monkeypatch.setattr(warmup, "run_backfill", backfill)
     monkeypatch.setattr(warmup, "run_collect", collect)
-    monkeypatch.setattr(worker, "COLLECTING_SCHEDULES", [(["v"], "*"), (["dst"], "*/5")])
+    monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1), (["dst"], 5)])
     monkeypatch.setattr(worker, "on_job_finished", events.append)
 
     async def check():
@@ -107,7 +107,7 @@ def test_restart_checks_previous_heartbeat(monkeypatch, state_path, seconds, exp
     collect = AsyncMock(return_value={"status": "complete"})
     monkeypatch.setattr(warmup, "run_backfill", backfill)
     monkeypatch.setattr(warmup, "run_collect", collect)
-    monkeypatch.setattr(worker, "COLLECTING_SCHEDULES", [(["v"], "*")])
+    monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1)])
     monkeypatch.setattr(worker, "on_job_finished", lambda event: None)
 
     async def check():
@@ -123,7 +123,7 @@ def test_backfill_failure_is_reported_and_collect_continues(monkeypatch, state_p
     collect = AsyncMock(return_value={"status": "partial", "failed_metrics": ["v"]})
     monkeypatch.setattr(warmup, "run_collect", collect)
     events = []
-    monkeypatch.setattr(worker, "COLLECTING_SCHEDULES", [(["v"], "*")])
+    monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1)])
     monkeypatch.setattr(worker, "on_job_finished", events.append)
 
     async def check():
@@ -158,7 +158,7 @@ def test_worker_signal_stops_during_warmup_or_scheduler(monkeypatch, state_path,
         def start(self, *args, **kwargs):
             super().start(*args, **kwargs)
             assert not warmup.read_state(state_path)["warmup_pending"]
-            assert len(self.get_jobs()) == 9
+            assert len(self.get_jobs()) == len(worker.collecting_schedules(worker.load_observation_config())) + 3
             ready.set()
 
     def create_scheduler(**kwargs):
@@ -191,9 +191,9 @@ def test_worker_signal_stops_during_warmup_or_scheduler(monkeypatch, state_path,
         collect.assert_not_awaited()
         assert events == []
     else:
-        assert collect.await_count == len(worker.COLLECTING_SCHEDULES)
+        assert collect.await_count == len(worker.collecting_schedules(worker.load_observation_config()))
         assert [call.args[0] for call in collect.await_args_list] == [
-            metrics for metrics, _ in worker.COLLECTING_SCHEDULES
+            metrics for metrics, _ in worker.collecting_schedules(worker.load_observation_config())
         ]
 
 

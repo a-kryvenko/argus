@@ -6,10 +6,10 @@ import pandas as pd
 import pytest
 
 from clio.config import load_observation_config
-from clio.ingestion import numeric_live
-from clio.ingestion.adapters import SOLFSMYHistoryAdapter
-from clio.ingestion.conversion import wide_to_measurements
-from clio.ingestion.live import load_solfsmy_means
+from clio.ingestion import collect_numeric as live_numeric
+from clio.ingestion.utils.adapters import SOLFSMYHistoryAdapter
+from clio.ingestion.utils.adapters import wide_to_measurements
+from clio.ingestion.collect_numeric import load_solfsmy_means
 from clio.providers import solfsmy as loader
 from contextlib import asynccontextmanager
 
@@ -58,9 +58,9 @@ def test_archive_download_once_and_live_receipt_keeps_window_date(monkeypatch):
 def test_collection_reads_delayed_mean_and_batches_solar_metrics(monkeypatch):
     frame = wide_to_measurements(loader.parse_solfsmy_means(TEXT)).assign(received_at=NOW)
     source = AsyncMock(return_value=frame)
-    monkeypatch.setattr(numeric_live, 'collect_product', source)
+    monkeypatch.setattr(live_numeric, 'collect_product', source)
     metrics = ['s10_81mean', 'm10_81mean', 'y10_81mean']
-    report = asyncio.run(numeric_live.collect_live(load_observation_config(), metrics, now=NOW))
+    report = asyncio.run(live_numeric.collect_numeric(load_observation_config(), metrics, now=NOW))
     assert report['failed_metrics'] == []
     assert report['downloaded_measurements'] == 6
     source.assert_awaited_once()
@@ -76,8 +76,6 @@ def test_cleanup_retains_published_means_for_their_collection_horizon(storage, m
         yield session
     monkeypatch.setattr(cleanup, 'get_db_session', connection)
     config = load_observation_config().model_copy(deep=True)
-    config.sdo_images.enabled = False
-    config.sdo_browse_enabled = False
     config.solar_wind_events.enabled = False
     asyncio.run(cleanup.cleanup(config, NOW))
     statement = session.execute.call_args_list[0].args[0].compile()

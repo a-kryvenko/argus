@@ -47,15 +47,14 @@ def solar_measurements(records, as_of):
 
 
 def select_sources(inputs):
-    """Select causal receipts before downloading or extracting any features."""
-    refs = sorted((r for r in inputs.files if r.observed_at <= inputs.as_of and r.available_at <= inputs.as_of),
-                  key=lambda r: (r.observed_at, r.available_at))
+    """Select the latest stored GOES frame per source and day."""
+    refs = sorted(inputs.files, key=lambda r: (r.observed_at, r.file.timestamp))
     # One most-recently received live frame per day, plus completed-day archives.
     selected_goes = {}
     for ref in refs:
-        if ref.kind == 'goes':
+        if ref.observation == 'goes':
             selected_goes[(ref.source_product, ref.slot_at.date())] = ref
-    return sorted(selected_goes.values(), key=lambda r: r.available_at)
+    return sorted(selected_goes.values(), key=lambda r: r.file.timestamp)
 
 
 def enrich_inputs(inputs):
@@ -66,7 +65,7 @@ def enrich_inputs(inputs):
             content = original(ref)
             goes.append(pd.read_json(io.StringIO(content.decode()), orient='records').assign(goes_euvs_quality_valid=True))
         except (OSError, ValueError, KeyError, TypeError, RuntimeError):
-            logger.exception('Cannot prepare %s model inputs from %s', ref.kind, ref.sha256)
+            logger.exception('Cannot prepare %s model inputs from %s', ref.observation, ref.sha256)
     apply_solar_measurements(inputs, solar_measurements(goes, inputs.as_of) if goes else [])
     return inputs
 

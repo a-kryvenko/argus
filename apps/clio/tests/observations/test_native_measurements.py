@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 import pandas as pd
 from sqlalchemy.dialects import postgresql
 
-from clio.ingestion.conversion import wide_to_measurements
-from clio.observations.measurements import store_native
+from clio.ingestion.utils.adapters import wide_to_measurements
+from clio.ingestion.utils.measurements import store_native
 
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 

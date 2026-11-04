@@ -3,44 +3,14 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.models.measurement import Measurement
-from clio.observations.errors import ObservationUnavailable
-from clio.observations.intervals import interval_end_expression
-from clio.observations.schema import MEASUREMENT_METRICS
+from clio.db.models.measurement import MEASUREMENT_METRICS
 
 UPSERT_BATCH_SIZE = 5_000
-
-
-async def read_measurements(session, *, start, end, metrics, aggregation='raw',
-                            min_value=None, max_value=None, exclude_value=None):
-    timestamp = Measurement.observed_at
-    available = func.greatest(timestamp, Measurement.received_at, interval_end_expression())
-    if aggregation == 'hourly':
-        timestamp = func.date_trunc('hour', timestamp)
-        statement = select(Measurement.metric, func.avg(Measurement.value).label('value'),
-                           timestamp.label('observed_at'), func.max(available).label('available_at'))
-        statement = statement.group_by(Measurement.metric, timestamp)
-    else:
-        statement = select(Measurement.metric, Measurement.value, timestamp,
-                           available.label('available_at'))
-    statement = statement.where(
-        Measurement.metric.in_(metrics), Measurement.observed_at >= start, Measurement.observed_at < end,
-        Measurement.value > float('-inf'), Measurement.value < float('inf'),
-    )
-    if min_value is not None:
-        statement = statement.where(Measurement.value >= min_value)
-    if max_value is not None:
-        statement = statement.where(Measurement.value < max_value)
-    if exclude_value is not None:
-        statement = statement.where(Measurement.value != exclude_value)
-    rows = (await session.execute(statement.order_by(timestamp, Measurement.metric).limit(250_001))).all()
-    if len(rows) > 250_000:
-        raise ObservationUnavailable('Measurement range exceeds the supported batch size; request a smaller interval')
-    return {'schema_version': 1, 'items': [dict(row._mapping) for row in rows]}
 
 
 async def load_measurements(
@@ -113,7 +83,7 @@ async def upsert_measurements(
                 where=changed,
             )
         elif repair_missing:
-            from clio.ingestion.products import OBSERVATIONS
+            from clio.ingestion.utils.products import OBSERVATIONS
             nonnegative = [name for name, definition in OBSERVATIONS.items()
                            if definition.kind == 'numeric' and definition.signed is False]
             missing = or_(Measurement.value.is_(None), Measurement.value <= float('-inf'),

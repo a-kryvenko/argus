@@ -39,7 +39,7 @@ def source(*polls, samples=()):
                     model_completed_at=datetime.fromisoformat(row['modelCompletionTime'].replace('Z', '+00:00')),
                     arrival_at=datetime.fromisoformat(row['estimatedShockArrivalTime'].replace('Z', '+00:00')),
                     arrival_target='Earth', observed_at=NOW-timedelta(hours=4), initial_speed_km_s=900))
-    return EventInputs(as_of=NOW, read_at=NOW, polls=list(polls), events=events, l1_samples=list(samples))
+    return EventInputs(read_at=NOW, polls=list(polls), events=events, l1_samples=list(samples))
 
 
 def test_empty_report_publishes_through_existing_release_contract():
@@ -74,13 +74,13 @@ def test_event_inputs_require_no_normalized_data_or_image_preparation(monkeypatc
     real_client = httpx.Client
     def handle(request):
         assert request.url.path == '/internal/v1/observations/solar-wind-events/inputs'
-        assert request.url.params['as_of'] == NOW.isoformat()
+        assert not request.url.params
         assert request.headers['Authorization'] == 'Bearer test-token'
         return httpx.Response(200, json=source().model_dump(mode='json'))
     monkeypatch.setattr(loader.httpx, 'Client', lambda **kwargs: real_client(
         transport=httpx.MockTransport(handle), **kwargs))
     result = loader.load_event_inputs(NOW)
-    assert result.observations.points == [] and result.solar_wind_events.as_of == NOW
+    assert result.observations.points == [] and result.solar_wind_events.read_at == NOW
 
 
 def test_speed_context_failure_preserves_arrival_inputs(monkeypatch):
@@ -95,7 +95,7 @@ def test_speed_context_failure_preserves_arrival_inputs(monkeypatch):
         return httpx.Response(503)
     monkeypatch.setattr(loader.httpx,'Client',lambda **kw:real(transport=httpx.MockTransport(handle),**kw))
     result=loader.load_event_inputs(NOW,include_speed=True)
-    assert result.solar_wind_events.as_of==NOW and not result.observations.points
+    assert result.solar_wind_events.read_at==NOW and not result.observations.points
 
 
 def test_changed_model_fingerprint_disables_only_speed(tmp_path):

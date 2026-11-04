@@ -7,17 +7,16 @@ import pandas as pd
 from requests import RequestException
 
 from clio.config import ClioObservations
-from clio.ingestion.adapters import historical_adapters
-from clio.ingestion.products import OBSERVATIONS
-from clio.ingestion.normalize import normalize_measurements
-from clio.observations.measurements import load_measurements, upsert_measurements
-from clio.observations.normalized import upsert_normalized_observations
+from clio.ingestion.utils.adapters import historical_adapters
+from clio.ingestion.utils.products import OBSERVATIONS
+from clio.ingestion.normalize import normalize_measurements, upsert_normalized_observations
+from clio.ingestion.utils.measurements import load_measurements, upsert_measurements
 
 logger = logging.getLogger(__name__)
 
-def missing_slots(stored, metric, start, end, *, freshness_minutes):
+def missing_slots(stored, metric, start, end, *, freshness_minutes, resolution_minutes):
     """Raw records close their native slot; normalized rows are never read."""
-    resolution = OBSERVATIONS[metric].resolution
+    resolution = f'{resolution_minutes}min'
     start, end = pd.Timestamp(start).ceil(resolution), pd.Timestamp(end).floor(resolution)
     clock = set(pd.date_range(start, end, freq=resolution, inclusive='left')) if start < end else set()
     rows = stored.loc[stored.metric == metric].copy()
@@ -86,11 +85,11 @@ def fetch_missing(pending, policies, adapters):
                         if row.metric not in metrics:
                             continue
                         definition = OBSERVATIONS[row.metric]
-                        slot = observed.floor(definition.resolution)
+                        slot = observed.floor(f'{policies[row.metric].resolution_minutes}min')
                         # Hourly products must return hourly samples. Daily and
                         # three-hour coverage keeps the original observation time
                         # (for example GFZ noon) instead of relabeling it.
-                        if ((definition.resolution == '1h' and observed != slot)
+                        if ((policies[row.metric].resolution_minutes == 60 and observed != slot)
                                 or not start <= observed < end or slot not in pending[row.metric]
                                 or not definition.accepts(row.value)):
                             continue
@@ -117,13 +116,14 @@ async def backfill_numeric(session, config: ClioObservations, metrics, *, now=No
     if now.tzinfo is None:
         raise ValueError('now must include a timezone')
     end = now.astimezone(UTC)
-    ends = {m: pd.Timestamp(end).floor(OBSERVATIONS[m].resolution).to_pydatetime() for m in metrics}
+    ends = {m: pd.Timestamp(end).floor(f'{config.observations[m].resolution_minutes}min').to_pydatetime() for m in metrics}
     starts = {m: ends[m] - timedelta(days=config.observations[m].backfill_days) for m in metrics}
     earliest = min(starts.values())
     latest = max(ends.values())
     stored = await load_measurements(session, since=earliest, until=latest)
     pending = {m: missing_slots(stored, m, starts[m], ends[m],
-                                freshness_minutes=config.observations[m].freshness_minutes) for m in metrics}
+                                freshness_minutes=config.observations[m].freshness_minutes,
+                                resolution_minutes=config.observations[m].resolution_minutes) for m in metrics}
     logger.info('Numeric backfill missing slots: %s', {
         m: min(1, len(slots)) if OBSERVATIONS[m].coverage == 'latest' else len(slots)
         for m, slots in pending.items()})
@@ -143,12 +143,13 @@ async def backfill_numeric(session, config: ClioObservations, metrics, *, now=No
     await session.commit()
     remaining = {m: (min(1, len(slots)) if OBSERVATIONS[m].coverage == 'latest' else len(slots))
                  for m in metrics for slots in [missing_slots(stored, m, starts[m], ends[m],
-                                freshness_minutes=config.observations[m].freshness_minutes)]}
+                                freshness_minutes=config.observations[m].freshness_minutes,
+                                resolution_minutes=config.observations[m].resolution_minutes)]}
     failed_metrics = {m for attempt in attempts if 'error' in attempt for m in attempt['metrics'] if remaining[m]}
     return {'status': 'complete' if not any(remaining.values()) else 'partial',
             'ranges': {m: {'from': starts[m].isoformat(), 'to_exclusive': ends[m].isoformat(),
-                          'resolution': OBSERVATIONS[m].resolution} for m in metrics},
+                          'resolution_minutes': config.observations[m].resolution_minutes} for m in metrics},
             'downloaded_measurements': len(frame), 'normalized_hours': len(normalized),
             'missing_observed_slots': remaining,
-            'missing_observed_hours': {m: count for m, count in remaining.items() if OBSERVATIONS[m].resolution == '1h'},
+            'missing_observed_hours': {m: count for m, count in remaining.items() if config.observations[m].resolution_minutes == 60},
             'failed_metrics': sorted(failed_metrics), 'source_attempts': attempts}

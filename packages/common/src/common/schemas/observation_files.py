@@ -1,15 +1,12 @@
 """Immutable observation original metadata."""
-from typing import Literal
-
 from pydantic import AwareDatetime, BaseModel, Field
 from common.schemas.files import FileReference
 
 
 class RawObservationFile(BaseModel):
-    kind: Literal['aia', 'gong', 'goes']
+    observation: str = Field(min_length=1)
     slot_at: AwareDatetime
     observed_at: AwareDatetime
-    available_at: AwareDatetime
     sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     source_product: str
     file: FileReference

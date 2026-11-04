@@ -1,3 +1,4 @@
+from common.data import datamanager
 import io
 
 import numpy as np
@@ -57,12 +58,12 @@ def test_discovery_never_fetches_full3d_and_prefers_l1(monkeypatch):
     assert not any('tar' in p or p.endswith('evo.earth.nc') for p in calls)
 
 
-def test_collection_preserves_raw_rejections_and_success_independently(storage, monkeypatch, tmp_path):
+def test_collection_stores_success_and_skips_rejected_profiles(storage, monkeypatch, tmp_path):
     monkeypatch.setenv("ARGUS_ENLIL_ARCHIVE", str(tmp_path))
     import asyncio
     from unittest.mock import AsyncMock
     from types import SimpleNamespace
-    from clio.ingestion import enlil as collector
+    from clio.ingestion.extras import enlil as collector
     good, bad = profile(), b'invalid NetCDF'
     objects = [dict(key=key, size=len(raw), last_modified='2026-01-01T00:15Z')
                for key, raw in [('good', good), ('bad', bad)]]
@@ -78,9 +79,23 @@ def test_collection_preserves_raw_rejections_and_success_independently(storage, 
     monkeypatch.setattr(collector, 'store', store)
     with pytest.raises(RuntimeError, match='1 profiles'):
         asyncio.run(collector.collect())
-    from clio.observations.archive import read_receipt
-    from clio.observations import files, file_storage
+    from clio.ingestion.utils.archive import read_receipt
     row = SimpleNamespace(**saved[0])
     assert read_receipt(row)['payload']['points'][0]['speed_km_s'] == 400
-    assert file_storage.read(files.find(id=row.file_id)[0]) == good
-    assert saved[1]['error'] and saved[1]['raw_path'] is None and 'file_id' not in saved[1]
+    assert datamanager.read_reference(storage.files(id=row.file_id)[0]) == good
+    assert len(saved) == len(storage.objects) == 1
+
+
+@pytest.mark.parametrize('result', [[], OSError('discovery failed')])
+def test_discovery_failure_does_not_create_observations(storage, monkeypatch, result):
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+    from clio.ingestion.extras import enlil as collector
+    discover = Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
+    monkeypatch.setattr(enlil, 'discover', discover)
+    store = AsyncMock()
+    monkeypatch.setattr(collector, 'store', store)
+    with pytest.raises(RuntimeError, match='discovery failed'):
+        asyncio.run(collector.collect())
+    store.assert_not_awaited()
+    assert not storage.objects

@@ -38,7 +38,7 @@ def test_failed_slot_resumes_and_completed_slot_is_immutable(tmp_path, monkeypat
         if url.endswith('/files'):
             return SimpleNamespace(json=lambda: {'data': [{'file': {'bucket': 'argus-private'},
                 'slot_at': slot.isoformat(), 'observed_at': slot.isoformat(),
-                'available_at': slot.isoformat(), 'sha256': sha}]})
+                'sha256': sha}]})
         raise AssertionError('Unexpected file HTTP request')
     monkeypatch.setattr(worker, 'get', get)
     def cached(*_):
@@ -54,6 +54,7 @@ def test_failed_slot_resumes_and_completed_slot_is_immutable(tmp_path, monkeypat
     runtime = SimpleNamespace(crop=lambda *_: None, predict=predict)
     worker.cycle(runtime, None, 'https://clio.test', 'secret')
     assert not list((tmp_path/'predictions').glob('*.json'))
+    assert state['downloads'] == 1
     state['fail'] = False
     worker.cycle(runtime, None, 'https://clio.test', 'secret')
     files = list((tmp_path/'predictions').glob('*.json'))
@@ -97,7 +98,7 @@ def test_worker_downloads_fits_from_object_storage_without_clio_file_requests(tm
         assert url.endswith('/files'), 'Clio must only serve a JSON catalog'
         return SimpleNamespace(json=lambda: {'data': [{'file': reference,
             'slot_at': slot.isoformat(), 'observed_at': slot.isoformat(),
-            'available_at': slot.isoformat(), 'sha256': sha}]})
+            'sha256': sha}]})
     monkeypatch.setattr(worker, 'get', get)
     monkeypatch.setattr(object_files, 'read_file', lambda bucket, key, **kwargs: content)
     def crop(path, *_):

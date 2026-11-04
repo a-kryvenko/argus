@@ -1,20 +1,19 @@
-"""Collection cadence shared by the scheduler and its diagnostics."""
-COLLECTING_SCHEDULES = [
-    (["v", "n", "t"], "*"),
-    (["bx", "by", "bz"], "*"),
-    (["kp", "ap"], "*"),
-    (["dst", "sdo"], "*/5"),
-    (["donki", "enlil", "sdo-browse"], "*/15"),
-    (["f10_7", "f10_7_81mean", "s10_81mean", "m10_81mean", "y10_81mean", "goes", "gong"], "0"),
-]
+"""Group configured observations by polling interval."""
+
+
+def collecting_schedules(config):
+    groups = {}
+    for metric, policy in config.observations.items():
+        if policy.sources.live:
+            groups.setdefault(policy.poll_minutes, []).append(metric)
+    if config.solar_wind_events.enabled:
+        groups.setdefault(config.solar_wind_events.poll_minutes, []).extend(['donki', 'enlil'])
+    return [(metrics, minutes) for minutes, metrics in groups.items()]
 
 
 def poll_seconds(metric: str) -> int:
-    for metrics, minute in COLLECTING_SCHEDULES:
+    from clio.config import load_observation_config
+    for metrics, minutes in collecting_schedules(load_observation_config()):
         if metric in metrics:
-            if minute == '*':
-                return 60
-            if minute.startswith('*/'):
-                return int(minute[2:]) * 60
-            return 3600
+            return minutes * 60
     raise ValueError(f'No collection schedule for {metric}')

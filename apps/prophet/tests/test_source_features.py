@@ -21,11 +21,11 @@ from common.schemas.observation import Observation, ObservationPoint
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 
 
-def reference(content, *, kind='goes', **kwargs):
+def reference(content, *, observation='goes', **kwargs):
     kwargs.setdefault('file', FileReference(id=uuid4(), timestamp=NOW, bucket='argus-private',
-        key=kind + '/' + hashlib.sha256(content).hexdigest()))
-    return RawObservationFile(kind=kind, slot_at=NOW, observed_at=NOW,
-        available_at=NOW, sha256=hashlib.sha256(content).hexdigest(), source_product=kind+'.live', **kwargs)
+        key=observation + '/' + hashlib.sha256(content).hexdigest()))
+    return RawObservationFile(observation=observation, slot_at=NOW, observed_at=NOW,
+        sha256=hashlib.sha256(content).hexdigest(), source_product=observation+'.live', **kwargs)
 
 
 def inputs(*refs):
@@ -93,28 +93,36 @@ def test_wire_features_and_legacy_calibrations_are_not_trusted():
 
 
 def test_retired_aia_inputs_do_not_download_or_load_sunpy(monkeypatch):
-    ref = reference(b'aia',kind='aia')
+    ref = reference(b'aia',observation='aia_171_nrt')
     monkeypatch.setattr(service, 'original', lambda *args: pytest.fail('Retired AIA must not be downloaded'))
     result = service.enrich_inputs(inputs(ref))
     assert 'aia_frames' not in result.model_dump()
 
 
 
-@pytest.mark.parametrize('available_at', [NOW-timedelta(days=1), NOW, NOW+timedelta(hours=1)])
-def test_retired_gong_inputs_are_never_downloaded(monkeypatch, available_at):
-    ref = reference(b'old magnetogram', kind='gong')
-    ref.available_at = available_at
+@pytest.mark.parametrize('uploaded_at', [NOW-timedelta(days=1), NOW, NOW+timedelta(hours=1)])
+def test_retired_gong_inputs_are_never_downloaded(monkeypatch, uploaded_at):
+    ref = reference(b'old magnetogram', observation='gong')
+    ref.file.timestamp = uploaded_at
     monkeypatch.setattr(service, 'original', lambda *args: pytest.fail('Retired GONG must not be downloaded'))
     result = service.enrich_inputs(inputs(ref))
     assert 'gong' not in result.model_dump()
     assert result.observations.points[0].v == 420
 
 
+def test_goes_selection_uses_latest_stored_file_without_availability_cutoff():
+    first = reference(b'first')
+    latest = reference(b'latest', file=FileReference(id=uuid4(), timestamp=NOW+timedelta(hours=1),
+        bucket='argus-private', key='goes/latest.json'))
+    assert service.select_sources(inputs(first, latest)) == [latest]
+    assert service.select_sources(inputs(latest, first)) == [latest]
+
+
 def test_goes_enrichment_remains_active_without_gong(calibrated_goes, tmp_path, monkeypatch):
     samples, _ = calibrated_goes
     content = samples.to_json(orient='records', date_format='iso').encode()
     ref = reference(content)
-    gong = reference(b'old magnetogram', kind='gong')
+    gong = reference(b'old magnetogram', observation='gong')
     calls = []
     def read(bucket, key, **kwargs):
         calls.append(key)

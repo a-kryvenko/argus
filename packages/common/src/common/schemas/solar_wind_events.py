@@ -181,7 +181,6 @@ class EnlilProfile(BaseModel):
 
 class EventInputs(BaseModel):
     schema_version: Literal[1, 2] = 1
-    as_of: AwareDatetime
     read_at: AwareDatetime
     polls: list[SourcePoll] = Field(default_factory=list)
     events: list[SolarWindEvent] | None = None

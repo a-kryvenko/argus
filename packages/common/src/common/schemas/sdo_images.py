@@ -5,6 +5,19 @@ from pydantic import AwareDatetime, BaseModel, Field
 from common.schemas.files import FileReference
 
 
+OBSERVED_CHANNELS = (
+    'aia94',
+    'aia131',
+    'aia171',
+    'aia193',
+    'aia211',
+    'aia304',
+    'aia335',
+    'aia1600',
+    'hmi_m'
+)
+
+
 class SDOImageReference(BaseModel):
     file: FileReference
     original: FileReference | None = None

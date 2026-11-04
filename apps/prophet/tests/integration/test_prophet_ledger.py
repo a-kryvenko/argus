@@ -40,7 +40,7 @@ async def test_cme_arrival_and_speed_snapshot_release_roundtrip(recorder_setup, 
         sha256=hashlib.sha256(json.dumps(simulations).encode()).hexdigest(),
         request_start=now-timedelta(days=30), request_end=now, records=simulations)
     inputs = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]),
-        solar_wind_events=EventInputs(as_of=now, read_at=now, polls=[poll, enlil_poll], events=[SolarWindEvent(event_id='cme1', kind='cme', status='predicted_hit', source='DONKI/WSA-ENLIL', source_ids=['cme1'], available_at=now, arrival_at=arrival, arrival_target='Earth', model_completed_at=now-timedelta(hours=1), initial_speed_km_s=900, simulation_id='enlil-run1')]))
+        solar_wind_events=EventInputs(read_at=now, polls=[poll, enlil_poll], events=[SolarWindEvent(event_id='cme1', kind='cme', status='predicted_hit', source='DONKI/WSA-ENLIL', source_ids=['cme1'], available_at=now, arrival_at=arrival, arrival_target='Earth', model_completed_at=now-timedelta(hours=1), initial_speed_km_s=900, simulation_id='enlil-run1')]))
     run = (await RunRecorder.begin('solar-wind-events', 'manual', config, writer=writer))
     (await run.snapshot(inputs))
     speed = dict(model_version='cme-speed-v2', state='available', model_sha256='a'*64,

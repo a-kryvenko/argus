@@ -48,12 +48,13 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
     configure(monkeypatch, handler)
     assert observations.load_inputs(NOW).observations.points[0].v == 420
     assert len(calls) == 4
+    assert all('as_of' not in request.url.params for request in calls)
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
     assert calls[0].url.params['interval'] == '1h'
     assert set(calls[0].url.params['metrics'].split(',')) >= {'f10_7', 'dst', 'ap', 's10_81mean'}
     assert calls[1].url.params['interval'] == '1m'
     assert calls[1].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
-    assert [request.url.params['kind'] for request in calls[2:]] == ['gong', 'goes']
+    assert [request.url.params['observation'] for request in calls[2:]] == ['gong', 'goes']
     assert calls[3].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
 
 
@@ -220,10 +221,10 @@ def test_assembles_native_measurements_and_originals(monkeypatch):
             payload = stored_inputs().model_dump(mode='json')
             payload['observations']['points'][0].update(v=430., n=4.5, dst=-20.)
             return resource_response(request, payload)
-        if request.url.path.endswith('/files') and request.url.params['kind'] == 'gong':
+        if request.url.path.endswith('/files') and request.url.params['observation'] == 'gong':
             return httpx.Response(200, json={'success': True, 'data': [{
-                'kind': 'gong', 'slot_at': NOW.isoformat(), 'observed_at': NOW.isoformat(),
-                'available_at': NOW.isoformat(), 'sha256': 'a'*64, 'source_product': 'gong.live',
+                'observation': 'gong', 'slot_at': NOW.isoformat(), 'observed_at': NOW.isoformat(),
+                'sha256': 'a'*64, 'source_product': 'gong.live',
                 'file': {'id':'00000000-0000-0000-0000-000000000001','timestamp':NOW.isoformat(),'bucket':'argus-private','key':'observations/GONG/source.fits'}}]})
         return resource_response(request, stored_inputs().model_dump(mode='json'))
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
@@ -232,4 +233,4 @@ def test_assembles_native_measurements_and_originals(monkeypatch):
     assert next(row for row in result.measurements if row.metric == 'dst').value == -20.
     assert result.speed_observations[0].v == 430.
     assert result.density_observations[0].n == 4.5
-    assert result.files[0].kind == 'gong'
+    assert result.files[0].observation == 'gong'

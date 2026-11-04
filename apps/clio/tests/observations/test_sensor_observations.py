@@ -10,7 +10,7 @@ import pytest
 from clio.db.models.measurement import Measurement
 from clio.db.models.normalized_observation import NormalizedObservation
 from clio.config import ClioObservations
-from clio.observations.schema import (
+from clio.db.models.measurement import (
     OBSERVATION_METRICS,
     REQUIRED_METRICS,
     SOLAR_INDEX_METRICS,
@@ -18,7 +18,7 @@ from clio.observations.schema import (
 from clio.ingestion import normalize as service
 from clio.ingestion import normalize as processing
 from clio.ingestion.normalize import normalize_measurements
-from clio.observations.normalized import upsert_normalized_observations
+from clio.ingestion.normalize import upsert_normalized_observations
 
 
 @pytest.fixture
@@ -166,11 +166,11 @@ def test_live_normalization_uses_configured_retention(monkeypatch, storage):
 
 
 def test_normalized_reader_converts_indices_to_contract_integers():
-    from clio.observations.normalized import load_normalized_observations
+    from clio.ingestion.normalize import load_normalized_observations
     expected = dict(kp=1.33, dst=-10.75, ap=5.666666666666667, f10_7=98.39285714285714)
     row = SimpleNamespace(observed_at=datetime(2026, 11, 3, tzinfo=UTC),
         bx=1., by=2., bz=-3., v=420., n=5., t=100000., **expected)
     session = AsyncMock()
     session.execute.return_value = Mock(scalars=lambda: Mock(all=lambda: [row]))
-    result = asyncio.run(load_normalized_observations(session))
+    result = asyncio.run(load_normalized_observations(session, since=row.observed_at, until=row.observed_at))
     assert {metric: getattr(result.points[0], metric) for metric in expected} == {metric: int(value) for metric, value in expected.items()}

@@ -1,10 +1,16 @@
-"""Historical adapters reuse provider parsers without gap filling."""
+"""Convert and validate provider records; adapt historical loaders."""
 import math
 
 import pandas as pd
 
-from clio.ingestion.conversion import wide_to_measurements
-from clio.ingestion.products import OBSERVATIONS, PRODUCTS
+from clio.db.models.measurement import MEASUREMENT_METRICS
+from clio.ingestion.utils.products import OBSERVATIONS, PRODUCTS
+
+
+def wide_to_measurements(frame: pd.DataFrame) -> pd.DataFrame:
+    metrics = [metric for metric in (*MEASUREMENT_METRICS, 'bt') if metric in frame]
+    return (frame.melt(id_vars='timestamp', value_vars=metrics, var_name='metric', value_name='value')
+            .rename(columns={'timestamp': 'observed_at'}).dropna(subset=['observed_at', 'value']))
 
 
 class WideHistoryAdapter:

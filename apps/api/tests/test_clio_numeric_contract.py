@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import httpx
+from common.config import get_config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -14,6 +15,7 @@ NOW = datetime.now(UTC).replace(second=0, microsecond=0)
 
 
 def configure(monkeypatch, respond):
+    get_config()
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'secret')
     original = httpx.AsyncClient
@@ -70,3 +72,19 @@ def test_dashboard_status_is_derived_from_values_and_configured_freshness(monkey
     assert values['dst']['status'] == 'fresh' and values['dst']['age_seconds'] == 3600
     assert values['v']['status'] == 'unavailable'
     assert result['status'] == 'degraded'
+
+
+def test_index_trends_read_observation_history_without_as_of(monkeypatch):
+    def respond(request):
+        assert 'as_of' not in request.url.params
+        if request.url.path.endswith('/latest'):
+            return {'points': [dict(time=NOW.isoformat(), ap=10, f10_7=120)]}
+        assert request.url.params['interval'] == '1m'
+        return {'interval': '1m', 'points': [
+            dict(time=(NOW-timedelta(hours=3)).isoformat(), ap=None, f10_7=100),
+            dict(time=(NOW-timedelta(hours=2)).isoformat(), ap=5, f10_7=None)]}
+    client, calls = configure(monkeypatch, respond)
+    response = client.get('/observations?observations=ap,f10_7&trends=true')
+    assert response.status_code == 200, response.text
+    assert response.json()['data']['changes_1h'] == {'ap': 5, 'f10_7': 20}
+    assert [request.url.path.rsplit('/', 1)[-1] for request in calls] == ['latest', 'history']

@@ -19,7 +19,6 @@ from api.routers.density_advisory import router as density_advisory_router
 from api.routers.healthcheck import router as healthcheck_router
 from api.routers.observations import router as observations_router
 from api.routers.summary import router as summary_router
-from api.services.summary import close_cache
 from common.schemas.response import error_response
 
 config = get_config()
@@ -31,7 +30,6 @@ async def lifespan(_: FastAPI):
         yield
     finally:
         await dispose_engine()
-        await close_cache()
 
 setup_sentry()
 

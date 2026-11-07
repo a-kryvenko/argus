@@ -1,0 +1,17 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-summary-charts",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "forecasts/summary/images/"
+      },
+      "Expiration": {
+        "Days": 2
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 2
+      }
+    }
+  ]
+}

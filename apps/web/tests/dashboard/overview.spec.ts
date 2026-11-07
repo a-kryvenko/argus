@@ -3,30 +3,30 @@ import { captureScreenshot } from './screenshot';
 import { mockSDO, sdoFixture } from '../fixtures/sdo';
 
 const time = '2026-10-30T12:00:00Z';
-const image = `${'a'.repeat(64)}.svg`;
+const image = `https://media.example/forecasts/summary/images/${'a'.repeat(64)}.svg`;
 function fixture() {
-  const item = (title: string, value: number | null, risk_level: number, measurements = '', image_name: string | null = null) =>
-    ({ title, value, risk_level, measurements, image_name, observed_at: value === null ? null : time });
+  const item = (title: string, value: number | null, risk_level: number, measurements = '', image_url: string | null = null) =>
+    ({ title, value, risk_level, measurements, image_url, observed_at: value === null ? null : time });
   return {
     generated_at: time, cme_events_available: true, sdo_images: sdoFixture(),
     cme_events: [{ event_id: 'CME-2026-10-29', source_url: 'https://example.org/cme', observed_at: time,
       arrival_window_start: time, arrival_window_end: null }],
     observations: {
-      plasma: { title: 'Plasma', items: [item('v', 540, 2, 'km/s', image), item('n', 8.25, 0, 'cm⁻³'), item('t', null, 0, 'K')] },
-      geo: { title: 'Geomagnetic', items: [item('Kp', 5, 1), item('Ap', 48, 1), item('Dst', -160, 4, 'nT')] },
-      hmf: { title: 'HMF', items: [item('Bt', 16, 3, 'nT'), item('Bz', -8, 1, 'nT')] },
-      radio: { title: 'Radio', items: [item('F10.7', 155.26, 0, 'sfu')] },
+      plasma: { title: 'Plasma', risk_level: 2, items: [item('v', 540, 2, 'km/s', image), item('n', 8.25, 0, 'cm⁻³'), item('t', null, 0, 'K')] },
+      geo: { title: 'Geomagnetic', risk_level: 4, items: [item('Kp', 5, 1), item('Ap', 48, 1), item('Dst', -160, 4, 'nT')] },
+      hmf: { title: 'HMF', risk_level: 3, items: [item('Bt', 16, 3, 'nT'), item('Bz', -8, 1, 'nT')] },
+      radio: { title: 'Radio', risk_level: 0, items: [item('F10.7', 155.26, 0, 'sfu')] },
     },
   };
 }
 async function mock(page: Page, data = fixture()) {
   await mockSDO(page);
   await page.route('**/api/v1/summary', route => route.fulfill({ json: { success: true, data, error: null } }));
-  await page.route('**/api/v1/summary/images/*', route => route.fulfill({ contentType: 'image/svg+xml',
+  await page.route('https://media.example/forecasts/summary/images/*', route => route.fulfill({ contentType: 'image/svg+xml',
     body: '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240"><path d="M0 200 L240 120 L480 40" stroke="orange" fill="none"/></svg>' }));
 }
 
-test('homepage shows CME, ordered groups, risks and API SVGs without forecast requests', async ({ page }) => {
+test('homepage shows CME, ordered groups, risks and S3 SVGs without forecast requests', async ({ page }) => {
   const errors: string[] = [];
   const forecastRequests: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -43,7 +43,7 @@ test('homepage shows CME, ordered groups, risks and API SVGs without forecast re
   await expect(plasma).toContainText('540');
   await expect(plasma).toContainText('km/s');
   const chart = plasma.getByRole('img');
-  await expect(chart).toHaveAttribute('src', `/api/v1/summary/images/${image}`);
+  await expect(chart).toHaveAttribute('src', image);
   await expect.poll(() => chart.evaluate(node => (node as HTMLImageElement).naturalWidth)).toBe(480);
   await expect(page.getByRole('region', { name: 'Geomagnetic', exact: true })).toHaveAttribute('data-risk', '4');
   await expect(page.getByRole('region', { name: 'Radio', exact: true })).toHaveAttribute('data-risk', '0');
@@ -79,7 +79,7 @@ test('homepage hides empty CME blocks and handles failed charts', async ({ page 
   const data = fixture();
   data.cme_events = [];
   await mock(page, data);
-  await page.route('**/api/v1/summary/images/*', route => route.fulfill({ status: 404 }));
+  await page.route('https://media.example/forecasts/summary/images/*', route => route.fulfill({ status: 404 }));
   await page.goto('/');
   const plasma = page.getByRole('region', { name: 'Plasma', exact: true });
   await expect(plasma).toBeVisible();

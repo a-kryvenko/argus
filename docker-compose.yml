@@ -144,6 +144,9 @@ services:
 
   prophet-api:
     <<: *prophet-runtime
+    volumes:
+      - ./configs:/var/www/configs:ro
+      - ./data/prophet:/var/www/data/prophet:ro
     environment:
       <<: *prophet-environment
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
@@ -199,15 +202,12 @@ services:
       <<: *api-environment
       DEBUG: ${DEBUG:-false}
       INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
-      API_REDIS_URL: redis://redis:6379/0
     volumes:
       - ./configs:/var/www/configs:ro
       - ./data/metrics:/var/www/data/metrics:ro
       - ./data/demo:/var/www/data/demo:ro
     depends_on:
       <<: *api-depends_on
-      redis:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
       interval: 30s

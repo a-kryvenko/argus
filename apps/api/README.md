@@ -14,8 +14,7 @@ Schemas and parameters: `/api/v1/docs`.
 
 | Path | Purpose |
 | --- | --- |
-| `/summary` | Homepage observations and chart names; Redis cache 10 minutes |
-| `/summary/images/{image_name}` | Generated transparent SVG; retained 30 minutes |
+| `/summary` | Prepared Prophet summary with observations, risks and public S3 chart URLs |
 | `/sdo/images/{name}` | Immutable AIA JPEG/WebP variants; `summary.sdo_images` maps channels to asset IDs |
 | `/observations` | Latest measurements with individual timestamps; `trends=true` adds observed changes |
 | `/observations/history` | History, including normalized hourly indices; select variables with `observations=bx,bz,v,kp` |
@@ -33,7 +32,7 @@ Dashboard requests observation/forecast status directly from Clio and Prophet.
 Dashboard status covers observations and forecasts; infrastructure monitoring uses Alloy → external Prometheus/Loki.
 
 Missing artifacts return 503.
-Summary requires `API_REDIS_URL`; settings: `api.summary` in `configs/project.yaml`.
+Summary is prepared by Prophet; API forwards the response.
 Summary CME: Earth arrivals only, at most 7 days old; retained until arrival window end (or arrival time) plus `cme_grace_hours` (24 by default).
 Summary `risk_level`: 0 green, 1 yellow, 2 orange, 3 red, 4 crimson; maximum absolute current/future value. No data or configured levels yields 0.
 Missing measurements remain null/gaps; history timestamps require a timezone.

@@ -42,8 +42,11 @@ Services use S3 directly in both environments. Production uses `S3_ENDPOINT_URL`
 Clio stores file observations in S3: private SDO under `argus-private/images/SDO`,
 public AIA under `argus-public/images/AIA`, other sources under `argus-private/observations`.
 `clio.files` stores object references; `clio.file_observation` stores their context. Catalogs read metadata from PostgreSQL; file content stays in S3.
-Production `S3_PUBLIC_BASE_URL` defaults to `https://media.argussun.com`. Prophet/PROSWIN use
-`S3_READ_ACCESS_KEY_ID` and `S3_READ_SECRET_ACCESS_KEY` with read access to private observations.
+Production `S3_PUBLIC_BASE_URL` defaults to `https://media.argussun.com`. Prophet commands use
+`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` with read/write access; charts use `argus-public/forecasts/summary/`.
+Prophet HTTP/PROSWIN use `S3_READ_ACCESS_KEY_ID`/`S3_READ_SECRET_ACCESS_KEY` for private sources.
+Prophet HTTP reads the prepared summary from the shared `data/prophet` directory (read-only mount).
+Add `configs/s3-summary-lifecycle.json` to the public bucket lifecycle (SVG expiry: two days).
 
 One-time local archive migration (after migrating Clio):
 ```bash

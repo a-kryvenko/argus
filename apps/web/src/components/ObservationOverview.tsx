@@ -13,9 +13,9 @@ type Observation = {
   measurements: string;
   observed_at: string | null;
   risk_level: Risk;
-  image_name: string | null;
+  image_url: string | null;
 };
-type Group = { title: string; items: Observation[] };
+type Group = { title: string; items: Observation[]; risk_level: Risk };
 type CmeEvent = {
   event_id: string;
   source_url: string | null;
@@ -44,16 +44,14 @@ function Time({ value }: { value: string | null }) {
 
 function Sparkline({ item }: { item: Observation }) {
   const [failed, setFailed] = useState(false);
-  if (!item.image_name || failed) return null;
-  // SVGs are already generated and sized by the API; no client chart library is needed.
+  if (!item.image_url || failed) return null;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img className={styles.sparkline} src={`/api/v1/summary/images/${encodeURIComponent(item.image_name)}`}
+  return <img className={styles.sparkline} src={item.image_url}
     alt={`${item.title}: recent observations and forecast`} width={480} height={240} onError={() => setFailed(true)} />;
 }
 
 function ObservationCard({ group, id }: { group: Group; id: string }) {
-  const risk = Math.max(0, ...group.items.map(item => item.risk_level)) as Risk;
-  return <section className={styles.card} data-risk={risk} aria-labelledby={`${id}-title`}>
+  return <section className={styles.card} data-risk={group.risk_level} aria-labelledby={`${id}-title`}>
     <header className={styles.cardHeader}><h2 id={`${id}-title`}>{group.title}</h2></header>
     <ul className={styles.items}>{group.items.map(item => <li key={item.title} className={styles.item} data-risk={item.risk_level}>
       <span className={styles.variable}>{item.title}<span className={styles.srOnly}> · {riskNames[item.risk_level]} risk</span></span>
@@ -61,7 +59,7 @@ function ObservationCard({ group, id }: { group: Group; id: string }) {
         <span className={styles.value}>{item.value === null ? '—' : number.format(item.value)}</span>
         <span className={styles.unit}>{item.measurements}</span>
       </div>
-      <Sparkline key={item.image_name} item={item} />
+      <Sparkline key={item.image_url} item={item} />
     </li>)}</ul>
   </section>;
 }

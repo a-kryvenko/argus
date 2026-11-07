@@ -124,3 +124,14 @@ async def verification(product: str):
     except Exception:
         logger.exception('Forecast verification read failed')
         raise HTTPException(503, 'Forecast verification is unavailable') from None
+
+
+@app.get('/internal/v1/summary', response_model=dict,
+         dependencies=[Depends(require_service_token)])
+def summary():
+    from prophet.services.summary import read_summary
+    try:
+        return read_summary()
+    except Exception:
+        logger.exception('Summary read failed')
+        raise HTTPException(503, 'Summary is unavailable') from None

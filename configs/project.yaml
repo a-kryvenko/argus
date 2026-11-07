@@ -6,10 +6,7 @@ prophet:
   shutdown_grace_seconds: 570
   verification_days: 30
 
-api:
   summary:
-    ttl_seconds: 600
-    image_ttl_seconds: 1800
     cme_grace_hours: 24
     critical_levels:
       v: [450, 500, 600, 700]

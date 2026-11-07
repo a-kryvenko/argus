@@ -43,7 +43,7 @@ def test_forecast_read_service_is_internal_and_requires_token():
     reader = services['prophet-api']
     assert 'ports' not in reader
     assert set(reader['networks']) == {'backend', 'forecasts'}
-    assert all('/data' not in volume for volume in reader['volumes'])
+    assert './data/prophet:/var/www/data/prophet:ro' in reader['volumes']
     assert reader['environment']['FORECASTS_SERVICE_TOKEN'].startswith('${FORECASTS_SERVICE_TOKEN:?')
     assert services['api']['environment']['FORECASTS_URL'] == 'http://forecasts-router:8102'
 
@@ -90,7 +90,7 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
         'clio': {},
         'prophet': {'models': True, 'prophet': False, 'demo': False},
         'proswin': {'models': True, 'prophet': False},
-        'prophet-api': {}, 'intelligence': {}, 'intelligence-api': {},
+        'prophet-api': {'prophet': True}, 'intelligence': {}, 'intelligence-api': {},
         'api': {'metrics': True, 'demo': True},
     }
     for name, allowed in allowed_data.items():
@@ -149,7 +149,7 @@ def test_observation_storage_uses_s3_in_both_environments():
     assert 'seaweed-data:/data' in storage['volumes']
     assert all(port.startswith('127.0.0.1:') for port in storage['ports'])
     assert set(dev['services']['clio']['environment']) >= {'S3_PUBLIC_BASE_URL', 'S3_ACCESS_KEY_ID'}
-    assert dev['services']['clio']['environment']['S3_ACCESS_KEY_ID'] != dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
+    assert dev['services']['clio']['environment']['S3_ACCESS_KEY_ID'] == dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
     for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
         assert dev['services'][name]['depends_on']['storage']['condition'] == 'service_healthy'
     assert 'storage' not in load_compose('.deploy/docker-compose.yml')['services']

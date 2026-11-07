@@ -9,6 +9,8 @@
 10 * * * * @ROOT@/scripts/cron-run prophet generate-radiation generation solar-radiation
 10 * * * * @ROOT@/scripts/cron-run prophet generate-atmosphere generation atmospheric-density
 
+*/5 * * * * @ROOT@/scripts/cron-run prophet summary summary
+
 # Score published forecasts against later observations
 30 */6 * * * @ROOT@/scripts/cron-run prophet verification verification all
 

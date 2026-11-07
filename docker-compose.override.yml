@@ -126,6 +126,9 @@ services:
     <<: *prophet-runtime
     environment:
       <<: *prophet-environment
+      S3_ACCESS_KEY_ID: argus-dev-writer
+      S3_SECRET_ACCESS_KEY: argus-dev-writer-secret
+      S3_PUBLIC_BASE_URL: ${DEV_S3_PUBLIC_BASE_URL:-http://localhost:${DEV_S3_PORT:-8333}/argus-public}
       OBSERVATIONS_URL: http://clio:8000
 
   prophet-api:

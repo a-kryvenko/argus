@@ -20,6 +20,8 @@ def main(argv=None):
     verification = commands.add_parser('verification')
     verification.add_argument('product', nargs='?', choices=(*VERIFIED_PRODUCTS, 'all'), default='solar-wind-speed')
 
+    commands.add_parser('summary')
+
     cleanup = commands.add_parser('cleanup')
     cleanup.add_argument('--apply', action='store_true')
 
@@ -42,6 +44,8 @@ def invoke(name, args):
         from prophet.commands.generation import run
     elif name == 'verification':
         from prophet.commands.verification import run
+    elif name == 'summary':
+        from prophet.commands.summary import run
     elif name == 'cleanup':
         from prophet.commands.cleanup import run
     else:

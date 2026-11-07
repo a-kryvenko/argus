@@ -18,6 +18,7 @@ Usage: ./argus <command> (environment: $mode)
   <service> migration current | history | downgrade REVISION
   prophet generation [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|solar-radiation|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (dev only; default: january-2026)
+  prophet summary
   prophet verification [PRODUCT]
   prophet cleanup [--days 90] [--apply]
   prophet serve [--host HOST] [--port 8000]

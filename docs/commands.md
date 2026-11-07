@@ -43,6 +43,7 @@ Scheduler: `clio-worker` in dev and prod. Logs: `./argus logs clio`.
 | --- | --- |
 | `./argus prophet serve [--host HOST] [--port 8000]` | Serve published forecasts |
 | `./argus prophet generation [product]` | Generate/publish; default all |
+| `./argus prophet summary` | Prepare local summary and upload SVGs to S3 |
 | `./argus prophet verification [product]` | Verify saved releases against observations |
 | `./argus prophet cleanup [--apply]` | Preview/clear diagnostics older than 14 days; preserve forecasts |
 

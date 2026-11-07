@@ -3,7 +3,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from api.services import summary_images as images
+from prophet.services import summary as images
 
 SVG = '{http://www.w3.org/2000/svg}'
 NOW = datetime(2026, 10, 29, 12, tzinfo=UTC)
@@ -18,7 +18,7 @@ def inputs(count=3, values=None, levels=None):
 
 @pytest.mark.parametrize('count', [2, 3])
 def test_svg_is_transparent_and_contains_only_chart_and_current_marker(count):
-    content = images.ForecastImageGenerator().render(**inputs(count))
+    content = images.render_image(**inputs(count))
     svg = ET.fromstring(content)
     assert svg.attrib == dict(width='480', height='240', viewBox='0 0 480 240')
     assert len(svg.findall(f'{SVG}circle')) == 2*count+1
@@ -41,14 +41,14 @@ def test_gradient_follows_critical_levels_in_danger_order(levels):
     if levels[0] < 0:
         for point in [*data['before'], data['current'], *data['after']]:
             point['value'] = -(point['value']-250)/4
-    svg = ET.fromstring(images.ForecastImageGenerator().render(**data))
+    svg = ET.fromstring(images.render_image(**data))
     gradient = svg.find(f'{SVG}defs/{SVG}linearGradient')
     stops = gradient.findall(f'{SVG}stop')
     assert stops[0].attrib == {'offset': '0.000000', 'stop-color': '#22c55e'}
-    assert stops[-1].attrib == {'offset': '1.000000', 'stop-color': images.ForecastImageGenerator.colors[len(levels)]}
+    assert stops[-1].attrib == {'offset': '1.000000', 'stop-color': ('#22c55e', '#eab308', '#f97316', '#ef4444', '#dc143c')[len(levels)]}
     offsets = [float(stop.attrib['offset']) for stop in stops]
     assert offsets == sorted(set(offsets))
-    assert [stop.attrib['stop-color'] for stop in stops] == list(images.ForecastImageGenerator.colors[:len(levels)+1])
+    assert [stop.attrib['stop-color'] for stop in stops] == list(('#22c55e', '#eab308', '#f97316', '#ef4444', '#dc143c')[:len(levels)+1])
     y1, y2 = float(gradient.attrib['y1']), float(gradient.attrib['y2'])
     assert (y1 > y2) == (levels[0] > 0)
 
@@ -58,7 +58,7 @@ def test_constant_series_and_equal_spacing_despite_irregular_timestamps(count):
     data = inputs(count=count, values=[400.]*7)
     data['current']['time'] += timedelta(minutes=59)
     data['after'][-1]['time'] += timedelta(hours=3)
-    svg = ET.fromstring(images.ForecastImageGenerator().render(**data))
+    svg = ET.fromstring(images.render_image(**data))
     points = [tuple(map(float, pair.split(','))) for pair in svg.find(f'{SVG}polyline').attrib['points'].split()]
     assert len({point[1] for point in points}) == 1
     distances = [b[0]-a[0] for a, b in zip(points, points[1:])]
@@ -90,5 +90,5 @@ def test_invalid_inputs_are_rejected(invalid):
     else:
         data['critical_levels'] = [4, 4]
     with pytest.raises(ValueError):
-        images.ForecastImageGenerator().render(**data)
+        images.render_image(**data)
 

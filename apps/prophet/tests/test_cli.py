@@ -10,7 +10,7 @@ def test_cli_help_is_available_without_loading_models():
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert '{serve,generation,verification,cleanup}' in result.stdout
+    assert '{serve,generation,verification,summary,cleanup}' in result.stdout
 
 
 def test_generation_generates_selected_product(monkeypatch):

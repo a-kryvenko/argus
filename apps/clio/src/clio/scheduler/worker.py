@@ -38,8 +38,12 @@ def _init_job(scheduler, func, job_id, args=(), **schedule):
 
 def _init_collect_job(scheduler, metrics, minutes):
     job_id = 'collect:' + '|'.join(metrics)
-    options = dict(func=run_collect, args=(metrics,),
-        trigger=IntervalTrigger(minutes=minutes, timezone=scheduler.timezone), name=job_id)
+    options = {
+        "func": run_collect,
+        "args": (metrics,),
+        "trigger": IntervalTrigger(minutes=minutes, timezone=scheduler.timezone),
+        "name": job_id
+    }
     if scheduler.get_job(job_id) is None:
         scheduler.add_job(id=job_id, **options)
     else:

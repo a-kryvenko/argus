@@ -68,7 +68,7 @@ def test_files_migration_adds_registry_and_requires_maintenance(tmp_path):
     from alembic.script import ScriptDirectory
     from tests.deployment.test_migrations import status
 
-    result = migration_sql('clio', '20261102_provider_contract:head', tmp_path)
+    result = migration_sql('clio', '20261102_provider_contract:20261102_files', tmp_path)
     assert result.returncode == 0, result.stderr
     assert 'CREATE TABLE clio.files' in result.stdout
     assert 'UNIQUE (bucket, key)' in result.stdout
@@ -79,4 +79,6 @@ def test_files_migration_adds_registry_and_requires_maintenance(tmp_path):
     scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
     assert status.revision_status(scripts, {'20261102_provider_contract'}, online=True) == 'blocked:20261102_files'
     assert status.revision_status(scripts, {'20261102_provider_contract'}) == 'pending'
-    assert status.revision_status(scripts, {'20261102_files'}, online=True) == 'current'
+    assert scripts.get_revision('20261107_file_observation').module.online_compatible is True
+    assert status.revision_status(scripts, {'20261102_files'}, online=True) == 'pending'
+    assert status.revision_status(scripts, {'20261107_file_observation'}, online=True) == 'current'

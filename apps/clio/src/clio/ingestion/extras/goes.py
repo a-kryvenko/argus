@@ -7,13 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
-from sqlalchemy.dialects.postgresql import insert
-
-from clio.db.models.file_observation import FileObservation
-from clio.db.session import get_db_session
-from clio.ingestion.utils.archive import observation_values
-from clio.ingestion.utils.archive import snapshots
-from clio.ingestion.utils.archive import store_original
+from clio.ingestion.utils.file_observations import find, save
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +52,11 @@ def download_snapshots(start, end, historical, expected=None, *, resolution_minu
             slot = slot.to_pydatetime()
             if samples.empty or slot not in pending:
                 continue
-            content = samples.to_json(orient='records', date_format='iso').encode()
-            values = store_original('goes', slot, samples.timestamp.max().to_pydatetime(), source, lambda: content)
-            records.append(values)
+            with TemporaryDirectory(prefix='clio-goes-') as temporary:
+                path = Path(temporary) / 'original.json'
+                samples.to_json(path, orient='records', date_format='iso')
+                records.append(save(path, observation='goes', observed_at=samples.timestamp.max().to_pydatetime(),
+                                    source_product=source))
     return records
 
 
@@ -89,18 +85,15 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
     report = dict(received=0, restored=0, retained=0, missing=0, rejected=0, failed=0,
                   latest_observed_at=None, source_errors=[])
     try:
-        async with get_db_session() as session:
-            rows = await snapshots(session, 'goes', start=start, end=end+timedelta(microseconds=1))
-        expected = {(row.slot_at, row.source_product): {key: getattr(row, key) for key in (
-            'slot_at', 'observed_at', 'available_at', 'sha256', 'source_product', 'file_id')} for row in rows}
+        rows = await asyncio.to_thread(find, 'goes', start=start, end=end+timedelta(microseconds=1))
+        resolution = policy.resolution_minutes if historical else policy.live_resolution_minutes
+        expected = {(pd.Timestamp(row['observed_at']).floor(f'{resolution}min').to_pydatetime(), row['source_product']): row
+                    for row in rows}
         records = await asyncio.to_thread(download_snapshots, start, end, historical, expected,
-            resolution_minutes=policy.resolution_minutes if historical else policy.live_resolution_minutes)
-        async with get_db_session() as session:
-            for record in records:
-                inserted = (await session.execute(insert(FileObservation).values(**observation_values('goes', record))
-                    .on_conflict_do_nothing().returning(FileObservation.id))).scalar_one_or_none()
-                report['received' if inserted else 'retained'] += 1
-            await session.commit()
+            resolution_minutes=resolution)
+        saved_ids = {row['id'] for row in rows}
+        report['retained'] = sum(record['id'] in saved_ids for record in records)
+        report['received'] = len(records)-report['retained']
         latest = max((r['observed_at'] for r in records), default=None)
         report['latest_observed_at'] = latest.isoformat() if latest else None
         report['missing'] = max(0, (end.date()-start.date()).days-len(records)) if historical else int(latest is None or latest < now-timedelta(minutes=policy.freshness_minutes))

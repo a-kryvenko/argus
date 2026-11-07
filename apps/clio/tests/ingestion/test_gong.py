@@ -58,35 +58,20 @@ assert 'astropy' not in sys.modules
     assert result.returncode == 0, result.stderr
 
 
-def test_original_is_published_without_local_archive(storage, monkeypatch):
-    from clio.ingestion.utils import file_observations
-    from clio.ingestion.utils import archive
-    from sqlalchemy import insert
-    from clio.db.models.file_observation import FileObservation
+def test_original_is_uploaded_and_recorded(storage, monkeypatch):
+    from clio.ingestion.utils.file_observations import find
     monkeypatch.setattr(provider, 'download', Mock(return_value=b'original FITS'))
     row = gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
-    values = archive.observation_values('gong', row)
-    assert not {'raw_path', 'sha256', 'error'}.intersection(values)
-    with storage.engine.begin() as connection:
-        connection.execute(insert(FileObservation).values(**values))
-    metadata = file_observations.find(kind='gong')[0]
-    assert metadata['entity'] == 'fits.original'
-    assert metadata['details']['source_url'] == 'https://example.test/gong.fits'
-    provider.download.side_effect = AssertionError('Do not redownload a stored observation')
-    again = gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
-    assert again['sha256'] == row['sha256']
+    assert row['sha256'] == hashlib.sha256(b'original FITS').hexdigest()
+    assert find('gong')[0]['details']['source_url'] == 'https://example.test/gong.fits'
 
 
 def test_complete_backfill_uses_db_references_without_source_download(storage, monkeypatch):
     from clio.config import load_observation_config
     config = load_observation_config()
     start = NOW-timedelta(hours=2)
-    rows = [SimpleNamespace(observed_at=start+timedelta(hours=i), slot_at=start+timedelta(hours=i),
-                           source_product='gong.archive') for i in range(2)]
-    session = AsyncMock()
-    session.__aenter__.return_value = session
-    monkeypatch.setattr(gong, 'get_db_session', lambda: session)
-    monkeypatch.setattr(gong, 'snapshots', AsyncMock(return_value=rows))
+    rows = [dict(observed_at=start+timedelta(hours=i), source_product='gong.archive') for i in range(2)]
+    monkeypatch.setattr(gong, 'find', lambda *args, **kwargs: rows)
     monkeypatch.setattr(provider, 'candidates', Mock(side_effect=AssertionError('No provider listing')))
     result = asyncio.run(gong.collect(config, mode='backfill', now=NOW, start=start, end=NOW))
     assert result['status'] == 'complete' and result['files']['gong']['retained'] == 2

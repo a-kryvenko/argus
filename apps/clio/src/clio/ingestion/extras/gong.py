@@ -1,22 +1,21 @@
-"""Download immutable GONG originals and retain their first receipts."""
+"""Download GONG originals to tmp and save uploaded observations."""
 import asyncio
 import math
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.dialects.postgresql import insert
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from clio.db.models.file_observation import FileObservation
-from clio.db.session import get_db_session
-from clio.ingestion.utils.archive import observation_values
-from clio.ingestion.utils.archive import snapshots
+from clio.ingestion.utils.file_observations import find, save
 
 
 def snapshot_values(observed, url, source):
     from clio.providers import gong as provider
-    from clio.ingestion.utils.archive import store_original
-    slot = observed.replace(minute=0, second=0, microsecond=0)
-    values = store_original('gong', slot, observed, source, lambda: provider.download(url), metadata={'source_url': url})
-    return {**values, 'source_url': values.get('source_url', url)}
+    with TemporaryDirectory(prefix='clio-gong-') as temporary:
+        path = Path(temporary) / 'original.fits'
+        path.write_bytes(provider.download(url))
+        return save(path, observation='gong', observed_at=observed,
+                    source_product=source, details={'source_url': url})
 
 
 async def collect(config, *, mode, now=None, start=None, end=None):
@@ -45,9 +44,8 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
     source = (policy.sources.historical if historical else policy.sources.live)[0]
     report = dict(received=0, restored=0, retained=0, missing=0, rejected=0, failed=0,
                   latest_observed_at=None, source_errors=[])
-    async with get_db_session() as session:
-        records = await snapshots(session, 'gong', start=start, end=end+timedelta(microseconds=1))
-    existing = {row.observed_at for row in records}
+    records = await asyncio.to_thread(find, 'gong', start=start, end=end+timedelta(microseconds=1))
+    existing = {row['observed_at'] for row in records}
     usable = set(existing)
     latest = max(usable) if usable else None
     report['retained'] = len(usable)
@@ -77,11 +75,7 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
                 continue
             try:
                 values = await asyncio.to_thread(snapshot_values, observed, url, source)
-                async with get_db_session() as session:
-                    statement = insert(FileObservation).values(**observation_values('gong', values)).on_conflict_do_nothing().returning(FileObservation.id)
-                    inserted = (await session.execute(statement)).scalar_one_or_none()
-                    await session.commit()
-                report['received' if inserted else 'retained'] += 1
+                report['received'] += 1
                 hours.add(hour)
                 usable.add(observed)
                 if inserted:

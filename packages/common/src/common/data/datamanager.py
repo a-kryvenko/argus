@@ -126,7 +126,7 @@ def upload_responsive_image(
 
 
 def upload_file(
-    file: bytes,
+    file: bytes | Path,
     bucket: str,
     prefix: str = "",
     name: str = "",
@@ -187,12 +187,17 @@ def delete_file(bucket: str, key: str) -> None:
 
 
 def _upload_s3(
-        content: bytes,
+        content: bytes | Path,
         bucket: str,
         key: str,
         content_type: str,
         cache_control: str
 ) -> None:
+    if isinstance(content, Path):
+        with content.open('rb') as stream:
+            _get_client().put_object(Bucket=bucket, Key=key, Body=stream,
+                                    ContentType=content_type, CacheControl=cache_control)
+        return
     _get_client().put_object(
         Bucket=bucket,
         Key=key,

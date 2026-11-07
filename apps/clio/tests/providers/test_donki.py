@@ -62,11 +62,11 @@ def test_collection_retains_exact_bytes_and_empty_success_but_skips_failures(sto
     from clio.db.models.file_observation import FileObservation
     with storage.engine.connect() as connection:
         saved = [SimpleNamespace(**row) for row in connection.execute(
-            select(FileObservation.__table__).order_by(FileObservation.received_at)).mappings()]
+            select(FileObservation.__table__).order_by(FileObservation.observed_at)).mappings()]
     assert len(saved) == 3
     cme = saved[0]
     assert storage.objects['argus-private', storage.files(id=cme.file_id)[0]['key']][0] == raw
-    assert cme.details['sha256'] == hashlib.sha256(raw).hexdigest() and cme.received_at >= before
+    assert cme.sha256 == hashlib.sha256(raw).hexdigest() and cme.observed_at >= before
     assert storage.objects['argus-private', storage.files(id=saved[1].file_id)[0]['key']][0] == b'[]'
     assert 'IPS' not in {row.source_product for row in saved}
     assert len(storage.objects) == 3

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 import math
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -24,7 +23,6 @@ class ObservationDefinition:
     handler: str | None = None
     channel: str | None = None
     file_kind: str | None = None
-    file_entity: str | None = None
 
     def accepts(self, value: float) -> bool:
         return math.isfinite(value) and (self.signed or value >= 0) and (
@@ -45,8 +43,8 @@ OBSERVATIONS = {
     'f10_7_81mean': ObservationDefinition('sfu', coverage='latest'),
     **{name + '_81mean': ObservationDefinition('sfu', coverage='latest')
        for name in ('s10', 'm10', 'y10')},
-    'goes': ObservationDefinition('JSON', kind='file', file_entity='json.original'),
-    'gong': ObservationDefinition('FITS', kind='file', file_entity='fits.original'),
+    'goes': ObservationDefinition('JSON', kind='file'),
+    'gong': ObservationDefinition('FITS', kind='file'),
 }
 
 
@@ -85,16 +83,19 @@ for channel in OBSERVED_CHANNELS:
     name = f'aia_{int(channel[3:]):03d}_nrt' if channel.startswith('aia') else 'hmi_m_nrt'
     source = 'aia.nrt_' + channel[3:] if channel.startswith('aia') else 'hmi.nrt_m'
     OBSERVATIONS[name] = ObservationDefinition('FITS', kind='file',
-        handler='sdo_nrt', channel=channel, file_kind='sdo', file_entity='fits.original')
+        handler='sdo_nrt', channel=channel, file_kind='sdo')
     PRODUCTS[source] = Product(frozenset({name}), frozenset({'live', 'historical'}), kind='file', slot_minutes=60)
 
 browse_metrics = set()
 for channel in BROWSE_CHANNELS:
     name = f'aia_{channel}_browse'
     OBSERVATIONS[name] = ObservationDefinition('JPEG', kind='file', coverage='latest',
-        handler='sdo_browse', channel='aia' + str(int(channel)), file_kind='sdo_browse', file_entity='jpg.original')
+        handler='sdo_browse', channel='aia' + str(int(channel)), file_kind='sdo_browse')
     browse_metrics.add(name)
 PRODUCTS['nasa.aia_browse'] = Product(frozenset(browse_metrics), frozenset({'live'}), kind='file')
+
+FILE_OBSERVATIONS = {(definition.file_kind or name, definition.channel): name
+                     for name, definition in OBSERVATIONS.items() if definition.kind == 'file'}
 
 
 SOURCE_IDS = {
@@ -108,10 +109,4 @@ SOURCE_IDS = {
 class NumericAdapter(Protocol):
     def fetch(self, start: datetime, end: datetime) -> pd.DataFrame:
         """Return metric/value/observed_at records in the UTC range [start, end)."""
-        ...
-
-
-class FileAdapter(Protocol):
-    def fetch(self, slot: datetime, root: Path, expected: dict | None = None) -> dict | None:
-        """Return a file receipt; preserve originals and recorded availability."""
         ...

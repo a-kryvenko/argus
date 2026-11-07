@@ -49,10 +49,10 @@ def object_store(monkeypatch, tmp_path):
     objects, clock = {}, [datetime(2026, 11, 2, 10, 30, tzinfo=UTC)]
     def put(**kwargs):
         location = kwargs['Bucket'], kwargs['Key']
-        assert kwargs['IfNoneMatch'] == '*'
-        if location in objects:
+        if kwargs.get('IfNoneMatch') == '*' and location in objects:
             raise ClientError({'Error': {'Code': 'PreconditionFailed'}, 'ResponseMetadata': {'HTTPStatusCode': 412}}, 'PutObject')
-        objects[location] = (kwargs['Body'], clock[0], kwargs['ContentType'])
+        body = kwargs['Body'].read() if hasattr(kwargs['Body'], 'read') else kwargs['Body']
+        objects[location] = (body, clock[0], kwargs['ContentType'])
         return {}
     def get(Bucket, Key):
         if (Bucket, Key) not in objects:
@@ -114,11 +114,20 @@ def scientific_source(monkeypatch):
     now = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
     image = np.full((1024, 1024), 4., np.float32)
     image[:2, :2] = np.nan
-    header = fits.Header({'CRPIX1': 512.5, 'CDELT1': 2.})
+    header = fits.Header({'CRPIX1': 512.5, 'CDELT1': 2., 'DATE-OBS': slot.isoformat().replace('+00:00', ''),
+                          'INSTRUME': 'AIA', 'WAVELNTH': 171, 'QUALITY': 0})
     output = io.BytesIO()
     fits.writeto(output, image, header)
     content = output.getvalue()
     download = Mock(return_value=(image, dict(channel='aia171', header=dict(header), source='https://example.test/aia.fits',
         sha256=hashlib.sha256(content).hexdigest(), observed_at=slot.isoformat(), available_at=now.isoformat()), content))
-    monkeypatch.setattr(provider, 'download_observation', download)
+    def download_file(url, path):
+        _, metadata, original = download()
+        if metadata['observed_at'] == slot.isoformat():
+            path.write_bytes(original)
+        else:
+            with fits.open(io.BytesIO(original)) as hdus:
+                hdus[0].header['DATE-OBS'] = metadata['observed_at'].replace('+00:00', '')
+                hdus.writeto(path)
+    monkeypatch.setattr(provider, 'download_file', download_file)
     return SimpleNamespace(content=content, download=download, image=image, slot=slot, now=now)

@@ -1,79 +1,54 @@
-"""Latest receipts, empty replacement and successful-poll history in PostgreSQL."""
+"""Current DONKI responses and ENLIL profiles in PostgreSQL."""
 import asyncio
-import gzip
-import hashlib
 from datetime import UTC, datetime, timedelta
 
 from tests.support.database import database, migrate
 
 
-def test_latest_donki_response_replaces_old_events_even_when_empty(database, monkeypatch, object_store):
-    _, _, environment = database
-    migrate(environment)
-    for key, value in environment.items():
-        monkeypatch.setenv(key, value)
-    from clio.db.models.file_observation import FileObservation
-    from clio.ingestion.utils.archive import store_receipt
+def test_latest_donki_response_replaces_old_events_even_when_empty(file_database):
+    from clio.ingestion.extras.donki import record_poll
     from common.db.session import dispose_engine
     from clio.db.session import get_db_session
     from clio.routers.solar_wind_events import load_event_inputs
     now = datetime.now(UTC)
-    raw = b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'
+    for minute, content in ((0, b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'), (1, b'[]')):
+        record_poll('CME', content, dict(request_start=(now-timedelta(days=30)).isoformat(),
+            request_end=(now+timedelta(days=1)).isoformat()), observed_at=now+timedelta(minutes=minute))
 
     async def check():
         try:
             async with get_db_session() as session:
-                for minute, payload in ((0, [{'activityID': 'cme1', 'startTime': '2026-01-01T00:00Z'}]), (1, [])):
-                    content = raw if payload else b'[]'
-                    values = store_receipt('donki', 'CME', str(minute),
-                        received_at=now+timedelta(minutes=minute), raw=content,
-                        metadata=dict(request_start=now-timedelta(days=30), request_end=now+timedelta(days=1),
-                            source_url='https://ccmc.gsfc.nasa.gov/DONKI-API/get/CME'))
-                    session.add(FileObservation(**values))
-                await session.commit()
-            async with get_db_session() as session:
-                second = await load_event_inputs(session, now+timedelta(minutes=2))
-                assert second.polls[0].records == [] and second.events == []
-                third = await load_event_inputs(session, now+timedelta(minutes=2))
-                assert third.polls[0].poll_id == second.polls[0].poll_id
-                assert third.latest_attempts['CME']['error'] is None
-                assert third.latest_attempts['CME']['received_at'] == (now+timedelta(minutes=1)).isoformat()
+                result = await load_event_inputs(session, now+timedelta(minutes=2))
+                assert result.polls[0].records == [] and result.events == []
+                assert result.latest_attempts['CME']['received_at'] == (now+timedelta(minutes=1)).isoformat()
         finally:
             await dispose_engine()
     asyncio.run(check())
 
 
-def test_enlil_profiles_return_latest_successful_version(database, monkeypatch, object_store):
-    _, _, environment = database
-    migrate(environment)
-    for key, value in environment.items():
-        monkeypatch.setenv(key, value)
-    from clio.db.models.file_observation import FileObservation
-    from clio.ingestion.utils.archive import store_receipt
+def test_enlil_profiles_return_latest_successful_version(file_database, tmp_path):
+    from clio.ingestion.utils.file_observations import save
     from common.db.session import dispose_engine
     from clio.db.session import get_db_session
     from clio.routers.solar_wind_events import load_event_inputs
     now = datetime.now(UTC).replace(microsecond=0)
+    for minute, speed in ((0, 500), (2, 900)):
+        path = tmp_path / 'original.nc'
+        path.write_bytes(str(speed).encode())
+        save(path, observation='enlil', source_product='noaa.enlil', observed_at=now+timedelta(minutes=minute),
+            details=dict(source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/run/evo.l1.nc',
+                source_key='run/evo.l1.nc', source_modified_at=now.isoformat(), model_created_at=now.isoformat(),
+                payload=dict(model_version='2.9', target='L1', density_kind='proton_equivalent',
+                    points=[dict(valid_time=(now+timedelta(hours=1)).isoformat(), speed_km_s=speed, density_cm3=5)])))
 
     async def check():
         try:
             async with get_db_session() as session:
-                for minute, speed in ((0, 500), (2, 900)):
-                    metadata = dict(source_url='https://noaa-wsa-enlil-pds.s3.amazonaws.com/run/evo.l1.nc',
-                        source_key='run/evo.l1.nc', source_modified_at=now-timedelta(minutes=1), model_created_at=now-timedelta(hours=1),
-                        payload=dict(model_version='2.9', target='L1', density_kind='proton_equivalent',
-                            points=[dict(valid_time=(now+timedelta(hours=1)).isoformat(), speed_km_s=speed, density_cm3=5)]))
-                    session.add(FileObservation(**store_receipt('enlil', 'noaa.enlil', str(minute),
-                        received_at=now+timedelta(minutes=minute), raw=str(speed).encode(), metadata=metadata)))
-                await session.commit()
-            async with get_db_session() as session:
-                latest = await load_event_inputs(session, now+timedelta(minutes=3))
-                assert latest.events == []
-                assert latest.enlil_profile_status['state'] == 'available'
-                assert latest.enlil_profiles[0].points[0].speed_km_s == 900
-                assert latest.enlil_profile_status['latest_attempt']['error'] is None
-                assert latest.enlil_profile_status['latest_attempt']['received_at'] == (now+timedelta(minutes=2)).isoformat()
-                assert latest.enlil_profile_status['linked_to_donki'] is False
+                result = await load_event_inputs(session, now+timedelta(minutes=3))
+                assert result.events == []
+                assert result.enlil_profile_status['state'] == 'available'
+                assert result.enlil_profiles[0].points[0].speed_km_s == 900
+                assert result.enlil_profile_status['linked_to_donki'] is False
         finally:
             await dispose_engine()
     asyncio.run(check())

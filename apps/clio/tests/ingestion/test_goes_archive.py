@@ -5,7 +5,7 @@ from unittest.mock import Mock, AsyncMock
 import pandas as pd
 import pytest
 from clio.ingestion.extras import goes
-from clio.ingestion.utils import archive
+
 
 NOW = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
 
@@ -17,7 +17,7 @@ def test_goes_stores_source_samples_directly_in_s3(storage, monkeypatch):
     content = next(iter(storage.objects.values()))[0]
     assert json.loads(content)[0]['goes_euv_256'] == 2.5
     assert not {'raw_path', 'features'}.intersection(row)
-    assert archive.observation_values('goes', row)['file_id']
+    assert row['file_id']
 
 
 def test_goes_retains_registered_days_without_downloading(storage, monkeypatch):
@@ -35,9 +35,4 @@ def test_live_goes_respects_freshness(storage, monkeypatch, freshness, expected)
     config.observations['goes'].freshness_minutes = freshness
     frame = pd.DataFrame([dict(timestamp=pd.Timestamp(NOW-timedelta(minutes=15)), goes_euv_256=2.5)])
     monkeypatch.setattr(goes, 'source_frames', Mock(return_value=[frame]))
-    session = AsyncMock()
-    session.__aenter__.return_value = session
-    session.execute.return_value = Mock(scalar_one_or_none=Mock(return_value=1))
-    monkeypatch.setattr(goes, 'get_db_session', lambda: session)
-    monkeypatch.setattr(goes, 'snapshots', AsyncMock(return_value=[]))
     assert asyncio.run(goes.collect(config, mode='live', now=NOW))['status'] == expected

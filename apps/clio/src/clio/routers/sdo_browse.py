@@ -29,24 +29,23 @@ def public_entities(sizes):
 
 def _catalog():
     base = os.getenv('S3_PUBLIC_BASE_URL', '').rstrip('/')
-    statement = (select(FileObservation.variable, FileObservation.details, File.key)
+    statement = (select(FileObservation.observation, FileObservation.details, File.key)
         .join(File, File.id == FileObservation.file_id)
-        .where(FileObservation.kind == 'sdo_browse', FileObservation.entity == 'jpg.original',
-               FileObservation.details['complete'].as_boolean().is_(True))
-        .distinct(FileObservation.variable)
-        .order_by(FileObservation.variable, FileObservation.observed_at.desc(), FileObservation.id.desc()))
+        .where(FileObservation.observation.in_([f'aia_{channel}_browse' for channel in CHANNELS]))
+        .distinct(FileObservation.observation)
+        .order_by(FileObservation.observation, FileObservation.observed_at.desc(), FileObservation.id.desc()))
     with db.get_sync_engine().connect() as connection:
         rows = connection.execute(statement).mappings().all()
     images = {}
     for row in rows:
         metadata = row['details'] or {}
         channel = metadata.get('channel')
-        if channel not in CHANNELS or channel in images or not metadata.get('complete'):
+        if channel not in CHANNELS or channel in images:
             continue
         if not base.startswith(('https://', 'http://')):
             raise ValueError('Set S3_PUBLIC_BASE_URL to the public bucket origin')
-        if row['variable'] != 'aia' + str(int(channel)):
-            raise ValueError('SDO image channel does not match its receipt')
+        if row['observation'] != f'aia_{channel}_browse':
+            raise ValueError('SDO image channel does not match its observation')
         images[channel] = {name: metadata.get(name) for name in ('channel', 'asset_id', 'captured_at', 'source_updated_at')}
         prefix = row['key'].rsplit('/', 1)[0]
         images[channel]['urls'] = {entity: base + '/' + quote(prefix + '/' + '.'.join(reversed(entity.split('.'))), safe='/')

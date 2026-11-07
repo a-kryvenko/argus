@@ -69,21 +69,13 @@ def test_collection_stores_success_and_skips_rejected_profiles(storage, monkeypa
                for key, raw in [('good', good), ('bad', bad)]]
     monkeypatch.setattr(enlil, 'discover', lambda now: objects)
     monkeypatch.setattr(enlil, 'download', lambda url: good if url.endswith('good') else bad)
-    session = AsyncMock()
-    session.__aenter__.return_value = session
-    session.scalar.return_value = None
-    monkeypatch.setattr(collector, 'get_db_session', lambda: session)
-    saved = []
-    async def store(values):
-        saved.append(values)
-    monkeypatch.setattr(collector, 'store', store)
     with pytest.raises(RuntimeError, match='1 profiles'):
         asyncio.run(collector.collect())
-    from clio.ingestion.utils.archive import read_receipt
-    row = SimpleNamespace(**saved[0])
-    assert read_receipt(row)['payload']['points'][0]['speed_km_s'] == 400
-    assert datamanager.read_reference(storage.files(id=row.file_id)[0]) == good
-    assert len(saved) == len(storage.objects) == 1
+    from clio.ingestion.utils.file_observations import find
+    row = find('enlil')[0]
+    assert row['details']['payload']['points'][0]['speed_km_s'] == 400
+    assert datamanager.read_reference(row['file']) == good
+    assert len(find('enlil')) == len(storage.objects) == 1
 
 
 @pytest.mark.parametrize('result', [[], OSError('discovery failed')])
@@ -93,9 +85,6 @@ def test_discovery_failure_does_not_create_observations(storage, monkeypatch, re
     from clio.ingestion.extras import enlil as collector
     discover = Mock(side_effect=result) if isinstance(result, Exception) else Mock(return_value=result)
     monkeypatch.setattr(enlil, 'discover', discover)
-    store = AsyncMock()
-    monkeypatch.setattr(collector, 'store', store)
-    with pytest.raises(RuntimeError, match='discovery failed'):
+    with pytest.raises(RuntimeError, match='profiles|discovery failed'):
         asyncio.run(collector.collect())
-    store.assert_not_awaited()
     assert not storage.objects

@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from clio.db.models.file import File
 from clio.db.models.file_observation import FileObservation
 from clio.db.session import get_request_db_session
-from clio.ingestion.utils.products import OBSERVATIONS
 from clio.routers.errors import ObservationUnavailable
 
 router = APIRouter(prefix='/internal/v1')
@@ -38,22 +37,12 @@ async def list_files(
 
 
 async def load_observation_files(session: AsyncSession, *, observation, start, end):
-    definition = OBSERVATIONS.get(observation)
-
-    if definition is None or definition.kind != 'file' or definition.file_entity is None:
-        raise HTTPException(422, 'Unknown file observation')
-
-    statement = (select(FileObservation.observed_at, FileObservation.details, FileObservation.source_product,
+    statement = (select(FileObservation.observation, FileObservation.observed_at, FileObservation.sha256, FileObservation.source_product,
         File.id.label('file_id'), File.timestamp.label('file_timestamp'), File.bucket, File.key)
         .join(File, File.id == FileObservation.file_id)
-        .where(FileObservation.kind == (definition.file_kind or observation),
-               FileObservation.entity == definition.file_entity,
-               FileObservation.observed_at >= start, FileObservation.observed_at < end,
-               FileObservation.details['complete'].as_boolean().is_not(False))
+        .where(FileObservation.observation == observation,
+               FileObservation.observed_at >= start, FileObservation.observed_at < end)
         .order_by(FileObservation.observed_at, FileObservation.source_product, File.key).limit(MAX_FILES + 1))
-
-    if definition.channel is not None:
-        statement = statement.where(FileObservation.variable == definition.channel)
 
     try:
         rows = (await session.execute(statement)).mappings().all()
@@ -61,10 +50,9 @@ async def load_observation_files(session: AsyncSession, *, observation, start, e
             raise ObservationUnavailable('Observation file range exceeds the supported batch size')
 
         return [RawObservationFile(
-            observation=observation,
-            slot_at=row['details']['slot_at'],
+            observation=row['observation'],
             observed_at=row['observed_at'],
-            sha256=row['details']['sha256'],
+            sha256=row['sha256'],
             source_product=row['source_product'],
             file=dict(
                 id=row['file_id'],

@@ -36,8 +36,8 @@ def test_failed_slot_resumes_and_completed_slot_is_immutable(tmp_path, monkeypat
             assert 'headers' not in kwargs
             return SimpleNamespace(content=b'2026;1;2026.0;100;0;1;1\n')
         if url.endswith('/files'):
-            return SimpleNamespace(json=lambda: {'data': [{'file': {'bucket': 'argus-private'},
-                'slot_at': slot.isoformat(), 'observed_at': slot.isoformat(),
+            return SimpleNamespace(json=lambda: {'data': [{'file': {'bucket': 'argus-private', 'timestamp': now.isoformat()},
+                'observed_at': slot.isoformat(),
                 'sha256': sha}]})
         raise AssertionError('Unexpected file HTTP request')
     monkeypatch.setattr(worker, 'get', get)
@@ -96,8 +96,10 @@ def test_worker_downloads_fits_from_object_storage_without_clio_file_requests(tm
     reference = dict(id=str(uuid4()), timestamp=now.isoformat(), bucket='argus-private', key='images/SDO/aia171/slot/original.fits')
     def get(client, url, **kwargs):
         assert url.endswith('/files'), 'Clio must only serve a JSON catalog'
+        channel = kwargs['params']['observation']
+        observed = slot + pd.Timedelta(minutes=-4 if channel == 'aia_171_nrt' else 6)
         return SimpleNamespace(json=lambda: {'data': [{'file': reference,
-            'slot_at': slot.isoformat(), 'observed_at': slot.isoformat(),
+            'observed_at': observed.isoformat(),
             'sha256': sha}]})
     monkeypatch.setattr(worker, 'get', get)
     monkeypatch.setattr(object_files, 'read_file', lambda bucket, key, **kwargs: content)
@@ -107,3 +109,7 @@ def test_worker_downloads_fits_from_object_storage_without_clio_file_requests(tm
     runtime = SimpleNamespace(crop=crop, predict=lambda *_: 500.)
     worker.cycle(runtime, None, 'http://clio', 'secret', inputs=SimpleNamespace(as_of=now, read_at=now))
     assert len(list((tmp_path / 'predictions').glob('*.json'))) == 1
+    record = json.loads(next((tmp_path / 'predictions').glob('*.json')).read_text())
+    assert pd.Timestamp(record['image_slot']) == slot
+    assert set(record['image_receipts']) == {'171', '211'}
+    assert all('slot_at' not in receipt for receipt in record['image_receipts'].values())

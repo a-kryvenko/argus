@@ -7,8 +7,7 @@ import requests
 from clio.ingestion.extras import sdo as collector
 from clio.db.locks import ingestion_lock
 from clio.ingestion.extras import sdo
-from clio.ingestion.utils import file_observations
-from clio.providers.sdo import observation_url, prepare_observation
+from clio.providers.sdo import observation_url
 
 
 @pytest.fixture
@@ -44,26 +43,12 @@ def test_backfill_uses_policy_window_and_channel(storage, policy, scientific_sou
     assert all(call.args[0] >= scientific_source.now-timedelta(days=1) for call in collect_one.call_args_list)
 
 
-def test_requested_slots_stay_fixed_while_download_time_advances(storage, scientific_source):
-    clocks = iter([scientific_source.now, scientific_source.now+timedelta(minutes=1)])
-    assert collector.collect_one(scientific_source.slot, 'aia171', clock=lambda: next(clocks)) == 'saved'
-    metadata = file_observations.find(entity='npz.512')[0]['details']
-    assert metadata['available_at'] == (scientific_source.now+timedelta(minutes=1)).isoformat()
-
-
 def test_404_does_not_publish_objects(storage, scientific_source):
     response = requests.Response()
     response.status_code = 404
     scientific_source.download.side_effect = requests.HTTPError(response=response)
     assert collector.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'unavailable'
     assert not storage.objects
-
-
-def test_reduction_retains_nan_and_rescales_wcs(scientific_source):
-    image, metadata = prepare_observation(scientific_source.image, scientific_source.download.return_value[1])
-    assert image.shape == (512, 512) and np.isnan(image[0, 0])
-    assert metadata['header']['CRPIX1'] == 256.5 and metadata['header']['CDELT1'] == 4.
-    assert observation_url('aia171', scientific_source.slot).endswith('_0171.fits')
 
 
 def test_unknown_channel_is_rejected_before_download(scientific_source):

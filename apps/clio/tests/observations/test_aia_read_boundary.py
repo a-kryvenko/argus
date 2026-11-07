@@ -8,7 +8,7 @@ def test_aia_original_reads_do_not_import_downloader():
         [sys.executable, '-c', (
             'import sys; '
             'import clio.routers.observation_files; '
-            'assert "clio.providers.sdo" not in sys.modules; assert "clio.ingestion.extras.sdo" not in sys.modules'
+            'assert not any(name.startswith("clio.ingestion") for name in sys.modules)'
         )],
         capture_output=True, text=True, timeout=30,
     )

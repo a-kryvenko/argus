@@ -17,15 +17,15 @@ NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 @pytest.mark.parametrize('observation', ['gong', 'goes', 'aia_094_nrt', 'hmi_m_nrt', 'aia_193_browse'])
 def test_catalog_reads_common_metadata_in_one_query(observation):
     session = AsyncMock()
-    row = dict(observed_at=NOW, details={'slot_at': NOW.isoformat(), 'sha256': 'a'*64},
+    row = dict(observation=observation, observed_at=NOW, sha256='a'*64,
         source_product='source', file_id=uuid4(), file_timestamp=NOW,
         bucket='argus-private', key='original')
     session.execute.return_value = Mock(mappings=lambda: Mock(all=lambda: [row]))
     files = asyncio.run(routes.load_observation_files(session, observation=observation,
         start=NOW-timedelta(days=1), end=NOW+timedelta(hours=1)))
     assert len(files) == 1 and files[0].observation == observation
-    assert files[0].observed_at == NOW and files[0].slot_at == NOW
-    assert set(files[0].model_dump()) == {'observation', 'slot_at', 'observed_at', 'sha256', 'source_product', 'file'}
+    assert files[0].observed_at == NOW
+    assert set(files[0].model_dump()) == {'observation', 'observed_at', 'sha256', 'source_product', 'file'}
     session.execute.assert_awaited_once()
     query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     assert 'JOIN files' in str(query)
@@ -55,17 +55,17 @@ def test_catalog_http_uses_observation_and_interval(monkeypatch):
     assert response.headers['cache-control'] == 'no-store'
     session.execute.assert_awaited_once()
     query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
-    assert query.params['kind_1'] == 'goes'
-    assert query.params['entity_1'] == 'json.original'
+    assert query.params['observation_1'] == 'goes'
+    assert 'details' not in str(query) and 'file_receipt' not in str(query)
     assert query.params['observed_at_1'] == NOW-timedelta(days=7)
     assert request(http, start=NOW.isoformat(), end=(NOW-timedelta(days=1)).isoformat()).status_code == 422
 
 
 @pytest.mark.parametrize('observation', ['unknown', 'v', 'aia'])
-def test_invalid_file_observation_fails_before_storage(monkeypatch, observation):
+def test_observation_names_do_not_require_an_ingestion_registry(monkeypatch, observation):
     http, session = client(monkeypatch)
-    assert request(http, observation=observation).status_code == 422
-    session.execute.assert_not_awaited()
+    assert request(http, observation=observation).json()['data'] == []
+    session.execute.assert_awaited_once()
 
 
 def test_catalog_rejects_overflow_before_decoding(monkeypatch):
@@ -75,7 +75,7 @@ def test_catalog_rejects_overflow_before_decoding(monkeypatch):
 
 @pytest.mark.parametrize('column', ['observed_at', 'file_timestamp'])
 def test_catalog_does_not_repair_timezone_naive_database_values(monkeypatch, column):
-    row = dict(observed_at=NOW, details={'slot_at': NOW.isoformat(), 'sha256': 'a'*64},
+    row = dict(observation='goes', observed_at=NOW, sha256='a'*64,
         source_product='goes.live', file_id=uuid4(), file_timestamp=NOW,
         bucket='argus-private', key='original')
     row[column] = NOW.replace(tzinfo=None)

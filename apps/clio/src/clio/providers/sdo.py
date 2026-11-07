@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 import hashlib
 from pathlib import Path
-from tempfile import TemporaryDirectory
 from time import monotonic
 
 import numpy as np
@@ -87,33 +86,20 @@ def read_native_fits(path, channel, *, slot, now, tolerance_seconds=120):
                       preprocessing='fits-unregistered-v1')
 
 
-def download_observation(url, channel, *, slot, now, session=None, include_original=False):
-    """Fetch to temporary storage and validate before returning a source image.
-
-    HTTP auth errors are propagated; no protected endpoints are scraped or
-    silently replaced with JPEG previews or archival data.
-    """
+def download_file(url, path, *, session=None):
     client = session or requests
-    with TemporaryDirectory(prefix='clio-sdo-') as temporary:
-        path = Path(temporary) / 'observation.fits'
-        deadline = monotonic() + 120
-        with client.get(url, stream=True, timeout=(10, 60)) as response:
-            response.raise_for_status()
-            size = 0
-            with path.open('wb') as stream:
-                for block in response.iter_content(1024 * 1024):
-                    if monotonic() > deadline:
-                        raise requests.Timeout('SDO download exceeded total time budget')
-                    size += len(block)
-                    if size > MAX_DOWNLOAD_BYTES:
-                        raise ValueError('Oversized SDO FITS download')
-                    stream.write(block)
-        image, metadata = read_native_fits(path, channel, slot=slot, now=now)
-        metadata['source'] = url
-        metadata['available_at'] = datetime.now(UTC).isoformat()
-        if include_original:
-            return image, metadata, path.read_bytes()
-        return image, metadata
+    deadline = monotonic() + 120
+    with client.get(url, stream=True, timeout=(10, 60)) as response:
+        response.raise_for_status()
+        size = 0
+        with path.open('wb') as stream:
+            for block in response.iter_content(1024 * 1024):
+                if monotonic() > deadline:
+                    raise requests.Timeout('SDO download exceeded total time budget')
+                size += len(block)
+                if size > MAX_DOWNLOAD_BYTES:
+                    raise ValueError('Oversized SDO FITS download')
+                stream.write(block)
 
 
 def observation_url(channel, slot):
@@ -128,79 +114,22 @@ def observation_url(channel, slot):
     return f'{base}/hmi/fits/{slot:%Y/%m/%d}/hmi.M_720s_nrt.{slot:%Y%m%d_%H0000}_TAI.fits'
 
 
-def prepare_observation(image, metadata):
-    """Area means in source units, retaining NaN where no measurement exists.
-
-    This is observation reduction, not Surya normalization or co-registration.
-    The adjusted WCS describes the reduced grid, including pixel-center offsets.
-    """
-    factor = image.shape[0] // 512
-    if image.shape not in ((1024, 1024), (4096, 4096)):
-        raise ValueError('Unsupported source shape')
-    blocks = image.reshape(512, factor, 512, factor)
-    finite = np.isfinite(blocks)
-    counts = finite.sum(axis=(1, 3))
-    sums = np.where(finite, blocks, 0).sum(axis=(1, 3), dtype=np.float64)
-    reduced = np.full((512, 512), np.nan, dtype=np.float32)
-    np.divide(sums, counts, out=reduced, where=counts > 0)
-    def scalar(value):
-        if isinstance(value, (list, tuple)):
-            return [scalar(entry) for entry in value]
-        if isinstance(value, np.generic):
-            value = value.item()
-        if isinstance(value, float) and not np.isfinite(value):
-            return None
-        return value if value is None or isinstance(value, (str, int, float, bool)) else str(value)
-    source_header = {k: scalar(v) for k, v in metadata['header'].items()}
-    header = dict(source_header)
-    for axis in (1, 2):
-        header[f'NAXIS{axis}'] = 512
-        key = f'CRPIX{axis}'
-        if key in header:
-            header[key] = (header[key] - 0.5) / factor + 0.5
-        key = f'CDELT{axis}'
-        if key in header:
-            header[key] *= factor
-        for other in (1, 2):
-            key = f'CD{axis}_{other}'
-            if key in header:
-                header[key] *= factor
-    return reduced, dict(metadata, header=header, source_header=source_header,
-                         preprocessing='sdo-area-mean-unregistered-v1',
-                         units='Gauss' if metadata['channel'] == 'hmi_m' else 'DN',
-                         missing_pixels='NaN; finite-only block mean; no imputation',
-                         valid_fraction=float(np.isfinite(reduced).mean()))
-
-
-def fetch(channel, slot):
-    """Return a file reference; download_observation validates the referenced FITS."""
-    return {'timestamp': _utc(slot), channel + '_url': observation_url(channel, slot)}
-
-
-def load_observation(channel, slot, *, now):
-    """Download, validate and reduce a scientific observation, retaining its original."""
-    reference = fetch(channel, slot)
-    image, metadata, original = download_observation(reference[channel + '_url'], channel,
-        slot=slot, now=now, include_original=True)
-    image, metadata = prepare_observation(image, metadata)
-    return image, metadata, original
-
-
-def download_browse(channel):
+def download_browse_file(channel, path):
     url = f'https://sdo.gsfc.nasa.gov/assets/img/latest/latest_4096_{int(channel):04d}.jpg'
     started = monotonic()
     with requests.get(url, stream=True, timeout=(10, 45)) as response:
         response.raise_for_status()
-        blocks, length = [], 0
-        for block in response.iter_content(1024 * 1024):
-            length += len(block)
-            if length > MAX_BROWSE_BYTES or monotonic()-started > 90:
-                raise ValueError('SDO browse download exceeds size/time limit')
-            blocks.append(block)
+        length = 0
+        with path.open('wb') as stream:
+            for block in response.iter_content(1024 * 1024):
+                length += len(block)
+                if length > MAX_BROWSE_BYTES or monotonic()-started > 90:
+                    raise ValueError('SDO browse download exceeds size/time limit')
+                stream.write(block)
         updated = response.headers.get('last-modified')
         try:
             updated = parsedate_to_datetime(updated) if updated else None
         except (TypeError, ValueError, OverflowError):
             updated = None
-        return b''.join(blocks), updated
+        return updated
 

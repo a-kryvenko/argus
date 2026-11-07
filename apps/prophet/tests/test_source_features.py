@@ -24,7 +24,7 @@ NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
 def reference(content, *, observation='goes', **kwargs):
     kwargs.setdefault('file', FileReference(id=uuid4(), timestamp=NOW, bucket='argus-private',
         key=observation + '/' + hashlib.sha256(content).hexdigest()))
-    return RawObservationFile(observation=observation, slot_at=NOW, observed_at=NOW,
+    return RawObservationFile(observation=observation, observed_at=NOW,
         sha256=hashlib.sha256(content).hexdigest(), source_product=observation+'.live', **kwargs)
 
 

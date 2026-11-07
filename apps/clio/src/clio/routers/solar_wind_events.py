@@ -8,11 +8,11 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from clio.db.session import get_request_db_session
 from clio.routers.errors import ObservationUnavailable
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from clio.db.models.measurement import Measurement
 from clio.db.models.file_observation import FileObservation
-from clio.ingestion.utils.archive import read_receipt
+from clio.db.models.file import File
 from clio.ingestion.extras.solar_wind_events import normalize_event_inputs
 
 router = APIRouter(prefix='/internal/v1/observations/solar-wind-events', tags=['observations'])
@@ -66,7 +66,7 @@ async def load_event_inputs(session, now):
     try:
         polls, attempts = await donki_inputs(session)
     except (OSError, ValueError, KeyError, TypeError):
-        raise ObservationUnavailable('DONKI original or receipt is unavailable or corrupt') from None
+        raise ObservationUnavailable('DONKI original or metadata is unavailable or corrupt') from None
     rows = (await session.execute(select(Measurement)
         .where(Measurement.metric.in_(['bx', 'by', 'bz', 'v', 'n', 't']),
                Measurement.source_product.in_(['swpc.rtsw_mag', 'swpc.rtsw_plasma']),
@@ -88,7 +88,7 @@ async def load_event_inputs(session, now):
     try:
         profile, attempt = await enlil_input(session)
     except (OSError, ValueError, KeyError, TypeError):
-        raise ObservationUnavailable('ENLIL original or receipt is unavailable or corrupt') from None
+        raise ObservationUnavailable('ENLIL original or metadata is unavailable or corrupt') from None
     if profile:
         result.enlil_profiles = [profile]
     future = profile and any(p.valid_time > now for p in result.enlil_profiles[0].points)
@@ -108,57 +108,31 @@ async def read_event_inputs(session, now):
         await session.rollback()
 
 
-def _latest(rows, key):
-    result = {}
-    for row in rows:
-        previous = result.get(key(row))
-        if previous is None or (row.received_at, row.id) >= (previous.received_at, previous.id):
-            result[key(row)] = row
-    return result
-
-
 async def donki_inputs(session):
-    new = (await session.scalars(select(FileObservation).where(FileObservation.kind == 'donki')
-        .distinct(FileObservation.source_product)
-        .order_by(FileObservation.source_product, FileObservation.received_at.desc(), FileObservation.id.desc()))).all()
-    candidates = _latest(new, lambda r: r.source_product)
-
-    polls = []
-    for endpoint, row in sorted(candidates.items()):
-        metadata = read_receipt(row)
-        records = metadata['records']
-        start, end = metadata['request_start'], metadata['request_end']
-        polls.append(SourcePoll(endpoint=endpoint, poll_id=row.id, received_at=row.received_at,
-            sha256=metadata['sha256'], request_start=start, request_end=end, records=records))
-    checks = await latest_successful_checks(session, 'donki')
-    return polls, {endpoint: dict(received_at=row.received_at.isoformat(), error=None,
-        last_success_at=row.received_at.isoformat())
-        for endpoint, row in checks.items()}
-
-
-async def latest_successful_checks(session, kind):
-    new = (await session.execute(select(FileObservation.source_product.label('source'), FileObservation.id,
-        FileObservation.received_at)
-        .where(FileObservation.kind.in_(('donki', 'donki_poll') if kind == 'donki' else (kind,)))
-        .distinct(FileObservation.source_product)
-        .order_by(FileObservation.source_product, FileObservation.received_at.desc(), FileObservation.id.desc()))).all()
-    return _latest(new, lambda r: r.source if kind == 'donki' else kind)
+    latest_ids = select(FileObservation.id, func.row_number().over(
+        partition_by=FileObservation.source_product,
+        order_by=(FileObservation.observed_at.desc(), FileObservation.id.desc())).label('position')) \
+        .where(FileObservation.observation.startswith('donki.', autoescape=True)).subquery()
+    rows = (await session.scalars(select(FileObservation)
+        .join(latest_ids, latest_ids.c.id == FileObservation.id)
+        .where(latest_ids.c.position == 1).order_by(FileObservation.source_product))).all()
+    latest = {row.source_product: row for row in rows}
+    polls = [SourcePoll(endpoint=endpoint, poll_id=row.id, received_at=row.observed_at,
+        sha256=row.sha256, request_start=row.details['request_start'], request_end=row.details['request_end'],
+        records=row.details['records']) for endpoint, row in sorted(latest.items())]
+    return polls, {endpoint: dict(received_at=row.observed_at.isoformat(), error=None,
+        last_success_at=row.observed_at.isoformat()) for endpoint, row in latest.items()}
 
 
 async def enlil_input(session):
-    new = (await session.scalars(select(FileObservation).where(FileObservation.kind == 'enlil'))).all()
-
-    candidates = []
-    for row in new:
-        metadata = read_receipt(row)
-        created = datetime.fromisoformat(metadata['model_created_at'])
-        candidates.append((created, row.received_at, row.id, row, metadata))
-    profile = None
-    if candidates:
-        _, _, _, row, metadata = max(candidates, key=lambda c: c[:3])
-        profile = EnlilProfile(receipt_id=row.id, received_at=row.received_at, sha256=metadata['sha256'],
-            **{key: metadata[key] for key in ('source_key', 'source_url', 'source_modified_at', 'model_created_at')},
-            **metadata['payload'])
-
-    check = (await latest_successful_checks(session, 'enlil')).get('enlil')
-    return profile, dict(received_at=check.received_at.isoformat(), error=None) if check else None
+    rows = (await session.execute(select(FileObservation, File.timestamp)
+        .join(File, File.id == FileObservation.file_id).where(FileObservation.observation == 'enlil')
+        .order_by(FileObservation.observed_at.desc(), File.timestamp.desc()).limit(1))).all()
+    if not rows:
+        return None, None
+    row, uploaded_at = rows[0]
+    metadata = row.details
+    profile = EnlilProfile(receipt_id=row.id, received_at=uploaded_at, sha256=row.sha256,
+        **{key: metadata[key] for key in ('source_key', 'source_url', 'source_modified_at', 'model_created_at')},
+        **metadata['payload'])
+    return profile, dict(received_at=uploaded_at.isoformat(), error=None)

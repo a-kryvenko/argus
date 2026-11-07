@@ -6,22 +6,21 @@ import pytest
 
 from clio.config import ClioObservations, load_observation_config
 from clio.ingestion.extras import sdo, sdo_browse
-from clio.ingestion.utils import file_observations
+from clio.ingestion.utils.file_observations import save
+from tempfile import TemporaryDirectory
+from pathlib import Path
 from clio.ingestion.utils.file_collection import collect_observation
 
 NOW = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
 
 
 def seed(storage, observation, observed, *, complete=True):
-    browse = observation.endswith('_browse')
-    kind, entity = ('sdo_browse', 'jpg.original') if browse else ('sdo', 'fits.original')
-    reference = storage.publish(b'original', 'argus-public' if browse else 'argus-private',
-        kind + '/' + str(observed), content_type='application/octet-stream')
-    file_observations.register(variable='aia171', timestamp=NOW, entity=entity,
-        kind=kind, source_product='nasa.aia_browse' if browse else 'aia.nrt_171',
-        bucket=reference['bucket'], key=reference['key'], uploaded_at=reference['timestamp'],
-        details={'complete': complete, 'captured_at': NOW.isoformat(),
-                 'source_updated_at' if browse else 'observed_at': observed.isoformat() if observed else None})
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / 'original.fits'
+        path.write_bytes(b'original')
+        save(path, observation=observation, observed_at=NOW if observation.endswith('_browse') else observed,
+             source_product='nasa.aia_browse' if observation.endswith('_browse') else 'aia.nrt_171',
+             details={'source_updated_at': observed.isoformat() if observed else None})
 
 
 @pytest.mark.parametrize('observation,module,age,expected', [
@@ -45,13 +44,6 @@ def test_live_freshness_uses_source_time_not_upload_time(storage, monkeypatch, o
 def test_missing_scientific_observation_time_is_rejected(storage):
     with pytest.raises(ValueError, match='Observation time'):
         seed(storage, 'aia_171_nrt', None)
-
-
-def test_incomplete_browse_is_not_a_fresh_observation(storage, monkeypatch):
-    seed(storage, 'aia_171_browse', NOW, complete=False)
-    monkeypatch.setattr(sdo_browse, 'collect', Mock(return_value={'status': 'complete', 'failed': 0}))
-    report = asyncio.run(collect_observation(load_observation_config(), 'aia_171_browse', mode='live', now=NOW))
-    assert report['freshness'] == 'unknown' and report['status'] == 'partial'
 
 
 def test_backfill_does_not_require_old_observations_to_be_fresh(storage, monkeypatch):

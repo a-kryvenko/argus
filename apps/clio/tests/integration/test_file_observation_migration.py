@@ -65,10 +65,9 @@ def archive_stage1(settings):
     from uuid import UUID
     import hashlib
     import json
-    from clio import migrate_local_files as legacy
     from common.db.session import dispose_engine
 
-    dsns, urls, _, _, raw = settings
+    dsns, urls, _, roots, raw = settings
     values = []
     for kind, table in (('gong', 'gong_snapshot'), ('goes', 'goes_snapshot'),
                         ('donki', 'donki_poll'), ('enlil', 'enlil_profile_receipt')):
@@ -86,7 +85,7 @@ def archive_stage1(settings):
             content = raw[kind] if row.get('error') is None else None
             relative = (str(Path('migrated')/(kind+'.gz')) if kind in ('gong','goes') else str(id)+'.gz') if content is not None else None
             if content is not None:
-                path = legacy.archive_path(kind,relative)
+                path = roots[kind] / relative
                 path.parent.mkdir(parents=True,exist_ok=True)
                 path.write_bytes(gzip.compress(content))
                 metadata['sha256'] = hashlib.sha256(content).hexdigest()

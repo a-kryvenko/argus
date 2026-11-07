@@ -223,7 +223,7 @@ def test_assembles_native_measurements_and_originals(monkeypatch):
             return resource_response(request, payload)
         if request.url.path.endswith('/files') and request.url.params['observation'] == 'gong':
             return httpx.Response(200, json={'success': True, 'data': [{
-                'observation': 'gong', 'slot_at': NOW.isoformat(), 'observed_at': NOW.isoformat(),
+                'observation': 'gong', 'observed_at': NOW.isoformat(),
                 'sha256': 'a'*64, 'source_product': 'gong.live',
                 'file': {'id':'00000000-0000-0000-0000-000000000001','timestamp':NOW.isoformat(),'bucket':'argus-private','key':'observations/GONG/source.fits'}}]})
         return resource_response(request, stored_inputs().model_dump(mode='json'))

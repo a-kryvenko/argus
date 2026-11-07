@@ -59,9 +59,16 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
             'start':(hour-pd.Timedelta(hours=95)).isoformat(),'end':(hour+pd.Timedelta(hours=1)).isoformat(),
             'observation':f'aia_{channel}_nrt'})
         for item in response.json()['data']:
-            m={key:value for key,value in item.items() if key != 'file'};slot=pd.Timestamp(m['slot_at'])
-            if pd.Timestamp(m['observed_at'])<=now:
-                groups.setdefault(slot,{})[channel]={**m, 'file': item['file']}
+            observed = pd.Timestamp(item['observed_at']).tz_convert('UTC')
+            slot = observed.round('h')
+            if observed > now or abs(observed-slot) > pd.Timedelta(minutes=10):
+                continue
+            images = groups.setdefault(slot, {})
+            previous = images.get(channel)
+            rank = (abs(observed-slot), -pd.Timestamp(item['file']['timestamp']).value)
+            if previous is None or rank < (abs(pd.Timestamp(previous['observed_at'])-slot),
+                                           -pd.Timestamp(previous['file']['timestamp']).value):
+                images[channel] = item
     completed=0
     for slot,images in sorted(groups.items(),reverse=True):
         valid=slot+pd.Timedelta(hours=96);dest=root/'predictions'/f'{valid:%Y%m%dT%H}.json'

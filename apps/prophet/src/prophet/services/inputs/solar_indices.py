@@ -53,7 +53,7 @@ def select_sources(inputs):
     selected_goes = {}
     for ref in refs:
         if ref.observation == 'goes':
-            selected_goes[(ref.source_product, ref.slot_at.date())] = ref
+            selected_goes[(ref.source_product, ref.observed_at.date())] = ref
     return sorted(selected_goes.values(), key=lambda r: r.file.timestamp)
 
 

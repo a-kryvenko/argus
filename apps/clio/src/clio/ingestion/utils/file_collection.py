@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from importlib import import_module
 
 from clio.ingestion.utils.products import OBSERVATIONS
-from clio.ingestion.utils import file_observations
+from clio.ingestion.utils.file_observations import find
 
 
 async def collect_observation(config, observation, *, mode, now):
@@ -25,18 +25,15 @@ async def collect_observation(config, observation, *, mode, now):
             return report
         if report['status'] == 'complete':
             break
-    rows = await asyncio.to_thread(file_observations.find, kind=definition.file_kind,
-        variable=definition.channel, entity=definition.file_entity)
+    rows = await asyncio.to_thread(find, observation)
     observed = []
     for row in rows:
         if row['source_product'] not in sources:
             continue
         metadata = row['details'] or {}
-        if handler == 'sdo_browse' and not metadata.get('complete'):
-            continue
-        value = metadata.get('observed_at' if handler == 'sdo_nrt' else 'source_updated_at')
+        value = row['observed_at'] if handler == 'sdo_nrt' else metadata.get('source_updated_at')
         if value is not None:
-            timestamp = datetime.fromisoformat(str(value))
+            timestamp = datetime.fromisoformat(value) if isinstance(value, str) else value
             if timestamp.tzinfo is not None and timestamp <= now:
                 observed.append(timestamp)
     latest = max(observed, default=None)

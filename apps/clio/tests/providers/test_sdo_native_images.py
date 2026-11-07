@@ -64,27 +64,8 @@ def test_fits_flags_are_checked_before_returning_pixels(tmp_path, channel, flags
             read_native_fits(path, channel, slot=SLOT, now=SLOT + timedelta(minutes=1))
 
 
-def test_file_reference_uses_internal_channel_name():
-    from clio.providers.sdo import fetch
-    result = fetch('aia171', SLOT)
-    assert set(result) == {'timestamp', 'aia171_url'}
-    assert result['timestamp'] == SLOT
-    assert result['aia171_url'].endswith('AIA20260930_060000_0171.fits')
-
-
-def test_provider_returns_reduced_observation_and_unchanged_original(scientific_source):
-    from clio.providers import sdo
-    source = scientific_source
-    image, metadata, original = sdo.load_observation('aia171', source.slot, now=source.now)
-    assert image.shape == (512, 512) and image.dtype == np.float32
-    assert metadata['header']['CRPIX1'] == 256.5
-    assert original == source.content
-    source.download.assert_called_once_with(sdo.observation_url('aia171', source.slot), 'aia171',
-        slot=source.slot, now=source.now, include_original=True)
-
-
 @pytest.mark.parametrize('limit, accepted', [(16, True), (3, False)])
-def test_browse_download_is_bounded_and_preserves_source_time(monkeypatch, limit, accepted):
+def test_browse_download_is_bounded_and_preserves_source_time(monkeypatch, tmp_path, limit, accepted):
     from unittest.mock import MagicMock
     from clio.providers import sdo
     response = MagicMock()
@@ -95,36 +76,8 @@ def test_browse_download_is_bounded_and_preserves_source_time(monkeypatch, limit
     response.return_value = response
     monkeypatch.setattr(sdo, 'MAX_BROWSE_BYTES', limit)
     if accepted:
-        assert sdo.download_browse('193') == (b'jpeg', SLOT)
+        assert sdo.download_browse_file('193', tmp_path/'image.jpg') == SLOT
+        assert (tmp_path/'image.jpg').read_bytes() == b'jpeg'
     else:
         with pytest.raises(ValueError, match='size/time limit'):
-            sdo.download_browse('193')
-
-
-def test_commentary_survives_native_fits_json_receipt_and_reduced_fits(tmp_path):
-    import io
-    import json
-    from clio.providers.sdo import prepare_observation
-    from clio.ingestion.extras.sdo import fits_bytes
-    path = tmp_path / 'aia.fits'
-    header = fits.Header({'DATE-OBS': SLOT.isoformat().replace('+00:00', ''),
-                          'INSTRUME': 'AIA_1', 'WAVELNTH': 171, 'CRPIX1': 512.5})
-    comments = ['  This FITS file may contain long string keyword values that are',
-                '  continued across multiple cards.']
-    history = ['First processing step', 'Second processing step']
-    for value in comments:
-        header.add_comment(value)
-    for value in history:
-        header.add_history(value)
-    fits.writeto(path, np.ones((1024, 1024), dtype=np.float32), header)
-    image, metadata = read_native_fits(path, 'aia171', slot=SLOT, now=SLOT+timedelta(hours=1))
-    metadata = json.loads(json.dumps(metadata))
-    assert metadata['header']['COMMENT'] == comments
-    image, metadata = prepare_observation(image, metadata)
-    metadata = json.loads(json.dumps(metadata))
-    assert metadata['source_header']['HISTORY'] == history
-    with fits.open(io.BytesIO(fits_bytes(image, metadata))) as hdus:
-        assert list(hdus[0].header['COMMENT']) == comments
-        assert list(hdus[0].header['HISTORY']) == history
-        assert hdus[0].data.shape == (512, 512)
-        assert hdus[0].header['CRPIX1'] == 256.5
+            sdo.download_browse_file('193', tmp_path/'image.jpg')

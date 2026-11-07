@@ -12,6 +12,7 @@ Sampling intervals, polling and backfill windows are required; file policies als
 SDO products use `aia_094_nrt`, `aia_094_browse`, etc. NRT recovery uses the same dated NRT source; browse has no history. Missing source timestamps produce unknown freshness.
 Originals and derivatives live in S3; PostgreSQL stores file references and observation metadata.
 `GET /internal/v1/files?observation=aia_171_nrt&start=…&end=…` returns stored originals for a file observation.
+Files are downloaded to `tmp`, uploaded to S3, recorded in `file_observation`, then removed from `tmp`.
 
 `clio` serves authenticated HTTP; `clio-worker` runs collection, backfill, normalization and cleanup.
 Health: `/health/live`, `/health/ready`. Logs: `./argus logs clio`.

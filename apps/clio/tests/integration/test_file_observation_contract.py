@@ -1,5 +1,6 @@
 """Upgrade the deployed file schema, then exercise real collection writes."""
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -81,7 +82,7 @@ def test_deployed_schema_preserves_receipts_and_accepts_current_collection(datab
             assert len(records) == 1 and records[0]['source_product'] == source
             assert records[0]['sha256'] == 'a'*64 and records[0]['observed_at'] == now
         with engine.connect() as connection:
-            assert connection.scalar(sa.text('SELECT version_num FROM clio.alembic_version')) == '20261107_file_observation'
+            assert connection.scalar(sa.text('SELECT version_num FROM clio.alembic_version')) == '20261107_event_identities'
             assert connection.scalar(sa.text('SELECT count(*) FROM clio.file_observation')) == 9
             assert connection.scalar(sa.text('SELECT count(*) FROM clio.file_observation WHERE observation IS NULL')) == 3
             assert connection.scalar(sa.text("SELECT raw_path FROM clio.file_observation WHERE source_key='local'")) == 'legacy.gz'
@@ -90,5 +91,14 @@ def test_deployed_schema_preserves_receipts_and_accepts_current_collection(datab
         path.write_bytes(b'new original')
         saved = save(path, observation='aia_171_nrt', observed_at=now, source_product='aia.nrt_171')
         assert saved['id'] in {row['id'] for row in find('aia_171_nrt')}
+
+        from clio.ingestion.extras.donki import record_poll
+        raw = json.dumps([dict(activityID='cme1', startTime=now.isoformat())]).encode()
+        metadata = dict(request_start=now-timedelta(days=30), request_end=now+timedelta(days=1))
+        for minute in range(2):
+            record_poll('CME', raw=raw, metadata=metadata, observed_at=now+timedelta(minutes=minute))
+            with engine.connect() as connection:
+                assert connection.scalar(sa.text("SELECT count(*) FROM clio.file_observation WHERE observation='donki.CME'")) == 2
+                assert connection.scalar(sa.text("SELECT count(*) FROM clio.file_observation WHERE observation='donki.CME' AND source_id='cme1'")) == 1
     finally:
         engine.dispose()

@@ -41,6 +41,7 @@ async def load_observation_files(session: AsyncSession, *, observation, start, e
         File.id.label('file_id'), File.timestamp.label('file_timestamp'), File.bucket, File.key)
         .join(File, File.id == FileObservation.file_id)
         .where(FileObservation.observation == observation,
+               (FileObservation.source_id.is_(None) | (FileObservation.source_id == '')),
                FileObservation.observed_at >= start, FileObservation.observed_at < end)
         .order_by(FileObservation.observed_at, FileObservation.source_product, File.key).limit(MAX_FILES + 1))
 

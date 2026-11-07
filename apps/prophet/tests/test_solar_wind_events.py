@@ -66,6 +66,19 @@ def test_empty_successful_feed_is_distinct_from_missing_or_stale_feed():
     assert report.source_status['IPS']['state'] == 'unavailable'
 
 
+def test_normalized_source_metadata_needs_no_raw_records():
+    snapshot = EventInputs(schema_version=2, read_at=NOW, events=[], enlil_arrivals=[],
+        polls=[poll('CME', []).model_copy(update={'record_count': 7})])
+    wire = snapshot.model_dump(mode='json')
+    assert 'records' not in wire['polls'][0]
+    inputs = ForecastInputs(as_of=NOW, read_at=NOW, observations=Observation(points=[]),
+        solar_wind_events=EventInputs.model_validate(wire))
+    report = forecast(inputs)
+    assert report.source_status['CME']['state'] == 'available'
+    assert report.source_status['CME']['record_count'] == 7
+    assert 'NOAA_ENLIL_profiles' not in report.source_status
+
+
 def test_event_inputs_require_no_normalized_data_or_image_preparation(monkeypatch):
     import httpx
     from prophet.services.inputs import loader as loader

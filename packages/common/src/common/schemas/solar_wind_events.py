@@ -14,7 +14,9 @@ class SourcePoll(BaseModel):
     sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     request_start: AwareDatetime
     request_end: AwareDatetime
-    records: list[dict]
+    record_count: int | None = Field(default=None, ge=0)
+    # Raw records are accepted for collection and legacy replay, never emitted.
+    records: list[dict] = Field(default_factory=list, exclude=True)
 
 
 class L1Sample(BaseModel):
@@ -151,34 +153,6 @@ class SolarWindEvent(BaseModel):
         return self
 
 
-class EnlilProfilePoint(BaseModel):
-    valid_time: AwareDatetime
-    speed_km_s: FiniteFloat = Field(ge=0)
-    density_cm3: FiniteFloat = Field(ge=0)
-
-
-class EnlilProfile(BaseModel):
-    provider: Literal['NOAA/SWPC ENLIL'] = 'NOAA/SWPC ENLIL'
-    receipt_id: UUID
-    source_key: str
-    source_url: str
-    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
-    received_at: AwareDatetime
-    source_modified_at: AwareDatetime
-    model_created_at: AwareDatetime
-    model_version: str
-    target: Literal['L1'] = 'L1'
-    density_kind: Literal['proton_equivalent'] = 'proton_equivalent'
-    points: list[EnlilProfilePoint]
-
-    @model_validator(mode='after')
-    def ordered_points(self):
-        times = [p.valid_time for p in self.points]
-        if not times or any(a >= b for a, b in zip(times, times[1:])):
-            raise ValueError('ENLIL profile times must be nonempty, unique and increasing')
-        return self
-
-
 class EventInputs(BaseModel):
     schema_version: Literal[1, 2] = 1
     read_at: AwareDatetime
@@ -186,8 +160,6 @@ class EventInputs(BaseModel):
     events: list[SolarWindEvent] | None = None
     # None identifies legacy snapshots; [] means the new Clio contract has no predictions.
     enlil_arrivals: list[EnlilArrivalInput] | None = None
-    enlil_profiles: list[EnlilProfile] = Field(default_factory=list)
-    enlil_profile_status: dict = Field(default_factory=lambda: {'state': 'unavailable'})
     latest_attempts: dict[str, dict] = Field(default_factory=dict)
     l1_samples: list[L1Sample] = Field(default_factory=list)
     speed_hourly: list[HourlyWindSpeed] = Field(default_factory=list)

@@ -81,4 +81,20 @@ def test_files_migration_adds_registry_and_requires_maintenance(tmp_path):
     assert status.revision_status(scripts, {'20261102_provider_contract'}) == 'pending'
     assert scripts.get_revision('20261107_file_observation').module.online_compatible is True
     assert status.revision_status(scripts, {'20261102_files'}, online=True) == 'pending'
-    assert status.revision_status(scripts, {'20261107_file_observation'}, online=True) == 'current'
+    assert status.revision_status(scripts, {'20261107_file_observation'}, online=True) == 'pending'
+    assert status.revision_status(scripts, {'20261107_event_identities'}, online=True) == 'current'
+
+
+def test_event_storage_has_unique_identities_and_allows_online_upgrade(tmp_path):
+    from pathlib import Path
+    from alembic.script import ScriptDirectory
+
+    result = migration_sql('clio', '20261107_file_observation:head', tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert 'file_observation ADD COLUMN source_id TEXT' in result.stdout
+    assert 'UNIQUE (observation, source_id)' in result.stdout
+    assert 'UNIQUE INDEX uq_file_observation_original' in result.stdout
+    assert 'WHERE source_id IS NULL' in result.stdout
+    assert 'CREATE TABLE' not in result.stdout and 'DELETE' not in result.stdout
+    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
+    assert scripts.get_revision('20261107_event_identities').module.online_compatible is True

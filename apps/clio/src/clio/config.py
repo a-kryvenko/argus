@@ -46,7 +46,6 @@ class SolarWindEvents(StrictModel):
     poll_minutes: int = Field(default=15, strict=True, gt=0)
     enabled: bool = False
     lookback_days: int = Field(default=30, strict=True, ge=7, le=90)
-    retention_days: int = Field(default=30, strict=True, ge=1, le=90)
 
 
 class Retention(StrictModel):

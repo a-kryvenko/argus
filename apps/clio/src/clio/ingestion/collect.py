@@ -3,7 +3,7 @@ from clio.ingestion.utils.products import OBSERVATIONS
 
 
 async def collect(config, metrics=None, *, now):
-    extras = {'donki', 'enlil'}
+    extras = {'donki'}
     selected = list(config.observations) if metrics is None else list(dict.fromkeys(metrics))
     if any(metric not in config.observations and metric not in extras for metric in selected):
         raise ValueError('Select observations configured in clio.observations')

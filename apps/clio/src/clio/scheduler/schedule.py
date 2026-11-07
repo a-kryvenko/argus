@@ -7,7 +7,7 @@ def collecting_schedules(config):
         if policy.sources.live:
             groups.setdefault(policy.poll_minutes, []).append(metric)
     if config.solar_wind_events.enabled:
-        groups.setdefault(config.solar_wind_events.poll_minutes, []).extend(['donki', 'enlil'])
+        groups.setdefault(config.solar_wind_events.poll_minutes, []).append('donki')
     return [(metrics, minutes) for minutes, metrics in groups.items()]
 
 

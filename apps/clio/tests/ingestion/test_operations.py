@@ -84,14 +84,13 @@ def test_mixed_backfill_commits_numeric_success_and_reports_file_failure(monkeyp
 @pytest.mark.parametrize('selected', [None, ['aia_171_nrt']])
 def test_common_operations_dispatch_configured_sdo_observations(monkeypatch, name, selected):
     from clio.ingestion.utils import file_collection
-    from clio.ingestion.extras import donki, enlil
+    from clio.ingestion.extras import donki
     from clio.config import ClioObservations, load_observation_config
     config = ClioObservations(observations={'aia_171_nrt': load_observation_config().observations['aia_171_nrt']},
                               solar_wind_events={'enabled': True})
     monkeypatch.setattr(live if name == 'collect' else backfill_operation, 'get_db_session', Mock(side_effect=AssertionError('numeric storage')))
-    donki_collect, enlil_collect = AsyncMock(), AsyncMock()
+    donki_collect = AsyncMock()
     monkeypatch.setattr(donki, 'collect', donki_collect)
-    monkeypatch.setattr(enlil, 'collect', enlil_collect)
     dispatch = AsyncMock(return_value={'status': 'complete', 'saved': 1})
     monkeypatch.setattr(file_collection, 'collect_observation', dispatch)
     now = datetime(2026, 10, 4, tzinfo=UTC)
@@ -99,33 +98,26 @@ def test_common_operations_dispatch_configured_sdo_observations(monkeypatch, nam
                          else backfill_operation.backfill(config, now=now))
     assert result['files']['aia_171_nrt']['saved'] == 1
     dispatch.assert_awaited_once_with(config, 'aia_171_nrt', mode='live' if name == 'collect' else 'backfill', now=now)
-    assert donki_collect.await_count == enlil_collect.await_count == int(name == 'collect' and selected is None)
+    assert donki_collect.await_count == int(name == 'collect' and selected is None)
 
 
-@pytest.mark.parametrize('selected', [None, ['donki'], ['enlil'], ['donki', 'enlil', 'donki']])
+@pytest.mark.parametrize('selected', [None, ['donki'], ['donki', 'donki']])
 @pytest.mark.parametrize('failed', [False, True])
 @pytest.mark.parametrize('enabled', [True, False])
 def test_catalog_collection_selection_and_independent_failures(monkeypatch, selected, failed, enabled):
-    from clio.ingestion.extras import donki, enlil
+    from clio.ingestion.extras import donki
     config = SimpleNamespace(observations={}, sdo_images=SimpleNamespace(enabled=False),
                              solar_wind_events=SimpleNamespace(enabled=enabled, lookback_days=30))
     monkeypatch.setattr(live, 'get_db_session', Mock(side_effect=AssertionError('numeric storage')))
     donki_collect = AsyncMock(side_effect=RuntimeError('DONKI failed') if failed else None)
-    enlil_collect = AsyncMock()
     monkeypatch.setattr(donki, 'collect', donki_collect)
-    monkeypatch.setattr(enlil, 'collect', enlil_collect)
     now = datetime(2026, 10, 27, tzinfo=UTC)
     result = asyncio.run(collection_operation.collect(config, selected, now=now))
-    chosen = {'donki', 'enlil'} if selected is None else set(selected)
+    chosen = {'donki'} if selected is None else set(selected)
     if enabled and 'donki' in chosen:
         donki_collect.assert_awaited_once_with(config.solar_wind_events, now=now)
     else:
         donki_collect.assert_not_awaited()
-    if enabled and 'enlil' in chosen:
-        enlil_collect.assert_awaited_once_with(now=now)
-        assert result['enlil']['status'] == 'complete'
-    else:
-        enlil_collect.assert_not_awaited()
     if not enabled:
         assert all(result[kind] == {'status': 'disabled'} for kind in chosen)
     assert result['failed_metrics'] == (['donki'] if enabled and failed and 'donki' in chosen else [])
@@ -142,8 +134,7 @@ def test_cleanup_expires_numeric_data_and_runs_file_retention(storage, monkeypat
     now = datetime(2026, 10, 27, tzinfo=UTC)
     result = asyncio.run(cleanup_operation.cleanup(config, now))
     assert result['live_removed'] == result['normalized_removed'] == 3
-    from clio.providers.donki import ENDPOINTS
-    assert set(result['files']) == {'enlil', *('donki.'+endpoint for endpoint in ENDPOINTS)}
+    assert result['files'] == {}
     from datetime import timedelta
     live_delete, hourly_delete = [call.args[0].compile() for call in session.execute.call_args_list]
     assert live_delete.params['observed_at_1'] == now - timedelta(days=8)

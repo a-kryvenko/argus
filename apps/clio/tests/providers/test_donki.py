@@ -62,7 +62,8 @@ def test_collection_retains_exact_bytes_and_empty_success_but_skips_failures(sto
     from clio.db.models.file_observation import FileObservation
     with storage.engine.connect() as connection:
         saved = [SimpleNamespace(**row) for row in connection.execute(
-            select(FileObservation.__table__).order_by(FileObservation.observed_at)).mappings()]
+            select(FileObservation.__table__).where(FileObservation.source_id == '')
+            .order_by(FileObservation.observed_at)).mappings()]
     assert len(saved) == 3
     cme = saved[0]
     assert storage.objects['argus-private', storage.files(id=cme.file_id)[0]['key']][0] == raw

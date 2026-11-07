@@ -35,7 +35,6 @@ clio:
     enabled: true
     poll_minutes: 15
     lookback_days: 30
-    retention_days: 30
   observations:
     aia_171_nrt:
       sources:

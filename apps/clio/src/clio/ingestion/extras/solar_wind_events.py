@@ -33,6 +33,20 @@ def simulation_key(row):
     return row.get('link') or row.get('simulationID')
 
 
+def merge_arrivals(sources):
+    """Reconcile the current normalized contributions for one simulation."""
+    predictions = {endpoint: EnlilArrivalInput.model_validate(data) for endpoint, data in sources.items()}
+    nested = predictions.get('CME')
+    standalone = predictions.get('WSAEnlilSimulations')
+    result = (standalone or nested).model_dump()
+    if standalone and nested and not standalone.cme_ids:
+        result['cme_ids'] = nested.cme_ids
+        result['available_at'] = max(standalone.available_at, nested.available_at)
+    receipts = {r.poll_id: r for prediction in predictions.values() for r in prediction.receipts}
+    result['receipts'] = sorted(receipts.values(), key=lambda r: (r.received_at, str(r.poll_id)))
+    return EnlilArrivalInput.model_validate(result)
+
+
 def normalize_event_inputs(inputs):
     cutoff = inputs.read_at
     polls = {}

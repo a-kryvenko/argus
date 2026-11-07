@@ -9,7 +9,8 @@ def test_every_configured_observation_is_scheduled_once():
     metrics = [metric for group, _ in COLLECTING_SCHEDULES for metric in group]
     assert len(metrics) == len(set(metrics))
     assert set(load_observation_config().observations) <= set(metrics)
-    assert {'donki', 'enlil', 'aia_171_nrt', 'aia_094_browse'} <= set(metrics)
+    assert 'enlil' not in metrics
+    assert {'donki', 'aia_171_nrt', 'aia_094_browse'} <= set(metrics)
 
 
 def test_monitored_source_intervals_match_scheduler():

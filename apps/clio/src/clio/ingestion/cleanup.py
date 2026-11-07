@@ -78,9 +78,6 @@ def cleanup_files(config, now, *, max_files=MAX_FILE_DELETIONS):
         lanes = {'sdo': ('sdo-live', 'sdo-warmup'), 'sdo_browse': ('sdo-browse',),
                  'gong': ('gong',), 'goes': ('goes',)}[definition.file_kind or observation]
         policies.append((observation, policy.retention_days, lanes))
-    from clio.providers.donki import ENDPOINTS
-    policies.extend(('donki.'+endpoint, config.solar_wind_events.retention_days, ('donki',)) for endpoint in ENDPOINTS)
-    policies.append(('enlil', config.solar_wind_events.retention_days, ('enlil',)))
     report = {}
     for observation, days, lanes in policies:
         with ExitStack() as stack:

@@ -15,10 +15,10 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from common.runtime import setup_sentry
 
+from clio.config import load_observation_config
 from clio.scheduler import warmup
 from clio.scheduler.jobs import run_backfill, run_cleanup, run_collect, run_normalize
 from clio.scheduler.schedule import collecting_schedules
-from clio.config import load_observation_config
 
 logger = logging.getLogger(__name__)
 

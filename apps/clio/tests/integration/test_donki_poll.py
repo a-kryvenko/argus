@@ -1,16 +1,14 @@
-"""Normalized DONKI observations and numeric histories in PostgreSQL."""
+"""Normalized DONKI observations in PostgreSQL."""
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
-
-from tests.support.database import database, migrate
 
 
 def test_latest_donki_response_replaces_old_events_even_when_empty(file_database):
     from clio.ingestion.extras.donki import record_poll
     from common.db.session import dispose_engine
     from clio.db.session import get_db_session
-    from clio.services.solar_wind_events import load_event_inputs
+    from clio.services.solar_wind_events import _load_event_inputs
     now = datetime.now(UTC)
     for minute, content in ((0, b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'), (1, b'[]')):
         record_poll('CME', raw=content, metadata=dict(request_start=(now-timedelta(days=30)).isoformat(),
@@ -19,7 +17,7 @@ def test_latest_donki_response_replaces_old_events_even_when_empty(file_database
     async def check():
         try:
             async with get_db_session() as session:
-                result = await load_event_inputs(session, now+timedelta(minutes=2))
+                result = await _load_event_inputs(session, now+timedelta(minutes=2))
                 assert result.polls[0].records == [] and result.events == []
                 assert result.latest_attempts['CME']['received_at'] == (now+timedelta(minutes=1)).isoformat()
         finally:
@@ -115,43 +113,3 @@ def test_repeated_polls_upsert_unique_ids_and_failed_writes_roll_back(file_datab
         assert connection.scalar(select(func.count()).select_from(FileObservation)) == 3
         assert connection.scalar(select(func.count()).select_from(File)) == 2
         assert connection.scalar(successful_poll()) == now+timedelta(minutes=22)
-
-
-def test_closed_hourly_speed_history_includes_late_receipts_and_prefers_native_data(database, monkeypatch, object_store):
-    _, _, environment = database
-    migrate(environment)
-    for key, value in environment.items():
-        monkeypatch.setenv(key, value)
-    from clio.db.models.measurement import Measurement
-    from common.db.session import dispose_engine
-    from clio.db.session import get_db_session
-    from clio.services.solar_wind_events import hourly_speeds
-    now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    first = now-timedelta(days=27)
-    second = first+timedelta(hours=1)
-
-    async def check():
-        try:
-            async with get_db_session() as session:
-                for hour in (first, second):
-                    session.add(Measurement(metric='v', observed_at=hour, received_at=hour+timedelta(hours=2),
-                        value=400, source_product='omni.hourly'))
-                    minutes = 30 if hour == first else 10
-                    for minute in range(1, minutes+1):
-                        session.add(Measurement(metric='v', observed_at=hour+timedelta(minutes=minute),
-                            received_at=hour+timedelta(hours=1), value=600, source_product='swpc.rtsw_plasma'))
-                session.add(Measurement(metric='v', observed_at=now-timedelta(hours=2),
-                    received_at=now+timedelta(minutes=1), value=900, source_product='omni.hourly'))
-                session.add(Measurement(metric='v', observed_at=now,
-                    received_at=now, value=900, source_product='swpc.rtsw_plasma'))
-                await session.commit()
-            async with get_db_session() as session:
-                result = await hourly_speeds(session, now)
-                assert len(result) == 3
-                assert result[0].value == 600 and result[0].sample_count == 30
-                assert result[1].value == 400 and result[1].source_product == 'omni.hourly'
-                assert result[2].value == 900 and result[2].available_at > now
-                assert all(r.interval_end <= now for r in result)
-        finally:
-            await dispose_engine()
-    asyncio.run(check())

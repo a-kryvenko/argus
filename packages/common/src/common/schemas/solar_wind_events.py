@@ -19,23 +19,6 @@ class SourcePoll(BaseModel):
     records: list[dict] = Field(default_factory=list, exclude=True)
 
 
-class L1Sample(BaseModel):
-    observed_at: AwareDatetime
-    available_at: AwareDatetime
-    metric: Literal['bx', 'by', 'bz', 'v', 'n', 't']
-    value: FiniteFloat | None = None
-    quality: str | None = None
-
-
-class HourlyWindSpeed(BaseModel):
-    observed_at: AwareDatetime
-    interval_end: AwareDatetime
-    available_at: AwareDatetime
-    value: FiniteFloat = Field(gt=0, lt=3000)
-    source_product: str
-    sample_count: int = Field(ge=1, le=60)
-
-
 class CoronalHoleRegion(BaseModel):
     region_id: str
     longitude_deg: FiniteFloat = Field(ge=-60, le=60)
@@ -161,8 +144,6 @@ class EventInputs(BaseModel):
     # None identifies legacy snapshots; [] means the new Clio contract has no predictions.
     enlil_arrivals: list[EnlilArrivalInput] | None = None
     latest_attempts: dict[str, dict] = Field(default_factory=dict)
-    l1_samples: list[L1Sample] = Field(default_factory=list)
-    speed_hourly: list[HourlyWindSpeed] = Field(default_factory=list)
 
 
 class L1Detection(BaseModel):

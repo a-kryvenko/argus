@@ -28,7 +28,7 @@ def simulation(ids=('cme1',), arrival='2026-10-14T12:00Z', completed='2026-10-13
                 estimatedDuration=20, isEarthGB=True, isEarthMinorImpact=False)
 
 
-def source(*polls, samples=()):
+def source(*polls):
     # Prophet receives normalized events from Clio, independently of raw provider parsing.
     events = []
     for p in polls:
@@ -39,7 +39,7 @@ def source(*polls, samples=()):
                     model_completed_at=datetime.fromisoformat(row['modelCompletionTime'].replace('Z', '+00:00')),
                     arrival_at=datetime.fromisoformat(row['estimatedShockArrivalTime'].replace('Z', '+00:00')),
                     arrival_target='Earth', observed_at=NOW-timedelta(hours=4), initial_speed_km_s=900))
-    return EventInputs(read_at=NOW, polls=list(polls), events=events, l1_samples=list(samples))
+    return EventInputs(read_at=NOW, polls=list(polls), events=events)
 
 
 def test_empty_report_publishes_through_existing_release_contract():
@@ -54,7 +54,7 @@ def test_empty_report_publishes_through_existing_release_contract():
     assert release.issue_time == NOW  # Minute precision, no hourly flooring.
     report = forecast(inputs)
     assert report.events == [] and report.source_status['CME']['state'] == 'unavailable'
-    assert report.source_status['L1']['state'] == 'unavailable'
+    assert report.l1_detections == []
 
 
 def test_empty_successful_feed_is_distinct_from_missing_or_stale_feed():

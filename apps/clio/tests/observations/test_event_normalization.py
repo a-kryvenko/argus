@@ -23,8 +23,8 @@ def simulation(ids=('cme1',), arrival='2026-10-14T12:00Z', completed='2026-10-13
                 estimatedDuration=20, isEarthGB=True, isEarthMinorImpact=False)
 
 
-def source(*polls, samples=()):
-    return EventInputs(read_at=NOW, polls=list(polls), l1_samples=list(samples))
+def source(*polls):
+    return EventInputs(read_at=NOW, polls=list(polls))
 
 
 def test_external_predictions_are_inputs_without_forecast_status_or_quantiles():

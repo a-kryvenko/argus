@@ -1,38 +1,37 @@
 import asyncio
 import pytest
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
-from sqlalchemy.dialects import postgresql
 from clio.services import solar_wind_events as service
-from common.schemas.solar_wind_events import EventInputs, SourcePoll
+from common.schemas.solar_wind_events import EventInputs
 
 NOW = datetime(2026, 10, 13, 12, tzinfo=UTC)
 
 
-def test_input_reads_current_samples_and_latest_files(monkeypatch):
-    poll = SimpleNamespace(endpoint='CME', id=uuid4(), received_at=NOW, sha256='a'*64,
-        request_start=NOW-timedelta(days=30), request_end=NOW+timedelta(days=1), payload=[])
-    sample = SimpleNamespace(observed_at=NOW-timedelta(minutes=1), received_at=NOW,
-        metric='v', value=500, quality='unverified')
-    result = lambda rows: Mock(scalars=lambda: Mock(all=lambda: rows))
+def test_input_returns_stored_donki_observations():
+    poll_id = uuid4()
+    poll_row = {
+        'source_product': 'CME', 'observed_at': NOW, 'sha256': 'a'*64,
+        'details': {
+            'poll_id': poll_id, 'request_start': NOW-timedelta(days=30),
+            'request_end': NOW+timedelta(days=1), 'record_count': 0,
+        },
+    }
     session = AsyncMock()
-    polls = AsyncMock(return_value=EventInputs(schema_version=2, read_at=NOW, events=[], enlil_arrivals=[],
-        polls=[SourcePoll(endpoint=poll.endpoint, poll_id=poll.id,
-        received_at=poll.received_at, sha256=poll.sha256, request_start=poll.request_start,
-        request_end=poll.request_end, record_count=0)]))
-    monkeypatch.setattr(service, 'stored_event_inputs', polls)
-    session.execute.side_effect = [result([sample]), Mock(mappings=lambda: Mock(all=lambda: []))]
-    inputs = asyncio.run(service.load_event_inputs(session, NOW))
+    session.execute.side_effect = [
+        Mock(mappings=lambda: Mock(all=lambda: [poll_row])),
+        Mock(scalars=lambda: Mock(all=lambda: [])),
+        Mock(scalars=lambda: Mock(all=lambda: [])),
+    ]
+    inputs = asyncio.run(service._load_event_inputs(session, NOW))
     assert inputs.schema_version == 2 and inputs.enlil_arrivals == [] and inputs.events == []
-    assert inputs.polls[0].records == [] and inputs.l1_samples[0].value == 500
-    queries = [c.args[0].compile(dialect=postgresql.dialect()) for c in session.execute.call_args_list]
-    polls.assert_awaited_once_with(session, NOW)
-    assert 'received_at <=' not in str(queries[0])
-    assert set(queries[0].params['source_product_1']) == {'swpc.rtsw_mag', 'swpc.rtsw_plasma'}
-    assert queries[0].params['observed_at_1'] == NOW-timedelta(hours=6)
+    assert inputs.read_at == NOW
+    assert inputs.polls[0].poll_id == poll_id and inputs.polls[0].records == []
+    assert inputs.latest_attempts['CME'] == {
+        'received_at': NOW.isoformat(), 'error': None, 'last_success_at': NOW.isoformat(),
+    }
 
 
 @pytest.mark.parametrize('unavailable', [False, True])
@@ -49,7 +48,7 @@ def test_event_http_read_rolls_back_snapshot_on_success_and_failure(monkeypatch,
                                               events=[], enlil_arrivals=[]))
     if unavailable:
         load.side_effect = ObservationUnavailable('DONKI original or receipt is unavailable or corrupt')
-    monkeypatch.setattr(service, 'load_event_inputs', load)
+    monkeypatch.setattr(service, '_load_event_inputs', load)
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[routes.get_request_db_session] = lambda: session

@@ -18,14 +18,16 @@ for file in "$root/.env" "$root/.env.local"; do
     if [[ "$mode" == prod || -f "$file" ]]; then compose+=(--env-file "$file"); fi
 done
 if [[ "$mode" == prod ]]; then
-    for file in .rolling-state.json .rolling-compose.json .release-compose.json; do
-        [[ -f "$root/$file" ]] || { echo "Missing production deployment file: $file" >&2; exit 2; }
-    done
-    compose_files=(-f "$root/.rolling-compose.json")
-    template_files=(-f "$root/.release-compose.json")
+    active_color=""
+    if [[ -f "$root/.active-color" ]]; then
+        active_color=$(< "$root/.active-color")
+        case "$active_color" in blue|green) ;; *) echo 'Invalid .active-color' >&2; exit 2 ;; esac
+    fi
+    compose_files=(--profile '*' -f "$root/docker-compose.yml" -f "$root/docker-compose.prod.yml")
+    template_files=("${compose_files[@]}")
 else
     export LOCAL_UID="${LOCAL_UID:-$(id -u)}" LOCAL_GID="${LOCAL_GID:-$(id -g)}"
-    compose_files=(-f "$root/docker-compose.yml" -f "$root/docker-compose.override.yml")
+    compose_files=(-f "$root/docker-compose.yml" -f "$root/docker-compose.dev.yml")
     template_files=("${compose_files[@]}")
 fi
 templates=("${compose[@]}" "${template_files[@]}")
@@ -35,6 +37,11 @@ usage() {
 }
 lock() {
     [[ "$mode" == prod ]] || return 0
+    if [[ -e /proc/self/fd/8 && /proc/self/fd/8 -ef "$root/.deployment.lock" ]]; then
+        # Reuse the inherited exclusive deployment lock without downgrading it.
+        flock -xn 8
+        return
+    fi
     exec 9>"$root/.deployment.lock"
     flock "-$1n" 9
 }
@@ -59,10 +66,9 @@ prepare_migration_database() {
     fi
 }
 migrate() {
-    local domain="$1" target="$1"
+    local domain="$1"
     shift
-    [[ "$mode" != prod ]] || target+="-migrate"
-    "${templates[@]}" run --rm --no-deps "$target" alembic "$@"
+    "${templates[@]}" run --rm --no-deps "$domain" alembic "$@"
 }
 case "${1:-}" in
     -h|--help|'') usage; exit 0 ;;
@@ -72,7 +78,7 @@ case "${1:-}" in
             provision)
                 shift
                 lock x
-                exec "${templates[@]}" run --rm --no-deps db-provision .venv/bin/python /var/www/scripts/db/provision.py "$@"
+                exec bash "$root/scripts/deployment/db-setup.sh" "$@"
                 ;;
             migrate)
                 shift
@@ -123,9 +129,10 @@ case "${1:-}" in
         if [[ "$mode" == prod ]]; then
             case "${1:-}" in
                 exec|logs|run|restart|start|stop|kill|pause|unpause|top|rm|ps|up)
-                    mapfile -d '' -t mapped < <(python3 - "$root/.rolling-state.json" "$@" <<'PY'
-import json, sys
-state = json.load(open(sys.argv[1]))['active']
+                    mapfile -d '' -t mapped < <(python3 - "$active_color" "$@" <<'PY'
+import sys
+color = sys.argv[1]
+http_services = {'api', 'clio', 'prophet-api', 'intelligence-api', 'frontend'}
 arguments = sys.argv[2:]
 command = arguments[0]
 value_options = {'--index', '--user', '-u', '--workdir', '-w', '--env', '-e', '--name',
@@ -151,9 +158,12 @@ if command == 'up' and not positions:
     print('Production up requires explicit services; use the release deployment for upgrades.', file=sys.stderr)
     raise SystemExit(2)
 for index in positions:
-    entry = state.get(arguments[index])
-    if entry and entry['slot']:
-        arguments[index] += '-' + entry['slot']
+    if arguments[index] in http_services:
+        if color:
+            arguments[index] += '-' + color
+        elif command != 'stop':
+            print('Missing .active-color; run a maintenance deployment first.', file=sys.stderr)
+            raise SystemExit(2)
 for value in arguments:
     sys.stdout.buffer.write(value.encode() + b'\0')
 PY

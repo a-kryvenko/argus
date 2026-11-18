@@ -69,12 +69,12 @@ Prophet demo caches use `data/demo`;
 
 Server: Bash, Python 3.10+, Docker Compose v2, rsync, flock; operator env files in `/var/www`.
 Compose must support `pull --policy missing` and `up --wait`.
+Install `.deploy/deploy.sh` as `/var/www/deploy.sh`. It reads the release ID from `.release`, the manifest from `.release_manifest`, and applies `incoming/<release_id>`.
 
 - Configure distinct DB owners, three service tokens, HTTPS dashboard origin and secure cookies.
 - Preserve existing PostgreSQL credentials/volumes. Provisioning creates missing owners/databases; it does not rotate passwords.
-- Configure SSH/private-checkout secrets from [deploy.yml](.github/workflows/deploy.yml), plus `GHCR_USERNAME` and `GHCR_READ_TOKEN` (`read:packages`, access to all six images).
+- Configure SSH/private-checkout secrets from [argus-deploy.yml](.github/workflows/argus-deploy.yml). Authenticate server Docker to GHCR with `read:packages` access to all six images.
 - Install release files, start PostgreSQL/Redis, provision and migrate before starting applications. Normal releases do not provision.
-- Create a smoke account with `/var/www/argus api user create deploy-smoke` (no groups). Set `DEPLOY_SMOKE_USERNAME` and `DEPLOY_SMOKE_PASSWORD` in `.env.local`.
 - `DEPLOY_MIN_AVAILABLE_MIB` defaults to 1024; each HTTP replacement requires this much available host RAM.
 
 Keep API internal. Login limits: nginx 10 immediate attempts/IP, then one per
@@ -86,7 +86,8 @@ from `172.20.0.0/16`; deploy edge and API changes together.
 ```bash
 ./deploy.sh                         # Checks and diagram generation
 ./deploy.sh -m "message"             # Also commits and pushes; no release
-./deploy.sh patch|minor|major -m "message"       # Also uploads artifacts and tags a release
+./deploy.sh patch|minor|major -m "message"       # Also uploads the bundle and tags the release
+./deploy.sh patch -m "message" --maintenance    # Stops traffic and writers during migration
 ```
 
 `minor`/`major` also require `-m`. Checks include web lint/types, Node, Playwright
@@ -94,33 +95,36 @@ and Python (`uv` required).
 
 Diagrams require Python 3.10+, Java 21+ and curl. [Diagram commands](docs/architecture/README.md).
 
-A `v*` tag deploys pinned images. Releases require existing `.rolling-state.json`
-and replace changed HTTP services individually: readiness, smoke checks, graceful routing switch, request
-drain, old-container stop. Workers remain single-instance and update separately.
+A release installs its bundle in the project root and pulls `latest` images.
+Rolling deployments start all HTTP services in the opposite blue/green color. After readiness and smoke
+checks, one nginx reload switches traffic. Old containers stop after requests drain.
+Workers remain single-instance and update separately.
 One `internal-router` nginx serves Clio/Prophet/Intelligence/API/frontend on ports
-8101–8105, bound to their service networks. The first release migrates and removes the old per-service routers.
+8101–8105, bound to their service networks.
 
-Smoke checks cover HTML/static assets, login/logout, observations, forecasts and
+Smoke checks cover HTML/static assets, observations, forecasts and
 Intelligence reads. No inference runs. Models/metrics use verified artifact bundles;
 configs are versioned. Demo data remains worker-owned; old frontend assets are retained.
 
-Rolling deployment requires `online_compatible = True` in every pending migration,
-reviewed for compatibility with both application versions. Missing or false declarations
-require a maintenance deployment. Actual DB revisions are checked before
-backup; changed files alone do not trigger one. Backups run before stopping services,
-with fast compression and progress every 15s. Migrations use a 5s lock timeout and
-5min statement timeout; affected workers drain while HTTP stays online.
-Current migration histories remain intact.
+Rolling is the default. Use `--maintenance` if a migration requires downtime.
+Each deployment runs `alembic upgrade head` for all four databases. In rolling
+mode, workers pause while HTTP stays online. Migrations use a 5s lock timeout
+and 5min statement timeout.
 
 Deployment waits up to 600s for running jobs to release `.deployment.lock` (`DEPLOY_LOCK_TIMEOUT`); timeout exits with status 75.
 
-Failed backups remain `.partial`; failed deployments do not rotate backups.
-Retain three pre-migration backups; prune unused images older than 72 hours.
-Operator env/models/data remain separate; do not override generated image references.
-Production CLI requires `.rolling-state.json`, `.rolling-compose.json` and `.release-compose.json`.
+Maintenance creates a DB backup after stopping writers. Successful maintenance
+retains the three newest backups. Failed backups remain `.partial`.
+Keep operator env files and generated image references intact.
+Production stores the active color in `.active-color`. The first deployment must
+use `--maintenance`; maintenance always starts green and writes this marker.
 `./argus` defaults to dev; production sets `.argus-mode` to `prod`.
 
+Local deployment uploads the bundle, then `.release` and `.release_manifest`. CI runs `/var/www/deploy.sh`. The bundle includes models, metrics and `demo/current.json`; deployment verifies its checksum before installation.
+
 ## Maintenance and recovery
+
+Maintenance serves a page with HTTP 503 and `Retry-After: 60`. If a migration fails, the page stays active. `.maintenance-recovery.json` records the previous state and verified backup. Restore and verify the database and previous services before clearing the checkpoint and running `./argus compose stop maintenance`.
 
 Use `/var/www/argus` in production. Manual schema commands lock operations but do
 not stop writers or back up DBs; do both first. Credential changes require container recreation.
@@ -128,10 +132,10 @@ not stop writers or back up DBs; do both first. Credential changes require conta
 Failed HTTP replacements restore the previous route; completed replacements remain
 active. Rerun the same release to recover an interrupted switch and finish deployment.
 Use `argus` for production commands/logs; it selects active HTTP slots. Bare
-`docker compose up` bypasses this state. DB rollback is manual. Preserve `releases/`,
-`artifacts/`, `.rolling-*` and stopped previous slots for recovery.
+`docker compose up` bypasses this state. DB rollback is manual. Preserve `.active-color`
+and stopped previous slots for recovery.
 
 [Commands](docs/commands.md) · [Architecture](docs/architecture.md)
 
 Clio runs in `clio-worker`; logs: `./argus logs clio`.
-Deployment replaces host cron with `apps/{prophet,api,intelligence}/cronjobs.txt` and `.deploy/cronjobs.txt`; `@ROOT@` expands to the deployment directory.
+Deployment replaces host cron with `apps/{prophet,api,intelligence}/cronjobs.txt` and `cronjobs.txt`; `@ROOT@` expands to the deployment directory.

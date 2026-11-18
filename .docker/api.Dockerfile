@@ -14,7 +14,6 @@ COPY apps/api/src ./src
 COPY apps/api/alembic.ini ./alembic.ini
 
 RUN uv sync --frozen --no-cache
-COPY scripts/db/provision.py /var/www/scripts/db/provision.py
 
 ENV PATH="/var/www/apps/api/.venv/bin:$PATH"
 

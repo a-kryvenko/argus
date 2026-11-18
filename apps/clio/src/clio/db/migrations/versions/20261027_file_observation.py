@@ -6,7 +6,6 @@ revision = '20261027_file_observation'
 down_revision = '20261014_enlil_profile'
 branch_labels = None
 depends_on = None
-online_compatible = True
 
 
 def upgrade():

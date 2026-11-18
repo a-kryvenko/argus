@@ -8,7 +8,6 @@ down_revision = '20261027_drop_forecast_slots'
 branch_labels = None
 depends_on = None
 # Deployment drains old workers before migration; released HTTP readers no longer use the pointer.
-online_compatible = True
 
 
 def upgrade():

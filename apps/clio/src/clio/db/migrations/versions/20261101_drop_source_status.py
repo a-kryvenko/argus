@@ -7,7 +7,6 @@ down_revision = '20261027_measurement_metadata'
 branch_labels = None
 depends_on = None
 # Older HTTP processes still read this table.
-online_compatible = True
 
 
 def upgrade():

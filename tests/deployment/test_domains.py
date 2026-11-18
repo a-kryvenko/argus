@@ -6,12 +6,13 @@ from .compose import load_compose
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
+def test_domain_credentials_are_scoped_for_services_and_slots():
     services = load_compose('.deploy/docker-compose.yml')['services']
     domains = {'api': ['api'], 'clio': ['clio', 'clio-worker'],
                'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
     for domain, names in domains.items():
-        for name in [*names, domain + '-migrate']:
+        slots = [slot for name in names for slot in (name + '-blue', name + '-green') if slot in services]
+        for name in [*names, *slots]:
             service = services[name]
             assert 'env_file' not in service
             environment = service['environment']
@@ -21,9 +22,9 @@ def test_domain_credentials_are_scoped_and_migrations_use_the_same_owner():
             for key in expected:
                 assert environment[key].startswith('${' + key + ':'), name
             assert all(
-                environment[key] == services[domain + '-migrate']['environment'][key] for key in expected)
-        assert services[domain + '-migrate']['profiles'] == ['maintenance']
-    assert services['db-provision']['profiles'] == ['maintenance']
+                environment[key] == services[domain]['environment'][key] for key in expected)
+    assert not any(name.endswith('-migrate') for name in services)
+    assert 'db-provision' not in services
     assert 'db-bootstrap' not in services and 'intelligence-provision' not in services
     assert services['api']['environment']['OBSERVATIONS_URL'] == 'http://observations-router:8101'
     assert services['prophet']['environment']['OBSERVATIONS_URL'] == 'http://observations-router:8101'
@@ -59,10 +60,8 @@ def test_intelligence_credentials_and_networks_are_scoped():
     assert runtime['environment']['INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR'] == '${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}'
     assert runtime['volumes'] == ['./configs:/var/www/configs:ro']
     assert not any(key in runtime for key in ('ports', 'env_file'))
-    assert services['intelligence-migrate']['profiles'] == ['maintenance']
-    assert set(services['intelligence-migrate']['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')}
     for name, service in services.items():
-        if not name.startswith('intelligence') and name != 'db-provision':
+        if not name.startswith('intelligence'):
             assert not any(key.startswith('INTELLIGENCE_DB_') for key in service.get('environment', {})), name
 
 
@@ -80,7 +79,7 @@ def test_impact_service_is_internal_and_has_scoped_database_credentials():
     assert runtime['environment']['INTELLIGENCE_SERVICE_TOKEN'] == services['api']['environment']['INTELLIGENCE_SERVICE_TOKEN']
 
 
-@pytest.mark.parametrize('filename', ['docker-compose.override.yml', '.deploy/docker-compose.yml'])
+@pytest.mark.parametrize('filename', ['docker-compose.dev.yml', '.deploy/docker-compose.yml'])
 def test_runtime_storage_credentials_and_startup_boundaries(filename):
     services = load_compose(filename)['services']
     owners = {'clio': 'CLIO', 'prophet': 'PROPHET',
@@ -120,7 +119,7 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
 
 
 def test_prophet_generation_is_a_command_template_without_a_background_worker():
-    for filename in ('docker-compose.override.yml', '.deploy/docker-compose.yml'):
+    for filename in ('docker-compose.dev.yml', '.deploy/docker-compose.yml'):
         services = load_compose(filename)['services']
         service = services['prophet']
         assert service['profiles'] == ['commands']
@@ -128,7 +127,7 @@ def test_prophet_generation_is_a_command_template_without_a_background_worker():
         assert service['command'] == ['prophet', '--help']
 
 
-@pytest.mark.parametrize('filename', ['docker-compose.override.yml', '.deploy/docker-compose.yml'])
+@pytest.mark.parametrize('filename', ['docker-compose.dev.yml', '.deploy/docker-compose.yml'])
 def test_api_status_does_not_require_a_worker_or_traffic_log(filename):
     services = load_compose(filename)['services']
     assert 'api-worker' not in services
@@ -136,13 +135,13 @@ def test_api_status_does_not_require_a_worker_or_traffic_log(filename):
 
 
 def test_observation_storage_uses_s3_in_both_environments():
-    for filename in ('docker-compose.override.yml', '.deploy/docker-compose.yml'):
+    for filename in ('docker-compose.dev.yml', '.deploy/docker-compose.yml'):
         services = load_compose(filename)['services']
         assert not {'minio', 'minio-init'} & services.keys()
         for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
             assert 'DATA_STORAGE' not in services[name]['environment']
             assert services[name]['environment']['S3_ENDPOINT_URL']
-    dev = load_compose('docker-compose.override.yml')
+    dev = load_compose('docker-compose.dev.yml')
     storage = dev['services']['storage']
     assert storage['image'] == 'chrislusf/seaweedfs:4.52'
     assert '-bucket=argus-private,argus-public' in storage['command']
@@ -153,3 +152,23 @@ def test_observation_storage_uses_s3_in_both_environments():
     for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
         assert dev['services'][name]['depends_on']['storage']['condition'] == 'service_healthy'
     assert 'storage' not in load_compose('.deploy/docker-compose.yml')['services']
+
+
+def test_production_defines_static_isolated_http_colors():
+    config = load_compose('.deploy/docker-compose.yml')
+    services = config['services']
+    for name in ('clio', 'prophet-api', 'intelligence-api', 'api', 'frontend'):
+        template = services[name]
+        assert template['profiles'] == ['templates']
+        for color in ('blue', 'green'):
+            slot = services[f'{name}-{color}']
+            assert slot['profiles'] == [color]
+            assert slot['image'] == template['image']
+            assert slot.get('command') == template.get('command')
+            assert slot.get('volumes') == template.get('volumes')
+            assert slot['environment'] == template['environment']
+            assert 'container_name' not in slot
+            assert not slot.get('depends_on')
+            assert not any(key.startswith('DEPLOY_') for key in slot['environment'])
+    assert set(services['internal-router']['networks']) == {'application', 'observations', 'forecasts', 'impacts'}
+    assert services['internal-router']['volumes'] == ['./routes/internal:/etc/nginx/conf.d:ro']

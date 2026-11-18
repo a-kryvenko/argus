@@ -25,19 +25,12 @@ def test_legacy_file_cleanup_drops_only_retired_tables(tmp_path):
         'gong_snapshot', 'goes_snapshot', 'donki_poll', 'enlil_profile_receipt', 'scheduled_job')]
 
 
-def test_provider_contract_keeps_legacy_column_and_allows_rolling_upgrade(tmp_path):
-    from pathlib import Path
-    from alembic.script import ScriptDirectory
-    from tests.deployment.test_migrations import status
-
+def test_provider_contract_keeps_legacy_column(tmp_path):
     result = migration_sql('clio', '20261101_drop_source_status:20261102_provider_contract', tmp_path)
     assert result.returncode == 0, result.stderr
     assert 'SET value = NULL, quality = NULL' in result.stdout
     assert "WHERE quality IN ('flagged', 'missing')" in result.stdout
     assert 'DROP' not in result.stdout and 'DELETE' not in result.stdout
-    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
-    assert scripts.get_revision('20261102_provider_contract').module.online_compatible is True
-    assert status.revision_status(scripts, {'20261101_drop_source_status'}, online=True) == 'blocked:20261102_files'
 
 
 def test_provider_migration_preserves_legacy_reads_and_valid_measurements():
@@ -63,11 +56,7 @@ def test_provider_migration_preserves_legacy_reads_and_valid_measurements():
     engine.dispose()
 
 
-def test_files_migration_adds_registry_and_requires_maintenance(tmp_path):
-    from pathlib import Path
-    from alembic.script import ScriptDirectory
-    from tests.deployment.test_migrations import status
-
+def test_files_migration_adds_registry(tmp_path):
     result = migration_sql('clio', '20261102_provider_contract:20261102_files', tmp_path)
     assert result.returncode == 0, result.stderr
     assert 'CREATE TABLE clio.files' in result.stdout
@@ -76,19 +65,9 @@ def test_files_migration_adds_registry_and_requires_maintenance(tmp_path):
     assert 'DROP TABLE' not in result.stdout and 'DROP COLUMN' not in result.stdout
     assert 'file_observation ADD COLUMN file_id' in result.stdout
     assert 'REFERENCES clio.files (id)' in result.stdout
-    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
-    assert status.revision_status(scripts, {'20261102_provider_contract'}, online=True) == 'blocked:20261102_files'
-    assert status.revision_status(scripts, {'20261102_provider_contract'}) == 'pending'
-    assert scripts.get_revision('20261107_file_observation').module.online_compatible is True
-    assert status.revision_status(scripts, {'20261102_files'}, online=True) == 'pending'
-    assert status.revision_status(scripts, {'20261107_file_observation'}, online=True) == 'pending'
-    assert status.revision_status(scripts, {'20261107_event_identities'}, online=True) == 'current'
 
 
-def test_event_storage_has_unique_identities_and_allows_online_upgrade(tmp_path):
-    from pathlib import Path
-    from alembic.script import ScriptDirectory
-
+def test_event_storage_has_unique_identities(tmp_path):
     result = migration_sql('clio', '20261107_file_observation:head', tmp_path)
     assert result.returncode == 0, result.stderr
     assert 'file_observation ADD COLUMN source_id TEXT' in result.stdout
@@ -96,5 +75,3 @@ def test_event_storage_has_unique_identities_and_allows_online_upgrade(tmp_path)
     assert 'UNIQUE INDEX uq_file_observation_original' in result.stdout
     assert 'WHERE source_id IS NULL' in result.stdout
     assert 'CREATE TABLE' not in result.stdout and 'DELETE' not in result.stdout
-    scripts = ScriptDirectory(str(Path(__file__).resolve().parents[1] / 'src/clio/db/migrations'))
-    assert scripts.get_revision('20261107_event_identities').module.online_compatible is True

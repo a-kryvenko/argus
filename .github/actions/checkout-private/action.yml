@@ -1,0 +1,29 @@
+name: Checkout private repositories
+description: Download selected private dependencies
+
+inputs:
+  forecast_core_key:
+    description: SSH key for forecast-core
+  intelligence_core_key:
+    description: SSH key for intelligence-core
+
+runs:
+  using: composite
+  steps:
+    - name: Download forecast-core
+      uses: actions/checkout@v6
+      with:
+        repository: a-kryvenko/argus-forecast-core
+        ref: master
+        path: packages/forecast-core
+        ssh-key: ${{ inputs.forecast_core_key }}
+        persist-credentials: false
+    
+    - name: Download intelligence-core
+      uses: actions/checkout@v6
+      with:
+        repository: a-kryvenko/argus-intelligence-core
+        ref: master
+        path: packages/intelligence-core
+        ssh-key: ${{ inputs.intelligence_core_key }}
+        persist-credentials: false

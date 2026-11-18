@@ -6,8 +6,6 @@ down_revision = '20260914_intelligence'
 branch_labels = None
 depends_on = None
 
-online_compatible = True
-
 
 def upgrade():
     op.execute('''CREATE TABLE intelligence.drag_profile (

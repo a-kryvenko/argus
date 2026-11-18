@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_architecture_workflow_references_existing_local_paths():
-    workflow = (ROOT / '.github/workflows/architecture.yml').read_text()
-    paths = re.findall(r'(?<![\w/])(?:apps|packages|tests)/[\w/.-]+', workflow)
+    workflow = (ROOT / '.github/workflows/architecture-docs.yml').read_text()
+    paths = re.findall(r'(?<![\w/])(?:apps|packages|tests|docs|scripts)/[\w/.-]+', workflow)
     assert paths
     # Additional checkouts are created by Actions, not present in a public clone.
     jobs = yaml.safe_load(workflow)['jobs']

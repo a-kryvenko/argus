@@ -1,0 +1,193 @@
+name: Build & Deploy
+
+on:
+  push:
+    tags:
+        - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+
+    outputs:
+      test_matrix: ${{ steps.plan.outputs.test_matrix }}
+      build_matrix: ${{ steps.plan.outputs.build_matrix }}
+      has_builds: ${{ steps.plan.outputs.has_builds }}
+
+    steps:
+      - name: Download main repository
+        uses: actions/checkout@v6
+
+      - name: Download private dependencies
+        uses: ./.github/actions/checkout-private
+        with:
+          forecast_core_key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          intelligence_core_key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
+      
+      - name: Prepare Python
+        uses: ./.github/actions/setup-python
+        with:
+          install_uv: 'false'
+      
+      - name: Set up Docker Buildx
+        uses: ./.github/actions/setup-docker
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create build plan
+        id: plan
+        run: python3 scripts/deployment/release-plan.py
+
+  test_python:
+    needs: plan
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.test_matrix) }}
+    
+    env:
+      PROJECT_PATH: ${{ matrix.project }}
+      TESTS_PATH: ${{ matrix.tests }}
+    
+    steps:
+      - name: No Python tests required
+        if: matrix.project == ''
+        run: echo "No Python tests required"
+    
+      - name: Download main repository
+        if: matrix.project != ''
+        uses: actions/checkout@v6
+
+      - name: Download private dependencies
+        if: matrix.project != ''
+        uses: ./.github/actions/checkout-private
+        with:
+          forecast_core_key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          intelligence_core_key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
+
+      - name: Prepare Python
+        if: matrix.project != ''
+        uses: ./.github/actions/setup-python
+
+      - name: Install project dependencies
+        if: matrix.project != ''
+        shell: bash
+        run: |
+          extras=()
+          if [[ "$PROJECT_PATH" == "packages/forecast-core" ]]; then
+            extras=(--extra models --extra datasets)
+          fi
+
+          uv sync --locked \
+            --project "$PROJECT_PATH" \
+            --group test \
+            "${extras[@]}"
+      
+      - name: Run TESTS_PATH
+        if: matrix.project != ''
+        shell: bash
+        run: |
+          args=()
+          if [[ "$PROJECT_PATH" == apps/* ]]; then
+            args+=(--ignore="$TESTS_PATH/integration")
+          fi
+
+          "$PROJECT_PATH/.venv/bin/python" -m pytest \
+            --rootdir=. \
+            --confcutdir=. \
+            --import-mode=importlib \
+            -n 2 \
+            -rs \
+            "$TESTS_PATH" \
+            "${args[@]}"
+
+  validate_deployment:
+    needs: plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-python
+      - name: Install deployment test dependencies
+        run: uv sync --locked --project tests/runtime
+      - name: Check release planning and entrypoints
+        run: tests/runtime/.venv/bin/python -m pytest -q tests/deployment tests/cli
+      - name: Prepare HTTP test images
+        run: |
+          docker pull nginx:stable-alpine
+          docker pull python:3.12-alpine
+      - name: Check routing, recovery and persistent nginx
+        env:
+          TEST_ROLLING_DOCKER: '1'
+          TEST_MAINTENANCE_DOCKER: '1'
+        run: tests/runtime/.venv/bin/python -m pytest -q tests/integration/test_rolling_http.py tests/integration/test_maintenance_http.py
+
+  build:
+    needs: [plan, test_python]
+    if: needs.plan.outputs.has_builds == 'true'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.plan.outputs.build_matrix) }}
+    
+    steps:
+      - name: Download main repository
+        uses: actions/checkout@v6
+      
+      - name: Download private dependencies
+        uses: ./.github/actions/checkout-private
+        with:
+          forecast_core_key: ${{ secrets.FORECAST_CORE_DEPLOY_KEY }}
+          intelligence_core_key: ${{ secrets.INTELLIGENCE_CORE_DEPLOY_KEY }}
+      
+      - name: Set up Docker Buildx
+        uses: ./.github/actions/setup-docker
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and publish image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: |
+            ${{ matrix.image }}
+            ${{ matrix.image_latest }}
+          push: true
+          build-args: |
+            DEPLOYMENT_VERSION=${{ matrix.version }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+  deploy:
+    needs: [plan, test_python, validate_deployment, build]
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Trigger server deploy hook
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          fingerprint: ${{ vars.PROD_FINGERPRINT }}
+          command_timeout: 40m
+          script: bash /var/www/deploy.sh

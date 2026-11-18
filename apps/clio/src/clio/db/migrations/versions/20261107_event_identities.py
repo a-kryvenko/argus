@@ -6,7 +6,6 @@ revision = '20261107_event_identities'
 down_revision = '20261107_file_observation'
 branch_labels = None
 depends_on = None
-online_compatible = True
 
 
 def upgrade():

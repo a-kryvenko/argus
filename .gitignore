@@ -61,5 +61,6 @@ yarn-error.log*
 mlflow.db
 /mlartifacts/
 .argus-mode
+/.active-color
 
 .cron-locks/

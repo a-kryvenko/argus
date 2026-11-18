@@ -13,7 +13,7 @@ x-object-reader: &object-reader
 x-clio-runtime: &clio-runtime
   build: &clio-build
     context: .
-    dockerfile: .deploy/clio.Dockerfile
+    dockerfile: .docker/clio.Dockerfile
   image: argus-clio-dev
   user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
   volumes:
@@ -36,7 +36,7 @@ x-clio-runtime: &clio-runtime
 x-prophet-runtime: &prophet-runtime
   build: &prophet-build
     context: .
-    dockerfile: .deploy/prophet.Dockerfile
+    dockerfile: .docker/prophet.Dockerfile
   image: argus-prophet-dev
   user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
   volumes:
@@ -55,7 +55,7 @@ x-prophet-runtime: &prophet-runtime
 x-intelligence-runtime: &intelligence-runtime
   build: &intelligence-build
     context: .
-    dockerfile: .deploy/intelligence.Dockerfile
+    dockerfile: .docker/intelligence.Dockerfile
   image: argus-intelligence-dev
   user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
   volumes:
@@ -70,7 +70,7 @@ x-intelligence-runtime: &intelligence-runtime
 x-api-runtime: &api-runtime
   build: &api-build
     context: .
-    dockerfile: .deploy/api.Dockerfile
+    dockerfile: .docker/api.Dockerfile
   image: argus-api-dev
   user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
   environment: &api-environment
@@ -83,7 +83,6 @@ x-api-runtime: &api-runtime
     DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-false}
   volumes:
     - ./apps/api/src:/var/www/apps/api/src
-    - ./scripts/db/provision.py:/var/www/scripts/db/provision.py:ro
     - ./packages/common/src:/var/www/packages/common/src
 
 services:
@@ -94,7 +93,7 @@ services:
     restart: unless-stopped
     volumes:
       - seaweed-data:/data
-      - ./.deploy/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - ./.docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     ports:
       - 127.0.0.1:${DEV_S3_PORT:-8333}:8333
     healthcheck:
@@ -140,7 +139,7 @@ services:
   proswin:
     build:
       context: .
-      dockerfile: .deploy/proswin.Dockerfile
+      dockerfile: .docker/proswin.Dockerfile
     image: argus-proswin-dev
     user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
     environment:
@@ -175,32 +174,6 @@ services:
     ports:
       - 127.0.0.1:8000:8000
 
-  db-provision:
-    build:
-      context: .
-      dockerfile: .deploy/api.Dockerfile
-    image: argus-api-dev
-    init: true
-    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
-    environment:
-      INTELLIGENCE_DB_HOST: postgres
-      INTELLIGENCE_DB_PORT: '5432'
-      PROPHET_DB_HOST: postgres
-      PROPHET_DB_PORT: '5432'
-      CLIO_DB_HOST: postgres
-      CLIO_DB_PORT: '5432'
-      API_DB_HOST: postgres
-      API_DB_PORT: '5432'
-      DB_HOST: postgres
-      DB_PORT: '5432'
-      ARGUS_WORKDIR: /var/www
-    volumes:
-      - ./configs:/var/www/configs:ro
-      - ./data/metrics:/var/www/data/metrics:ro
-      - ./data/demo:/var/www/data/demo:ro
-      - ./apps/api/src:/var/www/apps/api/src
-      - ./scripts/db/provision.py:/var/www/scripts/db/provision.py:ro
-      - ./packages/common/src:/var/www/packages/common/src
 
 volumes:
   seaweed-data:

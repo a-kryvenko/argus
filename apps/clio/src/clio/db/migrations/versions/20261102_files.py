@@ -8,7 +8,6 @@ down_revision = '20261102_provider_contract'
 branch_labels = None
 depends_on = None
 # S3-only receipts cannot be read by the previous local-archive application.
-online_compatible = False
 
 
 def success_constraint():

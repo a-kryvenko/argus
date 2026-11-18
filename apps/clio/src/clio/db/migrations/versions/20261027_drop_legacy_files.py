@@ -6,7 +6,6 @@ revision = '20261027_drop_legacy_files'
 down_revision = '20261027_file_cutover'
 branch_labels = None
 depends_on = None
-online_compatible = True
 
 
 def upgrade():

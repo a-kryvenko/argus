@@ -5,7 +5,6 @@ revision = '20261102_provider_contract'
 down_revision = '20261101_drop_source_status'
 branch_labels = None
 depends_on = None
-online_compatible = True
 
 
 def upgrade():

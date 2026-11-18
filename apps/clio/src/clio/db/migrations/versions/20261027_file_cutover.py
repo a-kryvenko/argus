@@ -15,7 +15,6 @@ revision = '20261027_file_cutover'
 down_revision = '20261027_file_observation'
 branch_labels = None
 depends_on = None
-online_compatible = True
 
 SOURCES = {'gong': 'gong_snapshot', 'goes': 'goes_snapshot',
            'donki': 'donki_poll', 'enlil': 'enlil_profile_receipt'}

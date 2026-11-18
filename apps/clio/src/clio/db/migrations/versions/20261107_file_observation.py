@@ -7,7 +7,6 @@ down_revision = '20261102_files'
 branch_labels = None
 depends_on = None
 # Legacy fields remain available, and both receipt formats are accepted.
-online_compatible = True
 
 
 def upgrade():

@@ -20,13 +20,16 @@ def cli(tmp_path, request):
     source = ROOT / 'scripts/run'
     wrapper.write_bytes(source.read_bytes())
     wrapper.chmod(0o755)
+    (folder / 'deployment').mkdir()
+    (folder / 'deployment/db-setup.sh').write_text('''#!/usr/bin/env bash
+set -euo pipefail
+echo db-setup
+for argument in "$@"; do printf '%s\\n' "$argument"; done
+''')
     for name in ('.env', '.env.local', '.release-images.env'):
         (root / name).write_text('# fixture\n')
     if request.param == 'production':
-        for name in ('.rolling-compose.json', '.release-compose.json'):
-            (root / name).write_text('{}')
-        (root / '.rolling-state.json').write_text(json.dumps({'active': {
-            service: {'slot': 'blue'} for service in ('api', 'clio', 'prophet-api', 'intelligence-api', 'frontend')}}))
+        (root / '.active-color').write_text('blue\n')
     bindir = tmp_path / 'tools'
     bindir.mkdir()
     log = tmp_path / 'calls.jsonl'
@@ -62,10 +65,10 @@ def test_domain_arguments_and_environment_files(cli):
     assert args[args.index('--project-directory') + 1] == str(root)
     assert args[args.index('run'):args.index('run') + 4] == ['run', '--rm', '--no-deps', 'intelligence']
     assert str(root / '.release-images.env') not in args
-    expected = '.release-compose.json' if mode == 'production' else 'docker-compose.yml'
+    expected = 'docker-compose.yml'
     assert args[args.index('-f') + 1] == str(root / expected)
     if mode == 'local':
-        assert args[args.index('-f') + 2:args.index('-f') + 4] == ['-f', str(root / 'docker-compose.override.yml')]
+        assert args[args.index('-f') + 2:args.index('-f') + 4] == ['-f', str(root / 'docker-compose.dev.yml')]
 
 
 @pytest.mark.parametrize('apply', [False, True])
@@ -73,9 +76,8 @@ def test_provision_defaults_to_plan(cli, apply):
     _, _, run = cli
     result, calls = run('db', 'provision', *(['--apply'] if apply else []))
     assert result.returncode == 0, result.stderr
-    args = calls[0]['args']
-    assert any(arg.endswith('/scripts/db/provision.py') for arg in args)
-    assert ('--apply' in args) == apply
+    assert result.stdout.splitlines() == ['db-setup', *(['--apply'] if apply else [])]
+    assert not calls
 
 
 @pytest.mark.parametrize('fail', [False, True])
@@ -92,12 +94,11 @@ def test_all_migrations_are_sequential_and_stop_on_failure(cli, fail):
     for domain, call in zip(('api', 'clio', 'prophet', 'intelligence'), calls):
         args = call['args']
         assert args[-3:] == ['alembic', 'upgrade', 'head']
-        target = domain if mode == 'local' else domain + '-migrate'
-        assert args[args.index('--no-deps') + 1] == target
+        assert args[args.index('--no-deps') + 1] == domain
 
 
 @pytest.mark.parametrize('domain', ['api', 'clio'])
-def test_specific_migration_uses_maintenance_service(cli, domain):
+def test_specific_migration_uses_domain_service(cli, domain):
     mode, _, run = cli
     result, calls = run(domain, 'migrate', 'current')
     assert result.returncode == 0, result.stderr
@@ -107,8 +108,7 @@ def test_specific_migration_uses_maintenance_service(cli, domain):
         assert calls[-1]['args'][-2:] == ['stop', 'postgres']
         calls = calls[2:-1]
     assert calls[0]['args'][-2:] == ['alembic', 'current']
-    if mode == 'production':
-        assert calls[0]['args'][-3] == domain + '-migrate'
+    assert calls[0]['args'][-3] == domain
 
 
 def test_unknown_commands_do_not_run_tools(cli):
@@ -118,13 +118,15 @@ def test_unknown_commands_do_not_run_tools(cli):
 
 
 @pytest.mark.parametrize('cli', ['production'], indirect=True)
-def test_production_maintenance_excludes_deployment_and_other_commands(cli):
+@pytest.mark.parametrize('command', ['migrate', 'provision'])
+def test_production_maintenance_excludes_deployment_and_other_commands(cli, command):
     _, root, run = cli
     import fcntl
     with (root / '.deployment.lock').open('w') as held:
         fcntl.flock(held, fcntl.LOCK_SH | fcntl.LOCK_NB)
-        result, calls = run('db', 'migrate')
+        result, calls = run('db', command)
         assert result.returncode != 0 and not calls
+        assert not result.stdout
 
 
 def test_compose_arguments_are_forwarded_without_running_app(cli):
@@ -132,7 +134,7 @@ def test_compose_arguments_are_forwarded_without_running_app(cli):
     result, calls = run('compose', 'up', '-d', '--wait', 'postgres', 'redis')
     assert result.returncode == 0, result.stderr
     assert len(calls) == 1
-    expected = '.rolling-compose.json' if mode == 'production' else 'docker-compose.override.yml'
+    expected = 'docker-compose.prod.yml' if mode == 'production' else 'docker-compose.dev.yml'
     assert calls[0]['args'][-6:] == [str(root / expected), 'up', '-d', '--wait', 'postgres', 'redis']
 
 
@@ -195,3 +197,46 @@ def test_removed_clio_commands_do_not_start_containers(cli, command):
     result, calls = run('clio', command)
     assert result.returncode == 2
     assert not calls
+
+
+@pytest.mark.parametrize('cli', ['production'], indirect=True)
+@pytest.mark.parametrize('arguments', [
+    ('pull', '--policy', 'always'),
+    ('config', '--format', 'json'),
+])
+def test_release_commands_use_installed_compose_files(cli, arguments):
+    _, root, run = cli
+    result, calls = run('compose', *arguments)
+    assert result.returncode == 0, result.stderr
+    args = calls[0]['args']
+    assert args[-len(arguments):] == list(arguments)
+    assert str(root / 'docker-compose.yml') in args
+    assert str(root / 'docker-compose.prod.yml') in args
+    assert str(root / '.rolling-compose.json') not in args
+    assert '--profile' in args
+
+
+@pytest.mark.parametrize('cli', ['production'], indirect=True)
+@pytest.mark.parametrize('arguments', [
+    ('pull', '--policy', 'always'),
+    ('config', '--format', 'json'),
+])
+def test_release_commands_use_installed_production_files(cli, arguments):
+    _, root, run = cli
+    result, calls = run('compose', *arguments)
+    assert result.returncode == 0, result.stderr
+    args = calls[0]['args']
+    files = [args[index + 1] for index, value in enumerate(args) if value == '-f']
+    assert files == [str(root / 'docker-compose.yml'), str(root / 'docker-compose.prod.yml')]
+    assert '--profile' in args
+    assert args[-len(arguments):] == list(arguments)
+
+
+@pytest.mark.parametrize('cli', ['production'], indirect=True)
+def test_inactive_slots_use_static_compose_without_color_remapping(cli):
+    _, root, run = cli
+    result, calls = run('compose', 'up', '-d', '--force-recreate', '--pull', 'never', 'api-green')
+    assert result.returncode == 0, result.stderr
+    args = calls[0]['args']
+    assert args[args.index('-f') + 1] == str(root / 'docker-compose.yml')
+    assert args[-1] == 'api-green'

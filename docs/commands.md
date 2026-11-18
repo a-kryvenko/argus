@@ -2,7 +2,8 @@
 
 `./argus help` and `./argus <service> --help` list options.
 The wrapper selects dev/prod Compose and loads env files.
-Shared services: `docker-compose.yml`; overrides: `docker-compose.override.yml` (dev), `.deploy/docker-compose.yml` (prod).
+Shared services: `docker-compose.yml`; overrides: `docker-compose.dev.yml` (dev), `.deploy/docker-compose.yml` (prod).
+Production uses the installed Compose files; `.active-color` selects blue/green services.
 [First startup](../README_DEPLOY.md#local-development).
 
 ## Service processes

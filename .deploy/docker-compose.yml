@@ -29,29 +29,21 @@ x-api-runtime: &api-runtime
     FORECASTS_URL: http://forecasts-router:8102
     OBSERVATIONS_URL: http://observations-router:8101
 
+x-http-slot: &http-slot
+  depends_on: !reset {}
+
 services:
   clio:
+    extends:
+      file: docker-compose.yml
+      service: clio
+    profiles: [templates]
     <<: *clio-runtime
     networks:
       backend:
       observations:
     expose:
       - '8000'
-
-  clio-migrate:
-    image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
-    profiles: [maintenance]
-    command: [alembic, upgrade, head]
-    environment:
-      CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
-      CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
-      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
-      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
-      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
-      ARGUS_WORKDIR: /var/www
-    volumes:
-      - ./configs:/var/www/configs:ro
-    networks: [backend]
 
   prophet:
     <<: *prophet-runtime
@@ -65,7 +57,17 @@ services:
       backend:
       observations:
 
+    depends_on: !override
+      internal-router:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
   prophet-api:
+    extends:
+      file: docker-compose.yml
+      service: prophet-api
+    profiles: [templates]
     <<: *prophet-runtime
     environment:
       <<: *prophet-environment
@@ -78,21 +80,6 @@ services:
     healthcheck:
       start_interval: 1s
 
-  prophet-migrate:
-    image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
-    profiles: [maintenance]
-    command: [alembic, upgrade, head]
-    environment:
-      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
-      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
-      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
-      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-      ARGUS_WORKDIR: /var/www
-    volumes:
-      - ./configs:/var/www/configs:ro
-    networks: [backend]
-
   proswin:
     environment:
       OBSERVATIONS_URL: http://observations-router:8101
@@ -103,6 +90,10 @@ services:
       S3_REGION: ${S3_REGION:-auto}
     networks: [observations]
 
+    depends_on: !override
+      internal-router:
+        condition: service_started
+
   intelligence:
     <<: *intelligence-runtime
     environment:
@@ -110,7 +101,17 @@ services:
       INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
     networks: [backend, forecasts]
 
+    depends_on: !override
+      internal-router:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
   intelligence-api:
+    extends:
+      file: docker-compose.yml
+      service: intelligence-api
+    profiles: [templates]
     <<: *intelligence-runtime
     environment:
       <<: *intelligence-environment
@@ -119,29 +120,17 @@ services:
     healthcheck:
       start_interval: 1s
 
-  intelligence-migrate:
-    image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
-    profiles: [maintenance]
-    command: [alembic, upgrade, head]
-    environment:
-      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
-      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
-      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
-      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
-    networks: [backend]
-
   api:
+    extends:
+      file: docker-compose.yml
+      service: api
+    profiles: [templates]
     <<: *api-runtime
     environment:
       <<: *api-environment
       INTELLIGENCE_URL: http://impacts-router:8103
       DASHBOARD_ORIGINS: ${DASHBOARD_ORIGINS-https://${APP_NAME:?APP_NAME is required}}
       DASHBOARD_COOKIE_SECURE: ${DASHBOARD_COOKIE_SECURE:-true}
-      DEPLOY_SMOKE_USERNAME: ${DEPLOY_SMOKE_USERNAME:-}
-      DEPLOY_SMOKE_PASSWORD: ${DEPLOY_SMOKE_PASSWORD:-}
-      DEPLOY_MIN_AVAILABLE_MIB: ${DEPLOY_MIN_AVAILABLE_MIB:-1024}
-    container_name: argusForecast
     restart: unless-stopped
     tty: true
     expose:
@@ -159,24 +148,9 @@ services:
       start_interval: 1s
     stop_grace_period: 60s
 
-  api-migrate:
-    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
-    profiles: [maintenance]
-    command: [alembic, upgrade, head]
-    environment:
-      API_DB_HOST: ${API_DB_HOST:-postgres}
-      API_DB_PORT: ${API_DB_PORT:-5432}
-      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
-      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
-      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
-    networks: [backend]
-
-  db-provision:
-    networks: [backend]
-
   frontend:
-    image: ${ARGUS_FRONTEND_IMAGE:-ghcr.io/a-kryvenko/argus-frontend:latest}
-    container_name: argusFrontend
+    profiles: [templates]
+    image: ghcr.io/a-kryvenko/argus-frontend:latest
     restart: unless-stopped
     tty: true
     expose:
@@ -211,7 +185,7 @@ services:
       backend:
 
   nginx:
-    image: nginx:stable-alpine
+    image: nginx:latest
     container_name: argusNginx
     restart: unless-stopped
     tty: true
@@ -219,23 +193,38 @@ services:
       - '80'
     volumes:
       - ./log/nginx:/var/www/log
-      - ./nginx/default.conf:/etc/nginx/includes/default.conf
-      - ./nginx/templates/http.conf.template:/etc/nginx/templates/website.conf.template
+      - ./.docker/nginx/default.conf:/etc/nginx/includes/default.conf
+      - ./.docker/nginx/templates/http.conf.template:/etc/nginx/templates/website.conf.template
       - ./data/next-static:/var/www/next-static:ro
     environment:
       - HOSTNAME=${APP_NAME}
       - APP_NAME=${APP_NAME}
       - VIRTUAL_HOST=${APP_NAME}
       - LETSENCRYPT_HOST=${APP_NAME}
-    depends_on:
-      - frontend
-      - api
     networks:
       nginx-proxy-network:
       frontserver:
       application:
         aliases:
           - ${APP_NAME}
+
+  maintenance:
+    image: nginx:stable-alpine
+    scale: 0
+    restart: unless-stopped
+    expose: ['80']
+    volumes:
+      - ./.docker/maintenance/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.docker/maintenance/index.html:/usr/share/nginx/html/maintenance.html:ro
+    environment:
+      VIRTUAL_HOST: ${APP_NAME}
+      LETSENCRYPT_HOST: ${APP_NAME}
+    networks: [nginx-proxy-network]
+    healthcheck:
+      test: [CMD, nginx, -t]
+      interval: 1s
+      timeout: 5s
+      retries: 5
 
   alloy:
     image: grafana/alloy:latest
@@ -248,7 +237,7 @@ services:
       - MONITORING_AUTH_USER=${MONITORING_AUTH_USER}
       - MONITORING_AUTH_PASSWORD=${MONITORING_AUTH_PASSWORD}
     volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ./.docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /:/host/root:ro,rslave
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -261,6 +250,89 @@ services:
     <<: *clio-runtime
     networks:
       backend:
+
+  clio-blue:
+    <<: *http-slot
+    extends:
+      service: clio
+    profiles: !override [blue]
+
+  prophet-api-blue:
+    <<: *http-slot
+    extends:
+      service: prophet-api
+    profiles: !override [blue]
+
+  intelligence-api-blue:
+    <<: *http-slot
+    extends:
+      service: intelligence-api
+    profiles: !override [blue]
+
+  api-blue:
+    <<: *http-slot
+    extends:
+      service: api
+    profiles: !override [blue]
+
+  frontend-blue:
+    <<: *http-slot
+    extends:
+      service: frontend
+    profiles: !override [blue]
+
+  clio-green:
+    <<: *http-slot
+    extends:
+      service: clio
+    profiles: !override [green]
+
+  prophet-api-green:
+    <<: *http-slot
+    extends:
+      service: prophet-api
+    profiles: !override [green]
+
+  intelligence-api-green:
+    <<: *http-slot
+    extends:
+      service: intelligence-api
+    profiles: !override [green]
+
+  api-green:
+    <<: *http-slot
+    extends:
+      service: api
+    profiles: !override [green]
+
+  frontend-green:
+    <<: *http-slot
+    extends:
+      service: frontend
+    profiles: !override [green]
+
+  internal-router:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    volumes:
+      - ./routes/internal:/etc/nginx/conf.d:ro
+    networks:
+      observations:
+        aliases: [observations-router]
+      forecasts:
+        aliases: [forecasts-router]
+      impacts:
+        aliases: [impacts-router]
+      application:
+        aliases: [application-router]
+    healthcheck:
+      test: [CMD, nginx, -t]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+    stop_grace_period: 120s
 
 networks:
   nginx-proxy-network:

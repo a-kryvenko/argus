@@ -4,7 +4,6 @@ Never reads project .env credentials. Creates/drops only UUID-named databases
 and owners. TEST_DATABASE_ADMIN_DSN must be administrative.
 """
 from contextlib import contextmanager
-import importlib.util
 import os
 from pathlib import Path
 import subprocess
@@ -19,14 +18,7 @@ from sqlalchemy.engine import make_url
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def load(path):
-    spec = importlib.util.spec_from_file_location(path.stem, path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-provisioning = load(ROOT / 'scripts/db/provision.py')
+DOMAINS = ('api', 'clio', 'prophet', 'intelligence')
 
 
 def database_environment(urls):
@@ -45,7 +37,7 @@ def provisioned_database(tmp_path):
     admin_url = make_url(admin_dsn)
     token = uuid4().hex[:16]
     targets = {d: admin_url.set(database=f'test_{d}_{token}', username=f'test_{d}_{token}', password=uuid4().hex + '@:/%+?#')
-               for d in provisioning.DOMAINS}
+               for d in DOMAINS}
     urls = {d: u.render_as_string(hide_password=False) for d, u in targets.items()}
     dsns = {d: admin_url.set(database=u.database).render_as_string(hide_password=False) for d, u in targets.items()}
     (tmp_path / 'configs').mkdir()
@@ -55,7 +47,14 @@ def provisioned_database(tmp_path):
                    'ARGUS_WORKDIR': str(tmp_path),
                    'DEBUG': 'true', 'SENTRY_COLLECT_POINT': '', 'SENTRY_DSN': ''}
     try:
-        provisioning.provision(admin_dsn, urls, apply=True)
+        with psycopg.connect(admin_dsn, autocommit=True) as admin:
+            for url in targets.values():
+                admin.execute(sql.SQL('CREATE ROLE {} LOGIN PASSWORD {}').format(
+                    sql.Identifier(url.username), sql.Literal(url.password)))
+                admin.execute(sql.SQL('CREATE DATABASE {} OWNER {}').format(
+                    sql.Identifier(url.database), sql.Identifier(url.username)))
+                admin.execute(sql.SQL('REVOKE ALL ON DATABASE {} FROM PUBLIC').format(
+                    sql.Identifier(url.database)))
         yield dsns, urls, environment
     finally:
         with psycopg.connect(admin_dsn, autocommit=True) as admin:
@@ -73,7 +72,7 @@ def database(tmp_path):
 
 
 def migrate(environment):
-    for domain in provisioning.DOMAINS:
+    for domain in DOMAINS:
         python = str(ROOT / 'apps' / domain / '.venv/bin/python')
         command = [python, '-m', 'alembic', '-c', str(ROOT / 'apps' / domain / 'alembic.ini')]
         result = subprocess.run([*command, 'upgrade', 'head'], env={**environment, 'PYTHONPATH': ''},

@@ -47,3 +47,42 @@ def test_clio_smoke_uses_latest_contract(monkeypatch, payload, error):
     else:
         smoke.check(options)
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize('payload,error', [
+    ({'success': True, 'data': []}, None),
+    ({'success': False, 'data': []}, 'Invalid public API response'),
+    ({'success': True, 'data': None}, 'Invalid public API response'),
+    (None, 'returned 503'),
+])
+def test_api_smoke_checks_public_endpoints_without_login(monkeypatch, payload, error):
+    calls = []
+
+    class Opener:
+        def open(self, request, timeout):
+            path = request.full_url.removeprefix('http://api')
+            calls.append(path)
+            assert request.get_method() == 'GET'
+            assert request.get_header('Cookie') is None
+            assert request.get_header('Authorization') is None
+            if path == '/health/ready':
+                data = {}
+            else:
+                assert path in ('/observations', '/forecasts/solar-wind-speed')
+                if payload is None:
+                    raise HTTPError(request.full_url, 503, 'Unavailable', {}, None)
+                data = payload
+            response = io.BytesIO(json.dumps(data).encode())
+            response.status = 200
+            response.headers = {}
+            return response
+
+    monkeypatch.setattr(smoke, 'build_opener', lambda *args: Opener())
+    options = {'service': 'api', 'base': 'http://api'}
+    if error:
+        with pytest.raises(RuntimeError, match=error):
+            smoke.check(options)
+        assert calls == ['/health/ready', '/observations']
+    else:
+        smoke.check(options)
+        assert calls == ['/health/ready', '/observations', '/forecasts/solar-wind-speed']

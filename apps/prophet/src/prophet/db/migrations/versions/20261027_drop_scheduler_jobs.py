@@ -6,7 +6,6 @@ revision = '20261027_drop_scheduler_jobs'
 down_revision = '20260929_prophet_product_slots'
 branch_labels = None
 depends_on = None
-online_compatible = True
 
 
 def upgrade():

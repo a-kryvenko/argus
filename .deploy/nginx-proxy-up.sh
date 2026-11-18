@@ -6,7 +6,7 @@ docker run --detach \
     --publish 80:80 \
     --publish 443:443 \
     --net nginx-proxy-network \
-    --env DEFAULT_ROOT="503 $(pwd)/maintenance.html" \
+    --env DEFAULT_ROOT=503 \
     --volume certs:/etc/nginx/certs \
     --volume vhost:/etc/nginx/vhost.d \
     --volume html:/usr/share/nginx/html \

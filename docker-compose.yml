@@ -23,7 +23,7 @@ x-clio-runtime: &clio-runtime
     timeout: 10s
     retries: 3
     start_period: 30s
-  image: ${ARGUS_CLIO_IMAGE:-ghcr.io/a-kryvenko/argus-clio:latest}
+  image: ghcr.io/a-kryvenko/argus-clio:latest
 
 x-prophet-runtime: &prophet-runtime
   init: true
@@ -39,7 +39,7 @@ x-prophet-runtime: &prophet-runtime
     ARGUS_WORKDIR: /var/www
     PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
     PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-  image: ${ARGUS_PROPHET_IMAGE:-ghcr.io/a-kryvenko/argus-prophet:latest}
+  image: ghcr.io/a-kryvenko/argus-prophet:latest
 
 x-intelligence-runtime: &intelligence-runtime
   init: true
@@ -58,7 +58,7 @@ x-intelligence-runtime: &intelligence-runtime
     ARGUS_WORKDIR: /var/www
     INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
     INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-  image: ${ARGUS_INTELLIGENCE_IMAGE:-ghcr.io/a-kryvenko/argus-intelligence:latest}
+  image: ghcr.io/a-kryvenko/argus-intelligence:latest
 
 x-api-runtime: &api-runtime
   environment: &api-environment
@@ -78,7 +78,7 @@ x-api-runtime: &api-runtime
       condition: service_healthy
     prophet-api:
       condition: service_started
-  image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
+  image: ghcr.io/a-kryvenko/argus-forecast:latest
 
 services:
   postgres:
@@ -173,7 +173,7 @@ services:
     depends_on:
       clio:
         condition: service_started
-    image: ${ARGUS_PROSWIN_IMAGE:-ghcr.io/a-kryvenko/argus-proswin:latest}
+    image: ghcr.io/a-kryvenko/argus-proswin:latest
 
   intelligence:
     <<: *intelligence-runtime
@@ -213,36 +213,6 @@ services:
       interval: 30s
       timeout: 10s
       start_period: 30s
-
-  db-provision:
-    environment:
-      INTELLIGENCE_DB_NAME: ${INTELLIGENCE_DB_NAME:?INTELLIGENCE_DB_NAME is required}
-      INTELLIGENCE_DB_USER: ${INTELLIGENCE_DB_USER:?INTELLIGENCE_DB_USER is required}
-      INTELLIGENCE_DB_PASSWORD: ${INTELLIGENCE_DB_PASSWORD:?INTELLIGENCE_DB_PASSWORD is required}
-      PROPHET_DB_NAME: ${PROPHET_DB_NAME:?PROPHET_DB_NAME is required}
-      PROPHET_DB_USER: ${PROPHET_DB_USER:?PROPHET_DB_USER is required}
-      PROPHET_DB_PASSWORD: ${PROPHET_DB_PASSWORD:?PROPHET_DB_PASSWORD is required}
-      CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
-      CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
-      CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
-      API_DB_NAME: ${API_DB_NAME:?API_DB_NAME is required}
-      API_DB_USER: ${API_DB_USER:?API_DB_USER is required}
-      API_DB_PASSWORD: ${API_DB_PASSWORD:?API_DB_PASSWORD is required}
-      DB_USER: ${DB_USER:?DB_USER is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      INTELLIGENCE_DB_HOST: ${INTELLIGENCE_DB_HOST:-postgres}
-      INTELLIGENCE_DB_PORT: ${INTELLIGENCE_DB_PORT:-5432}
-      PROPHET_DB_HOST: ${PROPHET_DB_HOST:-postgres}
-      PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
-      CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
-      CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
-      API_DB_HOST: ${API_DB_HOST:-postgres}
-      API_DB_PORT: ${API_DB_PORT:-5432}
-      DB_HOST: ${DB_HOST:-postgres}
-      DB_PORT: ${DB_PORT:-5432}
-    command: [.venv/bin/python, /var/www/scripts/db/provision.py, --apply]
-    profiles: [maintenance]
-    image: ${ARGUS_API_IMAGE:-ghcr.io/a-kryvenko/argus-forecast:latest}
 
 volumes:
   postgres_data:

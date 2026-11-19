@@ -98,6 +98,17 @@ def test_checksum_and_installation_follow_current_bundle_layout(tmp_path):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text('release data')
     deployment.manifest = {'mode': 'rolling', 'release_id': 'a' * 32, 'checksum': get_checksum(deployment.release.bundle)}
+    proxy_data = tmp_path / '.docker/nginx-proxy'
+    proxy_data.mkdir(parents=True)
+    (proxy_data / 'custom-proxy-config.conf').mkdir()
+    (proxy_data / 'certificate.pem').write_text('operator certificate')
+    bundled_proxy = deployment.release.bundle / '.docker/nginx-proxy'
+    bundled_proxy.mkdir(parents=True)
+    (bundled_proxy / 'custom-proxy-config.conf').write_text('release config')
+    nginx = deployment.release.bundle / '.docker/nginx'
+    nginx.mkdir()
+    (nginx / 'default.conf').write_text('application config')
+    deployment.manifest['checksum'] = get_checksum(deployment.release.bundle)
     write_json(tmp_path / '.release_manifest', deployment.manifest)
     (deployment.release.bundle / '__pycache__').mkdir()
     (deployment.release.bundle / '__pycache__/compiled.pyc').write_bytes(b'bytecode')
@@ -105,6 +116,9 @@ def test_checksum_and_installation_follow_current_bundle_layout(tmp_path):
     deployment.release.execute = lambda *args, **kwargs: subprocess.run(args, check=True, **kwargs)
     deployment.release.install()
     assert (tmp_path / 'data/models/model.bin').read_text() == 'release data'
+    assert (proxy_data / 'custom-proxy-config.conf').is_dir()
+    assert (proxy_data / 'certificate.pem').read_text() == 'operator certificate'
+    assert (tmp_path / '.docker/nginx/default.conf').read_text() == 'application config'
     (deployment.release.bundle / 'data/models/model.bin').write_text('corrupt')
     with pytest.raises(RuntimeError, match='checksum'):
         deployment.release.verify(deployment.manifest)

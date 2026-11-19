@@ -30,7 +30,8 @@ class Release:
         if self.root == self.bundle or self.root.is_relative_to(self.bundle):
             raise RuntimeError('Release bundle must be separate from the application root')
         
-        self.execute('rsync', '-a', '--inplace', str(self.bundle) + '/', str(self.root) + '/')
+        self.execute('rsync', '-a', '--no-owner', '--no-group', '--inplace',
+                     '--exclude=/.docker/nginx-proxy/', str(self.bundle) + '/', str(self.root) + '/')
         (self.root / '.argus-mode').write_text('prod\n')
         (self.root / 'data/next-static').mkdir(parents=True, exist_ok=True)
 

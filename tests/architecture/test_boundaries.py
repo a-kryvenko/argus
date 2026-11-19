@@ -155,6 +155,8 @@ def test_runtime_sql_does_not_read_foreign_domain_tables():
     ('apps/intelligence/src', {'api', 'clio', 'prophet', 'forecast', 'forecast_core'}, {'intelligence_core.api'}),
     ('packages/forecast-core/src', {'intelligence_core', 'clio', 'prophet', 'intelligence', 'api'}, None),
     ('packages/intelligence-core/src', {'clio', 'prophet', 'intelligence', 'api', 'forecast_core'}, None),
+    ('packages/forecast-core/tools', {'notebooks'}, None),
+    ('packages/intelligence-core/tools', {'notebooks'}, None),
 ])
 def test_service_import_boundaries(root, blocked, private_surface):
     paths = list((ROOT / root).rglob('*.py'))
@@ -163,6 +165,7 @@ def test_service_import_boundaries(root, blocked, private_surface):
     assert paths, root
     for path in paths:
         for module in imports(path):
+            assert module.split('.')[0] != 'notebooks', (path, 'Product code must not import research notebooks')
             assert module.split('.')[0] not in blocked, (path, module)
             if private_surface is not None and module.split('.')[0] in {'forecast_core', 'intelligence_core'}:
                 assert any(module == surface or module.startswith(surface + '.')

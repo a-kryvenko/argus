@@ -30,7 +30,7 @@ x-api-runtime: &api-runtime
     OBSERVATIONS_URL: http://observations-router:8101
 
 x-http-slot: &http-slot
-  depends_on: !reset {}
+  depends_on: !override {}
 
 services:
   clio:

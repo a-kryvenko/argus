@@ -69,7 +69,7 @@ Prophet demo caches use `data/demo`;
 
 Server: Bash, Python 3.10+, Docker Compose v2, rsync, flock; operator env files in `/var/www`.
 Compose must support `pull --policy missing` and `up --wait`.
-Install `.deploy/deploy.sh` as `/var/www/deploy.sh`. It reads the release ID from `.release`, the manifest from `.release_manifest`, and applies `incoming/<release_id>`.
+Local deployment installs `/var/www/deploy.sh`. It reads the release ID from `.release`, the manifest from `.release_manifest`, and applies `incoming/<release_id>`.
 
 - Configure distinct DB owners, three service tokens, HTTPS dashboard origin and secure cookies.
 - Preserve existing PostgreSQL credentials/volumes. Provisioning creates missing owners/databases; it does not rotate passwords.

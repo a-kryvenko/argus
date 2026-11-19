@@ -168,7 +168,7 @@ if [[ -n "$BUMP" ]]; then
   ARTIFACT_ID=$(python3 scripts/deployment/release-bundle.py --output "$bundle_directory/release-bundle" "${bundle_options[@]}")
   staging="argus:/var/www/incoming/$ARTIFACT_ID/"
   rsync -avzh --mkpath "$bundle_directory/release-bundle/" "$staging"
-  rsync -avzh "$bundle_directory/.release_manifest" "$bundle_directory/.release" argus:/var/www/
+  rsync -avzh "$bundle_directory/release-bundle/deploy.sh" "$bundle_directory/.release_manifest" "$bundle_directory/.release" argus:/var/www/
   printf 'Release uploaded to %s\n' "$staging"
 fi
 

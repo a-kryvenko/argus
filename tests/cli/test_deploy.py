@@ -83,6 +83,7 @@ def test_commit_and_release_modes(tmp_path, bump, tag, maintenance, dirty_submod
         f'assert sys.argv[3:] == {(["--maintenance"] if maintenance else [])!r}\n'
         'destination = Path(sys.argv[2])\n'
         'destination.mkdir()\n'
+        '(destination / "deploy.sh").write_text("server entrypoint")\n'
         f'manifest = {{"release_id": {artifact_id!r}, "mode": {("maintenance" if maintenance else "rolling")!r}}}\n'
         '(destination.parent / ".release_manifest").write_text(json.dumps(manifest))\n'
         '(destination.parent / ".release").write_text(manifest["release_id"] + "\\n")\n'
@@ -104,9 +105,11 @@ if 'diff --cached --quiet' in command:
 if command.startswith('rsync ') and os.getenv('FAIL_BUNDLE_UPLOAD') == '1':
     raise SystemExit(17)
 if command.startswith('rsync ') and sys.argv[-1] == 'argus:/var/www/':
+    entrypoint = Path(sys.argv[-4])
     marker = Path(sys.argv[-2])
     manifest = Path(sys.argv[-3])
     assert marker.name == '.release' and manifest.name == '.release_manifest'
+    assert entrypoint.name == 'deploy.sh' and entrypoint.read_text() == 'server entrypoint'
     assert json.loads(manifest.read_text())['release_id'] == marker.read_text().strip()
     if os.getenv('FAIL_METADATA_UPLOAD') == '1':
         raise SystemExit(17)
@@ -145,6 +148,7 @@ if command.startswith('rsync ') and sys.argv[-1] == 'argus:/var/www/':
         assert uploads[0].endswith(f'release-bundle/ argus:/var/www/incoming/{artifact_id}/')
         assert uploads[1].endswith('.release argus:/var/www/')
         assert '.release_manifest ' in uploads[1]
+        assert 'release-bundle/deploy.sh ' in uploads[1]
         assert commands[-2:] == [f'git tag -a {tag} -m Release message',
                                  f'git push origin {tag}']
     else:

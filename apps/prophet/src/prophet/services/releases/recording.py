@@ -90,4 +90,11 @@ class RunRecorder:
                 raise RuntimeError("Run is no longer running")
             if error is None:
                 from prophet.services.releases.publication import publish_run
-                await publish_run(session, self.run_id)
+                publication = await publish_run(session, self.run_id)
+                if publication is None:
+                    raise RuntimeError('Completed run was not eligible for publication')
+                await session.execute(text("""UPDATE forecast_run
+                    SET provenance=jsonb_set(provenance,'{publication}',:publication)
+                    WHERE id=:run_id""").bindparams(bindparam('publication', type_=JSONB)),
+                    {'run_id': self.run_id, 'publication': publication.model_dump(mode='json')})
+                return publication

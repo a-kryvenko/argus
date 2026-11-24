@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from common.schemas.forecast_release import (
     ForecastArtifact, ForecastRelease, MAX_ARTIFACT_BYTES, PRODUCT_ARTIFACTS,
 )
+from common.schemas.forecast_status import ForecastPublication
 from prophet.db.session import get_db_session
 from prophet.services.releases.queries import LATEST_RELEASES
 
@@ -47,20 +48,22 @@ async def publish_run(session, run_id):
         FROM ({LATEST_RELEASES}) r
         JOIN forecast_run f ON f.id=r.run_id WHERE r.product=:product'''), {'product': product})
     current = query.mappings().first()
-    if current and (current['run_id'] == run_id or current['started_at'] >= run['started_at']):
-        return None
+    if current and current['run_id'] == run_id:
+        return ForecastPublication(status='kept_current', reason='already_published')
+    if current and current['started_at'] >= run['started_at']:
+        return ForecastPublication(status='kept_current', reason='newer_run')
     release = await asyncio.to_thread(_release_from_artifacts, {
         'id': uuid4(), 'run_id': run_id, 'product': product, 'published_at': datetime.now(UTC),
     }, [rows[name] for name in names])
     if current and current['issue_time'] > release.issue_time:
-        return None
+        return ForecastPublication(status='kept_current', reason='newer_issue_time')
     query = await session.execute(text('''INSERT INTO forecast_release
         (id,product,run_id,published_at,issue_time,artifact_names) VALUES (:release_id,:product,:run_id,:published_at,:issue_time,:artifact_names)
         ON CONFLICT (product,run_id) DO NOTHING RETURNING id''').bindparams(bindparam('artifact_names', type_=JSONB)), {'release_id': release.release_id, 'product': product, 'run_id': run_id, 'published_at': release.published_at, 'issue_time': release.issue_time, 'artifact_names': list(names)})
     inserted = query.mappings().first()
     if inserted is None:
-        return None
-    return release.release_id
+        return ForecastPublication(status='kept_current', reason='already_published')
+    return ForecastPublication(status='published', release_id=release.release_id)
 
 
 async def read_release(product, release_id=None):

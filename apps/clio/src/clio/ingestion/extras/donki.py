@@ -142,7 +142,7 @@ def record_poll(endpoint, *, raw, metadata, observed_at=None):
 async def collect(policy, *, now=None):
     with ingestion_lock('donki', FILE_LOCKS['donki']) as acquired:
         if not acquired:
-            return False
+            return {'status': 'busy', 'failed_endpoints': []}
         now = now or datetime.now(UTC)
         start = (now-timedelta(days=policy.lookback_days)).replace(hour=0, minute=0, second=0, microsecond=0)
         end = now.replace(hour=0, minute=0, second=0, microsecond=0)+timedelta(days=1)
@@ -155,6 +155,4 @@ async def collect(policy, *, now=None):
             except (OSError, ValueError, donki.requests.RequestException) as exc:
                 failed.append(endpoint)
                 logger.warning('DONKI %s failed: %s', endpoint, type(exc).__name__)
-        if failed:
-            raise RuntimeError('DONKI collection failed: '+', '.join(failed))
-        return True
+        return {'status': 'partial' if failed else 'complete', 'failed_endpoints': failed}

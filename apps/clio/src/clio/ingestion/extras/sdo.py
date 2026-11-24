@@ -39,10 +39,10 @@ def observation_slots(now, *, days, resolution_minutes):
 def collect_one(slot, channel, *, clock, source=None):
     try:
         if channel not in OBSERVED_CHANNELS:
-            return 'unavailable'
+            return 'missing'
         observation = FILE_OBSERVATIONS['sdo', channel]
         if find(observation, start=slot-timedelta(minutes=2), end=slot+timedelta(minutes=2, seconds=1)):
-            return 'existing'
+            return 'retained'
         from clio.providers import sdo as provider
         url = provider.observation_url(channel, slot)
         with TemporaryDirectory(prefix='clio-sdo-') as temporary:
@@ -52,10 +52,10 @@ def collect_one(slot, channel, *, clock, source=None):
             save(path, observation=observation, observed_at=utc(metadata['observed_at']),
                 source_product=source or ('aia.nrt_' + channel[3:] if channel.startswith('aia') else 'hmi.nrt_m'),
                 details=dict(source_url=url, channel=channel))
-        return 'saved'
+        return 'received'
     except requests.HTTPError as exc:
         if exc.response is not None and exc.response.status_code == 404:
-            return 'unavailable'
+            return 'missing'
         logger.warning('SDO download failed: %s %s: %s', slot, channel, exc)
     except (requests.RequestException, ValueError, OSError, BotoCoreError, ClientError, SQLAlchemyError) as exc:
         logger.warning('SDO observation failed: %s %s: %s', slot, channel, exc)
@@ -71,9 +71,9 @@ def collect(policy, *, channel, source, mode, now):
         slots = observation_slots(now, days=policy.retention_days, resolution_minutes=resolution)
         horizon = timedelta(days=policy.backfill_days) if mode == 'backfill' else timedelta(minutes=policy.freshness_minutes)
         slots = [slot for slot in slots if slot >= now - horizon]
-        report = dict(saved=0, existing=0, unavailable=0, failed=0)
+        report = dict(received=0, retained=0, missing=0, failed=0)
         with ThreadPoolExecutor(max_workers=4) as pool:
             for state in pool.map(lambda slot: collect_one(slot, channel, clock=lambda: datetime.now(UTC), source=source), slots):
                 report[state] += 1
-        report['status'] = 'partial' if report['failed'] or (mode == 'backfill' and report['unavailable']) else 'complete'
+        report['status'] = 'partial' if report['failed'] or (mode == 'backfill' and report['missing']) else 'complete'
         return report

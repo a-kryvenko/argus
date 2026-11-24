@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
@@ -21,8 +22,18 @@ def stored_inputs():
 def configure(monkeypatch, handler):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://observations')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr(observations.httpx, 'Client', lambda **kwargs: client)
+    client = httpx.Client
+    monkeypatch.setattr(observations.httpx, 'Client', lambda **kwargs: client(
+        transport=httpx.MockTransport(handler), **kwargs))
+
+
+def load_inputs(product='dst', cache=None):
+    def execute(target, *args, timeout_seconds, **kwargs):
+        return target(*args, **kwargs)
+
+    return asyncio.run(observations.load_product_inputs(
+        product, NOW, {} if cache is None else cache, executor=execute, timeout_seconds=5,
+    ))
 
 
 def resource_response(request, payload):
@@ -46,24 +57,47 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
         assert request.headers['Authorization'] == 'Bearer test-token'
         return resource_response(request, stored_inputs().model_dump(mode='json'))
     configure(monkeypatch, handler)
-    assert observations.load_inputs(NOW).observations.points[0].v == 420
-    assert len(calls) == 4
+    shared = {}
+    assert load_inputs(cache=shared).observations.points[0].v == 420
+    assert load_inputs('geomagnetic-activity', shared).observations.points[0].v == 420
+    assert len(calls) == 1
     assert all('as_of' not in request.url.params for request in calls)
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
     assert calls[0].url.params['interval'] == '1h'
     assert set(calls[0].url.params['metrics'].split(',')) >= {'f10_7', 'dst', 'ap', 's10_81mean'}
+    assert load_inputs('hmf', shared).solar_wind_hourly is not None
     assert calls[1].url.params['interval'] == '1m'
     assert calls[1].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
-    assert [request.url.params['observation'] for request in calls[2:]] == ['gong', 'goes']
-    assert calls[3].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
+    assert load_inputs('solar-radiation', shared).as_of == NOW
+    assert [request.url.params['observation'] for request in calls[2:]] == ['goes']
+    assert calls[2].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
+
+
+def test_goes_failure_does_not_prevent_numeric_forecast(monkeypatch):
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        if request.url.path.endswith('/files'):
+            return httpx.Response(503)
+        return resource_response(request, stored_inputs().model_dump(mode='json'))
+
+    configure(monkeypatch, handler)
+    cache = {}
+    for product in ('solar-radiation', 'atmospheric-density'):
+        with pytest.raises(RuntimeError, match='goes input unavailable'):
+            load_inputs(product, cache)
+    assert load_inputs('dst', cache).observations.points[0].v == 420
+    assert [request.url.path for request in calls] == ['/internal/v1/observations/history', '/internal/v1/files']
 
 
 
 @pytest.mark.parametrize('status', [401, 503])
 def test_owner_failure_is_propagated_without_fallback(monkeypatch, status):
     configure(monkeypatch, lambda _: httpx.Response(status))
-    with pytest.raises(httpx.HTTPStatusError):
-        observations.load_inputs(NOW)
+    with pytest.raises(RuntimeError, match='hourly input unavailable') as error:
+        load_inputs()
+    assert isinstance(error.value.__cause__, httpx.HTTPStatusError)
 
 
 def test_empty_inputs_fail_without_ingestion(monkeypatch):
@@ -71,15 +105,16 @@ def test_empty_inputs_fail_without_ingestion(monkeypatch):
     payload['observations']['points'] = []
     configure(monkeypatch, lambda request: resource_response(request, payload))
     with pytest.raises(RuntimeError, match='check ingestion'):
-        observations.load_inputs(NOW)
+        load_inputs()
 
 
 def test_rejects_incompatible_contract(monkeypatch):
     payload = stored_inputs().model_dump(mode='json')
     payload['interval'] = '5m'
     configure(monkeypatch, lambda request: resource_response(request, payload))
-    with pytest.raises(ValueError):
-        observations.load_inputs(NOW)
+    with pytest.raises(RuntimeError, match='hourly input unavailable') as error:
+        load_inputs()
+    assert isinstance(error.value.__cause__, ValueError)
 
 
 def test_verification_reads_compact_live_metrics_and_excludes_end(monkeypatch):
@@ -143,7 +178,9 @@ def test_verification_incomplete_vectors_have_no_magnitude():
 
 def mock_models(monkeypatch):
     from types import SimpleNamespace
-    load = Mock(side_effect=lambda service, **_: (SimpleNamespace(registry_name=service.registry_name), {}))
+    load = Mock(side_effect=lambda service, **_: (
+        SimpleNamespace(registry_name=service.registry_name, last_status={}, model_info={}), {'sha256': 'test'},
+    ))
     compute = Mock(side_effect=lambda service, *args, **kwargs:
                    ForecastResult(service.registry_name, pd.DataFrame({'value': [1]}), {}))
     from prophet.services.generation import models
@@ -200,7 +237,6 @@ def test_temperature_verification_uses_hourly_observations():
 
 
 def test_runtime_catalog_selects_explicit_services():
-    from prophet.services.generation.model_services import SERVICES
     from prophet.services.generation.products import PRODUCTS
     from forecast.inference.quantile import QuantileFS
     from forecast.inference.probability import ProbabilityFS
@@ -208,29 +244,31 @@ def test_runtime_catalog_selects_explicit_services():
         if product in {'solar-wind-events', 'atmospheric-density'}:
             continue
         for model in spec.models:
-            service = SERVICES[model.artifact]
+            service = model.service_class()
             assert service.registry_name == model.artifact
             assert issubclass(service, (QuantileFS, ProbabilityFS))
             assert service.__module__.startswith('forecast_core.inference.')
 
 
-def test_assembles_native_measurements_and_originals(monkeypatch):
-    from prophet.services.inputs.observations import read_observations
+def test_assembles_hourly_measurements_and_goes_references(monkeypatch):
     def handler(request):
         if request.url.path.endswith('/history'):
             payload = stored_inputs().model_dump(mode='json')
             payload['observations']['points'][0].update(v=430., n=4.5, dst=-20.)
             return resource_response(request, payload)
-        if request.url.path.endswith('/files') and request.url.params['observation'] == 'gong':
+        if request.url.path.endswith('/files') and request.url.params['observation'] == 'goes':
             return httpx.Response(200, json={'success': True, 'data': [{
-                'observation': 'gong', 'observed_at': NOW.isoformat(),
-                'sha256': 'a'*64, 'source_product': 'gong.live',
-                'file': {'id':'00000000-0000-0000-0000-000000000001','timestamp':NOW.isoformat(),'bucket':'argus-private','key':'observations/GONG/source.fits'}}]})
+                'observation': 'goes', 'observed_at': NOW.isoformat(),
+                'sha256': 'a'*64, 'source_product': 'goes.live',
+                'file': {'id':'00000000-0000-0000-0000-000000000001','timestamp':NOW.isoformat(),'bucket':'argus-private','key':'observations/goes/original.json'}}]})
         return resource_response(request, stored_inputs().model_dump(mode='json'))
-    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
-        result = read_observations(client, 'http://observations', 'test-token', NOW)
+    from prophet.services.inputs import solar_indices
+    monkeypatch.setattr(solar_indices, 'original', lambda _: b'[{}]')
+    monkeypatch.setattr(solar_indices, 'solar_measurements', lambda *_: [])
+    configure(monkeypatch, handler)
+    result = load_inputs('atmospheric-density')
     assert result.as_of == NOW
     assert next(row for row in result.measurements if row.metric == 'dst').value == -20.
     assert result.speed_observations[0].v == 430.
     assert result.density_observations[0].n == 4.5
-    assert result.files[0].observation == 'gong'
+    assert result.files[0].observation == 'goes'

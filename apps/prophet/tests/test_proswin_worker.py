@@ -65,6 +65,9 @@ def test_failed_slot_resumes_and_completed_slot_is_immutable(tmp_path, monkeypat
     assert pd.Timestamp(record['valid_time']) == slot + pd.Timedelta(hours=96)
     def unexpected_model_load():
         raise AssertionError('Cached predictions must not load the neural model')
+    original_cutoff = pd.Timestamp(record['source_cutoff'])
+    worker.cycle(None, None, 'https://clio.test', 'secret',
+                 inputs=SimpleNamespace(as_of=original_cutoff, read_at=now), runtime_factory=unexpected_model_load)
     worker.cycle(None, None, 'https://clio.test', 'secret', runtime_factory=unexpected_model_load)
     assert files[0].read_bytes() == saved and state['predictions'] == 1
     files[0].write_text('{broken')

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from common.schemas.forecast_status import ForecastPublication
 from prophet.services.generation import cycle
 from prophet.services.generation.products import PRODUCTS
 
@@ -15,7 +16,7 @@ def setup_run():
     policy = ProphetConfig()
     begin = AsyncMock(side_effect=lambda name: cycle.ProductRun(name, recorders[name], runtime, policy))
     inputs = SimpleNamespace(observations=SimpleNamespace(points=[]))
-    read = Mock(return_value=inputs)
+    read = AsyncMock(return_value=inputs)
     command = Mock(return_value=[])
     service = ForecastGenerationService(
         input_loader=read, calculator=command,
@@ -26,7 +27,7 @@ def setup_run():
     return recorders, inputs, command, read, begin, service
 
 
-async def test_full_cycle_reads_once_and_publishes_each_product_before_next():
+async def test_full_cycle_shares_cutoff_and_cache_and_publishes_each_product_before_next():
     recorders, inputs, command, read, begin, service = setup_run()
     seen = []
     def compute(request):
@@ -38,7 +39,9 @@ async def test_full_cycle_reads_once_and_publishes_each_product_before_next():
         return []
     command.side_effect = compute
     (await service.generate(tuple(PRODUCTS)))
-    read.assert_called_once_with()
+    assert [call.args[0] for call in read.await_args_list] == list(PRODUCTS)
+    assert len({call.args[1] for call in read.await_args_list}) == 1
+    assert len({id(call.args[2]) for call in read.await_args_list}) == 1
     assert seen == list(PRODUCTS)
     for name, recorder in recorders.items():
         recorder.snapshot.assert_called_once_with(inputs)
@@ -61,7 +64,7 @@ async def test_model_failure_does_not_block_other_products(failed_product):
     assert error.value.failures == {failed_product: failure}
     assert f"{failed_product}: model failed" in str(error.value)
     assert command.call_count == len(PRODUCTS)
-    read.assert_called_once_with()
+    assert read.await_count == len(PRODUCTS)
     for name, recorder in recorders.items():
         if name == failed_product:
             recorder.finish.assert_called_once_with(error=failure)
@@ -99,48 +102,49 @@ async def test_lost_writer_stops_cycle_without_starting_more_products():
     assert begin.call_count == 1
 
 
-async def test_shared_input_failure_records_all_selected_products_and_reads_once():
+async def test_product_input_failure_is_recorded_and_other_products_continue():
     recorders, _, command, read, _, service = setup_run()
-    failure = RuntimeError('Clio unavailable')
-    read.side_effect = failure
+    failure = RuntimeError('hourly input unavailable')
+    read.side_effect = [failure, read.return_value]
     with pytest.raises(cycle.GenerationFailed) as error:
-        (await service.generate(tuple(PRODUCTS)))
-    assert set(error.value.failures) == set(PRODUCTS)
-    read.assert_called_once_with()
-    command.assert_not_called()
-    for recorder in recorders.values():
-        recorder.snapshot.assert_not_called()
-        recorder.finish.assert_called_once_with(error=failure)
+        await service.generate(('dst', 'hmf'))
+    assert error.value.failures == {'dst': failure}
+    assert command.call_args.args[0].product == 'hmf'
+    recorders['dst'].snapshot.assert_not_called()
+    recorders['dst'].finish.assert_awaited_once_with(error=failure)
+    recorders['hmf'].finish.assert_awaited_once_with()
 
 
 async def test_retry_subset_does_not_create_successful_product_attempts():
     recorders, inputs, command, read, begin, service = setup_run()
     (await service.generate(('dst', 'atmospheric-density')))
     assert [c.args[0] for c in begin.call_args_list] == ['dst', 'atmospheric-density']
-    read.assert_called_once_with()
+    assert read.await_count == 2
     recorders['solar-wind-speed'].finish.assert_not_called()
 
 
-async def test_manual_input_preparation_uses_supervised_timeout():
-    recorders, _, command, read, begin, service = setup_run()
+async def test_timed_out_optional_input_uses_fallback(monkeypatch):
+    from datetime import UTC, datetime
+    from forecast.inputs import ForecastInputs
+    from common.schemas.observation import Observation
+    from prophet.services.inputs.loader import load_product_inputs, read_source
+
+    now = datetime.now(UTC)
+    inputs = ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))
     timeout = TimeoutError('input preparation exceeded budget')
-    execute = Mock(side_effect=timeout)
-    service.executor = execute
-    with pytest.raises(cycle.GenerationFailed) as error:
-        (await service.generate(tuple(PRODUCTS)))
-    execute.assert_called_once_with(read, timeout_seconds=540)
-    assert all(isinstance(error, TimeoutError) and str(error) == str(timeout)
-               for error in error.value.failures.values())
-    command.assert_not_called()
-    for product, recorder in recorders.items():
-        recorder.finish.assert_awaited_once_with(error=error.value.failures[product])
+    execute = Mock(side_effect=[inputs, timeout, []])
+    result = await load_product_inputs('solar-wind-speed', now, {}, executor=execute, timeout_seconds=540)
+    assert result.solar_wind_events is None
+    assert execute.call_args_list == [
+        call(read_source, source, now, timeout_seconds=540) for source in ('hourly', 'events', 'proswin_cache')
+    ]
 
 
 async def test_manual_shutdown_records_interruption_and_stops_dispatch():
     from prophet.execution import ShutdownRequested
-    recorders, _, command, _, begin, service = setup_run()
+    recorders, _, command, read, begin, service = setup_run()
     interruption = ShutdownRequested('shutdown deadline')
-    service.executor = Mock(side_effect=interruption)
+    read.side_effect = interruption
     with pytest.raises(ShutdownRequested):
         (await service.generate(tuple(PRODUCTS)))
     assert begin.call_count == 1
@@ -165,6 +169,7 @@ async def test_reusing_service_loads_a_new_snapshot_per_cycle():
     (await service.generate(('dst',)))
     (await service.generate(('dst',)))
     assert read.call_count == 2
+    assert read.await_args_list[0].args[2] is not read.await_args_list[1].args[2]
     assert command.call_count == 2
     request = command.call_args.args[0]
     assert request.product == 'dst'
@@ -199,7 +204,7 @@ async def test_command_composition_preserves_writer_and_trigger(monkeypatch, sch
     monkeypatch.setattr(cycle, 'provenance', lambda _: {'source': 'test'})
     monkeypatch.setattr(cycle, 'execute', lambda target, *args, **kw: target(*args))
     inputs = SimpleNamespace(observations=SimpleNamespace(points=[]))
-    monkeypatch.setattr(observations, 'load_inputs', lambda: inputs)
+    monkeypatch.setattr(observations, 'load_product_inputs', AsyncMock(return_value=inputs))
     calculate = Mock(return_value=[])
     monkeypatch.setattr(cycle, 'calculate_product', calculate)
     recorder = Mock(snapshot=AsyncMock(), store=AsyncMock(), finish=AsyncMock())
@@ -222,13 +227,22 @@ async def test_calculation_uses_configured_timeout_and_only_serializable_request
     service.executor = executor
     service.timeout_seconds = 17
     (await service.generate(('dst',)))
-    assert executor.call_count == 2
-    assert executor.call_args_list[0] == call(read, timeout_seconds=17)
-    target, request = executor.call_args_list[1].args
+    executor.assert_called_once()
+    target, request = executor.call_args.args
     assert target is command
     assert isinstance(request, CalculationRequest)
     assert request.inputs is inputs
-    assert executor.call_args_list[1].kwargs == {'timeout_seconds': 17}
+    assert executor.call_args.kwargs == {'timeout_seconds': 17}
+
+
+async def test_kept_release_is_logged_without_claiming_publication(caplog):
+    from logging import INFO
+
+    recorders, _, _, _, _, service = setup_run()
+    recorders['dst'].finish.return_value = ForecastPublication(status='kept_current', reason='newer_issue_time')
+    caplog.set_level(INFO)
+    await service.generate(('dst',))
+    assert 'kept the current release (dst): newer_issue_time' in caplog.text
 
 
 pytestmark = pytest.mark.anyio

@@ -11,7 +11,7 @@ from clio.config import ClioObservations, load_observation_config
 from clio.ingestion.utils.adapters import WideHistoryAdapter, historical_adapters
 from clio.ingestion.utils.products import PRODUCTS
 from clio.ingestion import backfill_numeric as service
-from clio.ingestion.utils.measurements import upsert_measurements
+from clio.ingestion.utils.measurements import WritePolicy, historical_records, write_measurements
 from clio.providers.spdf import SPDF_Loader
 
 START = datetime(2026, 8, 31, tzinfo=UTC)
@@ -148,8 +148,8 @@ def test_backfill_preserves_concurrent_values_and_uses_metric_depth(monkeypatch)
     monkeypatch.setattr(service, 'load_measurements', reads)
     fetch = Mock(return_value=(frame(('v', 400., START)), []))
     monkeypatch.setattr(service, 'fetch_missing', fetch)
-    insert = AsyncMock()
-    monkeypatch.setattr(service, 'upsert_measurements', insert)
+    insert = AsyncMock(return_value=0)
+    monkeypatch.setattr(service, 'write_measurements', insert)
     normalize = Mock(return_value=pd.DataFrame(columns=['observed_at']))
     monkeypatch.setattr(service, 'normalize_measurements', normalize)
     monkeypatch.setattr(service, 'upsert_normalized_observations', AsyncMock())
@@ -158,26 +158,19 @@ def test_backfill_preserves_concurrent_values_and_uses_metric_depth(monkeypatch)
     pending = fetch.call_args.args[0]
     assert len(pending['v']) == 48 and len(pending['n']) == 24
     assert normalize.call_args.args[0].value.tolist() == [450.]
-    assert insert.call_args.kwargs == {'replace_existing': False, 'repair_missing': True}
+    assert insert.call_args.kwargs == {'policy': WritePolicy.REPAIR_INVALID}
+    assert result['stored_measurements'] == 0
     assert result['missing_observed_hours'] == {'v': 47, 'n': 24}
     session.commit.assert_awaited_once()
 
 
-def test_provenance_and_insert_only_conflict_do_not_update_existing_rows():
+def test_backfill_writes_provenance_for_historical_values():
     session = AsyncMock()
     data = frame(('v', 400., START)).assign(source_product='omni.hourly', received_at=END)
-    asyncio.run(upsert_measurements(session, data, replace_existing=False))
+    asyncio.run(write_measurements(session, historical_records(data), policy=WritePolicy.REPAIR_INVALID))
     compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
-    assert 'DO NOTHING' in str(compiled)
     assert compiled.params['source_product_m0'] == 'omni.hourly'
     assert compiled.params['received_at_m0'] == END
-
-
-def test_legacy_repoll_does_not_erase_provenance_for_unchanged_values():
-    session = AsyncMock()
-    asyncio.run(upsert_measurements(session, frame(('v', 400., START))))
-    sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
-    assert sql.rsplit(' WHERE ', 1)[-1].endswith('measurement.value IS DISTINCT FROM excluded.value')
 
 
 def test_invalid_observation_does_not_close_hour_but_valid_off_grid_value_does():
@@ -264,23 +257,25 @@ def test_second_backfill_of_complete_history_makes_no_provider_requests(monkeypa
     stored = frame()
     async def read(*args, **kwargs):
         return stored.copy()
-    async def save(session, values, **kwargs):
+    async def save(session, records, **kwargs):
         nonlocal stored
-        if not values.empty:
-            new = values[['metric', 'value', 'observed_at']]
+        if records:
+            new = pd.DataFrame(records, columns=['metric', 'value', 'observed_at'])
             stored = new.copy() if stored.empty else pd.concat([stored, new], ignore_index=True)
+        return len(records)
     adapter = Mock()
     adapter.fetch.return_value = frame(*(
         ('v', 400., time) for time in pd.date_range(START, START+timedelta(days=2), freq='h', inclusive='left')))
     factory = Mock(return_value={'omni.hourly': adapter})
     monkeypatch.setattr(service, 'load_measurements', read)
-    monkeypatch.setattr(service, 'upsert_measurements', save)
+    monkeypatch.setattr(service, 'write_measurements', save)
     monkeypatch.setattr(service, 'historical_adapters', factory)
     monkeypatch.setattr(service, 'upsert_normalized_observations', AsyncMock())
     session = AsyncMock()
     first = asyncio.run(service.backfill_numeric(session, config(('v',)), ['v'], now=START+timedelta(days=2)))
     second = asyncio.run(service.backfill_numeric(session, config(('v',)), ['v'], now=START+timedelta(days=2)))
     assert first['downloaded_measurements'] == 48
+    assert first['selected_measurements'] == first['stored_measurements'] == 48
     assert second['downloaded_measurements'] == 0
     assert second['source_attempts'] == []
     assert second['missing_observed_slots'] == {'v': 0}
@@ -307,11 +302,13 @@ def test_shared_historical_response_is_reused_when_fallback_needs_another_metric
     assert set(result.metric) == {'v', 'f10_7'}
     omni.fetch.assert_called_once()
     assert [a['accepted_measurements'] for a in attempts if a['product'] == 'omni.hourly'] == [1, 1]
+    assert [a.get('downloaded_measurements', 0) for a in attempts if a['product'] == 'omni.hourly'] == [2, 0]
 
 
 def test_backfill_repairs_only_unusable_stored_values():
     session = AsyncMock()
-    asyncio.run(upsert_measurements(session, frame(('v', 400., START)), replace_existing=False, repair_missing=True))
+    records = historical_records(frame(('v', 400., START)))
+    asyncio.run(write_measurements(session, records, policy=WritePolicy.REPAIR_INVALID))
     query = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     text = str(query)
     assert 'DO UPDATE' in text and 'quality' not in text

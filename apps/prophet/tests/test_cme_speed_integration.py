@@ -93,7 +93,7 @@ def test_new_speed_artifact_uses_causal_residual_mode_for_cme_probabilities(mode
     services['plasma_speed_threshold'].models_bundle = dict(format='proswin_revalidated_raw',
         point_quantile='raw', thresholds=[450, 500, 600],
         residuals={'blend': [blend]*4, 'fallback': [fallback]*4})
-    services['plasma_speed_threshold']._speed = SimpleNamespace(allowed_model_versions=(model_version,))
+    services['plasma_speed_threshold'].allowed_model_versions = (model_version,)
     frame = results['plasma_speed_threshold'].frame
     issue = frame.issue_time.iloc[0]
     valid = frame.valid_time.iloc[1]

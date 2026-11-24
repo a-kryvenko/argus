@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pandas as pd
 from clio.ingestion.utils.file_observations import find, save
 
 logger = logging.getLogger(__name__)
@@ -17,6 +16,7 @@ def source_frames(start, end, historical, *, days=None):
         from clio.providers.goes import fetch_goes
         yield fetch_goes(end=end, timeout=25)
         return
+    import pandas as pd
     from clio.providers.goes_history import archive_session, discover_goes_history, iter_goes_history
     satellites = [int(value) for value in os.getenv('GOES_ARCHIVE_SATELLITES', '18,16').split(',')]
     days = days if days is not None else pd.date_range(start, end - timedelta(microseconds=1), freq='D')
@@ -26,10 +26,11 @@ def source_frames(start, end, historical, *, days=None):
             yield frame
 
 
-def download_snapshots(start, end, historical, expected=None, *, resolution_minutes):
+def download_snapshots(start, end, historical, expected=None, *, source, resolution_minutes):
+    import pandas as pd
+
     expected = expected or {}
     records = []
-    source = 'goes.archive' if historical else 'goes.live'
     slots = pd.date_range(pd.Timestamp(start).ceil(f'{resolution_minutes}min'), end - timedelta(microseconds=1), freq=f'{resolution_minutes}min') if historical else [pd.Timestamp(end).floor(f'{resolution_minutes}min')]
     pending = set()
     for slot in slots:
@@ -60,20 +61,20 @@ def download_snapshots(start, end, historical, expected=None, *, resolution_minu
     return records
 
 
-async def collect(config, *, mode, now=None, start=None, end=None):
+async def collect(policy, *, source, mode, now, start=None, end=None):
     from clio.db.locks import ingestion_lock, FILE_LOCKS
     with ingestion_lock('goes', FILE_LOCKS['goes']) as acquired:
         if not acquired:
-            return {'status': 'busy', 'files': {'goes': {'status': 'busy'}}, 'failed_metrics': []}
-        return await _collect(config, mode=mode, now=now, start=start, end=end)
+            return {'status': 'busy', 'failed': 0}
+        return await _collect(policy, source=source, mode=mode, now=now, start=start, end=end)
 
 
-async def _collect(config, *, mode, now=None, start=None, end=None):
-    now = now or datetime.now(UTC)
+async def _collect(policy, *, source, mode, now, start, end):
+    import pandas as pd
+
     if mode not in ('live', 'backfill') or now.tzinfo is None or (start is None) != (end is None):
         raise ValueError('Use live/backfill and aware range boundaries')
     now = now.astimezone(UTC)
-    policy = config.observations['goes']
     historical = mode == 'backfill'
     end = end or (now.replace(hour=0, minute=0, second=0, microsecond=0) if historical else now)
     start = start or end - timedelta(days=policy.backfill_days if historical else 1)
@@ -82,7 +83,7 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
     start, end = start.astimezone(UTC), end.astimezone(UTC)
     if historical and any(t.hour or t.minute or t.second or t.microsecond for t in (start, end)):
         raise ValueError('GOES archive ranges must use whole UTC days')
-    report = dict(received=0, restored=0, retained=0, missing=0, rejected=0, failed=0,
+    report = dict(received=0, retained=0, missing=0, failed=0,
                   latest_observed_at=None, source_errors=[])
     try:
         rows = await asyncio.to_thread(find, 'goes', start=start, end=end+timedelta(microseconds=1))
@@ -90,15 +91,20 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
         expected = {(pd.Timestamp(row['observed_at']).floor(f'{resolution}min').to_pydatetime(), row['source_product']): row
                     for row in rows}
         records = await asyncio.to_thread(download_snapshots, start, end, historical, expected,
-            resolution_minutes=resolution)
+            source=source, resolution_minutes=resolution)
         saved_ids = {row['id'] for row in rows}
         report['retained'] = sum(record['id'] in saved_ids for record in records)
         report['received'] = len(records)-report['retained']
         latest = max((r['observed_at'] for r in records), default=None)
         report['latest_observed_at'] = latest.isoformat() if latest else None
-        report['missing'] = max(0, (end.date()-start.date()).days-len(records)) if historical else int(latest is None or latest < now-timedelta(minutes=policy.freshness_minutes))
+        expected_slots = len(pd.date_range(
+            pd.Timestamp(start).ceil(f'{resolution}min'), end, freq=f'{resolution}min', inclusive='left',
+        )) if historical else 1
+        report['missing'] = max(0, expected_slots - len(records))
+        if not historical and latest is not None and latest < now - timedelta(minutes=policy.freshness_minutes):
+            report['missing'] = 1
     except Exception as exc:
         report['failed'] += 1
-        report['source_errors'].append({'product': 'goes.archive' if historical else 'goes.live', 'error': str(exc)})
-    failed = bool(report['failed'] or report['missing'])
-    return {'status': 'partial' if failed else 'complete', 'failed_metrics': ['goes'] if failed else [], 'files': {'goes': report}}
+        report['source_errors'].append({'product': source, 'error': str(exc)})
+    report['status'] = 'partial' if report['failed'] or report['missing'] else 'complete'
+    return report

@@ -30,3 +30,17 @@ assert products.select_products('solar-wind-speed') == ('solar-wind-speed',)
 assert not blocked.intersection(sys.modules)
 '''], env=environment, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_dst_model_selection_does_not_import_other_product_backends():
+    result = subprocess.run([sys.executable, '-c', '''
+import sys
+from prophet.services.generation.products import PRODUCTS
+
+service = PRODUCTS['dst'].models[0].service_class()
+assert service.registry_name == 'dst_quantile'
+assert 'forecast_core.models.AtmosphericDensityForecastService' not in sys.modules
+assert 'forecast_core.inference.plasma.temperature.proswin' not in sys.modules
+assert 'forecast_core.inference.radiation.daily' not in sys.modules
+'''], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr

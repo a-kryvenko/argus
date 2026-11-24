@@ -1,4 +1,4 @@
-from contextlib import nullcontext
+from contextlib import asynccontextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -36,3 +36,37 @@ async def test_verification_and_summaries_use_configured_window(monkeypatch, day
     summary = await verification.monthly_accuracy('dst', now=now)
     assert summary.start == start
     assert session.execute.call_args.args[1]['start'] == start - timedelta(hours=96)
+
+
+@pytest.mark.anyio
+async def test_verification_budget_includes_file_lock_and_releases_writer_locks(monkeypatch, tmp_path):
+    from common import config
+    from prophet.commands import verification as command
+    from prophet.db import locks
+    from prophet.services.heavy_task import heavy_task
+
+    acquired = []
+    released = []
+
+    @asynccontextmanager
+    async def writer_lock(key):
+        acquired.append(key)
+        try:
+            yield object()
+        finally:
+            released.append(key)
+
+    verify = AsyncMock()
+    monkeypatch.setattr(verification, 'verify', verify)
+    monkeypatch.setattr(locks, 'writer_lock', writer_lock)
+    monkeypatch.setattr(config, 'get_config', lambda: SimpleNamespace(data_root=tmp_path))
+    monkeypatch.setattr('prophet.config.load_config', lambda: SimpleNamespace(
+        shutdown_grace_seconds=1, verification_timeout_seconds=0.05,
+    ))
+    with heavy_task(tmp_path):
+        with pytest.raises(TimeoutError):
+            await command.run(SimpleNamespace(product='dst'))
+
+    assert acquired == [locks.GENERATION_LOCK, locks.VERIFICATION_LOCK]
+    assert released == acquired[::-1]
+    verify.assert_not_awaited()

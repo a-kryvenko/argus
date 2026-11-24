@@ -110,12 +110,11 @@ def integrate_speed_forecast(request, results, services, outlook):
         translation_frame = p
         if bundle.get('format') in ('proswin_revalidated', 'proswin_revalidated_raw'):
             from forecast_core.inference.plasma.speed.dlinear_proswin import select_predictions
-            speed = getattr(services['plasma_speed_threshold'], '_speed', None)
             known = select_predictions(pd.Timestamp(q.issue_time.iloc[0]), pd.to_datetime(p.valid_time, utc=True),
                 request.inputs.proswin_predictions,
                 ready_at=request.inputs.proswin_ready_at or request.inputs.as_of,
                 source_cutoff=request.inputs.as_of,
-                allowed_model_versions=getattr(speed, 'allowed_model_versions', ('proswin-fold1-nrt-v1',)))
+                allowed_model_versions=services['plasma_speed_threshold'].allowed_model_versions)
             translation_frame = p.assign(speed_residual_mode=np.where(
                 np.isfinite(known) & p.lead_hours.le(96).to_numpy(), 'blend', 'fallback'))
         translated = translated_speed_probabilities(

@@ -12,7 +12,7 @@ from clio.ingestion.utils.adapters import CelesTrakHistoryAdapter
 from clio.ingestion.collect_numeric import load_celestrak_f107
 from clio.ingestion.backfill_numeric import fetch_missing
 from clio.ingestion.collect_numeric import fetch_live
-from clio.ingestion.utils.measurements import upsert_measurements
+from clio.ingestion.utils.measurements import WritePolicy, historical_records, write_measurements
 from clio.providers import celestrak as loader
 
 
@@ -93,7 +93,7 @@ def test_backfill_batches_both_metrics_and_downloads_history_once(monkeypatch):
     assert adapter.fetch(pd.Timestamp('2026-10-31T21:00Z'), pd.Timestamp(NOW)).empty
     download.assert_called_once_with(loader.CELESTRAK_HISTORY_URL, timeout=120)
     session = AsyncMock()
-    asyncio.run(upsert_measurements(session, frame, replace_existing=False))
+    asyncio.run(write_measurements(session, historical_records(frame), policy=WritePolicy.REPAIR_INVALID))
     values = session.execute.call_args.args[0].compile(dialect=postgresql.dialect()).params
     assert values['metric_m2'] == 'f10_7_81mean'
     assert values['value_m2'] == 112.

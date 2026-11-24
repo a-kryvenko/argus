@@ -76,7 +76,8 @@ def cycle(runtime,client,url,token,inputs=None,*,runtime_factory=None):
         if dest.exists():
             try:
                 saved = ProswinPrediction.model_validate_json(dest.read_text())
-                if saved.valid_time == valid and saved.image_slot == slot and slot <= saved.available_at <= now:
+                if (saved.valid_time == valid and saved.image_slot == slot
+                        and slot <= saved.available_at <= pd.Timestamp.now(tz='UTC')):
                     continue
             except (OSError, ValueError):
                 logger.warning('Rebuilding invalid PROSWIN record: %s', dest)

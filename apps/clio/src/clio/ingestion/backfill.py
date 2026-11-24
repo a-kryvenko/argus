@@ -13,10 +13,12 @@ async def backfill(config, *, now):
         async with get_db_session() as session:
             result = await backfill_numeric(session, config, numeric, now=now, raise_on_failure=False)
     if files:
-        from clio.ingestion.backfill_files import backfill_files
-        report = await backfill_files(config, files, now=now)
-        result.update({key: value for key, value in report.items() if key not in ('status', 'failed_metrics')})
+        from clio.ingestion.collect_files import collect_files
+        report = await collect_files(config, files, mode='backfill', now=now)
+        result['files'] = report['files']
         result['failed_metrics'] = sorted(set(result['failed_metrics']) | set(report['failed_metrics']))
         if report['status'] == 'partial':
             result['status'] = 'partial'
+        elif report['status'] == 'busy' and result['status'] == 'complete':
+            result['status'] = 'busy'
     return result

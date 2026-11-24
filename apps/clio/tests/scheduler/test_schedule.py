@@ -1,6 +1,6 @@
 """Scheduler coverage and polling cadence must match configured observations."""
 from clio.config import load_observation_config
-from clio.scheduler.schedule import collecting_schedules
+from clio.scheduler.schedule import collecting_schedules, poll_seconds
 
 COLLECTING_SCHEDULES = collecting_schedules(load_observation_config())
 
@@ -10,7 +10,9 @@ def test_every_configured_observation_is_scheduled_once():
     assert len(metrics) == len(set(metrics))
     assert set(load_observation_config().observations) <= set(metrics)
     assert 'enlil' not in metrics
-    assert {'donki', 'aia_171_nrt', 'aia_094_browse'} <= set(metrics)
+    assert {'aia_171_nrt', 'aia_094_browse'} <= set(metrics)
+    assert 'donki' not in metrics
+    assert poll_seconds('donki') == load_observation_config().solar_wind_events.poll_minutes * 60
 
 
 def test_monitored_source_intervals_match_scheduler():

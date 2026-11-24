@@ -20,9 +20,10 @@ def test_gong_collection_writes_s3_reference_and_retains_existing_snapshot(file_
     async def check():
         try:
             config = ClioObservations.model_validate({'observations': {'gong': {**load_observation_config().observations['gong'].model_dump(), 'backfill_days': 60, 'retention_days': 60, 'freshness_minutes': 120}}})
-            first = await gong.collect(config,mode='live',now=now)
-            assert first['files']['gong']['received'] == 1
-            await gong.collect(config,mode='live',now=now)
+            first = await gong.collect(config.observations['gong'], source='gong.live', mode='live', now=now)
+            assert first['received'] == 1 and first['failed'] == 0
+            assert first['latest_observed_at'] == observed.isoformat()
+            await gong.collect(config.observations['gong'], source='gong.live', mode='live', now=now)
             assert download.call_count == 1
             with file_database.connect() as connection:
                 row = connection.execute(select(FileObservation.file_id, FileObservation.details)).one()

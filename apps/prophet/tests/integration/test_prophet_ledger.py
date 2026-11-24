@@ -225,18 +225,44 @@ async def test_latest_reads_and_publication_reject_delayed_run(recorder_setup):
     current_release = await read_release('dst')
     assert (await read_release('dst')) == current_release
     assert (await product_status('dst')).current_release.release_id == current_release.release_id
-    await delayed.finish()
+    outcome = await delayed.finish()
+    assert outcome.status == 'kept_current' and outcome.reason == 'newer_run'
+    assert (await product_status('dst')).latest_attempt.publication.status == 'published'
     assert (await read_release('dst')) == current_release
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT count(*) FROM prophet.forecast_release WHERE run_id=%s',
                             (delayed.run_id,)).fetchone()[0] == 0
     next_run = await RunRecorder.begin('dst', 'manual', config, writer=writer)
     await store_product(next_run)
-    await next_run.finish()
+    published = await next_run.finish()
     newest = await read_release('dst')
+    assert published.release_id == newest.release_id
+    stale = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    await store_product(stale, issue='2026-09-12T00:00:00+00:00')
+    outcome = await stale.finish()
+    assert outcome.status == 'kept_current' and outcome.reason == 'newer_issue_time'
+    status = await product_status('dst')
+    assert status.current_release.release_id == newest.release_id
+    assert status.latest_attempt.run_id == stale.run_id and status.latest_attempt.publication == outcome
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute("SELECT to_regclass('prophet.current_forecast')").fetchone()[0] is None
     assert newest.run_id == next_run.run_id
+
+
+async def test_solar_indices_use_a_run_that_prepared_goes(recorder_setup):
+    from prophet.services.solar_indices import read_solar_indices
+
+    _, _, config, writer = recorder_setup
+    now = datetime.now(UTC)
+    solar = await RunRecorder.begin('solar-radiation', 'manual', config, writer=writer)
+    await solar.snapshot(ForecastInputs(
+        as_of=now, read_at=now, observations=Observation(points=[]),
+        measurements=[{'metric': 's10', 'value': 110., 'observed_at': now}],
+    ))
+    dst = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    await dst.snapshot(ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[])))
+    data = await read_solar_indices()
+    assert [(item.metric, item.value) for item in data.items] == [('s10', 110.)]
 
 
 async def test_cleanup_leaves_active_run_details(recorder_setup):

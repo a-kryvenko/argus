@@ -27,7 +27,7 @@ def snapshot(channel, now, *, source=None):
             digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         previous = find(observation)
         if previous and previous[0]['sha256'] == digest:
-            return
+            return False
         variants = []
         with Image.open(path) as image:
             if image.format != 'JPEG' or image.size != (4096, 4096):
@@ -47,6 +47,7 @@ def snapshot(channel, now, *, source=None):
             details=dict(channel=channel, captured_at=captured.isoformat(),
                 asset_id=f'{captured:%Y%m%d%H}_{channel}_{digest}',
                 source_updated_at=updated.isoformat() if updated else None))
+        return True
 
 
 def collect(policy, *, channel, source, mode, now):
@@ -54,8 +55,8 @@ def collect(policy, *, channel, source, mode, now):
         if not acquired:
             return {'status': 'busy', 'failed': 0}
         try:
-            snapshot(str(int(channel[3:])).zfill(3), now, source=source)
+            received = snapshot(str(int(channel[3:])).zfill(3), now, source=source)
         except (requests.RequestException, OSError, ValueError, BotoCoreError, ClientError, SQLAlchemyError):
             logger.exception('SDO browse collection failed for %s', channel)
             return {'status': 'partial', 'failed': 1}
-        return {'status': 'complete', 'failed': 0}
+        return {'status': 'complete', 'received': int(received), 'retained': int(not received), 'failed': 0}

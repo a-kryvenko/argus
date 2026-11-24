@@ -56,8 +56,7 @@ def test_collection_retains_exact_bytes_and_empty_success_but_skips_failures(sto
         return (raw, donki.decode(raw)) if endpoint == 'CME' else (b'[]', [])
     monkeypatch.setattr(donki, 'fetch', fetch)
     before = datetime.now(UTC)
-    with pytest.raises(RuntimeError, match='IPS'):
-        asyncio.run(collector.collect(policy))
+    assert asyncio.run(collector.collect(policy)) == {'status': 'partial', 'failed_endpoints': ['IPS']}
     from sqlalchemy import select
     from clio.db.models.file_observation import FileObservation
     with storage.engine.connect() as connection:
@@ -71,4 +70,19 @@ def test_collection_retains_exact_bytes_and_empty_success_but_skips_failures(sto
     assert storage.objects['argus-private', storage.files(id=saved[1].file_id)[0]['key']][0] == b'[]'
     assert 'IPS' not in {row.source_product for row in saved}
     assert len(storage.objects) == 3
+
+
+def test_collection_reports_busy_without_requesting_endpoints(monkeypatch):
+    import asyncio
+    from contextlib import nullcontext
+    from clio.ingestion.extras import donki as collector
+
+    monkeypatch.setattr(collector, 'ingestion_lock', Mock(return_value=nullcontext(False)))
+    fetch = Mock()
+    monkeypatch.setattr(donki, 'fetch', fetch)
+
+    assert asyncio.run(collector.collect(SimpleNamespace(lookback_days=30))) == {
+        'status': 'busy', 'failed_endpoints': [],
+    }
+    fetch.assert_not_called()
 

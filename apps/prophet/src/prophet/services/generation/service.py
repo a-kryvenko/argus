@@ -1,6 +1,7 @@
 """Manual generation use case with explicitly supplied infrastructure."""
 from collections.abc import Awaitable, Callable, Sequence
 import asyncio
+from datetime import UTC, datetime
 from typing import Protocol, TypeVar
 
 from forecast.inputs import ForecastInputs
@@ -35,14 +36,13 @@ class GenerationFailed(RuntimeError):
 
 
 class ForecastGenerationService:
-    """Coordinate independent product attempts sharing one input snapshot.
+    """Coordinate independent product attempts sharing an input cutoff and source reads.
 
-    Run creation and recording stay in the caller. Only the supplied input loader
-    and calculator are passed to the executor, which owns process supervision.
+    Run creation and recording stay in the caller.
     All per-cycle state is local so the service can be reused safely.
     """
 
-    def __init__(self, *, input_loader: Callable[[], ForecastInputs],
+    def __init__(self, *, input_loader: Callable[[str, datetime, dict], Awaitable[ForecastInputs]],
                  calculator: Callable[[CalculationRequest], list[Artifact]],
                  executor: Executor, run_factory: Callable[[str], Awaitable[GenerationRun]],
                  before_dispatch: Callable[[], None], timeout_seconds: float):
@@ -56,20 +56,14 @@ class ForecastGenerationService:
     async def generate(self, products: Sequence[str]) -> None:
         if not products or len(set(products)) != len(products) or any(name not in PRODUCTS for name in products):
             raise ValueError('Expected distinct supported forecast products')
-        inputs = None
-        input_error = None
+        as_of = datetime.now(UTC)
+        source_cache = {}
         failures = {}
         for product in products:
             self.before_dispatch()
             run = await self.run_factory(product)
             try:
-                if inputs is None and input_error is None:
-                    try:
-                        inputs = await asyncio.to_thread(self.executor, self.input_loader, timeout_seconds=self.timeout_seconds)
-                    except Exception as exc:
-                        input_error = exc
-                if input_error is not None:
-                    raise input_error
+                inputs = await self.input_loader(product, as_of, source_cache)
                 self.before_dispatch()
                 request = await run.prepare_calculation(inputs)
                 artifacts = await asyncio.to_thread(self.executor, self.calculator, request, timeout_seconds=self.timeout_seconds)

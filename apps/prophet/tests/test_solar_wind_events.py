@@ -92,8 +92,8 @@ def test_event_inputs_require_no_normalized_data_or_image_preparation(monkeypatc
         return httpx.Response(200, json=source().model_dump(mode='json'))
     monkeypatch.setattr(loader.httpx, 'Client', lambda **kwargs: real_client(
         transport=httpx.MockTransport(handle), **kwargs))
-    result = loader.load_event_inputs(NOW)
-    assert result.observations.points == [] and result.solar_wind_events.read_at == NOW
+    result = loader.read_source('events', NOW)
+    assert result.read_at == NOW
 
 
 def test_speed_context_failure_preserves_arrival_inputs(monkeypatch):
@@ -107,7 +107,12 @@ def test_speed_context_failure_preserves_arrival_inputs(monkeypatch):
             return httpx.Response(200,json=source().model_dump(mode='json'))
         return httpx.Response(503)
     monkeypatch.setattr(loader.httpx,'Client',lambda **kw:real(transport=httpx.MockTransport(handle),**kw))
-    result=loader.load_event_inputs(NOW,include_speed=True)
+    import asyncio
+    def execute(target, *args, timeout_seconds, **kwargs):
+        return target(*args, **kwargs)
+    result = asyncio.run(loader.load_product_inputs(
+        'solar-wind-events', NOW, {}, executor=execute, timeout_seconds=5,
+    ))
     assert result.solar_wind_events.read_at==NOW and not result.observations.points
 
 

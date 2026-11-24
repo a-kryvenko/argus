@@ -13,10 +13,10 @@ async def run(args):
     config = load_config()
     try:
         with supervise(config.shutdown_grace_seconds):
-            async with verification_lock() as writer:
-                timeout = config.verification_timeout_seconds
-                async with asyncio.timeout(timeout):
-                    result = await verify(args.product, writer=writer, deadline=monotonic()+timeout)
+            timeout = config.verification_timeout_seconds
+            deadline = monotonic() + timeout
+            async with asyncio.timeout(timeout), verification_lock() as writer:
+                result = await verify(args.product, writer=writer, deadline=deadline)
     except ShutdownRequested:
         raise SystemExit(130)
     print(json.dumps(result, default=str, indent=2, allow_nan=False))

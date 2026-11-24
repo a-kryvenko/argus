@@ -52,8 +52,10 @@ def test_images_are_prepared_in_tmp_and_only_completed_uploads_are_saved(storage
 
 
 def test_unchanged_image_does_not_create_extra_database_rows(storage, browse):
-    collect()
-    collect(NOW+timedelta(minutes=5))
+    first = collect()
+    repeated = collect(NOW+timedelta(minutes=5))
+    assert first['received'] == 1 and first['retained'] == 0
+    assert repeated['received'] == 0 and repeated['retained'] == 1
     assert len(find('aia_193_browse')) == 1 and len(storage.objects) == 6
 
 

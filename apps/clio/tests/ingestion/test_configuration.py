@@ -49,12 +49,12 @@ def test_nrt_sampling_uses_configured_interval(storage, monkeypatch):
     settings = policy('aia_171_nrt')
     settings.update(retention_days=1, backfill_days=1, resolution_minutes=120)
     config = ClioObservations(observations={'aia_171_nrt': settings})
-    collect = Mock(return_value='existing')
+    collect = Mock(return_value='retained')
     monkeypatch.setattr(sdo, 'collect_one', collect)
     now = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
     report = sdo.collect(config.observations['aia_171_nrt'], channel='aia171',
         source='aia.nrt_171', mode='backfill', now=now)
-    assert report['existing'] == 12
+    assert report['retained'] == 12
     slots = [call.args[0] for call in collect.call_args_list]
     assert all((left-right).total_seconds() == 7200 for left, right in zip(slots, slots[1:]))
 

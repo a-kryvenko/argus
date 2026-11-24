@@ -22,9 +22,9 @@ def collect(policy, now, mode='live'):
 
 def test_live_collection_is_idempotent(storage, scientific_source, policy):
     first = collect(policy, scientific_source.now)
-    assert first['saved'] == 1 and not first['failed']
+    assert first['received'] == 1 and not first['failed']
     before = dict(storage.objects)
-    assert collect(policy, scientific_source.now)['existing'] == 1
+    assert collect(policy, scientific_source.now)['retained'] == 1
     assert before == storage.objects and scientific_source.download.call_count == 1
 
 
@@ -35,10 +35,10 @@ def test_duplicate_lane_is_skipped(storage, policy, scientific_source):
 
 def test_backfill_uses_policy_window_and_channel(storage, policy, scientific_source, monkeypatch):
     policy = policy.model_copy(update={'retention_days': 2, 'backfill_days': 1})
-    collect_one = Mock(return_value='existing')
+    collect_one = Mock(return_value='retained')
     monkeypatch.setattr(collector, 'collect_one', collect_one)
     report = collector.collect(policy, channel='aia1600', source='aia.nrt_1600', mode='backfill', now=scientific_source.now)
-    assert report['existing'] == 24
+    assert report['retained'] == 24
     assert {call.args[1] for call in collect_one.call_args_list} == {'aia1600'}
     assert all(call.args[0] >= scientific_source.now-timedelta(days=1) for call in collect_one.call_args_list)
 
@@ -47,12 +47,12 @@ def test_404_does_not_publish_objects(storage, scientific_source):
     response = requests.Response()
     response.status_code = 404
     scientific_source.download.side_effect = requests.HTTPError(response=response)
-    assert collector.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'unavailable'
+    assert collector.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'missing'
     assert not storage.objects
 
 
 def test_unknown_channel_is_rejected_before_download(scientific_source):
-    assert collector.collect_one(scientific_source.slot, 'other', clock=lambda: scientific_source.now) == 'unavailable'
+    assert collector.collect_one(scientific_source.slot, 'other', clock=lambda: scientific_source.now) == 'missing'
     scientific_source.download.assert_not_called()
 
 

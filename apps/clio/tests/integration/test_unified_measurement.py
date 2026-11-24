@@ -16,7 +16,7 @@ from clio.db import session as db
 from clio.db.models.measurement import Measurement
 from clio.ingestion.utils.adapters import wide_to_measurements
 from clio.providers.solar_wind import parse_records
-from clio.ingestion.utils.measurements import store_native
+from clio.ingestion.utils.measurements import WritePolicy, write_measurements
 from clio.ingestion.utils.measurements import load_measurements
 
 pytestmark = pytest.mark.skipif(not os.getenv('TEST_DATABASE_ADMIN_DSN'), reason='Disposable PostgreSQL required')
@@ -102,10 +102,10 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                                 bz_gsm=value, overall_quality=1 if i == 2 else 0)
                            for i, value in enumerate([-8, 2, 99, None, -2])]
                 received = NOW+timedelta(hours=1)
-                await store_native(session, wind_rows(payload, received))
+                assert await write_measurements(session, wind_rows(payload, received), policy=WritePolicy.LIVE) == 3
                 await session.commit()
                 received += timedelta(hours=1)
-                await store_native(session, wind_rows(payload, received))
+                assert await write_measurements(session, wind_rows(payload, received), policy=WritePolicy.LIVE) == 0
                 await session.commit()
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(Measurement.metric == 'bz').limit(1))
                 assert receipt == NOW+timedelta(hours=1)
@@ -119,7 +119,7 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                     Measurement.metric.in_(['kp', 'ap', 'dst']), Measurement.observed_at == NOW))).all()
                 assert dict(rows) == {'kp': 2., 'ap': 2., 'dst': 2.}
                 payload[0]['bz_gsm'] = -10
-                await store_native(session, wind_rows(payload, received))
+                assert await write_measurements(session, wind_rows(payload, received), policy=WritePolicy.LIVE) == 1
                 await session.commit()
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(
                     Measurement.metric == 'bz', Measurement.observed_at == NOW))

@@ -56,14 +56,20 @@ def test_archive_download_once_and_live_receipt_keeps_window_date(monkeypatch):
 
 
 def test_collection_reads_delayed_mean_and_batches_solar_metrics(monkeypatch):
-    frame = wide_to_measurements(loader.parse_solfsmy_means(TEXT)).assign(received_at=NOW)
-    source = AsyncMock(return_value=frame)
-    monkeypatch.setattr(live_numeric, 'collect_product', source)
+    frame = wide_to_measurements(loader.parse_solfsmy_means(TEXT)).assign(received_at=NOW, source_product='solfsmy.means')
+    source = Mock(return_value=frame)
+    monkeypatch.setitem(live_numeric.LIVE_LOADERS, 'solfsmy.means', source)
+    session = AsyncMock()
+    session.execute.return_value = Mock(rowcount=6)
+    context = AsyncMock()
+    context.__aenter__.return_value = session
+    monkeypatch.setattr(live_numeric, 'get_db_session', Mock(return_value=context))
     metrics = ['s10_81mean', 'm10_81mean', 'y10_81mean']
     report = asyncio.run(live_numeric.collect_numeric(load_observation_config(), metrics, now=NOW))
     assert report['failed_metrics'] == []
-    assert report['downloaded_measurements'] == 6
-    source.assert_awaited_once()
+    assert report['downloaded_measurements'] == 8
+    assert report['selected_measurements'] == report['stored_measurements'] == 6
+    source.assert_called_once()
     assert source.call_args.args[-2] == NOW-timedelta(days=14)
 
 

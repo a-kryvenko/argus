@@ -18,21 +18,19 @@ def snapshot_values(observed, url, source):
                     source_product=source, details={'source_url': url})
 
 
-async def collect(config, *, mode, now=None, start=None, end=None):
+async def collect(policy, *, source, mode, now, start=None, end=None):
     from clio.db.locks import ingestion_lock, FILE_LOCKS
     with ingestion_lock('gong', FILE_LOCKS['gong']) as acquired:
         if not acquired:
-            return {'status': 'busy', 'files': {'gong': {'status': 'busy'}}, 'failed_metrics': []}
-        return await _collect(config, mode=mode, now=now, start=start, end=end)
+            return {'status': 'busy', 'failed': 0}
+        return await _collect(policy, source=source, mode=mode, now=now, start=start, end=end)
 
 
-async def _collect(config, *, mode, now=None, start=None, end=None):
+async def _collect(policy, *, source, mode, now, start, end):
     from clio.providers import gong as provider
-    now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError('now must include a timezone')
     now = now.astimezone(UTC)
-    policy = config.observations['gong']
     historical = mode == 'backfill'
     if mode not in ('live', 'backfill') or (start is None) != (end is None):
         raise ValueError('Use live/backfill and both range boundaries')
@@ -41,15 +39,13 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
     if start.tzinfo is None or end.tzinfo is None or not start < end <= now:
         raise ValueError('Choose a past timezone-aware GONG range')
     start, end = start.astimezone(UTC), end.astimezone(UTC)
-    source = (policy.sources.historical if historical else policy.sources.live)[0]
-    report = dict(received=0, restored=0, retained=0, missing=0, rejected=0, failed=0,
-                  latest_observed_at=None, source_errors=[])
-    records = await asyncio.to_thread(find, 'gong', start=start, end=end+timedelta(microseconds=1))
-    existing = {row['observed_at'] for row in records}
-    usable = set(existing)
-    latest = max(usable) if usable else None
-    report['retained'] = len(usable)
+    report = dict(received=0, retained=0, missing=0, failed=0, source_errors=[])
+    latest = None
     try:
+        records = await asyncio.to_thread(find, 'gong', start=start, end=end+timedelta(microseconds=1))
+        existing = {row['observed_at'] for row in records}
+        latest = max(existing, default=None)
+        report['retained'] = len(existing)
         # One magnetogram per closed hour; retain existing database references.
         hours = {t.replace(minute=0, second=0, microsecond=0) for t in existing}
         required = set()
@@ -74,18 +70,16 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
             if int(hour.timestamp()) % (resolution * 60) or hour in hours or (historical and hour not in required):
                 continue
             try:
-                values = await asyncio.to_thread(snapshot_values, observed, url, source)
+                await asyncio.to_thread(snapshot_values, observed, url, source)
                 report['received'] += 1
                 hours.add(hour)
-                usable.add(observed)
-                if inserted:
-                    latest = max(latest, observed) if latest else observed
+                latest = max(latest, observed) if latest else observed
             except Exception as exc:
                 report['failed'] += 1
                 if len(report['source_errors']) < 20:
                     report['source_errors'].append({'product': source, 'error': str(exc)})
         if historical:
-            report['missing'] = len(required - {t.replace(minute=0, second=0, microsecond=0) for t in usable})
+            report['missing'] = len(required - hours)
         else:
             expected = max(1, int((end-start).total_seconds() // (policy.live_resolution_minutes * 60)))
             report['missing'] = max(0, expected-len(hours))
@@ -93,6 +87,6 @@ async def _collect(config, *, mode, now=None, start=None, end=None):
         report['failed'] += 1
         report['source_errors'].append({'product': source, 'error': str(exc)})
     report['latest_observed_at'] = latest.isoformat() if latest else None
-    failed = report['failed'] > 0 if historical else latest is None or latest < now-timedelta(minutes=policy.freshness_minutes)
-    return {'status': 'partial' if failed or report['missing'] or report['failed'] else 'complete',
-            'failed_metrics': ['gong'] if failed else [], 'files': {'gong': report}}
+    stale = not historical and (latest is None or latest < now-timedelta(minutes=policy.freshness_minutes))
+    report['status'] = 'partial' if stale or report['missing'] or report['failed'] else 'complete'
+    return report

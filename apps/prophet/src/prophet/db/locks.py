@@ -87,10 +87,10 @@ def generation_lock():
 @asynccontextmanager
 async def verification_lock() -> AsyncGenerator[Writer, None]:
     from common.config import get_config
-    from prophet.services.heavy_task import heavy_task
+    from prophet.services.heavy_task import wait_for_heavy_task
     # Same acquisition order as retention; scoring must not overlap inference.
     async with writer_lock(GENERATION_LOCK), writer_lock(VERIFICATION_LOCK) as writer:
-        with heavy_task(get_config().data_root):
+        async with wait_for_heavy_task(get_config().data_root):
             yield writer
 
 

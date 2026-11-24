@@ -9,7 +9,7 @@ from clio.ingestion.extras import sdo, sdo_browse
 from clio.ingestion.utils.file_observations import save
 from tempfile import TemporaryDirectory
 from pathlib import Path
-from clio.ingestion.utils.file_collection import collect_observation
+from clio.ingestion.collect_files import collect_observation
 
 NOW = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
 

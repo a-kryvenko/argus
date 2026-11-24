@@ -117,7 +117,7 @@ async def _product_status(session, product, now):
     current = query.mappings().first()
     from prophet.services.generation.products import attempt_selections
     query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,
-        provenance->'input_diagnostics' AS input_diagnostics FROM forecast_run
+        provenance->'input_diagnostics' AS input_diagnostics, provenance->'publication' AS publication FROM forecast_run
         WHERE product=ANY(:products) ORDER BY started_at DESC,id DESC LIMIT 1"""), {'products': attempt_selections(product)})
     attempt = query.mappings().first()
     artifacts = []

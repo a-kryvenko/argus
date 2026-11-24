@@ -6,7 +6,7 @@ import pandas as pd
 from sqlalchemy.dialects import postgresql
 
 from clio.ingestion.utils.adapters import wide_to_measurements
-from clio.ingestion.utils.measurements import store_native
+from clio.ingestion.utils.measurements import WritePolicy, write_measurements
 
 NOW = datetime(2026, 10, 3, tzinfo=UTC)
 
@@ -21,8 +21,8 @@ def test_dataset_conversion_keeps_independent_values_and_solar_means():
 
 def test_receipt_alone_is_not_a_revision():
     session = AsyncMock()
-    asyncio.run(store_native(session, [dict(metric='bz', value=-2., observed_at=NOW,
-        received_at=NOW, source_product='swpc.rtsw_mag')]))
+    records = [dict(metric='bz', value=-2., observed_at=NOW, received_at=NOW, source_product='swpc.rtsw_mag')]
+    asyncio.run(write_measurements(session, records, policy=WritePolicy.LIVE))
     query = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
     where = query.split(' WHERE ')[1]
     assert 'value IS DISTINCT FROM' in where

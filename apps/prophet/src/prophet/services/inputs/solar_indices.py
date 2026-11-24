@@ -9,6 +9,7 @@ from common.config import get_config
 from forecast.observation_inputs import SourceMeasurement
 
 from prophet.services.inputs.cache import original
+from prophet.services.inputs.observations import apply_solar_measurements
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +69,3 @@ def enrich_inputs(inputs):
             logger.exception('Cannot prepare %s model inputs from %s', ref.observation, ref.sha256)
     apply_solar_measurements(inputs, solar_measurements(goes, inputs.as_of) if goes else [])
     return inputs
-
-
-def apply_solar_measurements(inputs, calibrated):
-    inputs.measurements = [row for row in inputs.measurements if row.metric not in ('s10', 'm10', 'y10')] + calibrated
-    by_time = {}
-    for row in calibrated:
-        by_time.setdefault(row.observed_at, {})[row.metric] = row.value
-    for point in inputs.observations.points:
-        for metric in ('s10', 'm10', 'y10'):
-            setattr(point, metric, by_time.get(point.issue_time, {}).get(metric))

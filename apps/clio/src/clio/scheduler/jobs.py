@@ -9,6 +9,11 @@ async def run_collect(metrics: list):
     result = await collect(load_observation_config(), metrics, now=datetime.now(UTC))
     return result
 
+async def run_donki(policy):
+    from clio.ingestion.extras.donki import collect
+
+    return await collect(policy, now=datetime.now(UTC))
+
 async def run_backfill():
     from clio.ingestion.backfill import backfill
 

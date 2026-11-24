@@ -14,7 +14,8 @@ async def read_solar_indices():
             input_snapshot->>'as_of' AS as_of,
             input_snapshot->'measurements' AS measurements
             FROM forecast_run WHERE input_snapshot IS NOT NULL
-            AND product<>'solar-wind-events'
+            AND (product IN ('solar-radiation', 'atmospheric-density')
+                 OR input_snapshot->'files' @> '[{"observation":"goes"}]'::jsonb)
             ORDER BY started_at DESC, id DESC LIMIT 1"""))).mappings().first()
     if row is None:
         return None

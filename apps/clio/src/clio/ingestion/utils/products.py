@@ -20,7 +20,6 @@ class ObservationDefinition:
     signed: bool = False
     max_value: float | None = None
     coverage: Literal['slots', 'latest'] = 'slots'
-    handler: str | None = None
     channel: str | None = None
     file_kind: str | None = None
 
@@ -83,14 +82,14 @@ for channel in OBSERVED_CHANNELS:
     name = f'aia_{int(channel[3:]):03d}_nrt' if channel.startswith('aia') else 'hmi_m_nrt'
     source = 'aia.nrt_' + channel[3:] if channel.startswith('aia') else 'hmi.nrt_m'
     OBSERVATIONS[name] = ObservationDefinition('FITS', kind='file',
-        handler='sdo_nrt', channel=channel, file_kind='sdo')
+        channel=channel, file_kind='sdo')
     PRODUCTS[source] = Product(frozenset({name}), frozenset({'live', 'historical'}), kind='file', slot_minutes=60)
 
 browse_metrics = set()
 for channel in BROWSE_CHANNELS:
     name = f'aia_{channel}_browse'
     OBSERVATIONS[name] = ObservationDefinition('JPEG', kind='file', coverage='latest',
-        handler='sdo_browse', channel='aia' + str(int(channel)), file_kind='sdo_browse')
+        channel='aia' + str(int(channel)), file_kind='sdo_browse')
     browse_metrics.add(name)
 PRODUCTS['nasa.aia_browse'] = Product(frozenset(browse_metrics), frozenset({'live'}), kind='file')
 

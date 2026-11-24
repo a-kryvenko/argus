@@ -6,7 +6,7 @@ from pathlib import Path
 
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 
-from clio.scheduler.jobs import run_backfill, run_collect
+from clio.scheduler.jobs import run_backfill, run_collect, run_donki
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +57,13 @@ async def _run_job(job_id, func, report_job, *args):
     report_job(event)
 
 
-async def run(collect_groups, report_job):
+async def run(collect_groups, report_job, *, donki_policy):
     logger.info("Warmup started")
     await _run_job("warmup:backfill", run_backfill, report_job)
     for metrics in collect_groups:
         await _run_job(
             "warmup:collect:" + "|".join(metrics), run_collect, report_job, metrics,
         )
+    if donki_policy.enabled:
+        await _run_job("warmup:donki", run_donki, report_job, donki_policy)
     logger.info("Warmup finished")

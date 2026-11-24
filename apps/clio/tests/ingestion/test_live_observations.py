@@ -10,7 +10,7 @@ from sqlalchemy.dialects import postgresql
 from clio.config import load_observation_config
 from clio.ingestion import collect_numeric as loaders
 from clio.ingestion import collect_numeric as live
-from clio.ingestion.utils.measurements import store_native
+from clio.ingestion.utils.measurements import WritePolicy, write_measurements
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
 
@@ -106,21 +106,24 @@ def test_native_error_propagates(monkeypatch):
 
 def test_live_saves_partial_results_without_normalization(monkeypatch):
     config = load_observation_config()
-    collect = AsyncMock(return_value=frame(('v', 450., NOW)))
-    monkeypatch.setattr(live, 'collect_product', collect)
+    storage(monkeypatch)
+    fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'v': [450.]}))
+    monkeypatch.setattr(loaders.solar_wind, 'fetch_records', fetch)
     report = asyncio.run(live.collect_numeric(config, ['v', 'n'], now=NOW))
     assert report['failed_metrics'] == ['n']
     assert report['downloaded_measurements'] == 1
-    collect.assert_awaited_once()
-    assert collect.call_args.args[0] == 'swpc.rtsw_plasma'
-    assert collect.call_args.args[1]['v'] == ['swpc.rtsw_plasma']
+    assert report['stored_measurements'] == 1
+    fetch.assert_called_once_with('plasma')
 
 
 def test_live_noop_does_not_refresh_receipt_and_update_requires_priority():
     session = AsyncMock()
-    session.execute.return_value = Mock(all=lambda: [])
+    session.execute.return_value = Mock(rowcount=0)
     records = frame(('v', 450., NOW)).assign(source_product='backup').to_dict('records')
-    asyncio.run(store_native(session, records, source_priorities={'v': ['primary', 'backup']}))
+    written = asyncio.run(write_measurements(
+        session, records, policy=WritePolicy.LIVE, source_priorities={'v': ['primary', 'backup']},
+    ))
+    assert written == 0
     session.execute.assert_awaited_once()
     compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
@@ -133,10 +136,10 @@ def test_live_noop_does_not_refresh_receipt_and_update_requires_priority():
 def test_live_receipt_uses_actual_changed_record_time():
     session = AsyncMock()
     received = NOW - timedelta(seconds=20)
-    session.execute.return_value = Mock(all=lambda: [('v', NOW - timedelta(minutes=1), received)])
+    session.execute.return_value = Mock(rowcount=1)
     records = frame(('v', 450., NOW - timedelta(minutes=1))).assign(
         source_product='primary', received_at=received).to_dict('records')
-    asyncio.run(store_native(session, records, source_priorities={'v': ['primary']}))
+    asyncio.run(write_measurements(session, records, policy=WritePolicy.LIVE, source_priorities={'v': ['primary']}))
     assert session.execute.await_count == 1
     receipt = session.execute.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
     assert receipt.params['received_at_m0'] == received
@@ -144,7 +147,7 @@ def test_live_receipt_uses_actual_changed_record_time():
 
 def storage(monkeypatch):
     session = AsyncMock()
-    session.execute.return_value = Mock(scalar_one=Mock(return_value=True))
+    session.execute.return_value = Mock(scalar_one=Mock(return_value=True), rowcount=1)
     context = AsyncMock()
     context.__aenter__.return_value = session
     monkeypatch.setattr(live, 'get_db_session', Mock(return_value=context))
@@ -156,8 +159,8 @@ def test_locked_product_does_not_fetch_or_write(monkeypatch):
     session.execute.return_value = Mock(scalar_one=Mock(return_value=False))
     fetch = Mock(side_effect=AssertionError('must not fetch'))
     monkeypatch.setitem(live.LIVE_LOADERS, 'swpc.rtsw_mag', fetch)
-    result = asyncio.run(live.collect_product('swpc.rtsw_mag', {}, NOW-timedelta(days=1), NOW))
-    assert result.empty
+    result = asyncio.run(live.collect_numeric(load_observation_config(), ['bz'], now=NOW))
+    assert result['downloaded_measurements'] == result['stored_measurements'] == 0
     fetch.assert_not_called()
     session.commit.assert_not_awaited()
 
@@ -166,9 +169,12 @@ def test_collection_writes_full_feed_once_and_reports_only_usable_selected_value
     session = storage(monkeypatch)
     fetch = Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'bx': [1.], 'by': [None], 'bz': [-4.], 'bt': [6.]}))
     monkeypatch.setattr(loaders.solar_wind, 'fetch_records', fetch)
+    session.execute.return_value.rowcount = 3
     report = asyncio.run(live.collect_numeric(load_observation_config(), ['bz', 'by'], now=NOW))
     fetch.assert_called_once_with('mag')
-    assert report['downloaded_measurements'] == 1
+    assert report['downloaded_measurements'] == 3
+    assert report['selected_measurements'] == 1
+    assert report['stored_measurements'] == 3
     assert report['failed_metrics'] == ['by']
     # Advisory lock and one measurement insert; no diagnostic writes.
     assert session.execute.await_count == 2
@@ -186,6 +192,8 @@ def test_storage_failure_rolls_back_records_and_reports_failure(monkeypatch, cap
     monkeypatch.setattr(loaders.geomagnetic, 'fetch_records', Mock(return_value=pd.DataFrame({'timestamp': [NOW], 'dst': [-20.]})))
     report = asyncio.run(live.collect_numeric(load_observation_config(), ['dst'], now=NOW))
     assert report['failed_metrics'] == ['dst']
+    assert report['downloaded_measurements'] == 1
+    assert report['selected_measurements'] == report['stored_measurements'] == 0
     assert 'swpc.dst' in caplog.text and 'write failed' in caplog.text
     session.rollback.assert_awaited_once()
     session.commit.assert_not_awaited()

@@ -10,7 +10,7 @@ from clio.config import ClioObservations
 from clio.ingestion.utils.adapters import historical_adapters
 from clio.ingestion.utils.products import OBSERVATIONS
 from clio.ingestion.normalize import normalize_measurements, upsert_normalized_observations
-from clio.ingestion.utils.measurements import load_measurements, upsert_measurements
+from clio.ingestion.utils.measurements import WritePolicy, historical_records, load_measurements, write_measurements
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,7 @@ def fetch_missing(pending, policies, adapters):
                     if cached is None:
                         frame = adapters[product].fetch(start, end)
                         cache.setdefault(product, []).append((start, end, frame))
+                        attempt['downloaded_measurements'] = len(frame)
                     else:
                         frame = cached[2]
                     received_at = datetime.now(UTC)
@@ -134,7 +135,7 @@ async def backfill_numeric(session, config: ClioObservations, metrics, *, now=No
     if raise_on_failure and frame.empty and any('error' in attempt for attempt in attempts):
         raise RuntimeError('No gaps filled; source errors: ' + '; '.join(
             f"{a['product']}: {a['error']}" for a in attempts if 'error' in a))
-    await upsert_measurements(session, frame, replace_existing=False, repair_missing=True)
+    written = await write_measurements(session, historical_records(frame), policy=WritePolicy.REPAIR_INVALID)
     # Reload after insert: concurrent or pre-existing observations always win.
     stored = await load_measurements(session, since=earliest, until=latest)
     normalized = normalize_measurements(stored)
@@ -149,7 +150,8 @@ async def backfill_numeric(session, config: ClioObservations, metrics, *, now=No
     return {'status': 'complete' if not any(remaining.values()) else 'partial',
             'ranges': {m: {'from': starts[m].isoformat(), 'to_exclusive': ends[m].isoformat(),
                           'resolution_minutes': config.observations[m].resolution_minutes} for m in metrics},
-            'downloaded_measurements': len(frame), 'normalized_hours': len(normalized),
+            'downloaded_measurements': sum(attempt.get('downloaded_measurements', 0) for attempt in attempts),
+            'selected_measurements': len(frame), 'stored_measurements': written, 'normalized_hours': len(normalized),
             'missing_observed_slots': remaining,
             'missing_observed_hours': {m: count for m, count in remaining.items() if config.observations[m].resolution_minutes == 60},
             'failed_metrics': sorted(failed_metrics), 'source_attempts': attempts}

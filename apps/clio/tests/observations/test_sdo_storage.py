@@ -21,13 +21,13 @@ def capture_downloads(monkeypatch):
 
 def test_download_upload_record_and_remove_tmp(storage, scientific_source, monkeypatch):
     paths = capture_downloads(monkeypatch)
-    assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'saved'
+    assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'received'
     row = find('aia_171_nrt')[0]
     assert storage.objects['argus-private', row['key']][0] == scientific_source.content
     assert row['file_id'] == storage.files()[0]['id']
     assert len(storage.objects) == 1
     assert paths and all(not path.exists() and not path.parent.exists() for path in paths)
-    assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'existing'
+    assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'retained'
     assert scientific_source.download.call_count == 1
 
 
@@ -54,6 +54,6 @@ def test_failed_storage_cleans_tmp_and_next_attempt_downloads_again(storage, sci
         assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'failed'
     assert not find('aia_171_nrt') and not storage.objects
     assert all(not path.parent.exists() for path in paths)
-    assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'saved'
+    assert sdo.collect_one(scientific_source.slot, 'aia171', clock=lambda: scientific_source.now) == 'received'
     assert scientific_source.download.call_count == 2
     assert all(not path.parent.exists() for path in paths)

@@ -73,5 +73,23 @@ def test_complete_backfill_uses_db_references_without_source_download(storage, m
     rows = [dict(observed_at=start+timedelta(hours=i), source_product='gong.archive') for i in range(2)]
     monkeypatch.setattr(gong, 'find', lambda *args, **kwargs: rows)
     monkeypatch.setattr(provider, 'candidates', Mock(side_effect=AssertionError('No provider listing')))
-    result = asyncio.run(gong.collect(config, mode='backfill', now=NOW, start=start, end=NOW))
-    assert result['status'] == 'complete' and result['files']['gong']['retained'] == 2
+    report = asyncio.run(gong.collect(
+        config.observations['gong'], source='gong.archive', mode='backfill', now=NOW, start=start, end=NOW,
+    ))
+    assert report['status'] == 'complete' and report['retained'] == 2
+
+
+def test_gong_reports_success_and_observation_time_after_saving(storage, monkeypatch):
+    from clio.config import load_observation_config
+
+    policy = load_observation_config().observations['gong'].model_copy(update={'freshness_minutes': 60})
+    observed = NOW - timedelta(minutes=15)
+    monkeypatch.setattr(provider, 'candidates', Mock(return_value=pd.DataFrame([
+        {'timestamp': observed, 'gong_url': 'https://example.test/gong.fits'},
+    ])))
+    monkeypatch.setattr(provider, 'download', Mock(return_value=b'original FITS'))
+    report = asyncio.run(gong.collect(policy, source='gong.live', mode='live', now=NOW))
+
+    assert report['status'] == 'complete'
+    assert report['received'] == 1 and report['failed'] == 0
+    assert report['latest_observed_at'] == observed.isoformat()

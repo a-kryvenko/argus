@@ -17,7 +17,7 @@ from common.runtime import setup_sentry
 
 from clio.config import load_observation_config
 from clio.scheduler import warmup
-from clio.scheduler.jobs import run_backfill, run_cleanup, run_collect, run_normalize
+from clio.scheduler.jobs import run_backfill, run_cleanup, run_collect, run_donki, run_normalize
 from clio.scheduler.schedule import collecting_schedules
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,9 @@ def on_job_finished(event):
         if not isinstance(result, dict):
             return
 
+        if result.get("status") == "busy":
+            logger.info("Job %s reported an existing collection in progress", event.job_id)
+
         incomplete = (
             result.get("status") in {"partial", "failed"}
             or bool(result.get("failed_metrics"))
@@ -76,7 +79,8 @@ def on_job_finished(event):
             details = {
                 "status": result.get("status"),
                 "failed_metrics": result.get("failed_metrics"),
-                "failed": result.get("failed")
+                "failed": result.get("failed"),
+                "failed_endpoints": result.get("failed_endpoints"),
             }
             logger.warning(
                 "Job %s completed with failures: %s",
@@ -126,9 +130,16 @@ async def main(heartbeat_path: Path):
     The Core of worker.
     Scheduled jobs
     """
-    schedules = collecting_schedules(load_observation_config())
+    config = load_observation_config()
+    schedules = collecting_schedules(config)
     for metrics, minutes in schedules:
         _init_collect_job(scheduler, metrics, minutes)
+
+    if config.solar_wind_events.enabled:
+        scheduler.add_job(
+            run_donki, IntervalTrigger(minutes=config.solar_wind_events.poll_minutes, timezone=scheduler.timezone),
+            args=(config.solar_wind_events,), id="donki",
+        )
 
     _init_job(scheduler, run_backfill, "backfill", hour="*/6", minute=0)
     _init_job(scheduler, run_normalize, "normalize", minute=0)
@@ -171,7 +182,8 @@ async def main(heartbeat_path: Path):
         if required:
             await warmup.run(
                 [metrics for metrics, _ in schedules],
-                on_job_finished
+                on_job_finished,
+                donki_policy=config.solar_wind_events,
             )
             state["warmup_pending"] = False
             warmup.write_state(heartbeat_path, state)

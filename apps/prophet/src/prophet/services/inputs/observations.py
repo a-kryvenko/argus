@@ -39,27 +39,28 @@ def native_hourly(points, issue, as_of):
     return dict(resolution_seconds=3600, gap_filling='none', series=series)
 
 
+def read_resource(request, url, token, path, **params):
+    response = request(url.rstrip('/') + path, params=params, headers={'Authorization': f'Bearer {token}'})
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get('success') is not True or payload.get('data') is None:
+        raise ValueError('Observation service returned an unsuccessful response')
+    return payload['data']
+
+
+def read_history(request, url, token, metrics, interval, start, end):
+    data = read_resource(request, url, token, '/internal/v1/observations/history',
+                         metrics=','.join(metrics), interval=interval,
+                         **{'from': start.isoformat(), 'to': end.isoformat()})
+    if not isinstance(data, dict) or data.get('interval') != interval or not isinstance(data.get('points'), list):
+        raise ValueError(f'Expected Clio {interval} metric history')
+    return data['points']
+
+
 def read_observations(client, url, token, as_of, *, request=None):
-    request = request or client.get
-    headers = {'Authorization': f'Bearer {token}'}
     read_at = datetime.now(UTC)
-
-    def read(resource, **params):
-        response = request(url.rstrip('/') + ('/internal/v1/files' if resource == 'files' else '/internal/v1/observations/' + resource),
-                           params=params, headers=headers)
-        response.raise_for_status()
-        payload = response.json()
-        if payload.get('success') is not True or payload.get('data') is None:
-            raise ValueError('Observation service returned an unsuccessful response')
-        return payload['data']
-
-    end = (as_of + timedelta(microseconds=1)).isoformat()
-    start = (as_of - timedelta(days=HISTORY_DAYS)).isoformat()
-    hourly = read('history', metrics=','.join((*CORE, *MEANS)), interval='1h',
-                  **{'from': start, 'to': end})
-    if hourly.get('interval') != '1h' or not isinstance(hourly.get('points'), list):
-        raise ValueError('Expected Clio hourly metric history')
-    rows = hourly['points']
+    rows = read_history(request or client.get, url, token, (*CORE, *MEANS), '1h',
+                        as_of - timedelta(days=HISTORY_DAYS), as_of + timedelta(microseconds=1))
     observations = Observation.model_validate({'points': [
         dict(issue_time=row['time'], **{metric: row[metric] for metric in CORE})
         for row in rows if all(row.get(metric) is not None for metric in CORE)]})
@@ -70,15 +71,21 @@ def read_observations(client, url, token, as_of, *, request=None):
              if row.get('v') is not None and 0 <= row['v'] < 9999]
     density = [dict(issue_time=row['time'], n=row['n']) for row in rows
                if row.get('n') is not None and row['n'] >= 0 and row['n'] != 999.9]
-    issue = as_of.replace(minute=0, second=0, microsecond=0)
-    native = read('history', metrics=','.join(WIND), interval='1m',
-                  **{'from': (issue-timedelta(hours=168)).isoformat(), 'to': issue.isoformat()})
-    if native.get('interval') != '1m' or not isinstance(native.get('points'), list):
-        raise ValueError('Expected Clio minute metric history')
-    files = []
-    for observation, days in (('gong', 2), ('goes', 35)):
-        files.extend(read('files', observation=observation, start=(as_of-timedelta(days=days)).isoformat(),
-                          end=end))
     return ObservationInputs(as_of=as_of, read_at=read_at, observations=observations,
-        measurements=indices, speed_observations=speed, density_observations=density,
-        files=files, solar_wind_hourly=native_hourly(native['points'], issue, as_of))
+        measurements=indices, speed_observations=speed, density_observations=density)
+
+
+def read_native_history(client, url, token, as_of):
+    issue = as_of.replace(minute=0, second=0, microsecond=0)
+    rows = read_history(client.get, url, token, WIND, '1m', issue-timedelta(hours=168), issue)
+    return native_hourly(rows, issue, as_of)
+
+
+def apply_solar_measurements(inputs, calibrated):
+    inputs.measurements = [row for row in inputs.measurements if row.metric not in ('s10', 'm10', 'y10')] + calibrated
+    by_time = {}
+    for row in calibrated:
+        by_time.setdefault(row.observed_at, {})[row.metric] = row.value
+    for point in inputs.observations.points:
+        for metric in ('s10', 'm10', 'y10'):
+            setattr(point, metric, by_time.get(point.issue_time, {}).get(metric))

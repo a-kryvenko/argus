@@ -17,6 +17,13 @@ def state_path(tmp_path):
     return tmp_path / "worker-state.json"
 
 
+@pytest.fixture(autouse=True)
+def donki_job(monkeypatch):
+    job = AsyncMock(return_value={"status": "complete"})
+    monkeypatch.setattr(warmup, "run_donki", job)
+    return job
+
+
 def test_worker_requires_heartbeat_file(monkeypatch):
     setup = Mock()
     monkeypatch.setattr(worker, "setup_sentry", setup)
@@ -66,7 +73,7 @@ def test_warmup_threshold(monkeypatch, seconds, pending, expected):
     assert warmup.needs_warmup(None)
 
 
-def test_cold_start_backfills_before_collect_and_persists_state(monkeypatch, state_path):
+def test_cold_start_backfills_before_collect_and_persists_state(monkeypatch, state_path, donki_job):
     calls = []
     events = []
 
@@ -91,7 +98,10 @@ def test_cold_start_backfills_before_collect_and_persists_state(monkeypatch, sta
         assert len(asyncio.all_tasks()) == 1
 
     asyncio.run(check())
-    assert len(events) == 3
+    assert [event.job_id for event in events] == [
+        "warmup:backfill", "warmup:collect:v", "warmup:collect:dst", "warmup:donki",
+    ]
+    donki_job.assert_awaited_once_with(worker.load_observation_config().solar_wind_events)
     assert all(event.code == EVENT_JOB_EXECUTED for event in events)
     assert warmup.read_state(state_path)["last_checked_at"]
     assert not state_path.with_suffix(".tmp").exists()
@@ -158,7 +168,11 @@ def test_worker_signal_stops_during_warmup_or_scheduler(monkeypatch, state_path,
         def start(self, *args, **kwargs):
             super().start(*args, **kwargs)
             assert not warmup.read_state(state_path)["warmup_pending"]
-            assert len(self.get_jobs()) == len(worker.collecting_schedules(worker.load_observation_config())) + 3
+            config = worker.load_observation_config()
+            assert len(self.get_jobs()) == len(worker.collecting_schedules(config)) + 4
+            donki = self.get_job("donki")
+            assert donki.func is worker.run_donki
+            assert donki.trigger.interval.total_seconds() == config.solar_wind_events.poll_minutes * 60
             ready.set()
 
     def create_scheduler(**kwargs):

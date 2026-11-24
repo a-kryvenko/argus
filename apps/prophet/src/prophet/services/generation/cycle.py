@@ -40,8 +40,12 @@ class ProductRun:
         for artifact in artifacts:
             await self.recorder.store(artifact.name, artifact.content, artifact.model_info,
                                 artifact.row_count, artifact.columns)
-        await self.recorder.finish()
-        logger.info('Prophet run %s published (%s)', self.recorder.run_id, self.product)
+        publication = await self.recorder.finish()
+        if publication.status == 'published':
+            logger.info('Prophet run %s published %s (%s)', self.recorder.run_id, publication.release_id, self.product)
+        else:
+            logger.info('Prophet run %s kept the current release (%s): %s',
+                        self.recorder.run_id, self.product, publication.reason)
 
     async def fail(self, error):
         # Failure to record the outcome is fatal: the writer may have lost its lock.
@@ -56,20 +60,14 @@ async def generate(product: str, *, writer) -> None:
 async def generate_products(products, *, writer) -> None:
     """Composition root for manual generation; bind infrastructure to the use case."""
     from common.config import get_config
-    from prophet.services.inputs.loader import load_inputs, load_event_inputs
+    from prophet.services.inputs.loader import load_product_inputs
     if not products or len(set(products)) != len(products) or any(name not in PRODUCTS for name in products):
         raise ValueError('Expected distinct supported forecast products')
     runtime = get_config()
     policy = ProphetConfig.model_validate(getattr(runtime, 'project_config', {}).get('prophet', {}))
     details = provenance(runtime)
-    loader = partial(load_event_inputs, include_speed=True) if tuple(products) == ('solar-wind-events',) else load_inputs
-    options = {}
-    if {'solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'}.intersection(products):
-        options['prepare_proswin'] = True
-    if {'solar-wind-events', 'solar-wind-speed'}.intersection(products) and loader is load_inputs:
-        options['include_events'] = True
     service = ForecastGenerationService(
-        input_loader=partial(loader, **options) if options else loader,
+        input_loader=partial(load_product_inputs, executor=execute, timeout_seconds=policy.calculation_timeout_seconds),
         calculator=calculate_product,
         executor=execute,
         run_factory=partial(ProductRun.begin, trigger='scheduled' if os.getenv('ARGUS_SCHEDULED_JOB') else 'manual', runtime=runtime,

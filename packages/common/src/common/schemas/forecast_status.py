@@ -16,6 +16,12 @@ class CurrentReleaseStatus(BaseModel):
     input_diagnostics: dict | None = None
 
 
+class ForecastPublication(BaseModel):
+    status: Literal['published', 'kept_current']
+    release_id: UUID | None = None
+    reason: Literal['newer_run', 'newer_issue_time', 'already_published'] | None = None
+
+
 class ForecastAttemptStatus(BaseModel):
     run_id: UUID
     status: Literal['running', 'succeeded', 'partial', 'failed', 'interrupted']
@@ -23,6 +29,7 @@ class ForecastAttemptStatus(BaseModel):
     finished_at: AwareDatetime | None = None
     error: str | None = None
     input_diagnostics: dict | None = None
+    publication: ForecastPublication | None = None
 
 
 class AttemptArtifactStatus(BaseModel):

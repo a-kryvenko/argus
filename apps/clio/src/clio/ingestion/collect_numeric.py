@@ -1,6 +1,7 @@
 """Collect selected live observations with product batching and gap fallback."""
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from functools import partial
 
@@ -15,7 +16,7 @@ from clio.ingestion.utils.adapters import wide_to_measurements, clean_records
 from clio.ingestion.utils.products import OBSERVATIONS, SOURCE_IDS
 from clio.db.session import get_db_session
 from clio.db.locks import SOURCE_LOCKS
-from clio.ingestion.utils.measurements import store_native
+from clio.ingestion.utils.measurements import WritePolicy, write_measurements
 from clio.db.models.measurement import INTERVALS
 
 logger = logging.getLogger(__name__)
@@ -64,27 +65,49 @@ LIVE_LOADERS = {
 }
 
 
-async def collect_product(product, priorities, start, now):
+@asynccontextmanager
+async def product_session(product):
+    """Hold the source lock until this product's write commits."""
     async with get_db_session() as session:
         source_id = SOURCE_IDS.get(product)
         if source_id is not None:
             lock = await session.execute(text('SELECT pg_try_advisory_xact_lock(:key)'),
                                          {'key': SOURCE_LOCKS[source_id]})
             if not lock.scalar_one():
-                return pd.DataFrame(columns=COLUMNS)
+                yield None
+                return
         try:
-            frame = await asyncio.to_thread(LIVE_LOADERS[product], start, now)
-            allowed = {metric for metric, sources in priorities.items() if product in sources}
-            if allowed.intersection({'bx', 'by', 'bz'}):
-                allowed.add('bt')
-            frame = frame.loc[frame.metric.isin(allowed)]
-            records = frame.astype(object).where(pd.notna(frame), None).to_dict('records')
-            await store_native(session, records, source_priorities=priorities)
-            await session.commit()
+            yield session
         except Exception:
             await session.rollback()
             raise
-        return frame
+
+
+def select_native_measurements(frame, product, priorities):
+    allowed = {metric for metric, sources in priorities.items() if product in sources}
+    if allowed.intersection({'bx', 'by', 'bz'}):
+        allowed.add('bt')
+    return frame.loc[frame.metric.isin(allowed)]
+
+
+def select_live_samples(frame, requested, policies, start, now, product):
+    rows = []
+    covered = {metric: set() for metric in requested}
+    for row in frame.itertuples(index=False):
+        if row.metric not in requested:
+            continue
+        observed = pd.Timestamp(row.observed_at)
+        if observed.tzinfo is None:
+            raise ValueError('Loader returned a timezone-naive observation')
+        observed = observed.tz_convert('UTC')
+        slot = observed.floor(f'{policies[row.metric].live_resolution_minutes}min')
+        if (not start <= observed <= now or slot not in requested[row.metric]
+                or pd.isna(row.value) or not OBSERVATIONS[row.metric].accepts(row.value)):
+            continue
+        rows.append(dict(metric=row.metric, value=row.value, observed_at=observed,
+                         source_product=product, received_at=row.received_at))
+        covered[row.metric].add(slot)
+    return rows, covered
 
 
 async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
@@ -112,26 +135,13 @@ async def fetch_live(metrics, policies, fetchers, now, *, lookback_days=6):
             try:
                 if isinstance(cache[key], Exception):
                     raise cache[key]
-                frame = cache[key]
-                requested = {m: pending[m].copy() for m in selected}
-                accepted = 0
-                for row in frame.itertuples(index=False):
-                    if row.metric not in requested:
-                        continue
-                    definition = OBSERVATIONS[row.metric]
-                    observed = pd.Timestamp(row.observed_at)
-                    if observed.tzinfo is None:
-                        raise ValueError('Loader returned a timezone-naive observation')
-                    observed = observed.tz_convert('UTC')
-                    slot = observed.floor(f'{policies[row.metric].live_resolution_minutes}min')
-                    if (not start <= observed <= now or slot not in requested[row.metric]
-                            or pd.isna(row.value) or not definition.accepts(row.value)):
-                        continue
-                    rows.append(dict(metric=row.metric, value=row.value, observed_at=observed,
-                                     source_product=product, received_at=row.received_at))
-                    pending[row.metric].discard(slot)
-                    accepted += 1
-                attempt['accepted_measurements'] = accepted
+                samples, covered = select_live_samples(
+                    cache[key], {metric: pending[metric] for metric in selected}, policies, start, now, product,
+                )
+                rows.extend(samples)
+                for metric, slots in covered.items():
+                    pending[metric].difference_update(slots)
+                attempt['accepted_measurements'] = len(samples)
             except (RequestException, OSError, ValueError, KeyError, RuntimeError, SQLAlchemyError) as exc:
                 logger.warning('Live source %s failed', product, exc_info=True)
                 attempt['error'] = str(exc)
@@ -154,8 +164,33 @@ async def collect_numeric(config, metrics, *, now=None):
     now = now.astimezone(UTC)
     priorities = {m: policy.sources.live for m, policy in config.observations.items()
                   if OBSERVATIONS[m].kind == 'numeric'}
-    fetchers = {product: partial(collect_product, product, priorities) for product in LIVE_LOADERS}
-    lookback_days = max(config.retention.live_days, *((config.observations[m].freshness_minutes * 60 + INTERVALS.get(m, timedelta()).total_seconds()) / 86400 for m in metrics))
+    downloaded = 0
+    stored = 0
+
+    async def ingest_product(product, start, end):
+        nonlocal downloaded, stored
+        async with product_session(product) as session:
+            if session is None:
+                return pd.DataFrame(columns=COLUMNS)
+            frame = await asyncio.to_thread(LIVE_LOADERS[product], start, end)
+            downloaded += len(frame)
+            native = select_native_measurements(frame, product, priorities)
+            records = native.astype(object).where(pd.notna(native), None).to_dict('records')
+            written = await write_measurements(
+                session, records, policy=WritePolicy.LIVE, source_priorities=priorities,
+            )
+            await session.commit()
+            stored += written
+            return native
+
+    fetchers = {product: partial(ingest_product, product) for product in LIVE_LOADERS}
+    lookback = timedelta(days=config.retention.live_days)
+    for metric in metrics:
+        freshness = timedelta(minutes=config.observations[metric].freshness_minutes)
+        lookback = max(lookback, freshness + INTERVALS.get(metric, timedelta()))
+    lookback_days = lookback / timedelta(days=1)
     frame, report = await fetch_live(metrics, config.observations, fetchers, now, lookback_days=lookback_days)
-    report['downloaded_measurements'] = len(frame)
+    report['downloaded_measurements'] = downloaded
+    report['selected_measurements'] = len(frame)
+    report['stored_measurements'] = stored
     return report

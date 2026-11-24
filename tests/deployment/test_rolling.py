@@ -58,6 +58,29 @@ def test_drain_waits_for_pre_reload_worker_even_before_signal_is_processed(tmp_p
     assert len(sleeps) == 2
 
 
+@pytest.mark.parametrize('version,keepalive', [('1.24.0', False), ('1.27.3', True)])
+def test_existing_router_preserves_docker_dns_on_both_nginx_versions(tmp_path, version, keepalive):
+    deployment = harness(tmp_path)
+
+    def run(*args, **kwargs):
+        if args[-1] == 'nginx -v 2>&1':
+            return f'nginx version: nginx/{version}'
+        return ''
+
+    deployment.compose.run = run
+    deployment.proxy.prepare('blue')
+    deployment.proxy.switch('green')
+    route = (tmp_path / 'routes/internal/clio.conf').read_text()
+    assert 'X-Argus-Upstream clio-green' in route
+    assert 'resolver 127.0.0.11 valid=5s' in route
+    if keepalive:
+        assert 'server clio-green:8000 resolve;' in route
+        assert 'keepalive 16;' in route
+    else:
+        assert 'set $backend clio-green:8000;' in route
+        assert 'proxy_pass http://$backend;' in route
+
+
 def test_backup_retention_counts_old_sql_and_compressed_archives_together(tmp_path):
     deployment = harness(tmp_path)
     directory = tmp_path / 'backups'

@@ -1,5 +1,6 @@
 """Switch nginx routes and wait for requests on the old route to finish."""
 import os
+import re
 import time
 
 from .applications import HTTP, slot_names
@@ -12,9 +13,11 @@ class NginxProxy:
         self.root = root
         self.compose = compose
         self.applications = applications
+        self.keepalive = True
 
     def route(self, service, target):
-        self.write_route(self.root / 'routes/internal' / (service + '.conf'), route_text(service, target))
+        self.write_route(self.root / 'routes/internal' / (service + '.conf'),
+                         route_text(service, target, keepalive=self.keepalive))
 
     @staticmethod
     def write_route(path, content):
@@ -28,11 +31,22 @@ class NginxProxy:
         temporary.replace(path)
 
     def prepare(self, color):
-        for service, name in zip(HTTP, slot_names(color)):
+        # Compose can start a previously stopped router with its original image.
+        self.keepalive = False
+        targets = list(zip(HTTP, slot_names(color)))
+        for service, name in targets:
             self.route(service, name)
 
         self.compose.run('up', '-d', '--no-deps', '--no-recreate', '--pull', 'never',
                      '--wait', '--wait-timeout', '300', ROUTER)
+        version = self.compose.run('exec', '-T', ROUTER, 'sh', '-c', 'nginx -v 2>&1', capture=True)
+        match = re.search(r'nginx/(\d+)\.(\d+)\.(\d+)', version)
+        self.keepalive = bool(match and tuple(map(int, match.groups())) >= (1, 27, 3))
+        if self.keepalive:
+            for service, name in targets:
+                self.route(service, name)
+        else:
+            print('[deploy] Internal router needs Nginx 1.27.3+ for upstream keep-alive with Docker DNS', flush=True)
         self.drain(ROUTER, self.reload(ROUTER))
 
     def switch(self, color):
@@ -66,18 +80,35 @@ class NginxProxy:
         raise RuntimeError(f'{service}: old router requests did not drain in 120 seconds')
 
 
-def route_text(service, target):
+def route_text(service, target, *, keepalive=True):
     settings = HTTP[service]
-    port = settings.port
+    upstream = 'argus_' + target.replace('-', '_')
     listen = f'{settings.router_host}:{settings.router_port} bind'
-    return f'''server {{
-    resolver 127.0.0.11 valid=5s ipv6=off;
-    listen {listen};
+    resolver = '    resolver 127.0.0.11 valid=5s ipv6=off;\n'
+    if keepalive:
+        upstream_block = f'''upstream {upstream} {{
+    zone {upstream} 64k;
+{resolver}    resolver_timeout 5s;
+    server {target}:{settings.port} resolve;
+    keepalive 16;
+}}
+
+'''
+        server_resolver = ''
+        backend = f'''        proxy_pass http://{upstream};
+        proxy_set_header Connection "";
+'''
+    else:
+        upstream_block = ''
+        server_resolver = resolver
+        backend = f'''        set $backend {target}:{settings.port};
+        proxy_pass http://$backend;
+'''
+    return f'''{upstream_block}server {{
+{server_resolver}    listen {listen};
     add_header X-Argus-Upstream {target} always;
     location / {{
-        set $backend {target}:{port};
-        proxy_pass http://$backend;
-        proxy_http_version 1.1;
+{backend}        proxy_http_version 1.1;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $http_x_real_ip;
         proxy_set_header X-Forwarded-For $http_x_forwarded_for;

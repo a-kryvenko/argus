@@ -23,9 +23,10 @@ def edge(tmp_path_factory):
         pytest.skip('Set TEST_NGINX_IMAGE to run the disposable nginx integration checks')
     directory = tmp_path_factory.mktemp('login-edge')
     (directory / 'log').mkdir()
-    template = (ROOT / '.deploy/nginx/templates/http.conf.template').read_text()
+    nginx = ROOT / '.deploy/.docker/nginx'
+    template = (nginx / 'templates/http.conf.template').read_text()
     (directory / 'site.conf').write_text(template.replace('${APP_NAME}', 'dashboard.test'))
-    (directory / 'default.conf').write_text((ROOT / '.deploy/nginx/default.conf').read_text())
+    (directory / 'default.conf').write_text((nginx / 'default.conf').read_text())
     # Port 8081 simulates the trusted edge on loopback. Port 80 is an untrusted
     # direct connection. Test-only headers never enter the shipped configuration.
     (directory / 'nginx.conf').write_text('''
@@ -42,13 +43,14 @@ http {
     }
     server {
         listen 8104;
+        add_header X-Test-Upstream-Port $remote_port always;
         default_type application/json;
         if ($http_x_test_account_limit) {
             return 429 '{"error":{"message":"Account limit"}}';
         }
         return 200 '{"upstream":true}';
     }
-    server { listen 8105; return 200; }
+    server { listen 8105; add_header X-Test-Upstream-Port $remote_port always; return 200; }
 }
 ''')
     name = 'argus-login-edge-' + uuid4().hex[:12]
@@ -86,6 +88,14 @@ http {
         yield request
     finally:
         docker('stop', name)
+
+
+@pytest.mark.parametrize('path', ['/api/ping', '/demo'])
+def test_site_reuses_upstream_connections(edge, path):
+    responses = [edge(path, method='GET') for _ in range(4)]
+    assert all(status == 200 for status, _, _ in responses)
+    ports = [headers['X-Test-Upstream-Port'] for _, headers, _ in responses]
+    assert ports[0] is not None and len(set(ports)) == 1
 
 
 def test_login_ip_limit_is_independent_and_returns_json(edge):

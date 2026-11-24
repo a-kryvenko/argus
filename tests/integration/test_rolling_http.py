@@ -31,13 +31,15 @@ SERVER = '''import json, os, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 active = 0
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
     def do_GET(self):
         global active
         if self.path == '/slow':
             active += 1
             try: time.sleep(3)
             finally: active -= 1
-        body = json.dumps({'version': os.environ['VERSION'], 'active': active}).encode()
+        body = json.dumps({'version': os.environ['VERSION'], 'active': active,
+                           'connection': self.client_address[1]}).encode()
         self.send_response(200)
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
@@ -116,6 +118,20 @@ def test_static_slots_switch_as_one_group_and_preserve_inflight_requests(tmp_pat
         if slot == 'api-green' and ((failure == 'direct' and not routed) or (failure == 'routed' and routed)):
             raise RuntimeError('injected smoke failure')
     deployment.applications.check = smoke
+
+    def connections(slot):
+        source = """import http.client,json
+conn = http.client.HTTPConnection('observations-router', 8101, timeout=5)
+ports = []
+for _ in range(4):
+    conn.request('GET', '/')
+    response = conn.getresponse()
+    ports.append(json.load(response)['connection'])
+conn.close()
+print(json.dumps(ports))
+"""
+        return json.loads(deployment.compose.run('exec', '-T', slot, 'python', '-c', source, capture=True))
+
     try:
         deployment.applications.start('blue')
         deployment.proxy.prepare('blue')
@@ -123,6 +139,7 @@ def test_static_slots_switch_as_one_group_and_preserve_inflight_requests(tmp_pat
             return json.loads(deployment.compose.run('exec', '-T', ROUTER, 'wget', '-qO-',
                               '-T', '15', '-t', '1', 'http://observations-router:8101' + path, capture=True))
         assert get()['version'] == 'clio-blue'
+        assert len(set(connections('clio-blue'))) == 1
         with pytest.raises(subprocess.CalledProcessError):
             get_from_container('frontend-blue', 'http://application-router:8101')
         def traffic():
@@ -146,10 +163,11 @@ def test_static_slots_switch_as_one_group_and_preserve_inflight_requests(tmp_pat
         else:
             deployment.swap_blue_green_services()
         slow_thread.join(timeout=15)
-        assert slow == [{'version': 'clio-blue', 'active': 0}]
+        assert [(response['version'], response['active']) for response in slow] == [('clio-blue', 0)]
         color = 'blue' if failure else 'green'
         assert deployment.state.read_color() == color
         assert get()['version'] == 'clio-' + color
+        assert len(set(connections('clio-' + color))) == 1
         running = set(deployment.compose.run('ps', '--status', 'running', '--services', capture=True).split())
         assert running == {ROUTER, *slot_names(color)}
         assert responses and not errors

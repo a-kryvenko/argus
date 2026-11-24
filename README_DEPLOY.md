@@ -120,6 +120,8 @@ Production stores the active color in `.active-color`. The first deployment must
 use `--maintenance`; maintenance always starts green and writes this marker.
 `./argus` defaults to dev; production sets `.argus-mode` to `prod`.
 
+`internal-router` uses upstream keep-alive with Nginx 1.27.3+. Releases reuse the router container.
+
 Local deployment uploads the bundle, then `.release` and `.release_manifest`. CI runs `/var/www/deploy.sh`. The bundle includes models, metrics and `demo/current.json`; deployment verifies its checksum before installation.
 
 ## Maintenance and recovery

@@ -130,7 +130,8 @@ jobs:
         env:
           TEST_ROLLING_DOCKER: '1'
           TEST_MAINTENANCE_DOCKER: '1'
-        run: tests/runtime/.venv/bin/python -m pytest -q tests/integration/test_rolling_http.py tests/integration/test_maintenance_http.py
+          TEST_NGINX_IMAGE: nginx:stable-alpine
+        run: tests/runtime/.venv/bin/python -m pytest -q tests/integration/test_rolling_http.py tests/integration/test_maintenance_http.py tests/integration/test_login_edge.py
 
   build:
     needs: [plan, test_python]

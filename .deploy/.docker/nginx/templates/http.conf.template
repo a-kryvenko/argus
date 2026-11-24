@@ -6,6 +6,16 @@ map "$request_method:$uri" $argus_login_ip {
 }
 limit_req_zone $argus_login_ip zone=argus_login:10m rate=6r/m;
 
+upstream argus_public_api {
+    server application-router:8104;
+    keepalive 16;
+}
+
+upstream argus_public_frontend {
+    server application-router:8105;
+    keepalive 16;
+}
+
 server {
     listen 80;
     listen [::]:80;

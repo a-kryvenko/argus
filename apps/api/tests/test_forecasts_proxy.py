@@ -7,9 +7,9 @@ import httpx
 import pytest
 
 from common.schemas.forecast_release import ForecastRelease, ForecastArtifact
-from api.services.forecasts import client as forecasts_client
-from api.services.forecasts import products as forecast_products
-from api.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.forecasts import client as forecasts_client
+from apps.api.tests.reference_public.services.forecasts import products as forecast_products
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
 
 
 def test_wind_speed_serializes_as_integers_without_rounding_probabilities():
@@ -124,7 +124,7 @@ def test_verification_proxy_validates_upstream(monkeypatch, failure):
 def test_verification_route_rejects_old_prefix_and_preserves_upstream_failure(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from api.routers.forecasts import router
+    from apps.api.tests.reference_public.routers.forecasts import router
     from common.schemas.forecast_verification import ForecastVerification, VerificationGroup
     app = FastAPI()
     app.include_router(router)
@@ -178,7 +178,7 @@ def test_events_route_reads_typed_report_and_preserves_source_availability(monke
     import io
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from api.routers.forecasts import router
+    from apps.api.tests.reference_public.routers.forecasts import router
     from common.schemas.solar_wind_events import SolarWindEventForecast, HSSForecast, CMEEnsembleForecast
     issue = datetime(2026, 10, 13, 12, 5, tzinfo=UTC)
     hss = [] if version.endswith('v1') else [HSSForecast(forecast_id='hss1', status='expected',

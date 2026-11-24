@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 import pytest
-from api.services.observations.trends import change_one_hour, interval_change
+from apps.api.tests.reference_public.services.observations.trends import change_one_hour, interval_change
 
 NOW = datetime(2026, 9, 7, 16, tzinfo=UTC)
 

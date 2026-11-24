@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
-from api.schemas.metadata import metadata_field
+from apps.api.tests.reference_public.schemas.metadata import metadata_field
 
 Metric = Literal['bx', 'by', 'bz', 'bt', 'v', 'n', 't']
 Index = Literal['kp', 'dst']

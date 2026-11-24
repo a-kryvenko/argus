@@ -2,8 +2,8 @@
 from fastapi import APIRouter, HTTPException, Response
 
 from common.schemas.response import ApiResponse, success_response
-from api.services.errors import ArtifactNotReadyError
-from api.services.forecasts.client import read_summary
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.forecasts.client import read_summary
 
 router = APIRouter(prefix='/summary', tags=['summary'])
 

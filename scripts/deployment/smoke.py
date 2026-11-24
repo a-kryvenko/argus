@@ -47,8 +47,11 @@ def check(options):
         if not isinstance(data, list):
             raise RuntimeError('Invalid Intelligence profile list')
     elif service == 'api':
-        for path in ('/observations', '/forecasts/solar-wind-speed'):
-            data, _ = request(path)
-            if not data.get('success') or data.get('data') is None:
-                raise RuntimeError('Invalid public API response')
+        try:
+            opener.open(Request(base + '/api/v1/dashboard/me'), timeout=5).close()
+        except HTTPError as error:
+            if error.code != 401:
+                raise RuntimeError(f'Dashboard session check returned {error.code}') from None
+        else:
+            raise RuntimeError('Dashboard accepted a request without a session')
     print(f'[deploy] {service}: smoke passed', flush=True)

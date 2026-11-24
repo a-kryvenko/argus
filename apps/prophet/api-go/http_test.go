@@ -41,7 +41,7 @@ func TestRoutes(t *testing.T) {
 	if err := os.WriteFile(summary, []byte(`{"observations":{}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	handler := newHandler(emptyStore{}, "token", summary, 6)
+	handler := newHandler(emptyStore{}, "token", summary, 6, nil, metricReports{})
 	const prefix = "/internal/v1/forecasts/"
 	const releaseID = "b2be2c45-bcf3-431f-b676-0c98b99b82fa"
 	for _, tc := range []struct {
@@ -95,8 +95,8 @@ func (unavailableStore) solarIndices(context.Context) (solarIndices, error) {
 func TestProtectedRoutesReturnPublicErrors(t *testing.T) {
 	summary := filepath.Join(t.TempDir(), "missing.json")
 	for _, handler := range []http.Handler{
-		newHandler(unavailableStore{}, "token", summary, 6),
-		newHandler(emptyStore{}, "", summary, 6),
+		newHandler(unavailableStore{}, "token", summary, 6, nil, metricReports{}),
+		newHandler(emptyStore{}, "", summary, 6, nil, metricReports{}),
 	} {
 		for _, path := range []string{
 			"/internal/v1/forecasts/dst/latest",
@@ -131,7 +131,7 @@ func (store statusDeadlineStore) status(ctx context.Context, assessedAt time.Tim
 }
 
 func TestStatusHasDeadline(t *testing.T) {
-	handler := newHandler(statusDeadlineStore{t: t}, "token", "", 6)
+	handler := newHandler(statusDeadlineStore{t: t}, "token", "", 6, nil, metricReports{})
 	request := httptest.NewRequest(http.MethodGet, "/internal/v1/forecasts/status", nil)
 	request.Header.Set("Authorization", "Bearer token")
 	result := httptest.NewRecorder()
@@ -164,7 +164,11 @@ func TestDensityMaxAgeRejectsNonFiniteValues(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(configs, "models_registry.yaml"), []byte(registry), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := densityMaxAge(dir); err == nil || !strings.Contains(err.Error(), "must be finite") {
+		models, err := loadModelRegistry(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := models.densityMaxAge(); err == nil || !strings.Contains(err.Error(), "must be finite") {
 			t.Errorf("max_age_hours = %s returned %v", value, err)
 		}
 	}

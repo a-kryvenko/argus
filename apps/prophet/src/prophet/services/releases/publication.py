@@ -63,6 +63,7 @@ async def publish_run(session, run_id):
     inserted = query.mappings().first()
     if inserted is None:
         return ForecastPublication(status='kept_current', reason='already_published')
+    await session.execute(text("SELECT pg_notify('prophet_release_published', :product)"), {'product': product})
     return ForecastPublication(status='published', release_id=release.release_id)
 
 

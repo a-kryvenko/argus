@@ -58,7 +58,11 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
-	maxAge, err := densityMaxAge(workdir)
+	models, err := loadModelRegistry(workdir)
+	if err != nil {
+		return err
+	}
+	maxAge, err := models.densityMaxAge()
 	if err != nil {
 		return err
 	}
@@ -76,13 +80,18 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	db := postgres{pool}
+	prepared := newPreparedForecasts(db)
+	wake := make(chan struct{}, 1)
 	server := &http.Server{
-		Handler:           newHandler(postgres{pool}, token, filepath.Join(workdir, "data", "prophet", "summary", "latest.json"), maxAge),
+		Handler:           newHandler(db, token, filepath.Join(workdir, "data", "prophet", "summary", "latest.json"), maxAge, prepared, metricReports{workdir, models}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- server.Serve(listener) }()
 	log.Printf("Prophet listening on %s", listener.Addr())
+	go subscribeToPublications(ctx, dsn, wake)
+	go prepared.run(ctx, wake)
 	select {
 	case err := <-serveErr:
 		return err
@@ -146,22 +155,27 @@ func workDir() (string, error) {
 	}
 }
 
-func densityMaxAge(directory string) (float64, error) {
+type modelRegistry map[string]struct {
+	MetricsReport string   `yaml:"metrics_report"`
+	MaxAge        *float64 `yaml:"max_age_hours"`
+}
+
+func loadModelRegistry(directory string) (modelRegistry, error) {
 	content, err := os.ReadFile(filepath.Join(directory, "configs", "models_registry.yaml"))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	var registry struct {
-		Models struct {
-			AtmosphericDensity struct {
-				MaxAge *float64 `yaml:"max_age_hours"`
-			} `yaml:"atmospheric_density"`
-		} `yaml:"models"`
+		Models modelRegistry `yaml:"models"`
 	}
 	if err := yaml.Unmarshal([]byte(os.ExpandEnv(string(content))), &registry); err != nil {
-		return 0, fmt.Errorf("read model registry: %w", err)
+		return nil, fmt.Errorf("read model registry: %w", err)
 	}
-	if maxAge := registry.Models.AtmosphericDensity.MaxAge; maxAge != nil {
+	return registry.Models, nil
+}
+
+func (models modelRegistry) densityMaxAge() (float64, error) {
+	if maxAge := models["atmospheric_density"].MaxAge; maxAge != nil {
 		if math.IsNaN(*maxAge) || math.IsInf(*maxAge, 0) {
 			return 0, errors.New("atmospheric_density.max_age_hours must be finite")
 		}

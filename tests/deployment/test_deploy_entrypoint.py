@@ -151,6 +151,9 @@ with open(os.environ['DOCKER_CALLS'], 'a') as output:
     output.write(json.dumps(args) + '\\n')
 if 'ps' in args and '--services' in args:
     print('postgres\\nnginx\\nclio\\nclio-worker')
+    with open(os.environ['DOCKER_CALLS']) as calls:
+        if any('"--force-recreate"' in line and '"public-api-green"' in line for line in calls):
+            print('public-api-green')
 elif 'sh' in args and 'pg_dumpall' in args[-1]:
     print('database dump')
 if 'alembic' in args:
@@ -184,7 +187,12 @@ if 'alembic' in args:
     assert migrations == [[domain, 'alembic', 'upgrade', 'head']
                           for domain in ('api', 'clio-worker', 'prophet', 'intelligence')]
     starts = [args[-1] for args in calls if '--force-recreate' in args and args[-1].endswith('-green')]
-    assert set(starts) == {'clio-green', 'api-green', 'prophet-api-green', 'intelligence-api-green', 'frontend-green'}
+    assert set(starts) == {'clio-green', 'api-green', 'public-api-green', 'prophet-api-green',
+                           'intelligence-api-green', 'frontend-green'}
+    public_checks = [args for args in calls if args[-4:-2] == ['public-api', 'smoke']]
+    assert [args[-2:] for args in public_checks] == [
+        ['http://127.0.0.1:8000', ''], ['http://application-router:8104', 'public-api-green'],
+    ]
     clio_checks = [args for args in calls if 'clio-smoke' in args]
     assert [args[-2:] for args in clio_checks] == [
         ['http://127.0.0.1:8000', ''], ['http://observations-router:8101', 'clio-green'],

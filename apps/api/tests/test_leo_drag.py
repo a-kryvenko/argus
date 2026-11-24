@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from common.schemas.leo_drag import LeoDragRequest
-from api.routers import leo_drag
-from api.services.intelligence import drag as service
-from api.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.routers import leo_drag
+from apps.api.tests.reference_public.services.intelligence import drag as service
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
 
 REQUEST = dict(altitude_km=400, inclination_deg=51.6, mass_kg=100,
                effective_area_m2=1, drag_coefficient=2.2, horizon_hours=24)

@@ -1,13 +1,13 @@
-from api.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
 from common.schemas.forecast_verification import ForecastVerification
 from common.schemas.solar_wind_events import SolarWindEventForecast
 from typing import Annotated, Literal
 
-from api.schemas.forecast import Forecast
-from api.schemas.metrics import ForecastMetrics
-from api.schemas.metadata import MetaQuery
+from apps.api.tests.reference_public.schemas.forecast import Forecast
+from apps.api.tests.reference_public.schemas.metrics import ForecastMetrics
+from apps.api.tests.reference_public.schemas.metadata import MetaQuery
 from common.schemas.response import ApiResponse, success_response
-from api.services.forecasts.products import (
+from apps.api.tests.reference_public.services.forecasts.products import (
     load_forecast,
     load_metrics,
     PRODUCTS
@@ -52,7 +52,7 @@ TargetType = Literal[*PRODUCTS.keys()]
                         'Nominal, early and late scenarios retain the event peak. Scenario envelopes are not '
                         'calibrated quantiles or hit probabilities. HSS forecasts are disabled in the current release.')
 def solar_wind_events():
-    from api.services.forecasts.client import read_event_forecast
+    from apps.api.tests.reference_public.services.forecasts.client import read_event_forecast
     try:
         return success_response(read_event_forecast())
     except ArtifactNotReadyError:
@@ -100,7 +100,7 @@ def metrics(
             summary='Get last 30 days published forecast accuracy')
 def verification(target: str):
     product = _product(target)
-    from api.services.forecasts.client import read_verification
+    from apps.api.tests.reference_public.services.forecasts.client import read_verification
     try:
         return success_response(read_verification(product.target))
     except ArtifactNotReadyError:

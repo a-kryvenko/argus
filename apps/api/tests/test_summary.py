@@ -5,9 +5,9 @@ from fastapi import FastAPI
 import httpx
 import pytest
 
-from api.routers import summary as routes
-from api.services.errors import ArtifactNotReadyError
-from api.services.forecasts import client as forecasts
+from apps.api.tests.reference_public.routers import summary as routes
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.forecasts import client as forecasts
 
 
 def test_public_summary_returns_prophet_response_unchanged(monkeypatch):

@@ -4,6 +4,7 @@ WORKDIR /src
 COPY apps/prophet/api-go/go.mod apps/prophet/api-go/go.sum ./
 RUN go mod download
 COPY apps/prophet/api-go/*.go ./
+COPY apps/prophet/api-go/publicforecast ./publicforecast
 ENV CGO_ENABLED=0
 RUN go test ./... && go build -trimpath -o /prophet-api .
 

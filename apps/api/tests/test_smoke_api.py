@@ -1,13 +1,16 @@
 from fastapi.testclient import TestClient
+from api.db.session import get_request_db_session
 from api.main import app
 
 
-def test_application_exposes_current_routes():
+def test_dashboard_does_not_expose_public_routes(monkeypatch):
+    async def unused_session():
+        yield None
+
+    monkeypatch.setitem(app.dependency_overrides, get_request_db_session, unused_session)
     with TestClient(app) as client:
-        response = client.get("/openapi.json")
-    assert response.status_code == 200
-    paths = response.json()["paths"]
-    assert {path for path in paths if path.startswith("/observations")} == {"/observations", "/observations/history"}
-    assert not any(path.startswith(("/public/", "/private/")) or "{visibility}" in path for path in paths)
-    assert "/auth/token" not in paths
-    assert not any(path.startswith(("/private/risk/", "/private/model/")) for path in paths)
+        assert client.get('/api/v1/dashboard/me').status_code == 401
+        for path in ('/ping', '/observations', '/observations/history', '/summary',
+                     '/forecasts/dst', '/docs', '/openapi.json'):
+            assert client.get(path).status_code == 404
+        assert client.post('/risks/leo-drag', json={}).status_code == 404

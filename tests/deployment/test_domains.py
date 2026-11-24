@@ -92,8 +92,8 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
         'clio': {},
         'prophet': {'models': True, 'prophet': False, 'demo': False},
         'proswin': {'models': True, 'prophet': False},
-        'prophet-api': {'prophet': True}, 'intelligence': {}, 'intelligence-api': {},
-        'api': {'metrics': True, 'demo': True},
+        'prophet-api': {'prophet': True, 'metrics': True}, 'intelligence': {}, 'intelligence-api': {},
+        'api': {}, 'public-api': {},
     }
     for name, allowed in allowed_data.items():
         service = services[name]
@@ -117,6 +117,7 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
     for name in ('api', 'intelligence-api'):
         assert services[name]['environment']['INTELLIGENCE_SERVICE_TOKEN'] == (
             '${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}')
+    assert not any('_DB_' in key for key in services['public-api']['environment'])
 
 
 

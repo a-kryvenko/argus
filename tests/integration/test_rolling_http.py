@@ -114,6 +114,8 @@ def test_static_slots_switch_as_one_group_and_preserve_inflight_requests(tmp_pat
         return json.loads(deployment.compose.run('exec', '-T', client, 'python', '-c', source, url, capture=True))
     def smoke(service, slot, routed=False):
         url = routed_url(service) if routed else f'http://127.0.0.1:{HTTP[service].port}'
+        if routed and service == 'public-api':
+            url += '/api/v1/ping'
         assert get_from_container(slot, url)['version'] == slot
         if slot == 'api-green' and ((failure == 'direct' and not routed) or (failure == 'routed' and routed)):
             raise RuntimeError('injected smoke failure')
@@ -177,7 +179,8 @@ print(json.dumps(ports))
         assert running == {ROUTER, *slot_names(color)}
         assert responses and not errors
         for service in HTTP:
-            assert get_from_container('api-' + color, routed_url(service))['version'] == service + '-' + color
+            path = {'api': '/api/v1/dashboard/me', 'public-api': '/api/v1/ping'}.get(service, '')
+            assert get_from_container('api-' + color, routed_url(service) + path)['version'] == service + '-' + color
     finally:
         stop.set()
         for active_thread in (thread, slow_thread):

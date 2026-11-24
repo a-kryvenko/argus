@@ -7,9 +7,9 @@ from common.config import get_config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.routers import observations
+from apps.api.tests.reference_public.routers import observations
 from api.services import project_status
-from api.services.observations import client as transport
+from apps.api.tests.reference_public.services.observations import client as transport
 
 NOW = datetime.now(UTC).replace(second=0, microsecond=0)
 

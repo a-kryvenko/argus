@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/a-kryvenko/argus/apps/prophet/api-go/publicforecast"
 )
 
 func smoke(base, expectedUpstream, token string) error {
@@ -66,6 +68,31 @@ func smoke(base, expectedUpstream, token string) error {
 	if data.Product != product || data.ID == "" || len(data.Artifacts) != len(productArtifacts(product)) {
 		return errors.New("invalid forecast release")
 	}
+	if err := checkPreparedForecast(request, product, token); err != nil {
+		return err
+	}
 	log.Print("[deploy] prophet-api: smoke passed")
 	return nil
+}
+
+func checkPreparedForecast(request func(context.Context, string, string) (*http.Response, error), product, token string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	for {
+		response, err := request(ctx, preparedForecastPath+product, token)
+		if err == nil {
+			var forecast publicforecast.Forecast
+			err = json.NewDecoder(response.Body).Decode(&forecast)
+			response.Body.Close()
+			if err != nil || forecast.Target != product || len(forecast.Predictions) == 0 {
+				return errors.New("invalid prepared forecast")
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("prepared forecast did not become available: %w", err)
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }

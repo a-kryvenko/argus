@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from api.schemas.metadata import MetaQuery
-from api.schemas.observations import (
+from apps.api.tests.reference_public.schemas.metadata import MetaQuery
+from apps.api.tests.reference_public.schemas.observations import (
     CurrentObservations,
     CurrentAdditionalIndices,
     IndexHistory,
@@ -19,7 +19,7 @@ from api.schemas.observations import (
     SolarHistory,
     SolarLatest,
 )
-from api.services.observations.read import read_observations
+from apps.api.tests.reference_public.services.observations.read import read_observations
 from common.schemas.response import ApiResponse, success_response
 
 router = APIRouter(prefix='/observations', tags=['observations'])

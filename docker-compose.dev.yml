@@ -191,6 +191,18 @@ services:
     ports:
       - 127.0.0.1:8000:8000
 
+  public-api:
+    build:
+      context: .
+      dockerfile: .docker/public-api.Dockerfile
+    image: argus-public-api-dev
+    environment:
+      OBSERVATIONS_URL: http://clio:8000
+      FORECASTS_URL: http://prophet-api:8000
+      INTELLIGENCE_URL: http://intelligence-api:8000
+    ports:
+      - 127.0.0.1:8003:8000
+
 
 volumes:
   seaweed-data:

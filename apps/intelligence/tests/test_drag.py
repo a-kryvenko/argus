@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 from common.schemas.forecast_release import ForecastRelease
-from common.schemas.leo_drag import LeoDragRequest
+from common.schemas.leo_drag import LeoDragAssessment, LeoDragRequest
 from intelligence import drag, main
 
 REQUEST = dict(altitude_km=400, inclination_deg=51.6, mass_kg=100,
@@ -100,13 +100,34 @@ def test_auth_and_domain_errors(release, backend, monkeypatch):
         assert client.post('/internal/v1/risks/leo-drag', json=REQUEST).status_code == 503
 
 
-def test_real_backend_end_to_end(release):
+def test_real_backend_end_to_end(release, monkeypatch):
     pytest.importorskip('intelligence_core.api')
+    inputs = {**REQUEST, 'horizon_hours': 48}
+    headers = {'Authorization': 'Bearer impact-token'}
+    public_path = '/internal/v1/public-risks/leo-drag'
     with TestClient(main.app) as client:
-        response = client.post('/internal/v1/risks/leo-drag', json={**REQUEST, 'horizon_hours': 48},
-                               headers={'Authorization': 'Bearer impact-token'})
-    assert response.status_code == 200, response.text
-    result = response.json()
+        result_response = client.post('/internal/v1/risks/leo-drag', json=inputs, headers=headers)
+        assert result_response.status_code == 200, result_response.text
+        result = result_response.json()
+        assessment = LeoDragAssessment.model_validate(result)
+        monkeypatch.setattr(main, 'assess_drag', lambda _: assessment)
+        assert client.post(public_path, json=inputs).status_code == 401
+        compact = client.post(public_path, json=inputs, headers=headers)
+        expanded = client.post(public_path + '?meta=true', json=inputs, headers=headers)
+        assert compact.status_code == expanded.status_code == 200
+
+    expected = {key: value for key, value in result.items() if key not in {'model', 'source'}}
+    expected['source'] = {key: result['source'][key] for key in (
+        'release_id', 'issue_time', 'observed_at', 'dtc_observed_at', 'geomagnetic_observed_at', 'driver_mode',
+    )}
+    expected['source']['background_interpolated'] = False
+    assert compact.json() == expected
+    expanded = expanded.json()
+    metadata = expanded.pop('meta')
+    assert expanded == expected
+    assert metadata['model'] == result['model']
+    assert metadata['source']['model'] == result['source']['density_model']
+    assert metadata['source']['dtc_method'] == result['source']['dtc_method']
     assert len(result['predictions']) == 49
     assert 0 < result['estimated_altitude_loss_m'] < 1000
     assert result['predictions'][-1]['estimated_altitude_loss_m'] == result['estimated_altitude_loss_m']

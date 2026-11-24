@@ -11,14 +11,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.routers.dashboard import router as dashboard_router
 from common.db.session import dispose_engine
-from api.routers.forecasts import router as forecasts_router
-from api.routers.atmospheric_density import router as atmospheric_density_router
-from api.routers.leo_drag import router as leo_drag_router
 from api.routers.drag_monitor import router as drag_monitor_router
 from api.routers.density_advisory import router as density_advisory_router
 from api.routers.healthcheck import router as healthcheck_router
-from api.routers.observations import router as observations_router
-from api.routers.summary import router as summary_router
 from common.schemas.response import error_response
 
 config = get_config()
@@ -34,10 +29,11 @@ async def lifespan(_: FastAPI):
 setup_sentry()
 
 app = FastAPI(
-    title="ARGUS SUNWATCH API",
+    title="ARGUS SUNWATCH Dashboard",
     debug=config.debug,
     root_path="/api/v1",
     lifespan=lifespan,
+    openapi_url=None,
 )
 
 if not config.debug:
@@ -79,13 +75,6 @@ app.include_router(dashboard_router, include_in_schema=False)
 app.include_router(drag_monitor_router, include_in_schema=False)
 app.include_router(density_advisory_router, include_in_schema=False)
 app.include_router(healthcheck_router)
-app.include_router(observations_router)
-app.include_router(summary_router)
-
-app.include_router(atmospheric_density_router)
-app.include_router(leo_drag_router)
-app.include_router(forecasts_router)
-
 @app.middleware("http")
 async def add_processing_time_header(request: Request, call_next):
     start_time = time.perf_counter()

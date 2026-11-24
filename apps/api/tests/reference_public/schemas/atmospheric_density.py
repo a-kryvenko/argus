@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 from common.schemas.atmospheric_density import DensityForecast as InternalDensityForecast, DensityPoint, DensityBackground
-from api.schemas.metadata import metadata_field
+from apps.api.tests.reference_public.schemas.metadata import metadata_field
 
 
 class DensityMetadata(BaseModel):

@@ -28,12 +28,11 @@ from api.services.authentication import digest
 from api.routers.dashboard import router
 from api.schemas.dashboard import UserCreate
 from api.services.authentication import create_user
-from api.routers.observations import router as public_router
-
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
-from tests.support.clio import CLIO_ROOT, clio_server, migrate_clio
+from apps.api.tests.reference_public.routers.observations import router as public_router
+from tests.support.clio import CLIO_ROOT, clio_server, go_http_server, migrate_clio
 from tests.support.database import provisioned_database
 
 
@@ -62,8 +61,11 @@ def dashboard_clio():
                     VALUES (%s, %s, %s, %s, %s)
                 """, rows)
             with clio_server(path, environment) as url:
-                with patch.dict(os.environ, {'ARGUS_WORKDIR': str(path)}), patch('common.config._config', None):
-                    yield url
+                environment['OBSERVATIONS_URL'] = url
+                with go_http_server(path, environment, ROOT / 'apps/api/api-go', 'public-api', 'PUBLIC_API_HTTP_ADDR',
+                                    'Public API listening on ') as public_url, \
+                     patch.dict(os.environ, {'ARGUS_WORKDIR': str(path)}), patch('common.config._config', None):
+                    yield url, public_url
 
 
 def get_database_url():
@@ -100,20 +102,25 @@ async def verify():
             await db.commit()
         app = FastAPI()
         app.include_router(router)
-        app.include_router(public_router)
+        reference_api = FastAPI()
+        reference_api.include_router(public_router)
         async def session():
             async with factory() as db:
                 yield db
         app.dependency_overrides[get_request_db_session] = session
         transport = ASGITransport(app=app)
         headers = {'Origin': 'https://dashboard.test'}
-        with dashboard_clio() as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
+        with dashboard_clio() as (clio_url, public_url), patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
-                       AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
+                       AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary, \
+                       AsyncClient(base_url=public_url, trust_env=False) as public, \
+                       AsyncClient(transport=ASGITransport(app=reference_api), base_url='http://reference') as reference:
                 for params in ({}, {'trends': 'true'}, {'meta': 'true', 'trends': 'true'}):
-                    response = await client.get('/observations', params=params)
+                    response = await public.get('/api/v1/observations', params=params)
                     assert response.status_code == 200, (params, response.text)
                     data = response.json()['data']
+                    expected = (await reference.get('/observations', params=params)).json()['data']
+                    assert data == expected, (params, data, expected)
                     assert data['v']['value'] == 400 and data['bt']['value'] == 5
                     assert data['kp']['value'] == 2 and data['f10_7']['value'] == 145
                     assert 'southward_bz' not in data
@@ -177,7 +184,8 @@ async def verify():
                     await db.execute(update(Session).values(expires_at=now-timedelta(seconds=1)))
                     await db.commit()
                 assert (await client.get('/dashboard/me')).status_code == 401
-                assert (await client.get('/observations')).status_code == 200
+                assert (await public.get('/api/v1/observations')).status_code == 200
+                assert (await client.get('/observations')).status_code == 404
         async with engine.begin() as conn:
             await conn.run_sync(lambda c: migrate(c, 'downgrade'))
             await conn.run_sync(lambda c: migrate(c, 'upgrade'))

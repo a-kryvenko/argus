@@ -3,8 +3,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from api.services.forecasts import products as service
-from api.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.forecasts import products as service
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
 
 ROOT = Path(__file__).resolve().parents[3]
 

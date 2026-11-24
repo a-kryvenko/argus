@@ -10,6 +10,7 @@ from pathlib import Path
 SERVICE_IMAGES = {
     "frontend": "ghcr.io/a-kryvenko/argus-frontend",
     "api": "ghcr.io/a-kryvenko/argus-forecast",
+    "public-api": "ghcr.io/a-kryvenko/argus-public-api",
     "clio": "ghcr.io/a-kryvenko/argus-clio",
     "clio-api": "ghcr.io/a-kryvenko/argus-clio-api",
     "prophet": "ghcr.io/a-kryvenko/argus-prophet",
@@ -55,6 +56,10 @@ SERVICES_TRACKABLE_FILES = {
         + ["./.docker/clio.Dockerfile"]
     ,
     "clio-api": ["apps/clio/api-go", "./.docker/clio-api.Dockerfile"],
+    "public-api": [
+        "apps/api/api-go", "./.docker/public-api.Dockerfile",
+        "apps/prophet/api-go/publicforecast", "apps/prophet/api-go/go.mod",
+    ],
     "prophet": _default_service_files("prophet")
         + _PACKAGES_TRACKABLE_FILES["common"]
         + _PACKAGES_TRACKABLE_FILES["forecast"]
@@ -104,6 +109,7 @@ _SERVICES_TESTS = {
     "clio": ["apps/clio/tests"]
             + _PACKAGES_TESTS["common"],
     "clio-api": [],
+    "public-api": [],
     "prophet-api": [],
     "prophet": ["apps/prophet/tests"]
             + _PACKAGES_TESTS["common"]

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from common.schemas.leo_drag import LeoDragRequest
-from api.schemas.leo_drag import LeoDragAssessment
-from api.schemas.metadata import MetaQuery
+from apps.api.tests.reference_public.schemas.leo_drag import LeoDragAssessment
+from apps.api.tests.reference_public.schemas.metadata import MetaQuery
 from common.schemas.response import ApiResponse, success_response
-from api.services.errors import ArtifactNotReadyError
-from api.services.intelligence.drag import assess_drag, DragDomainError
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.intelligence.drag import assess_drag, DragDomainError
 
 router = APIRouter(tags=['risks'])
 

@@ -26,7 +26,7 @@ type reader interface {
 	verification(context.Context, string) (json.RawMessage, error)
 }
 
-func newHandler(db reader, token, summaryPath string, densityMaxAge float64) http.Handler {
+func newHandler(db reader, token, summaryPath string, densityMaxAge float64, prepared *preparedForecasts, reports metricReports) http.Handler {
 	mux := http.NewServeMux()
 	register := func(path string, handler http.HandlerFunc) {
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +89,10 @@ func newHandler(db reader, token, summaryPath string, densityMaxAge float64) htt
 			writeJSON(w, 200, data)
 		}
 	}
+	if prepared != nil {
+		protected(preparedForecastPath+"{product}", prepared.serve(densityMaxAge))
+	}
+	protected(metricsPath+"{product}", reports.serve)
 	protected("/internal/v1/forecasts/{product}/latest", func(w http.ResponseWriter, r *http.Request) {
 		readRelease(w, r, "")
 	})

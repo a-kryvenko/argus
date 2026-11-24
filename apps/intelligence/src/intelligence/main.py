@@ -8,9 +8,11 @@ from intelligence.db.session import get_db_session
 from sqlalchemy import text
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from common.schemas.leo_drag import LeoDragAssessment, LeoDragRequest
 from intelligence.drag import assess_drag, DragDomainError, DragNotReadyError
+from intelligence.public_drag import PublicLeoDragAssessment
 from intelligence.monitor_routes import router as monitor_router
 from intelligence.density_routes import router as density_router
 
@@ -39,15 +41,26 @@ app.include_router(monitor_router, dependencies=[Depends(require_service_token)]
 app.include_router(density_router, dependencies=[Depends(require_service_token)])
 
 
-@app.post('/internal/v1/risks/leo-drag', response_model=LeoDragAssessment,
-          dependencies=[Depends(require_service_token)])
-def leo_drag(request: LeoDragRequest):
+def calculate_leo_drag(request: LeoDragRequest) -> LeoDragAssessment:
     try:
         return assess_drag(request)
     except DragNotReadyError:
         raise HTTPException(503, 'Atmospheric density or impact backend is not ready') from None
     except DragDomainError as exc:
         raise HTTPException(422, str(exc)) from None
+
+
+@app.post('/internal/v1/risks/leo-drag', response_model=LeoDragAssessment,
+          dependencies=[Depends(require_service_token)])
+def leo_drag(request: LeoDragRequest):
+    return calculate_leo_drag(request)
+
+
+@app.post('/internal/v1/public-risks/leo-drag', response_model=PublicLeoDragAssessment,
+          dependencies=[Depends(require_service_token)])
+def public_leo_drag(request: LeoDragRequest, meta: bool = False):
+    assessment = PublicLeoDragAssessment.from_assessment(calculate_leo_drag(request), meta=meta)
+    return JSONResponse(assessment.model_dump(mode='json', exclude=None if meta else {'meta'}))
 
 
 @app.get('/health/live')

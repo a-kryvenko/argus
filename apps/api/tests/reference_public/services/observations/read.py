@@ -5,9 +5,9 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from common.config import get_config
-from api.services.observations.client import read_observations as read
-from api.services.observations.coverage import coverage
-from api.services.observations.trends import change_one_hour, interval_change, value_change
+from apps.api.tests.reference_public.services.observations.client import read_observations as read
+from apps.api.tests.reference_public.services.observations.coverage import coverage
+from apps.api.tests.reference_public.services.observations.trends import change_one_hour, interval_change, value_change
 
 WIND = ('bx', 'by', 'bz', 'bt', 'v', 'n', 't')
 INDICES = ('kp', 'dst')

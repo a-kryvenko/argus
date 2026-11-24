@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
-from api.schemas.metadata import metadata_field
+from apps.api.tests.reference_public.schemas.metadata import metadata_field
 from common.schemas.solar_wind_events import CMESpeedOutlook
 
 LEAD_HOURS_DESCRIPTION = (

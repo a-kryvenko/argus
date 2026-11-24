@@ -64,7 +64,6 @@ dependencies = [
     { name = "common" },
     { name = "fastapi" },
     { name = "httpx" },
-    { name = "pandas" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "sentry-sdk" },
@@ -74,8 +73,8 @@ dependencies = [
 
 [package.dev-dependencies]
 test = [
-    { name = "httpx" },
     { name = "httpx2" },
+    { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-xdist" },
 ]
@@ -86,7 +85,6 @@ requires-dist = [
     { name = "common", editable = "../../packages/common" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28,<1" },
-    { name = "pandas", specifier = ">=2.2,<3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "sentry-sdk", specifier = ">=2.61.1" },
@@ -96,8 +94,8 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 test = [
-    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "httpx2" },
+    { name = "pandas", specifier = ">=2.2,<3" },
     { name = "pytest", specifier = ">=8,<10" },
     { name = "pytest-xdist", specifier = ">=3,<4" },
 ]

@@ -142,7 +142,7 @@ case "${1:-}" in
                     mapfile -d '' -t mapped < <(python3 - "$active_color" "$@" <<'PY'
 import sys
 color = sys.argv[1]
-http_services = {'api', 'clio', 'prophet-api', 'intelligence-api', 'frontend'}
+http_services = {'api', 'public-api', 'clio', 'prophet-api', 'intelligence-api', 'frontend'}
 arguments = sys.argv[2:]
 command = arguments[0]
 value_options = {'--index', '--user', '-u', '--workdir', '-w', '--env', '-e', '--name',

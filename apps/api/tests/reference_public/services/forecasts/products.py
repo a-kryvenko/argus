@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 import pandas as pd
-from api.schemas.forecast import (
+from apps.api.tests.reference_public.schemas.forecast import (
     BinaryForecast,
     Forecast,
     ForecastPoint,
@@ -10,12 +10,12 @@ from api.schemas.forecast import (
     QuantileForecast,
     VariableForecast,
 )
-from api.schemas.metrics import ForecastMetrics
+from apps.api.tests.reference_public.schemas.metrics import ForecastMetrics
 from common.config import get_config
 from common.density_contract import parse_density_frame
 from common.schemas.atmospheric_density import DensityForecast
-from api.services.errors import ArtifactNotReadyError
-from api.services.forecasts.client import read_frames
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.forecasts.client import read_frames
 from common.schemas.solar_wind_events import CMESpeedOutlook
 
 

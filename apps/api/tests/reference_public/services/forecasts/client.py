@@ -6,7 +6,7 @@ import os
 import httpx
 import pandas as pd
 from common.schemas.forecast_release import ForecastRelease, PRODUCT_ARTIFACTS
-from api.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
 
 def read_event_forecast():
     from common.schemas.solar_wind_events import SolarWindEventForecast

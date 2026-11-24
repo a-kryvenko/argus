@@ -3,7 +3,7 @@ import os
 
 import httpx
 from common.schemas.leo_drag import LeoDragAssessment, LeoDragRequest
-from api.services.errors import ArtifactNotReadyError
+from apps.api.tests.reference_public.services.errors import ArtifactNotReadyError
 
 class DragDomainError(Exception):
     pass

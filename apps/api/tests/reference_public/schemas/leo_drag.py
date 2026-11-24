@@ -5,8 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from common.schemas.leo_drag import LeoDragAssessment as InternalAssessment, LeoDragRequest, DragPoint
-from api.schemas.atmospheric_density import DensityMetadata
-from api.schemas.metadata import metadata_field
+from apps.api.tests.reference_public.schemas.atmospheric_density import DensityMetadata
+from apps.api.tests.reference_public.schemas.metadata import metadata_field
 
 
 class DragSource(BaseModel):

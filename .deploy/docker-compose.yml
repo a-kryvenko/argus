@@ -166,6 +166,20 @@ services:
       start_interval: 1s
     stop_grace_period: 60s
 
+  public-api:
+    extends:
+      file: docker-compose.yml
+      service: public-api
+    profiles: [templates]
+    restart: unless-stopped
+    expose: ['8000']
+    environment:
+      OBSERVATIONS_URL: http://observations-router:8101
+      FORECASTS_URL: http://forecasts-router:8102
+      INTELLIGENCE_URL: http://impacts-router:8103
+    networks: [application, observations, forecasts, impacts]
+    stop_grace_period: 115s
+
   postgres:
     environment:
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
@@ -275,6 +289,12 @@ services:
       service: api
     profiles: !override [blue]
 
+  public-api-blue:
+    <<: *http-slot
+    extends:
+      service: public-api
+    profiles: !override [blue]
+
   frontend-blue:
     <<: *http-slot
     extends:
@@ -303,6 +323,12 @@ services:
     <<: *http-slot
     extends:
       service: api
+    profiles: !override [green]
+
+  public-api-green:
+    <<: *http-slot
+    extends:
+      service: public-api
     profiles: !override [green]
 
   frontend-green:

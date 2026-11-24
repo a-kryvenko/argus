@@ -169,6 +169,7 @@ services:
     volumes:
       - ./configs:/var/www/configs:ro
       - ./data/prophet:/var/www/data/prophet:ro
+      - ./data/metrics:/var/www/data/metrics:ro
     environment:
       <<: *prophet-environment
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
@@ -226,10 +227,6 @@ services:
       <<: *api-environment
       DEBUG: ${DEBUG:-false}
       INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
-    volumes:
-      - ./configs:/var/www/configs:ro
-      - ./data/metrics:/var/www/data/metrics:ro
-      - ./data/demo:/var/www/data/demo:ro
     depends_on:
       <<: *api-depends_on
     healthcheck:
@@ -237,6 +234,23 @@ services:
       interval: 30s
       timeout: 10s
       start_period: 30s
+
+  public-api:
+    image: ghcr.io/a-kryvenko/argus-public-api:latest
+    init: true
+    environment:
+      ARGUS_WORKDIR: /var/www
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+      FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
+      INTELLIGENCE_SERVICE_TOKEN: ${INTELLIGENCE_SERVICE_TOKEN:?INTELLIGENCE_SERVICE_TOKEN is required}
+    volumes:
+      - ./configs:/var/www/configs:ro
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8000/health/ready]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   postgres_data:

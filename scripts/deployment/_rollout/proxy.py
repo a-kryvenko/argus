@@ -15,9 +15,15 @@ class NginxProxy:
         self.applications = applications
         self.keepalive = True
 
-    def route(self, service, target):
+    def route(self, service, target, *, public_api=None):
         self.write_route(self.root / 'routes/internal' / (service + '.conf'),
-                         route_text(service, target, keepalive=self.keepalive))
+                         route_text(service, target, keepalive=self.keepalive, public_api=public_api))
+
+    def write_color(self, color, *, split_public):
+        targets = dict(zip(HTTP, slot_names(color)))
+        public_api = targets.pop('public-api')
+        for service, name in targets.items():
+            self.route(service, name, public_api=public_api if service == 'api' and split_public else None)
 
     @staticmethod
     def write_route(path, content):
@@ -30,12 +36,10 @@ class NginxProxy:
             os.fsync(output.fileno())
         temporary.replace(path)
 
-    def prepare(self, color):
+    def prepare(self, color, *, split_public=True):
         # Compose can start a previously stopped router with its original image.
         self.keepalive = False
-        targets = list(zip(HTTP, slot_names(color)))
-        for service, name in targets:
-            self.route(service, name)
+        self.write_color(color, split_public=split_public)
 
         self.compose.run('up', '-d', '--no-deps', '--no-recreate', '--pull', 'never',
                      '--wait', '--wait-timeout', '300', ROUTER)
@@ -43,18 +47,18 @@ class NginxProxy:
         match = re.search(r'nginx/(\d+)\.(\d+)\.(\d+)', version)
         self.keepalive = bool(match and tuple(map(int, match.groups())) >= (1, 27, 3))
         if self.keepalive:
-            for service, name in targets:
-                self.route(service, name)
+            self.write_color(color, split_public=split_public)
         else:
             print('[deploy] Internal router needs Nginx 1.27.3+ for upstream keep-alive with Docker DNS', flush=True)
         self.drain(ROUTER, self.reload(ROUTER))
 
-    def switch(self, color):
-        for service, name in zip(HTTP, slot_names(color)):
-            self.route(service, name)
+    def switch(self, color, *, split_public=True):
+        self.write_color(color, split_public=split_public)
         
         workers = self.reload(ROUTER)
         for service, name in zip(HTTP, slot_names(color)):
+            if service == 'public-api' and not split_public:
+                continue
             self.applications.check(service, name, routed=True)
         
         self.drain(ROUTER, workers)
@@ -95,16 +99,14 @@ class NginxProxy:
         raise RuntimeError(f'{service}: old router requests did not drain in 120 seconds')
 
 
-def route_text(service, target, *, keepalive=True):
-    settings = HTTP[service]
+def upstream_config(target, port, keepalive, variable):
     upstream = 'argus_' + target.replace('-', '_')
-    listen = f'{settings.router_host}:{settings.router_port} bind'
     resolver = '    resolver 127.0.0.11 valid=5s ipv6=off;\n'
     if keepalive:
         upstream_block = f'''upstream {upstream} {{
     zone {upstream} 64k;
 {resolver}    resolver_timeout 5s;
-    server {target}:{settings.port} resolve;
+    server {target}:{port} resolve;
     keepalive 16;
 }}
 
@@ -116,13 +118,15 @@ def route_text(service, target, *, keepalive=True):
     else:
         upstream_block = ''
         server_resolver = resolver
-        backend = f'''        set $backend {target}:{settings.port};
-        proxy_pass http://$backend;
+        backend = f'''        set ${variable} {target}:{port};
+        proxy_pass http://${variable};
 '''
-    return f'''{upstream_block}server {{
-{server_resolver}    listen {listen};
-    add_header X-Argus-Upstream {target} always;
-    location / {{
+    return upstream_block, server_resolver, backend
+
+
+def location(route, backend, target):
+    return f'''    location {route} {{
+        add_header X-Argus-Upstream {target} always;
 {backend}        proxy_http_version 1.1;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $http_x_real_ip;
@@ -132,6 +136,20 @@ def route_text(service, target, *, keepalive=True):
         proxy_read_timeout 120s;
         proxy_buffering off;
     }}
+'''
+
+
+def route_text(service, target, *, keepalive=True, public_api=None):
+    settings = HTTP[service]
+    upstreams, resolver, backend = upstream_config(target, settings.port, keepalive, 'backend')
+    locations = location('/', backend, target)
+    if public_api:
+        extra_upstream, _, public_backend = upstream_config(public_api, HTTP['public-api'].port, keepalive, 'public_backend')
+        upstreams += extra_upstream
+        locations += location('~ ^/api/v1/(?!dashboard(?:/|$))', public_backend, public_api)
+    return f'''{upstreams}server {{
+{resolver}    listen {settings.router_host}:{settings.router_port} bind;
+{locations.rstrip()}
 }}
 '''
 

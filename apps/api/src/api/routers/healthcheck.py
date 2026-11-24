@@ -1,15 +1,9 @@
-from common.schemas.response import success_response
 import asyncio
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 from api.db.session import get_db_session
 
 router = APIRouter(tags=["ping"])
-
-@router.get("/ping")
-def ping():
-    return success_response("pong")
-
 
 @router.get('/health/live', include_in_schema=False)
 def live():

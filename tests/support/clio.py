@@ -16,10 +16,17 @@ def migrate_clio(python, environment):
 
 @contextmanager
 def clio_server(directory, environment):
-    binary = directory / 'clio-api'
+    with go_http_server(directory, environment, CLIO_ROOT / 'api-go', 'clio-api',
+                        'CLIO_HTTP_ADDR', 'Clio listening on ') as url:
+        yield url
+
+
+@contextmanager
+def go_http_server(directory, environment, module, name, bind_setting, listen_message):
+    binary = directory / name
     subprocess.run(['go', 'build', '-o', str(binary), '.'],
-                   cwd=CLIO_ROOT / 'api-go', check=True, timeout=120)
-    with subprocess.Popen([binary], env={**environment, 'CLIO_HTTP_ADDR': '127.0.0.1:0'},
+                   cwd=module, check=True, timeout=120)
+    with subprocess.Popen([binary], env={**environment, bind_setting: '127.0.0.1:0'},
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
         failed = False
         try:
@@ -27,7 +34,7 @@ def clio_server(directory, environment):
                 selector.register(process.stdout, selectors.EVENT_READ)
                 assert selector.select(timeout=10), 'Go API did not start'
                 line = process.stdout.readline().rstrip()
-            _, marker, address = line.partition('Clio listening on ')
+            _, marker, address = line.partition(listen_message)
             assert marker, line
             yield f'http://{address}'
         except BaseException:

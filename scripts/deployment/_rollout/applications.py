@@ -16,6 +16,7 @@ HTTP = {
     'prophet-api': HttpService(8000, 'forecasts-router', 8102),
     'intelligence-api': HttpService(8000, 'impacts-router', 8103),
     'api': HttpService(8000, 'application-router', 8104),
+    'public-api': HttpService(8000, 'application-router', 8104),
     'frontend': HttpService(3000, 'application-router', 8105),
 }
 WORKERS = ('clio-worker', 'prophet-worker', 'intelligence', 'proswin')
@@ -36,6 +37,10 @@ class Applications:
         self.compose = compose
 
     def check(self, service: str, slot, routed=False):
+        if service == 'public-api':
+            base = routed_url(service) if routed else 'http://127.0.0.1:8000'
+            self.compose.run('exec', '-T', slot, 'public-api', 'smoke', base, slot if routed else '')
+            return
         if service == 'frontend':
             # Node is available in the standalone frontend; check HTML and a referenced asset.
             base = routed_url(service) if routed else 'http://127.0.0.1:3000'

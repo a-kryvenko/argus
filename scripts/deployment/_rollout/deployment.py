@@ -42,26 +42,30 @@ class Deployment:
         if self.manifest['mode'] == 'maintenance':
             self.apply_maintenance()
         else:
-            self.proxy.prepare(self.color)
             self.apply_rolling()
         
         print('[deploy] Release applied successfully', flush=True)
 
     def apply_rolling(self):
+        split_public = self.has_public_slot(self.color)
+        self.proxy.prepare(self.color, split_public=split_public)
         running = self.compose.run('ps', '--status', 'running', '--services', capture=True).split()
         workers = [name for name in WORKERS if name in running]
         try:
             if workers:
                 self.compose.run('stop', *workers)
             self.database.migrate()
-            self.swap_blue_green_services()
+            self.swap_blue_green_services(previous_split=split_public)
             self.finish_release()
         except BaseException:
             if workers:
                 self.compose.run('start', *workers)
             raise
 
-    def swap_blue_green_services(self):
+    def has_public_slot(self, color):
+        return bool(self.compose.run('ps', '--all', '-q', f'public-api-{color}', capture=True).strip())
+
+    def swap_blue_green_services(self, *, previous_split=True):
         previous = self.color
         target = 'green' if previous == 'blue' else 'blue'
         
@@ -73,7 +77,7 @@ class Deployment:
             self.state.save_color(target)
             self.color = target
         except BaseException:
-            self.proxy.switch(previous)
+            self.proxy.switch(previous, split_public=previous_split)
             self.compose.run('stop', *slot_names(target))
             raise
 
@@ -113,7 +117,11 @@ class Deployment:
                     f'Maintenance failed. Traffic remains closed. Recovery state: {self.state.recovery_path}'
                 )
             
-            self.compose.run('start', *slot_names(record['color']), *WORKERS)
+            previous_color = record['color']
+            previous = slot_names(previous_color)
+            if not self.has_public_slot(previous_color):
+                previous.remove(f'public-api-{previous_color}')
+            self.compose.run('start', *previous, *WORKERS)
             self.compose.run('start', 'nginx')
             self.compose.run('stop', 'maintenance')
             self.state.clear_maintenance()

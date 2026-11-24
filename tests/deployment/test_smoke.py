@@ -49,13 +49,8 @@ def test_clio_smoke_uses_latest_contract(monkeypatch, payload, error):
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize('payload,error', [
-    ({'success': True, 'data': []}, None),
-    ({'success': False, 'data': []}, 'Invalid public API response'),
-    ({'success': True, 'data': None}, 'Invalid public API response'),
-    (None, 'returned 503'),
-])
-def test_api_smoke_checks_public_endpoints_without_login(monkeypatch, payload, error):
+@pytest.mark.parametrize('status', [401, 200, 503])
+def test_dashboard_smoke_requires_a_session(monkeypatch, status):
     calls = []
 
     class Opener:
@@ -65,24 +60,20 @@ def test_api_smoke_checks_public_endpoints_without_login(monkeypatch, payload, e
             assert request.get_method() == 'GET'
             assert request.get_header('Cookie') is None
             assert request.get_header('Authorization') is None
-            if path == '/health/ready':
-                data = {}
-            else:
-                assert path in ('/observations', '/forecasts/solar-wind-speed')
-                if payload is None:
-                    raise HTTPError(request.full_url, 503, 'Unavailable', {}, None)
-                data = payload
-            response = io.BytesIO(json.dumps(data).encode())
+            if path != '/health/ready':
+                assert path == '/api/v1/dashboard/me'
+                if status != 200:
+                    raise HTTPError(request.full_url, status, 'Dashboard response', {}, None)
+            response = io.BytesIO(b'{}')
             response.status = 200
             response.headers = {}
             return response
 
     monkeypatch.setattr(smoke, 'build_opener', lambda *args: Opener())
     options = {'service': 'api', 'base': 'http://api'}
-    if error:
-        with pytest.raises(RuntimeError, match=error):
-            smoke.check(options)
-        assert calls == ['/health/ready', '/observations']
-    else:
+    if status == 401:
         smoke.check(options)
-        assert calls == ['/health/ready', '/observations', '/forecasts/solar-wind-speed']
+    else:
+        with pytest.raises(RuntimeError, match='Dashboard'):
+            smoke.check(options)
+    assert calls == ['/health/ready', '/api/v1/dashboard/me']

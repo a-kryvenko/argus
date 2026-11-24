@@ -179,13 +179,17 @@ def test_color_switch_commits_only_after_all_checks(tmp_path, monkeypatch, failu
         monkeypatch.setattr(deployment.state, 'save_color', fail_to_save)
     if failure:
         with pytest.raises((RuntimeError, OSError)):
-            deployment.swap_blue_green_services()
+            deployment.swap_blue_green_services(previous_split=False)
         assert DeploymentState(tmp_path).read_color() == 'blue'
+        assert 'public-api' not in (tmp_path / 'routes/internal/api.conf').read_text()
+        assert ('smoke', 'public-api-blue', True) not in deployment.calls
         assert ('stop', *slot_names('green')) in deployment.calls
         assert ('stop', *slot_names('blue')) not in deployment.calls
     else:
         deployment.swap_blue_green_services()
         assert DeploymentState(tmp_path).read_color() == 'green'
+        assert 'public-api-green' in (tmp_path / 'routes/internal/api.conf').read_text()
+        assert ('smoke', 'public-api-green', True) in deployment.calls
         assert deployment.calls.index(('smoke', 'frontend-green', False)) < deployment.calls.index(('smoke', 'clio-green', True))
         assert deployment.calls.index(('smoke', 'frontend-green', True)) < deployment.calls.index(('stop', *slot_names('blue')))
 
@@ -231,25 +235,24 @@ def test_apply_selects_explicit_mode(tmp_path, monkeypatch, mode):
         ),
         database=SimpleNamespace(),
         applications=SimpleNamespace(),
-        proxy=SimpleNamespace(prepare=lambda color: calls.append('prepare')),
+        proxy=SimpleNamespace(),
         state=SimpleNamespace(read_color=lambda **kwargs: 'blue', ensure_recovered=lambda: None),
     )
     monkeypatch.setattr(deployment, 'apply_rolling', lambda: calls.append('rolling'))
     monkeypatch.setattr(deployment, 'apply_maintenance', lambda: calls.append('maintenance'))
     deployment.apply()
-    expected = ['install', 'pull']
-    if mode == 'rolling':
-        expected.append('prepare')
-    assert calls == expected + [mode]
+    assert calls == ['install', 'pull', mode]
 
 
 @pytest.mark.parametrize('fail', [False, True])
 def test_rolling_never_backs_up_and_resumes_workers_after_failure(tmp_path, monkeypatch, fail):
     deployment = harness(tmp_path)
-    deployment.compose.run = lambda *args, **kwargs: deployment.calls.append(args) or ('clio-worker' if args[0] == 'ps' else '')
+    deployment.compose.run = lambda *args, **kwargs: deployment.calls.append(args) or (
+        'clio-worker' if args[:2] == ('ps', '--status') else '')
     monkeypatch.setattr(deployment.database, 'backup', lambda: pytest.fail('Unexpected rolling backup'))
     monkeypatch.setattr(deployment, 'finish_release', lambda: None)
-    def replace():
+    def replace(*, previous_split):
+        assert not previous_split
         if fail:
             raise RuntimeError('replacement failed')
     monkeypatch.setattr(deployment, 'swap_blue_green_services', replace)
@@ -304,7 +307,7 @@ def test_maintenance_bootstraps_green_and_keeps_traffic_closed_after_migration_f
                          '--scale', 'maintenance=1', '--wait', 'maintenance')
     stopped = ('stop', *WORKERS, *HTTP, *slot_names('blue'), *slot_names('green'))
     assert calls.index(maintenance_start) < calls.index(('stop', 'nginx')) < calls.index(stopped) < calls.index(('backup',))
-    assert not any(call[0] == 'ps' for call in calls)
+    assert not any(call[:2] == ('ps', '--status') for call in calls)
     assert 'postgres' not in stopped and 'redis' not in stopped
     needs_recovery = failure == 'migration' or (failure == 'backup' and initial_color is None)
     assert (tmp_path / '.maintenance-recovery.json').exists() == needs_recovery
@@ -314,7 +317,8 @@ def test_maintenance_bootstraps_green_and_keeps_traffic_closed_after_migration_f
     restores_previous = failure == 'backup' and initial_color is not None
     assert (('start', 'nginx') in calls) == restores_previous
     if restores_previous:
-        assert ('start', *slot_names(initial_color), *WORKERS) in calls
+        legacy_slots = [name for name in slot_names(initial_color) if not name.startswith('public-api-')]
+        assert ('start', *legacy_slots, *WORKERS) in calls
         assert calls.index(('start', 'nginx')) < calls.index(('stop', 'maintenance'))
 
 

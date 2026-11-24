@@ -5,8 +5,8 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from api.services.observations import client as service
-from api.routers import observations
+from apps.api.tests.reference_public.services.observations import client as service
+from apps.api.tests.reference_public.routers import observations
 from api.routers import dashboard
 
 

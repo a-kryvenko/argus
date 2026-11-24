@@ -2,9 +2,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.schemas.forecast import LEAD_HOURS_DESCRIPTION
-from api.schemas.forecast import ForecastMetadata
-from api.schemas.metadata import metadata_field
+from apps.api.tests.reference_public.schemas.forecast import LEAD_HOURS_DESCRIPTION
+from apps.api.tests.reference_public.schemas.forecast import ForecastMetadata
+from apps.api.tests.reference_public.schemas.metadata import metadata_field
 
 
 class ReliabilityPoint(BaseModel):

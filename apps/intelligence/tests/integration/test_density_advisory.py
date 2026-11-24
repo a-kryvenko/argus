@@ -57,10 +57,12 @@ def release():
 
 
 async def test_all_spacecraft_are_always_monitored_and_migration_resumes_paused_profiles(storage, monkeypatch):
+    from alembic.config import Config
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
     from sqlalchemy import create_engine
-    from tests.support.database import ROOT, load
+    from tests.support.database import ROOT
 
     paused = await monitor.save_profile(1, body().model_copy(update={'enabled': False}))
     active = await monitor.save_profile(1, body())
@@ -70,7 +72,8 @@ async def test_all_spacecraft_are_always_monitored_and_migration_resumes_paused_
     monkeypatch.setattr(monitor, 'retrieve_inputs', AsyncMock(return_value={}))
     assert (await monitor.refresh_profiles()) == {'profiles': 2, 'failed': 0}
     assert (await monitor.read_profile(1, paused.id)).enabled is True
-    migration = load(ROOT / 'apps/intelligence/src/intelligence/db/migrations/versions/20261017_density_always_on.py')
+    scripts = ScriptDirectory.from_config(Config(str(ROOT / 'apps/intelligence/alembic.ini')))
+    migration = scripts.get_revision('20261017_density_always_on').module
     engine = create_engine(get_database_url('INTELLIGENCE'))
     try:
         with engine.begin() as connection:

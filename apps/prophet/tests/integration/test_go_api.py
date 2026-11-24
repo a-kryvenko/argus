@@ -185,3 +185,127 @@ async def asyncio_smoke(binary, address):
     return await asyncio.to_thread(
         subprocess.run, [binary, 'smoke', address, ''], capture_output=True, text=True, timeout=20,
     )
+
+
+async def test_public_forecasts_match_existing_contract_and_refresh(recorder_setup, monkeypatch):
+    import asyncio
+    import csv
+    from io import StringIO
+    from tests.support.clio import go_http_server
+
+    _, _, config, writer = recorder_setup
+    issue = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=2)
+    monkeypatch.setenv('ARGUS_WORKDIR', str(config.workdir))
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-token')
+    monkeypatch.setattr(common_config, '_config', None)
+    dst = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+    await store_product(dst, issue=issue.isoformat())
+    await dst.finish()
+
+    density = await RunRecorder.begin('atmospheric-density', 'manual', config, writer=writer)
+    rows = [dict(issue_time=issue.isoformat(), valid_time=(issue + timedelta(hours=lead)).isoformat(),
+                 lead_hours=lead, observed_at=(issue-timedelta(days=5)).isoformat(),
+                 driver_mode='observed_persistence', background_method='trailing_81_daily_values',
+                 dtc_method='causal_dst_ap_v1', history_start=(issue-timedelta(days=85)).isoformat(),
+                 dtc_observed_at=issue.isoformat(), altitude_km=400, latitude_deg=0,
+                 rho_kg_m3=1e-12, rho_lon_p10_kg_m3=8e-13, rho_lon_p90_kg_m3=2e-12)
+            for lead in range(49)]
+    stream = StringIO()
+    csv_writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+    csv_writer.writeheader()
+    csv_writer.writerows(rows)
+    await density.store('atmospheric_density', stream.getvalue().encode(), {}, len(rows), list(rows[0]))
+    await density.finish()
+
+    events = await RunRecorder.begin('solar-wind-events', 'manual', config, writer=writer)
+    event_csv = await store_product(events, names=PRODUCT_ARTIFACTS['solar-wind-events'], issue=issue.isoformat())
+    await events.finish()
+    event_report = json.loads(next(csv.DictReader(StringIO(event_csv)))['report_json'])
+
+    model_registry = {'models': {'dst_quantile': {'metrics_report': 'dst-metrics.json'}}}
+    (config.workdir / 'configs/models_registry.yaml').write_text(json.dumps(model_registry))
+    (config.workdir / 'dst-metrics.json').write_text(json.dumps({
+        'target': 'dst',
+        'variables': {'dst': {'continuous': {
+            'quantiles': [0.1, 0.5, 0.9],
+            'by_lead_hour': [
+                {'lead_hours': 48, 'values': {'mae': 2.0}},
+                {'lead_hours': 49, 'values': {'mae': 3.0}},
+            ],
+        }}},
+    }))
+    targets = ('dst', 'atmospheric-density')
+    releases = [(await read_release(target)).model_dump(mode='json') for target in targets]
+    reference = await asyncio.to_thread(reference_projections, releases, config.workdir)
+    with go_server(config.workdir) as (_, prophet_url):
+        environment = {**os.environ, 'FORECASTS_URL': prophet_url}
+        with go_http_server(config.workdir, environment, ROOT / 'apps/api/api-go', 'public-api',
+                            'PUBLIC_API_HTTP_ADDR', 'Public API listening on ') as public_url:
+            async with httpx.AsyncClient(base_url=public_url, trust_env=False) as public, \
+                       httpx.AsyncClient(base_url=prophet_url, trust_env=False) as prophet:
+                assert (await prophet.get('/internal/v1/public-forecasts/dst')).status_code == 401
+                assert (await prophet.get('/internal/v1/public-forecast-metrics/dst')).status_code == 401
+
+                async def read_forecast(target, meta, accept=lambda _: True):
+                    deadline = monotonic() + 8
+                    while True:
+                        response = await public.get(f'/api/v1/forecasts/{target}', params={'meta': str(meta).lower()})
+                        if response.status_code == 200:
+                            data = response.json()['data']
+                            if accept(data):
+                                return data
+                        assert monotonic() < deadline, response.text
+                        await asyncio.sleep(0.05)
+
+                for target in targets:
+                    for meta in (False, True):
+                        assert await read_forecast(target, meta) == reference[target][int(meta)]
+                assert await read_forecast('solar-wind-events', False) == event_report
+                for meta in (False, True):
+                    metrics = await public.get('/api/v1/forecasts/dst/metrics', params={'meta': str(meta).lower()})
+                    assert metrics.status_code == 200
+                    assert metrics.json()['data'] == reference['dst-metrics'][int(meta)]
+                assert (await public.get('/api/v1/forecasts/hmf/metrics')).status_code == 503
+
+                updated_issue = issue + timedelta(hours=1)
+                updated = await RunRecorder.begin('dst', 'manual', config, writer=writer)
+                await store_product(updated, issue=updated_issue.isoformat())
+                await updated.finish()
+                received = await read_forecast('dst', False, lambda data: datetime.fromisoformat(data['issue_time']) == updated_issue)
+                assert received['predictions'][0]['valid_time'] == (updated_issue + timedelta(hours=1)).isoformat().replace('+00:00', 'Z')
+
+
+def reference_projections(releases, workdir):
+    code = """
+import io
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pandas as pd
+from apps.api.tests.reference_public.services.forecasts import products
+from apps.api.tests.reference_public.schemas.atmospheric_density import DensityForecast
+
+releases = {item['product']: item for item in json.load(sys.stdin)}
+workdir = Path(sys.argv[1])
+registry = json.loads((workdir / 'configs/models_registry.yaml').read_text())
+registry['models']['atmospheric_density'] = {'max_age_hours': 6}
+products.get_config = lambda: SimpleNamespace(workdir=workdir, models_registry=registry)
+products.read_frames = lambda target: {
+    artifact['name']: pd.read_csv(io.StringIO(artifact['csv_text']), parse_dates=['issue_time', 'valid_time'])
+    for artifact in releases[target]['artifacts']
+}
+print(json.dumps({
+    'dst': [products.load_forecast(products.PRODUCTS['dst'], meta=meta).model_dump(mode='json')
+            for meta in (False, True)],
+    'atmospheric-density': [DensityForecast.from_internal(products.load_density_forecast(), meta=meta).model_dump(mode='json')
+                            for meta in (False, True)],
+    'dst-metrics': [products.load_metrics(products.PRODUCTS['dst'], meta=meta).model_dump(mode='json')
+                    for meta in (False, True)],
+}))
+"""
+    result = subprocess.run([ROOT / 'apps/api/.venv/bin/python', '-c', code, str(workdir)], cwd=ROOT,
+                            input=json.dumps(releases), capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)

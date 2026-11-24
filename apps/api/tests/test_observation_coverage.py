@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from api.services.observations.coverage import coverage
+from apps.api.tests.reference_public.services.observations.coverage import coverage
 
 START = datetime(2026, 9, 1, tzinfo=UTC)
 

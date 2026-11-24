@@ -1,29 +1,17 @@
 # Shared service definitions. Use the dev or production override.
 
-x-clio-runtime: &clio-runtime
-  init: true
-  volumes:
-    - ./configs:/var/www/configs:ro
-  stop_grace_period: 10m
-  depends_on: &clio-depends_on
-    postgres:
-      condition: service_healthy
-  environment: &clio-environment
-    CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
-    CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
-    CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
-    ARGUS_WORKDIR: /var/www
-    DEBUG: ${DEBUG:-false}
-    OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
-    SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
-    CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
-    CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
-  healthcheck: &clio-healthcheck
-    interval: 30s
-    timeout: 10s
-    retries: 3
-    start_period: 30s
-  image: ghcr.io/a-kryvenko/argus-clio:latest
+x-clio-database: &clio-database
+  CLIO_DB_NAME: ${CLIO_DB_NAME:?CLIO_DB_NAME is required}
+  CLIO_DB_USER: ${CLIO_DB_USER:?CLIO_DB_USER is required}
+  CLIO_DB_PASSWORD: ${CLIO_DB_PASSWORD:?CLIO_DB_PASSWORD is required}
+  CLIO_DB_HOST: ${CLIO_DB_HOST:-postgres}
+  CLIO_DB_PORT: ${CLIO_DB_PORT:-5432}
+
+x-clio-healthcheck: &clio-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
 
 x-prophet-runtime: &prophet-runtime
   init: true
@@ -109,14 +97,30 @@ services:
       retries: 5
 
   clio:
-    <<: *clio-runtime
+    init: true
+    image: ghcr.io/a-kryvenko/argus-clio-api:latest
+    depends_on: &clio-depends_on
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *clio-database
+      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
     healthcheck:
       <<: *clio-healthcheck
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
-    command: [.venv/bin/uvicorn, 'clio.main:app', --host, 0.0.0.0, --port, '8000']
+      test: [CMD, wget, -q, -O, /dev/null, -T, '5', 'http://127.0.0.1:8000/health/ready']
 
   clio-worker:
-    <<: *clio-runtime
+    init: true
+    image: ghcr.io/a-kryvenko/argus-clio:latest
+    volumes:
+      - ./configs:/var/www/configs:ro
+    stop_grace_period: 10m
+    depends_on: *clio-depends_on
+    environment:
+      <<: *clio-database
+      ARGUS_WORKDIR: /var/www
+      DEBUG: ${DEBUG:-false}
+      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
     healthcheck:
       <<: *clio-healthcheck
       test: [CMD, .venv/bin/python, -m, clio.scheduler.healthcheck, /tmp/clio/worker-state.json]

@@ -137,5 +137,5 @@ and stopped previous slots for recovery.
 
 [Commands](docs/commands.md) · [Architecture](docs/architecture.md)
 
-Clio runs in `clio-worker`; logs: `./argus logs clio`.
+Clio serves HTTP from `clio` and runs collection and migrations from `clio-worker`. Logs: `./argus logs clio`.
 Deployment replaces host cron with `apps/{prophet,api,intelligence}/cronjobs.txt` and `cronjobs.txt`; `@ROOT@` expands to the deployment directory.

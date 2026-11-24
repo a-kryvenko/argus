@@ -11,6 +11,7 @@ Production uses the installed Compose files; `.active-color` selects blue/green 
 ```bash
 ./argus compose up -d --wait
 pnpm dev                         # Local frontend
+./argus compose up -d --build clio # Go API source changes
 ./argus compose restart clio-worker # Scheduler source changes
 ./argus compose down
 ```

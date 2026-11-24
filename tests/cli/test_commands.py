@@ -91,10 +91,10 @@ def test_all_migrations_are_sequential_and_stop_on_failure(cli, fail):
         assert calls[-1]['args'][-2:] == ['stop', 'postgres']
         calls = calls[2:-1]
     assert len(calls) == (2 if fail else 4)
-    for domain, call in zip(('api', 'clio', 'prophet', 'intelligence'), calls):
+    for service, call in zip(('api', 'clio-worker', 'prophet', 'intelligence'), calls):
         args = call['args']
         assert args[-3:] == ['alembic', 'upgrade', 'head']
-        assert args[args.index('--no-deps') + 1] == domain
+        assert args[args.index('--no-deps') + 1] == service
 
 
 @pytest.mark.parametrize('domain', ['api', 'clio'])
@@ -108,7 +108,7 @@ def test_specific_migration_uses_domain_service(cli, domain):
         assert calls[-1]['args'][-2:] == ['stop', 'postgres']
         calls = calls[2:-1]
     assert calls[0]['args'][-2:] == ['alembic', 'current']
-    assert calls[0]['args'][-3] == domain
+    assert calls[0]['args'][-3] == ('clio-worker' if domain == 'clio' else domain)
 
 
 def test_unknown_commands_do_not_run_tools(cli):

@@ -10,8 +10,8 @@ x-object-reader: &object-reader
   S3_ACCESS_KEY_ID: argus-dev-reader
   S3_SECRET_ACCESS_KEY: argus-dev-reader-secret
 
-x-clio-runtime: &clio-runtime
-  build: &clio-build
+x-clio-worker: &clio-worker
+  build:
     context: .
     dockerfile: .docker/clio.Dockerfile
   image: argus-clio-dev
@@ -22,7 +22,7 @@ x-clio-runtime: &clio-runtime
   depends_on:
     storage:
       condition: service_healthy
-  environment: &clio-environment
+  environment:
     <<: *object-storage
     CLIO_DB_HOST: postgres
     CLIO_DB_PORT: '5432'
@@ -31,7 +31,6 @@ x-clio-runtime: &clio-runtime
     SDO_EMAIL: ${SDO_EMAIL:-}
     S3_ACCESS_KEY_ID: argus-dev-writer
     S3_SECRET_ACCESS_KEY: argus-dev-writer-secret
-    S3_PUBLIC_BASE_URL: ${DEV_S3_PUBLIC_BASE_URL:-http://localhost:${DEV_S3_PORT:-8333}/argus-public}
 
 x-prophet-runtime: &prophet-runtime
   build: &prophet-build
@@ -113,13 +112,19 @@ services:
       - 127.0.0.1:6379:6379
 
   clio:
-    <<: *clio-runtime
-    command: [.venv/bin/uvicorn, 'clio.main:app', --host, 0.0.0.0, --port, '8000', --reload, --reload-dir, src, --reload-dir, /var/www/packages]
+    build:
+      context: .
+      dockerfile: .docker/clio-api.Dockerfile
+    image: argus-clio-api-dev
+    environment:
+      CLIO_DB_HOST: postgres
+      CLIO_DB_PORT: '5432'
+      S3_PUBLIC_BASE_URL: ${DEV_S3_PUBLIC_BASE_URL:-http://localhost:${DEV_S3_PORT:-8333}/argus-public}
     ports:
       - 127.0.0.1:8001:8000
 
   clio-worker:
-    <<: *clio-runtime
+    <<: *clio-worker
 
   prophet:
     <<: *prophet-runtime

@@ -138,7 +138,12 @@ def test_observation_storage_uses_s3_in_both_environments():
     for filename in ('docker-compose.dev.yml', '.deploy/docker-compose.yml'):
         services = load_compose(filename)['services']
         assert not {'minio', 'minio-init'} & services.keys()
-        for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
+        clio = services['clio']
+        assert clio['environment']['S3_PUBLIC_BASE_URL']
+        assert {key for key in clio['environment'] if key.startswith('S3_')} == {'S3_PUBLIC_BASE_URL'}
+        assert clio['healthcheck']['test'][1] == 'wget'
+        assert clio['image'] != services['clio-worker']['image']
+        for name in ('clio-worker', 'prophet', 'prophet-api', 'proswin'):
             assert 'DATA_STORAGE' not in services[name]['environment']
             assert services[name]['environment']['S3_ENDPOINT_URL']
     dev = load_compose('docker-compose.dev.yml')
@@ -147,9 +152,11 @@ def test_observation_storage_uses_s3_in_both_environments():
     assert '-bucket=argus-private,argus-public' in storage['command']
     assert 'seaweed-data:/data' in storage['volumes']
     assert all(port.startswith('127.0.0.1:') for port in storage['ports'])
-    assert set(dev['services']['clio']['environment']) >= {'S3_PUBLIC_BASE_URL', 'S3_ACCESS_KEY_ID'}
-    assert dev['services']['clio']['environment']['S3_ACCESS_KEY_ID'] == dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
-    for name in ('clio', 'clio-worker', 'prophet', 'prophet-api', 'proswin'):
+    assert dev['services']['clio']['build']['dockerfile'] == '.docker/clio-api.Dockerfile'
+    assert dev['services']['clio-worker']['build']['dockerfile'] == '.docker/clio.Dockerfile'
+    assert 'storage' not in dev['services']['clio']['depends_on']
+    assert dev['services']['clio-worker']['environment']['S3_ACCESS_KEY_ID'] == dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
+    for name in ('clio-worker', 'prophet', 'prophet-api', 'proswin'):
         assert dev['services'][name]['depends_on']['storage']['condition'] == 'service_healthy'
     assert 'storage' not in load_compose('.deploy/docker-compose.yml')['services']
 

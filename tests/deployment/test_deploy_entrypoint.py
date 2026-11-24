@@ -182,9 +182,13 @@ if 'alembic' in args:
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     migrations = [args[-4:] for args in calls if 'alembic' in args]
     assert migrations == [[domain, 'alembic', 'upgrade', 'head']
-                          for domain in ('api', 'clio', 'prophet', 'intelligence')]
+                          for domain in ('api', 'clio-worker', 'prophet', 'intelligence')]
     starts = [args[-1] for args in calls if '--force-recreate' in args and args[-1].endswith('-green')]
     assert set(starts) == {'clio-green', 'api-green', 'prophet-api-green', 'intelligence-api-green', 'frontend-green'}
+    clio_checks = [args for args in calls if 'clio-smoke' in args]
+    assert [args[-2:] for args in clio_checks] == [
+        ['http://127.0.0.1:8000', ''], ['http://observations-router:8101', 'clio-green'],
+    ]
     assert not any('.rolling-compose.json' in argument for args in calls for argument in args)
     with (root / '.deployment.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -59,7 +59,13 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         source = (self.root / 'scripts/deployment/smoke.py').read_text()
         options = {'service': service, 'base': routed_url(service) if routed else 'http://127.0.0.1:8000',
                    'expected_upstream': slot if routed else None}
-        self.compose.run('exec', '-T', slot, '.venv/bin/python', '-', input=source + '\ncheck(' + repr(options) + ')\n', text=True)
+        command = ('.venv/bin/python', '-')
+        if service == 'clio':
+            # A failed first Go rollout can route back to a running FastAPI slot.
+            command = ('sh', '-c',
+                       'if command -v clio-api >/dev/null; then exec clio-api smoke "$@"; fi; exec .venv/bin/python -',
+                       'clio-smoke', options['base'], options['expected_upstream'] or '')
+        self.compose.run('exec', '-T', slot, *command, input=source + '\ncheck(' + repr(options) + ')\n', text=True)
 
     def start(self, color):
         for service, name in zip(HTTP, slot_names(color)):

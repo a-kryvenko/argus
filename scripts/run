@@ -68,7 +68,9 @@ prepare_migration_database() {
 migrate() {
     local domain="$1"
     shift
-    "${templates[@]}" run --rm --no-deps "$domain" alembic "$@"
+    local service="$domain"
+    if [[ "$domain" == clio ]]; then service=clio-worker; fi
+    "${templates[@]}" run --rm --no-deps "$service" alembic "$@"
 }
 case "${1:-}" in
     -h|--help|'') usage; exit 0 ;;

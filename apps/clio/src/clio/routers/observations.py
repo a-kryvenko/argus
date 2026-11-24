@@ -6,7 +6,7 @@ from typing import Literal
 from common.schemas.response import success_response
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AwareDatetime
-from sqlalchemy import select, or_
+from sqlalchemy import or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,14 +73,6 @@ def _output_value(metric, number):
     return int(number) if metric in INTEGER_METRICS and number is not None else number
 
 
-def _points(rows, metrics):
-    grouped = {}
-    for time, metric, number in rows:
-        grouped.setdefault(time, {'time': time})[metric] = number
-    return [dict(time=time, **{metric: _output_value(metric, row.get(metric)) for metric in metrics})
-            for time, row in sorted(grouped.items())]
-
-
 async def _read_latest(session, metrics):
     statement = (select(Measurement)
         .where(Measurement.metric.in_(metrics))
@@ -96,54 +88,69 @@ async def _read_latest(session, metrics):
 
 
 async def _read_history(session, metrics, start, end, interval):
-    rows = []
-    if interval == '1h':
-        selected = [metric for metric in metrics if metric in OBSERVATION_METRICS]
-        columns = list(selected)
-        if 'bt' in metrics:
-            columns = list(dict.fromkeys([*columns, 'bx', 'by', 'bz']))
-        if columns:
-            statement = select(NormalizedObservation.observed_at, *[
-                getattr(NormalizedObservation, metric) for metric in columns]).where(
-                    NormalizedObservation.observed_at >= start,
-                    NormalizedObservation.observed_at < end
-                ).order_by(NormalizedObservation.observed_at).limit(MAX_ROWS + 1)
-            records = (await session.execute(statement)).all()
-            if len(records) > MAX_ROWS:
-                raise ObservationUnavailable('Numeric read exceeds the supported batch size')
-            for record in records:
-                values = dict(zip(columns, record[1:]))
-                rows.extend((record[0], metric, _value(metric, values[metric])) for metric in selected)
-                if 'bt' in metrics:
-                    components = [_value(metric, values[metric]) for metric in ('bx', 'by', 'bz')]
-                    rows.append((record[0], 'bt', math.sqrt(sum(v*v for v in components))
-                                 if all(v is not None for v in components) else None))
-        native = [metric for metric in metrics if metric.endswith('_81mean')]
-    else:
-        native = metrics
-    if native:
-        statement = select(Measurement).where(
-            Measurement.metric.in_(native), Measurement.observed_at >= start,
-            Measurement.observed_at < end)
-        if interval != '1h':
-            statement = statement.where(or_(Measurement.source_product.in_(LIVE_PRODUCTS),
-                                            Measurement.metric.in_([m for m in native if m.endswith('_81mean')])))
-        records = (await session.execute(statement.order_by(Measurement.observed_at).limit(MAX_ROWS + 1))).scalars().all()
-        if len(records) > MAX_ROWS:
-            raise ObservationUnavailable('Numeric read exceeds the supported batch size')
+    hourly = interval == '1h'
+    means = [metric for metric in metrics if metric.endswith('_81mean')]
+    points = await _read_hourly_points(session, metrics, start, end) if hourly else {}
+    native_metrics = means if hourly else metrics
+    if native_metrics:
+        statement = select(Measurement.observed_at, Measurement.metric, Measurement.value).where(
+            Measurement.metric.in_(native_metrics))
+        if not hourly:
+            statement = statement.where(or_(Measurement.source_product.in_(LIVE_PRODUCTS), Measurement.metric.in_(means)))
+        records = await _read_bounded_rows(session, statement, Measurement.observed_at, start, end)
         if interval == '5m':
-            buckets = {}
-            for record in records:
-                time = record.observed_at.replace(minute=record.observed_at.minute // 5 * 5, second=0, microsecond=0)
-                if time < start or time + timedelta(minutes=5) > end:
-                    continue
-                # A minute contributes at most once, even for off-grid native samples.
-                minute = record.observed_at.replace(second=0, microsecond=0)
-                buckets.setdefault((time, record.metric), {})[minute] = _value(record.metric, record.value)
-            for (time, metric), samples in buckets.items():
-                valid = [v for v in samples.values() if v is not None]
-                rows.append((time, metric, sum(valid) / len(valid) if valid else None))
+            points = _five_minute_points(records, start, end)
         else:
-            rows.extend((record.observed_at, record.metric, _value(record.metric, record.value))
-                        for record in records)
-    return {'interval': interval, 'points': _points(rows, metrics)}
+            for record in records:
+                points.setdefault(record.observed_at, {})[record.metric] = _value(record.metric, record.value)
+
+    return {
+        'interval': interval,
+        'points': [dict(time=time, **{metric: _output_value(metric, values.get(metric)) for metric in metrics})
+                   for time, values in sorted(points.items())],
+    }
+
+
+async def _read_bounded_rows(session, statement, observed_at, start, end):
+    statement = statement.where(observed_at >= start, observed_at < end).order_by(observed_at).limit(MAX_ROWS + 1)
+    rows = (await session.execute(statement)).all()
+    if len(rows) > MAX_ROWS:
+        raise ObservationUnavailable('Numeric read exceeds the supported batch size')
+    return rows
+
+
+async def _read_hourly_points(session, metrics, start, end):
+    components = ('bx', 'by', 'bz') if 'bt' in metrics else ()
+    selected = [metric for metric in metrics if metric in OBSERVATION_METRICS]
+    columns = tuple(dict.fromkeys((*selected, *components)))
+    if not columns:
+        return {}
+
+    observed_at = NormalizedObservation.observed_at
+    statement = select(observed_at, *(getattr(NormalizedObservation, metric) for metric in columns))
+    rows = await _read_bounded_rows(session, statement, observed_at, start, end)
+    points = {}
+    for time, *numbers in rows:
+        values = {metric: _value(metric, number) for metric, number in zip(columns, numbers)}
+        if components:
+            field = [values[metric] for metric in components]
+            values['bt'] = math.sqrt(sum(value * value for value in field)) if None not in field else None
+        points[time] = values
+    return points
+
+
+def _five_minute_points(records, start, end):
+    window = timedelta(minutes=5)
+    buckets = {}
+    for record in records:
+        minute = record.observed_at.replace(second=0, microsecond=0)
+        time = minute.replace(minute=minute.minute // 5 * 5)
+        if start <= time and time + window <= end:
+            # In timestamp order, the last sample within each minute wins.
+            buckets.setdefault((time, record.metric), {})[minute] = _value(record.metric, record.value)
+
+    points = {}
+    for (time, metric), samples in buckets.items():
+        valid = [value for value in samples.values() if value is not None]
+        points.setdefault(time, {})[metric] = sum(valid) / len(valid) if valid else None
+    return points

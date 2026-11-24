@@ -53,22 +53,28 @@ def test_latest_keeps_independent_times_and_null_latest_values():
 
 def test_hourly_uses_normalized_storage_and_preserves_published_mean_dates():
     session = AsyncMock()
-    session.execute.side_effect = [result([(NOW, -3.)]), result([record('s10_81mean', 30, 110)])]
-    data = asyncio.run(routes._read_history(session, ['bx', 's10_81mean'], NOW, NOW+timedelta(hours=1),
+    session.execute.side_effect = [
+        result([(NOW, -3.), (NOW+timedelta(hours=1), -4.)]),
+        result([record('s10_81mean', 30, 110), record('s10_81mean', 60, 120)]),
+    ]
+    data = asyncio.run(routes._read_history(session, ['bx', 's10_81mean'], NOW, NOW+timedelta(hours=2),
                                     '1h'))
     assert data == {'interval': '1h', 'points': [
         {'time': NOW, 'bx': -3., 's10_81mean': None},
-        {'time': NOW+timedelta(minutes=30), 'bx': None, 's10_81mean': 110.}]}
+        {'time': NOW+timedelta(minutes=30), 'bx': None, 's10_81mean': 110.},
+        {'time': NOW+timedelta(hours=1), 'bx': -4., 's10_81mean': 120.}]}
     sql = [str(call.args[0].compile(dialect=postgresql.dialect())) for call in session.execute.call_args_list]
     assert 'normalized_observation' in sql[0]
     assert 'measurement' in sql[1] and 'received_at <=' not in sql[1]
 
 
-def test_five_minute_windows_use_valid_unique_minutes_and_exclude_partial_window():
+def test_five_minute_windows_use_valid_unique_minutes_and_exclude_partial_windows():
     session = AsyncMock()
-    session.execute.return_value = result([record('v', 0, 100), record('v', 1, 300),
+    session.execute.return_value = result([record('v', -1, 900),
+        record('v', 0, 50), record('v', 0.5, 100), record('v', 1, 300),
         record('v', 2, float('nan')), record('v', 3, None), record('v', 5, 500)])
-    data = asyncio.run(routes._read_history(session, ['v'], NOW, NOW+timedelta(minutes=7), '5m'))
+    start, end = NOW-timedelta(minutes=1), NOW+timedelta(minutes=7)
+    data = asyncio.run(routes._read_history(session, ['v'], start, end, '5m'))
     assert data == {'interval': '5m', 'points': [{'time': NOW, 'v': 200.}]}
     sql = str(session.execute.call_args.args[0].compile(dialect=postgresql.dialect()))
     assert 'source_product IN' in sql and 'normalized_observation' not in sql

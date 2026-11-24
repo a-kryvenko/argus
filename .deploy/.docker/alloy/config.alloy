@@ -75,6 +75,10 @@ loki.source.file "nginx_error" {
 }
 
 loki.source.file "nginx_requests" {
+  file_match {
+    enabled = true
+  }
+
   targets = [
     {
       __path__ = "/var/log/nginx/requests.jsonl",

@@ -44,6 +44,7 @@ http {
     server {
         listen 8104;
         add_header X-Test-Upstream-Port $remote_port always;
+        add_header X-Argus-Upstream api-blue always;
         default_type application/json;
         if ($http_x_test_account_limit) {
             return 429 '{"error":{"message":"Account limit"}}';
@@ -85,6 +86,7 @@ http {
             time.sleep(.1)
         else:
             pytest.fail(docker('logs', name))
+        request.access_log = directory / 'log/requests.jsonl'
         yield request
     finally:
         docker('stop', name)
@@ -96,6 +98,37 @@ def test_site_reuses_upstream_connections(edge, path):
     assert all(status == 200 for status, _, _ in responses)
     ports = [headers['X-Test-Upstream-Port'] for _, headers, _ in responses]
     assert ports[0] is not None and len(set(ports)) == 1
+
+
+def test_request_log_keeps_path_without_query_and_attributes_trusted_cloudflare_ip(edge):
+    agent = 'Argus "monitoring" check'
+    headers = {'User-Agent': agent, 'CF-Connecting-IP': '203.0.113.8'}
+    assert edge('/api/traffic-check?token=secret-test', method='GET',
+                client='172.71.123.190', headers=headers)[0] == 200
+    assert edge('/xmlrpc.php', method='GET', client='198.51.100.5', headers=headers)[0] == 200
+    assert edge('/robots.txt', method='GET', client='198.51.100.5')[0] == 404
+    assert edge('/api/untrusted-traffic-check', method='GET', direct=True,
+                headers={**headers, 'X-Forwarded-For': '172.71.123.190'})[0] == 200
+
+    def read_requests():
+        return [json.loads(line) for line in edge.access_log.read_text().splitlines()]
+
+    for _ in range(50):
+        requests = {row['path']: row for row in read_requests()}
+        if '/api/untrusted-traffic-check' in requests:
+            break
+        time.sleep(.02)
+    entry = requests['/api/traffic-check']
+    assert entry['method'] == 'GET' and entry['status_class'] == '2xx'
+    assert entry['surface'] == 'api' and entry['upstream'] == 'api-blue'
+    assert entry['ip'] == '203.0.113.8' and entry['edge_ip'] == '172.71.123.190'
+    assert entry['user_agent'] == agent
+    assert float(entry['timestamp']) > 0 and float(entry['request_time']) >= 0
+    assert 'secret-test' not in json.dumps(entry)
+    assert requests['/xmlrpc.php']['traffic'] == 'probe'
+    assert requests['/xmlrpc.php']['ip'] == '198.51.100.5'
+    assert requests['/robots.txt']['surface'] == 'static'
+    assert requests['/api/untrusted-traffic-check']['ip'] != '203.0.113.8'
 
 
 def test_login_ip_limit_is_independent_and_returns_json(edge):

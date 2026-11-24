@@ -243,7 +243,8 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - ./log/nginx:/var/log/nginx:ro
-    command: [run, /etc/alloy/config.alloy, '--server.http.listen-addr=0.0.0.0:12345']
+      - alloy_data:/var/lib/alloy/data
+    command: [run, /etc/alloy/config.alloy, '--server.http.listen-addr=0.0.0.0:12345', '--storage.path=/var/lib/alloy/data']
     depends_on:
       - nginx
 
@@ -340,6 +341,9 @@ services:
       start_period: 10s
       start_interval: 1s
     stop_grace_period: 120s
+
+volumes:
+  alloy_data:
 
 networks:
   nginx-proxy-network:

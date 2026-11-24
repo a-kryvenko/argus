@@ -124,6 +124,8 @@ use `--maintenance`; maintenance always starts green and writes this marker.
 
 Local deployment uploads the bundle, then `.release` and `.release_manifest`. CI runs `/var/www/deploy.sh`. The bundle includes models, metrics and `demo/current.json`; deployment verifies its checksum before installation.
 
+Import the [Website traffic dashboard](docs/monitoring/website-traffic.json) into Grafana and select the existing Loki source. It shows requests that reach Argus Nginx after deployment.
+
 ## Maintenance and recovery
 
 Maintenance serves a page with HTTP 503 and `Retry-After: 60`. If a migration fails, the page stays active. `.maintenance-recovery.json` records the previous state and verified backup. Restore and verify the database and previous services before clearing the checkpoint and running `./argus compose stop maintenance`.

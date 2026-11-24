@@ -41,6 +41,8 @@ prometheus.remote_write "monitoring" {
 }
 
 loki.source.file "nginx_access" {
+  tail_from_end = true
+
   targets = [
     {
       __path__ = "/var/log/nginx/access.log",
@@ -56,6 +58,8 @@ loki.source.file "nginx_access" {
 }
 
 loki.source.file "nginx_error" {
+  tail_from_end = true
+
   targets = [
     {
       __path__ = "/var/log/nginx/error.log",
@@ -68,6 +72,33 @@ loki.source.file "nginx_error" {
   forward_to = [
     loki.write.monitoring.receiver,
   ]
+}
+
+loki.source.file "nginx_requests" {
+  targets = [
+    {
+      __path__ = "/var/log/nginx/requests.jsonl",
+      job      = "nginx-requests",
+      instance = "argus",
+      host     = "argus",
+    },
+  ]
+
+  forward_to = [loki.process.nginx_requests.receiver]
+}
+
+loki.process "nginx_requests" {
+  forward_to = [loki.write.monitoring.receiver]
+
+  stage.json {
+    expressions = { request_timestamp = "timestamp" }
+  }
+
+  stage.timestamp {
+    source = "request_timestamp"
+    format = "Unix"
+    action_on_failure = "skip"
+  }
 }
 
 loki.write "monitoring" {

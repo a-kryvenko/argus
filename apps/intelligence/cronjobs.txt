@@ -1,1 +1,0 @@
-# No cron jobs; periodic work runs in the service worker.

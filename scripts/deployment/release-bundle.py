@@ -33,10 +33,6 @@ def _copy_release_files(destination):
         'argus',
         'scripts/run',
         'scripts/logs',
-        'scripts/cron-run',
-        'apps/api/cronjobs.txt',
-        'apps/prophet/cronjobs.txt',
-        'apps/intelligence/cronjobs.txt',
     )
     for name in repository_files:
         target = destination / name

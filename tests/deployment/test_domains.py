@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_domain_credentials_are_scoped_for_services_and_slots():
     services = load_compose('.deploy/docker-compose.yml')['services']
     domains = {'api': ['api'], 'clio': ['clio', 'clio-worker'],
-               'prophet': ['prophet', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
+               'prophet': ['prophet', 'prophet-worker', 'prophet-api'], 'intelligence': ['intelligence', 'intelligence-api']}
     for domain, names in domains.items():
         slots = [slot for name in names for slot in (name + '-blue', name + '-green') if slot in services]
         for name in [*names, *slots]:
@@ -53,7 +53,7 @@ def test_intelligence_credentials_and_networks_are_scoped():
     services = load_compose('.deploy/docker-compose.yml')['services']
     runtime = services['intelligence']
     assert 'profiles' not in runtime
-    assert runtime['command'] == ['intelligence', 'worker']
+    assert runtime['command'][:2] == ['intelligence', 'worker']
     assert set(runtime['networks']) == {'backend', 'forecasts'}
     assert set(runtime['environment']) == {'INTELLIGENCE_DB_' + field for field in ('HOST', 'PORT', 'NAME', 'USER', 'PASSWORD')} | {'FORECASTS_URL', 'FORECASTS_SERVICE_TOKEN', 'ARGUS_WORKDIR', 'INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR', 'INTELLIGENCE_SERVICE_TOKEN'}
     assert runtime['environment']['ARGUS_WORKDIR'] == '/var/www'
@@ -118,13 +118,22 @@ def test_runtime_storage_credentials_and_startup_boundaries(filename):
 
 
 
-def test_prophet_generation_is_a_command_template_without_a_background_worker():
+def test_scheduler_workers_and_manual_prophet_commands_are_separate():
     for filename in ('docker-compose.dev.yml', '.deploy/docker-compose.yml'):
         services = load_compose(filename)['services']
         service = services['prophet']
         assert service['profiles'] == ['commands']
         assert service['restart'] == 'no'
         assert service['command'] == ['prophet', '--help']
+        worker = services['prophet-worker']
+        assert not worker.get('profiles')
+        assert worker['environment'] == service['environment']
+        assert worker['volumes'] == service['volumes']
+        assert worker['command'][2] == 'prophet.scheduler'
+        for name in ('prophet-worker', 'intelligence'):
+            worker = services[name]
+            assert worker['command'][-2] == '--heartbeat-file'
+            assert worker['healthcheck']['test'][-2:] == ['common.scheduler', worker['command'][-1]]
 
 
 @pytest.mark.parametrize('filename', ['docker-compose.dev.yml', '.deploy/docker-compose.yml'])
@@ -143,7 +152,7 @@ def test_observation_storage_uses_s3_in_both_environments():
         assert {key for key in clio['environment'] if key.startswith('S3_')} == {'S3_PUBLIC_BASE_URL'}
         assert clio['healthcheck']['test'][1] == 'wget'
         assert clio['image'] != services['clio-worker']['image']
-        for name in ('clio-worker', 'prophet', 'prophet-api', 'proswin'):
+        for name in ('clio-worker', 'prophet', 'prophet-worker', 'prophet-api', 'proswin'):
             assert 'DATA_STORAGE' not in services[name]['environment']
             assert services[name]['environment']['S3_ENDPOINT_URL']
     dev = load_compose('docker-compose.dev.yml')
@@ -156,7 +165,7 @@ def test_observation_storage_uses_s3_in_both_environments():
     assert dev['services']['clio-worker']['build']['dockerfile'] == '.docker/clio.Dockerfile'
     assert 'storage' not in dev['services']['clio']['depends_on']
     assert dev['services']['clio-worker']['environment']['S3_ACCESS_KEY_ID'] == dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
-    for name in ('clio-worker', 'prophet', 'prophet-api', 'proswin'):
+    for name in ('clio-worker', 'prophet', 'prophet-worker', 'prophet-api', 'proswin'):
         assert dev['services'][name]['depends_on']['storage']['condition'] == 'service_healthy'
     assert 'storage' not in load_compose('.deploy/docker-compose.yml')['services']
 

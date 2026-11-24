@@ -2,11 +2,12 @@
 import asyncio
 import json
 import os
-import signal
-import threading
+from datetime import UTC, datetime
 from uuid import uuid4
 
+from apscheduler.triggers.interval import IntervalTrigger
 from common.db.session import dispose_engine
+from common.scheduler import WorkerScheduler
 from intelligence.db import session as db
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -83,41 +84,39 @@ async def status(product='solar-wind-speed'):
             'note': 'Processing history only; this does not establish worker liveness, forecast readiness or satellite risks.'}
 
 
-async def _worker(product='solar-wind-speed', *, interval=60, stop=None):
-    stop = stop or threading.Event()
-    previous = {}
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        previous[sig] = signal.signal(sig, lambda *_: stop.set())
+async def refresh_cycle(product, stop):
     try:
-        while not stop.is_set():
-            try:
-                outcome = await process_once(product)
-            except Exception:
-                outcome = {'status': 'error', 'product': product, 'error': 'Processing failed; retry scheduled'}
-            print(json.dumps(outcome), flush=True)
-            if os.getenv('INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR','false').lower() in ('true','1'):
-                try:
-                    from intelligence.monitor import refresh_profiles
-                    monitoring = await refresh_profiles(stop=stop)
-                    if monitoring['profiles']:
-                        print(json.dumps({'drag_monitor': monitoring}), flush=True)
-                except Exception:
-                    print(json.dumps({'drag_monitor': {'error': 'Monitoring unavailable; retry scheduled'}}), flush=True)
-            try:
-                from intelligence.density_monitor import refresh_profiles as refresh_density
-                screening = await refresh_density(stop=stop)
-                if screening['profiles']:
-                    print(json.dumps({'density_advisory': screening}), flush=True)
-            except Exception:
-                print(json.dumps({'density_advisory': {'error': 'Monitoring unavailable; retry scheduled'}}), flush=True)
-            await asyncio.to_thread(stop.wait, interval)
-    finally:
+        outcome = await process_once(product)
+    except Exception:
+        outcome = {'status': 'error', 'product': product, 'error': 'Processing failed; retry scheduled'}
+    print(json.dumps(outcome), flush=True)
+    if not stop.is_set() and os.getenv('INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR', 'false').lower() in ('true', '1'):
         try:
-            await dispose_engine()
-        finally:
-            for sig, handler in previous.items():
-                signal.signal(sig, handler)
+            from intelligence.monitor import refresh_profiles
+            monitoring = await refresh_profiles(stop=stop)
+            if monitoring['profiles']:
+                print(json.dumps({'drag_monitor': monitoring}), flush=True)
+        except Exception:
+            print(json.dumps({'drag_monitor': {'error': 'Monitoring unavailable; retry scheduled'}}), flush=True)
+    if not stop.is_set():
+        try:
+            from intelligence.density_monitor import refresh_profiles as refresh_density
+            screening = await refresh_density(stop=stop)
+            if screening['profiles']:
+                print(json.dumps({'density_advisory': screening}), flush=True)
+        except Exception:
+            print(json.dumps({'density_advisory': {'error': 'Monitoring unavailable; retry scheduled'}}), flush=True)
 
 
-def worker(product='solar-wind-speed', *, interval=60, stop=None):
-    asyncio.run(_worker(product, interval=interval, stop=stop))
+async def _worker(product='solar-wind-speed', *, interval=60, stop=None, heartbeat_file=None):
+    scheduler = WorkerScheduler(stop=stop)
+    scheduler.add_job(refresh_cycle, IntervalTrigger(seconds=interval, timezone=UTC),
+                      id='refresh', args=(product, scheduler.stop), next_run_time=datetime.now(UTC))
+    try:
+        await scheduler.serve(heartbeat_file)
+    finally:
+        await dispose_engine()
+
+
+def worker(product='solar-wind-speed', *, interval=60, stop=None, heartbeat_file=None):
+    asyncio.run(_worker(product, interval=interval, stop=stop, heartbeat_file=heartbeat_file))

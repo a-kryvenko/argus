@@ -4,6 +4,7 @@ import asyncio
 from datetime import UTC, datetime
 import json
 import os
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -58,6 +59,8 @@ def main(argv=None):
         sub = commands.add_parser(command, aliases=['refresh'] if command == 'process' else [])
         sub.add_argument('product', choices=PRODUCT_ARTIFACTS if command == 'worker' else ('all', *PROCESS_PRODUCTS),
                          nargs='?', default='solar-wind-speed' if command == 'worker' else 'all')
+        if command == 'worker':
+            sub.add_argument('--heartbeat-file', type=Path)
     commands.add_parser('serve')
     args = parser.parse_args(argv)
     if args.command == 'serve':
@@ -68,7 +71,7 @@ def main(argv=None):
         from intelligence import worker
         try:
             if args.command == 'worker':
-                worker.worker(args.product)
+                worker.worker(args.product, heartbeat_file=args.heartbeat_file)
                 return
             operation = worker.status if args.command == 'status' else worker.process_once
             async def execute():

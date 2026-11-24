@@ -182,12 +182,18 @@ def test_jobs_do_not_require_interactive_input(cli, domain, command):
     assert args[-len(command)-2:] == [domain, domain, *command]
 
 
-def test_prophet_cron_origin_is_forwarded_into_the_container(cli):
+@pytest.mark.parametrize('worker_running', [False, True])
+def test_legacy_prophet_cron_runs_only_before_scheduler_cutover(cli, worker_running):
     _, _, run = cli
-    result, calls = run('prophet', 'test-command', 'argument', env={'ARGUS_CRON_JOB': 'test-job'})
+    result, calls = run('prophet', 'test-command', 'argument', running=worker_running,
+                        env={'ARGUS_CRON_JOB': 'test-job'})
     assert result.returncode == 0, result.stderr
-    args = calls[0]['args']
-    assert args[args.index('-e')+1] == 'ARGUS_CRON_JOB=test-job'
+    assert calls[0]['args'][-5:] == ['ps', '--status', 'running', '-q', 'prophet-worker']
+    if worker_running:
+        assert len(calls) == 1
+        return
+    args = calls[1]['args']
+    assert args[args.index('-e')+1] == 'ARGUS_SCHEDULED_JOB=test-job'
     assert args[-4:] == ['prophet', 'prophet', 'test-command', 'argument']
 
 

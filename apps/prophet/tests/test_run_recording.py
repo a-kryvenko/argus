@@ -185,12 +185,12 @@ async def test_shutdown_after_loading_inputs_does_not_record_snapshot_or_calcula
     command.assert_not_called()
 
 
-@pytest.mark.parametrize('cron_job,trigger', [(None, 'manual'), ('generate-dst', 'scheduled')])
-async def test_command_composition_preserves_writer_and_trigger(monkeypatch, cron_job, trigger):
-    if cron_job:
-        monkeypatch.setenv('ARGUS_CRON_JOB', cron_job)
+@pytest.mark.parametrize('scheduled_job,trigger', [(None, 'manual'), ('generation:dst', 'scheduled')])
+async def test_command_composition_preserves_writer_and_trigger(monkeypatch, scheduled_job, trigger):
+    if scheduled_job:
+        monkeypatch.setenv('ARGUS_SCHEDULED_JOB', scheduled_job)
     else:
-        monkeypatch.delenv('ARGUS_CRON_JOB', raising=False)
+        monkeypatch.delenv('ARGUS_SCHEDULED_JOB', raising=False)
     from common import config
     from prophet.services.inputs import loader as observations
     from prophet.services.releases import recording as ledger

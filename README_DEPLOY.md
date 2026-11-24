@@ -140,4 +140,4 @@ and stopped previous slots for recovery.
 [Commands](docs/commands.md) · [Architecture](docs/architecture.md)
 
 Clio serves HTTP from `clio` and runs collection and migrations from `clio-worker`. Logs: `./argus logs clio`.
-Deployment replaces host cron with `apps/{prophet,api,intelligence}/cronjobs.txt` and `cronjobs.txt`; `@ROOT@` expands to the deployment directory.
+Deployment installs `cronjobs.txt` for Nginx bootstrap. Prophet and Intelligence run scheduled jobs in their workers.

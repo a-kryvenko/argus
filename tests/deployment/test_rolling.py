@@ -149,18 +149,14 @@ def test_checksum_and_installation_follow_current_bundle_layout(tmp_path):
 
 def test_current_cron_layout_is_installed(tmp_path):
     deployment = harness(tmp_path)
-    contents = []
-    for index, name in enumerate(('apps/prophet/cronjobs.txt', 'apps/api/cronjobs.txt',
-                                  'apps/intelligence/cronjobs.txt', 'cronjobs.txt')):
-        path = tmp_path / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        text = f'{index} * * * * cd @ROOT@ && job-{index}'
-        path.write_text(text + '\n')
-        contents.append(text.replace('@ROOT@', str(tmp_path)))
+    (tmp_path / 'cronjobs.txt').write_text('@reboot cd @ROOT@ && ./nginx-proxy-up.sh\n')
+    legacy = tmp_path / 'apps/prophet/cronjobs.txt'
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('*/5 * * * * old-job\n')
     calls = []
     deployment.release.execute = lambda *args, **kwargs: calls.append((args, kwargs))
     deployment.release.install_crontab()
-    assert calls == [(('crontab', '-'), {'input': '\n\n'.join(contents) + '\n', 'text': True})]
+    assert calls == [(('crontab', '-'), {'input': f'@reboot cd {tmp_path} && ./nginx-proxy-up.sh\n', 'text': True})]
 
 
 @pytest.mark.parametrize('failure', [None, 'startup', 'smoke', 'route', 'persist'])
@@ -353,8 +349,12 @@ def test_marker_is_required_for_rolling_but_not_for_maintenance(tmp_path, monkey
 
 def test_finish_release_keeps_existing_nginx_and_reloads_configuration(tmp_path, monkeypatch):
     deployment = harness(tmp_path)
-    monkeypatch.setattr(deployment.release, 'install_crontab', lambda: None)
+    monkeypatch.setattr(deployment.release, 'install_crontab', lambda: deployment.calls.append(('crontab',)))
     deployment.finish_release()
+    worker_start = deployment.calls[0]
+    assert worker_start[0] == 'up' and '--wait' in worker_start
+    assert set(worker_start[-len(WORKERS):]) == set(WORKERS)
+    assert deployment.calls[1] == ('crontab',)
     nginx_up = [call for call in deployment.calls if call[0] == 'up' and 'nginx' in call]
     assert len(nginx_up) == 1
     assert '--no-recreate' in nginx_up[0] and '--pull' in nginx_up[0]

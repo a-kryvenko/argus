@@ -82,8 +82,7 @@ def release_source(tmp_path, monkeypatch):
     shutil.copytree(ROOT / '.deploy', source / '.deploy')
     shutil.copytree(ROOT / 'scripts/deployment', source / 'scripts/deployment',
                     ignore=shutil.ignore_patterns('__pycache__'))
-    for name in ('docker-compose.yml', 'argus', 'scripts/run', 'scripts/logs', 'scripts/cron-run',
-                 'apps/api/cronjobs.txt', 'apps/prophet/cronjobs.txt', 'apps/intelligence/cronjobs.txt'):
+    for name in ('docker-compose.yml', 'argus', 'scripts/run', 'scripts/logs'):
         target = source / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, target)

@@ -51,6 +51,15 @@ x-prophet-runtime: &prophet-runtime
     storage:
       condition: service_healthy
 
+x-prophet-jobs: &prophet-jobs
+  <<: *prophet-runtime
+  environment:
+    <<: *prophet-environment
+    S3_ACCESS_KEY_ID: argus-dev-writer
+    S3_SECRET_ACCESS_KEY: argus-dev-writer-secret
+    S3_PUBLIC_BASE_URL: ${DEV_S3_PUBLIC_BASE_URL:-http://localhost:${DEV_S3_PORT:-8333}/argus-public}
+    OBSERVATIONS_URL: http://clio:8000
+
 x-intelligence-runtime: &intelligence-runtime
   build: &intelligence-build
     context: .
@@ -127,13 +136,10 @@ services:
     <<: *clio-worker
 
   prophet:
-    <<: *prophet-runtime
-    environment:
-      <<: *prophet-environment
-      S3_ACCESS_KEY_ID: argus-dev-writer
-      S3_SECRET_ACCESS_KEY: argus-dev-writer-secret
-      S3_PUBLIC_BASE_URL: ${DEV_S3_PUBLIC_BASE_URL:-http://localhost:${DEV_S3_PORT:-8333}/argus-public}
-      OBSERVATIONS_URL: http://clio:8000
+    <<: *prophet-jobs
+
+  prophet-worker:
+    <<: *prophet-jobs
 
   prophet-api:
     <<: *prophet-runtime

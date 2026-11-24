@@ -38,8 +38,5 @@ class Release:
     def install_crontab(self):
         if any(char in str(self.root) for char in ('\n', '\r', '%')):
             raise RuntimeError('Cron deployment path must not contain newlines or %')
-        paths = [self.root / 'apps' / domain / 'cronjobs.txt'
-                 for domain in ('prophet', 'api', 'intelligence')]
-        paths.append(self.root / 'cronjobs.txt')
-        contents = '\n\n'.join(path.read_text().rstrip() for path in paths)
+        contents = (self.root / 'cronjobs.txt').read_text().rstrip()
         self.execute('crontab', '-', input=contents.replace('@ROOT@', shlex.quote(str(self.root))) + '\n', text=True)

@@ -124,9 +124,9 @@ class Deployment:
         self.database.rotate_backups()
 
     def finish_release(self):
-        self.release.install_crontab()
         self.compose.run('up', '-d', '--no-deps', '--force-recreate', '--pull', 'never',
                          '--wait', '--wait-timeout', '300', *WORKERS)
+        self.release.install_crontab()
         self.compose.run('up', '-d', '--no-deps', '--no-recreate', '--pull', 'never', '--wait', 'nginx')
         self.compose.run('exec', '-T', 'nginx', 'sh', '/docker-entrypoint.d/20-envsubst-on-templates.sh')
         self.proxy.drain('nginx', self.proxy.reload('nginx'))

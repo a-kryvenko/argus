@@ -72,7 +72,7 @@ async def generate_products(products, *, writer) -> None:
         input_loader=partial(loader, **options) if options else loader,
         calculator=calculate_product,
         executor=execute,
-        run_factory=partial(ProductRun.begin, trigger='scheduled' if os.getenv('ARGUS_CRON_JOB') else 'manual', runtime=runtime,
+        run_factory=partial(ProductRun.begin, trigger='scheduled' if os.getenv('ARGUS_SCHEDULED_JOB') else 'manual', runtime=runtime,
                             policy=policy, writer=writer, details=details),
         before_dispatch=before_dispatch,
         timeout_seconds=policy.calculation_timeout_seconds,

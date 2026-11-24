@@ -29,6 +29,29 @@ x-prophet-runtime: &prophet-runtime
     PROPHET_DB_PORT: ${PROPHET_DB_PORT:-5432}
   image: ghcr.io/a-kryvenko/argus-prophet:latest
 
+x-prophet-jobs: &prophet-jobs
+  <<: *prophet-runtime
+  volumes:
+    - ./configs:/var/www/configs:ro
+    - ./data/models:/var/www/data/models:ro
+    - ./data/prophet:/var/www/data/prophet
+    - ./data/demo:/var/www/data/demo
+  depends_on:
+    <<: *prophet-depends_on
+    clio:
+      condition: service_started
+  environment:
+    <<: *prophet-environment
+    OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+    SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+  stop_grace_period: 10m
+
+x-scheduler-healthcheck: &scheduler-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
 x-intelligence-runtime: &intelligence-runtime
   init: true
   volumes:
@@ -127,24 +150,18 @@ services:
     command: [.venv/bin/python, -m, clio.scheduler.worker, --heartbeat-file, /tmp/clio/worker-state.json]
 
   prophet:
-    <<: *prophet-runtime
-    volumes:
-      - ./configs:/var/www/configs:ro
-      - ./data/models:/var/www/data/models:ro
-      - ./data/prophet:/var/www/data/prophet
-      - ./data/demo:/var/www/data/demo
-    depends_on:
-      <<: *prophet-depends_on
-      clio:
-        condition: service_started
-    environment:
-      <<: *prophet-environment
-      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
-      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
+    <<: *prophet-jobs
     profiles: [commands]
     restart: 'no'
     command: [prophet, --help]
-    stop_grace_period: 10m
+
+  prophet-worker:
+    <<: *prophet-jobs
+    restart: unless-stopped
+    command: [.venv/bin/python, -m, prophet.scheduler, --heartbeat-file, /tmp/prophet/worker-state.json]
+    healthcheck:
+      <<: *scheduler-healthcheck
+      test: [CMD, .venv/bin/python, -m, common.scheduler, /tmp/prophet/worker-state.json]
 
   prophet-api:
     <<: *prophet-runtime
@@ -184,7 +201,10 @@ services:
     environment:
       <<: *intelligence-environment
       INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR: ${INTELLIGENCE_EXPERIMENTAL_DRAG_MONITOR:-false}
-    command: [intelligence, worker]
+    command: [intelligence, worker, --heartbeat-file, /tmp/intelligence/worker-state.json]
+    healthcheck:
+      <<: *scheduler-healthcheck
+      test: [CMD, .venv/bin/python, -m, common.scheduler, /tmp/intelligence/worker-state.json]
     stop_grace_period: 2m
 
   intelligence-api:

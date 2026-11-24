@@ -18,7 +18,7 @@ HTTP = {
     'api': HttpService(8000, 'application-router', 8104),
     'frontend': HttpService(3000, 'application-router', 8105),
 }
-WORKERS = ('clio-worker', 'intelligence', 'proswin')
+WORKERS = ('clio-worker', 'prophet-worker', 'intelligence', 'proswin')
 
 
 def slot_names(color):

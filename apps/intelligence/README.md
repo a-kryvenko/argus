@@ -13,7 +13,7 @@ Public infrastructure only; calculations and risk policy live in private
 
 Configure `INTELLIGENCE_DB_*`, `FORECASTS_URL`, `FORECASTS_SERVICE_TOKEN`
 and `INTELLIGENCE_SERVICE_TOKEN` for the API.
-Compose runs `intelligence-api` and `intelligence` (worker, 60-second polling).
+Compose runs `intelligence-api` and `intelligence` (scheduler, 60-second polling).
 
 ```bash
 ./argus intelligence migrate

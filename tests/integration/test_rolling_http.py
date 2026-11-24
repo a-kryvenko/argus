@@ -162,6 +162,11 @@ print(json.dumps(ports))
                 deployment.swap_blue_green_services()
         else:
             deployment.swap_blue_green_services()
+
+        # Measure upstream reuse without concurrent requests borrowing from the pool.
+        stop.set()
+        thread.join(timeout=20)
+        assert not thread.is_alive()
         slow_thread.join(timeout=15)
         assert [(response['version'], response['active']) for response in slow] == [('clio-blue', 0)]
         color = 'blue' if failure else 'green'

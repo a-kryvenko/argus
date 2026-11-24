@@ -1,4 +1,3 @@
-from clio.db import session as db
 """Migration and canonical observation contracts on a disposable database."""
 import asyncio
 import os
@@ -13,11 +12,11 @@ from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
+from clio.db import session as db
 from clio.db.models.measurement import Measurement
 from clio.ingestion.utils.adapters import wide_to_measurements
 from clio.providers.solar_wind import parse_records
 from clio.ingestion.utils.measurements import store_native
-from clio.routers.observations import _read_history as history
 from clio.ingestion.utils.measurements import load_measurements
 
 pytestmark = pytest.mark.skipif(not os.getenv('TEST_DATABASE_ADMIN_DSN'), reason='Disposable PostgreSQL required')
@@ -110,16 +109,15 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 await session.commit()
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(Measurement.metric == 'bz').limit(1))
                 assert receipt == NOW+timedelta(hours=1)
-                data = await history(session, ['bz'], NOW, NOW+timedelta(minutes=10), '5m', NOW+timedelta(hours=3))
-                assert data['points'][0] == {'time': NOW, 'bz': pytest.approx(-8/3)}
                 frame = await load_measurements(session, NOW)
                 assert frame.loc[frame.metric == 'bz', 'value'].tolist() == [-8, 2, -2]
                 session.add_all([Measurement(metric=metric, value=2, observed_at=NOW,
                     received_at=NOW+timedelta(minutes=5), source_product=source)
                     for metric, source in [('kp', 'swpc.kp'), ('ap', 'swpc.kp'), ('dst', 'swpc.dst')]])
                 await session.commit()
-                data = await history(session, ['kp', 'ap', 'dst'], NOW, NOW+timedelta(hours=4), '1m', NOW+timedelta(hours=4))
-                assert data['points'] == [{'time': NOW, 'kp': 2., 'ap': 2., 'dst': 2.}]
+                rows = (await session.execute(sa.select(Measurement.metric, Measurement.value).where(
+                    Measurement.metric.in_(['kp', 'ap', 'dst']), Measurement.observed_at == NOW))).all()
+                assert dict(rows) == {'kp': 2., 'ap': 2., 'dst': 2.}
                 payload[0]['bz_gsm'] = -10
                 await store_native(session, wind_rows(payload, received))
                 await session.commit()
@@ -131,7 +129,7 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
     asyncio.run(verify())
 
 
-def test_backfill_normalize_and_cleanup_lifecycle(database_url, monkeypatch):
+def test_backfill_normalize_and_cleanup_lifecycle(database_url, project_config, monkeypatch):
     from unittest.mock import Mock
 
     import pandas as pd

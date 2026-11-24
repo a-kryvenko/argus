@@ -1,19 +1,13 @@
-from collections.abc import AsyncIterator
 from functools import lru_cache
 
 from common.db.session import get_database_url
 from sqlalchemy import create_engine
 
 from common.db.session import get_db_session as _get_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def get_db_session():
     return _get_db_session('clio')
-
-async def get_request_db_session() -> AsyncIterator[AsyncSession]:
-    async with get_db_session() as session:
-        yield session
 
 
 @lru_cache(maxsize=1)

@@ -1,4 +1,3 @@
-import asyncio
 from datetime import UTC, datetime, timedelta
 import hashlib
 import io
@@ -11,8 +10,6 @@ from clio.config import load_observation_config
 from clio.ingestion.extras import sdo_browse as service
 from clio.ingestion.utils.file_observations import find
 from clio.providers import sdo as provider
-from clio.routers import sdo_browse as routes
-from clio.routers.observation_files import load_observation_files
 
 NOW = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
 
@@ -26,8 +23,6 @@ def jpeg(color='red', size=4096):
 @pytest.fixture
 def browse(storage, monkeypatch):
     monkeypatch.setattr(service, 'SIZES', (128, 512, 4096))
-    monkeypatch.setattr(routes, 'CHANNELS', ('193',))
-    monkeypatch.setattr(routes, 'SIZES', (128, 512, 4096))
     downloaded = Mock(return_value=(jpeg(), NOW))
     paths = []
     def download(channel, path):
@@ -44,7 +39,7 @@ def collect(now=NOW):
         channel='aia193', source='nasa.aia_browse', mode='live', now=now)
 
 
-def test_images_are_prepared_in_tmp_and_only_completed_uploads_are_saved(storage, browse, metadata_session):
+def test_images_are_prepared_in_tmp_and_only_completed_uploads_are_saved(storage, browse):
     _, paths = browse
     assert collect()['status'] == 'complete'
     row = find('aia_193_browse')[0]
@@ -52,11 +47,8 @@ def test_images_are_prepared_in_tmp_and_only_completed_uploads_are_saved(storage
     assert row['sha256'] == hashlib.sha256(jpeg()).hexdigest()
     assert len(row['details']['extra_files']) == 5
     assert all(not path.parent.exists() for path in paths)
-    files = asyncio.run(load_observation_files(metadata_session, observation='aia_193_browse',
-        start=NOW-timedelta(minutes=1), end=NOW+timedelta(minutes=1)))
-    assert len(files) == 1 and files[0].file.key.endswith('original.jpg')
-    image = routes._catalog().images[0]
-    assert image.urls['webp.512'] == 'https://media.example.test/'+row['key'].rsplit('/', 1)[0]+'/512.webp'
+    assert row['file']['key'].endswith('original.jpg')
+    assert any(key.endswith('/512.webp') for _, key in storage.objects)
 
 
 def test_unchanged_image_does_not_create_extra_database_rows(storage, browse):

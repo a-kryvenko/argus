@@ -16,12 +16,13 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_installed_application_imports_without_other_services(application, blocked, tmp_path):
     import os
     import subprocess
+    entrypoint = 'clio.scheduler.worker' if application == 'clio' else application + '.main'
     code = f'''
 import importlib
 import importlib.util
 for module in {sorted(blocked)!r}:
     assert importlib.util.find_spec(module) is None, module
-importlib.import_module({application + '.main'!r})
+importlib.import_module({entrypoint!r})
 '''
     if application == 'prophet':
         code += '''

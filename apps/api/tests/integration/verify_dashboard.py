@@ -5,15 +5,16 @@ apps/api/.venv/bin/python apps/api/tests/integration/verify_dashboard.py
 import asyncio
 from contextlib import contextmanager
 import os
-import socket
-import subprocess
-import time
+from shutil import copyfile
+import sys
+from tempfile import TemporaryDirectory
 import importlib.util
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 from unittest.mock import patch
 
+import psycopg
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from fastapi import FastAPI
@@ -29,80 +30,43 @@ from api.schemas.dashboard import UserCreate
 from api.services.authentication import create_user
 from api.routers.observations import router as public_router
 
+ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT))
+
+from tests.support.clio import CLIO_ROOT, clio_server, migrate_clio
+from tests.support.database import provisioned_database
+
+
 @contextmanager
-def clio_server(root, schema):
-    """Run the observation owner in its own installed environment over real HTTP."""
-    with socket.socket() as listener:
-        listener.bind(('127.0.0.1', 0))
-        port = listener.getsockname()[1]
-    code = """
-import asyncio
-import os
-from datetime import datetime, timedelta, timezone
-import uvicorn
-from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from clio.main import app
-from clio.db.session import get_request_db_session
-from clio.db.models.measurement import Measurement
-url = make_url(os.environ['TEST_DATABASE_ADMIN_DSN']).set(drivername='postgresql+psycopg')
-engine = create_async_engine(url, connect_args={'options': '-csearch_path=' + os.environ['TEST_DASHBOARD_SCHEMA']})
-factory = async_sessionmaker(engine)
-async def session():
-    async with factory() as db:
-        yield db
-app.dependency_overrides[get_request_db_session] = session
-async def serve():
-    try:
-        async with engine.begin() as connection:
-            await connection.run_sync(Measurement.__table__.create)
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        async with factory() as db:
+def dashboard_clio():
+    with TemporaryDirectory() as directory:
+        path = Path(directory)
+        with provisioned_database(path) as (_, urls, environment):
+            copyfile(ROOT / 'configs/project.yaml', path / 'configs/project.yaml')
+            environment.update(OBSERVATIONS_SERVICE_TOKEN='test-token', PYTHONPATH='')
+            migrate_clio(CLIO_ROOT / '.venv/bin/python', environment)
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            rows = []
             for metric, value in {'bx': 1, 'by': 2, 'bz': -3, 'bt': 5, 'v': 400, 'n': 2, 't': 100000}.items():
                 source = 'mag' if metric in ('bx', 'by', 'bz', 'bt') else 'plasma'
                 for minutes in (60, 0):
-                    db.add(Measurement(metric=metric, value=value, observed_at=now-timedelta(minutes=minutes),
-                                       received_at=now, source_product=f'swpc.rtsw_{source}'))
+                    rows.append((metric, value, now-timedelta(minutes=minutes), now, f'swpc.rtsw_{source}'))
             for metric, value, hours, source in (
                 ('kp', 2, 3, 'swpc.kp'), ('dst', -10, 1, 'swpc.dst'),
                 ('ap', 7, 3, 'swpc.kp'), ('f10_7', 145, 24, 'swpc.f107'),
             ):
-                db.add(Measurement(metric=metric, value=value, observed_at=now-timedelta(hours=hours),
-                                   received_at=now, source_product=source))
-            await db.commit()
-        config = uvicorn.Config(app, host='127.0.0.1', port=int(os.environ['TEST_DASHBOARD_PORT']), log_level='error')
-        await uvicorn.Server(config).serve()
-    finally:
-        await engine.dispose()
-asyncio.run(serve())
-"""
-    process = subprocess.Popen([str(root / 'apps/clio/.venv/bin/python'), '-c', code],
-        env={**os.environ, 'PYTHONPATH': '', 'TEST_DASHBOARD_SCHEMA': schema,
-             'TEST_DASHBOARD_PORT': str(port), 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'})
-    try:
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            if process.poll() is not None:
-                raise RuntimeError('Clio test server exited before readiness')
-            try:
-                with socket.create_connection(('127.0.0.1', port), timeout=.2):
-                    break
-            except OSError:
-                time.sleep(.1)
-        else:
-            raise RuntimeError('Clio test server did not become ready')
-        yield f'http://127.0.0.1:{port}'
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
+                rows.append((metric, value, now-timedelta(hours=hours), now, source))
+            with psycopg.connect(urls['clio']) as database, database.cursor() as cursor:
+                cursor.executemany("""
+                    INSERT INTO clio.measurement (metric, value, observed_at, received_at, source_product)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, rows)
+            with clio_server(path, environment) as url:
+                with patch.dict(os.environ, {'ARGUS_WORKDIR': str(path)}), patch('common.config._config', None):
+                    yield url
 
 
 def get_database_url():
-    import os
     from sqlalchemy.engine import make_url
     value = os.getenv('TEST_DATABASE_ADMIN_DSN')
     if not value:
@@ -111,13 +75,12 @@ def get_database_url():
 
 
 async def verify():
-    root = Path(__file__).resolve().parents[4]
     schema = 'dashboard_test_' + uuid4().hex
     admin = create_async_engine(get_database_url())
     engine = create_async_engine(get_database_url(), connect_args={'options': f'-csearch_path={schema}'})
     factory = async_sessionmaker(engine, expire_on_commit=False)
     created = False
-    spec = importlib.util.spec_from_file_location('dashboard_migration', root / 'apps/api/src/api/db/migrations/versions/20260911_0010_dashboard.py')
+    spec = importlib.util.spec_from_file_location('dashboard_migration', ROOT / 'apps/api/src/api/db/migrations/versions/20260911_0010_dashboard.py')
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     def migrate(connection, direction):
@@ -144,12 +107,12 @@ async def verify():
         app.dependency_overrides[get_request_db_session] = session
         transport = ASGITransport(app=app)
         headers = {'Origin': 'https://dashboard.test'}
-        with clio_server(root, schema) as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
+        with dashboard_clio() as clio_url, patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary:
                 for params in ({}, {'trends': 'true'}, {'meta': 'true', 'trends': 'true'}):
                     response = await client.get('/observations', params=params)
-                    assert response.status_code == 200, response.text
+                    assert response.status_code == 200, (params, response.text)
                     data = response.json()['data']
                     assert data['v']['value'] == 400 and data['bt']['value'] == 5
                     assert data['kp']['value'] == 2 and data['f10_7']['value'] == 145

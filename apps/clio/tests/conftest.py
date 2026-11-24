@@ -1,14 +1,13 @@
 from datetime import UTC, datetime
 import io
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 from botocore.exceptions import ClientError
 import pytest
 from sqlalchemy import DateTime, create_engine, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.dialects.sqlite import DATETIME
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.data import datamanager
 from clio.db.models.file import File
@@ -93,15 +92,6 @@ def storage(monkeypatch, tmp_path, object_store):
         return [dict(row) for row in rows]
     yield SimpleNamespace(**vars(object_store), engine=engine, files=registered_files)
     engine.dispose()
-
-
-@pytest.fixture
-def metadata_session(storage):
-    with storage.engine.connect() as connection:
-        session = AsyncMock(spec=AsyncSession)
-        session.execute.side_effect = connection.execute
-        session.scalars.side_effect = connection.scalars
-        yield session
 
 
 @pytest.fixture

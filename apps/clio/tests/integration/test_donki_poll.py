@@ -1,40 +1,32 @@
 """Normalized DONKI observations in PostgreSQL."""
-import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
 
-def test_latest_donki_response_replaces_old_events_even_when_empty(file_database):
+def read_event_inputs(client):
+    response = client.get('/internal/v1/observations/solar-wind-events/inputs')
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_latest_donki_response_replaces_old_events_even_when_empty(file_api):
     from clio.ingestion.extras.donki import record_poll
-    from common.db.session import dispose_engine
-    from clio.db.session import get_db_session
-    from clio.services.solar_wind_events import _load_event_inputs
     now = datetime.now(UTC)
     for minute, content in ((0, b'[{"activityID":"cme1","startTime":"2026-01-01T00:00Z"}]'), (1, b'[]')):
         record_poll('CME', raw=content, metadata=dict(request_start=(now-timedelta(days=30)).isoformat(),
             request_end=(now+timedelta(days=1)).isoformat()), observed_at=now+timedelta(minutes=minute))
 
-    async def check():
-        try:
-            async with get_db_session() as session:
-                result = await _load_event_inputs(session, now+timedelta(minutes=2))
-                assert result.polls[0].records == [] and result.events == []
-                assert result.latest_attempts['CME']['received_at'] == (now+timedelta(minutes=1)).isoformat()
-        finally:
-            await dispose_engine()
-    asyncio.run(check())
+    result = read_event_inputs(file_api)
+    assert result['polls'][0]['record_count'] == 0 and result['events'] == []
+    assert result['latest_attempts']['CME']['received_at'] == (now+timedelta(minutes=1)).isoformat()
 
 
-def test_legacy_metadata_is_pruned_after_normalized_predictions_are_published(file_database, tmp_path, monkeypatch):
+def test_legacy_metadata_is_pruned_after_normalized_predictions_are_published(file_database, file_api, tmp_path):
     from sqlalchemy import func, select
     from clio.db.models.file_observation import FileObservation
     from clio.db.models.file import File
     from clio.ingestion.extras.donki import record_poll
     from clio.ingestion.utils.file_observations import save
-    from clio.services.solar_wind_events import read_event_inputs
-    from clio.db.session import get_db_session
-    from common.data import datamanager
-    from common.db.session import dispose_engine
 
     now = datetime.now(UTC)
     metadata = dict(request_start=now-timedelta(days=30), request_end=now+timedelta(days=1))
@@ -53,22 +45,11 @@ def test_legacy_metadata_is_pruned_after_normalized_predictions_are_published(fi
         assert connection.scalar(select(func.count()).select_from(File)) == 2
         assert connection.scalar(select(func.count()).select_from(FileObservation).where(
             FileObservation.source_id.is_(None))) == 0
-    def unexpected_read(*args, **kwargs):
-        raise AssertionError('API read must not fetch originals')
-    monkeypatch.setattr(datamanager, 'read_file', unexpected_read)
-
-    async def check():
-        try:
-            async with get_db_session() as session:
-                result = await read_event_inputs(session, now+timedelta(seconds=1))
-                assert result.events[0].initial_speed_km_s == 900
-                assert result.enlil_arrivals[0].cme_ids == ['cme1']
-                assert len(result.polls) == 2
-                assert all(p.record_count == 1 for p in result.polls)
-                assert all('records' not in p for p in result.model_dump()['polls'])
-        finally:
-            await dispose_engine()
-    asyncio.run(check())
+    result = read_event_inputs(file_api)
+    assert result['events'][0]['initial_speed_km_s'] == 900
+    assert result['enlil_arrivals'][0]['cme_ids'] == ['cme1']
+    assert len(result['polls']) == 2
+    assert all(poll['record_count'] == 1 and 'records' not in poll for poll in result['polls'])
 
 
 def test_repeated_polls_upsert_unique_ids_and_failed_writes_roll_back(file_database, monkeypatch):

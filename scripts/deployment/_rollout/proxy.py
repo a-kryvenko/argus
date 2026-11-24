@@ -59,6 +59,21 @@ class NginxProxy:
         
         self.drain(ROUTER, workers)
 
+    def reload_public(self):
+        config_root = self.root / '.docker/nginx'
+        for source, destination in (
+            ('default.conf', '/etc/nginx/includes/default.conf'),
+            ('templates/http.conf.template', '/etc/nginx/templates/website.conf.template'),
+        ):
+            content = (config_root / source).read_text()
+            mounted = self.compose.run('exec', '-T', 'nginx', 'cat', destination, capture=True)
+            if mounted != content:
+                # Write through the existing bind mount so older containers see the release.
+                self.compose.run('exec', '-T', 'nginx', 'sh', '-c', 'cat > "$1"', 'nginx-config',
+                                 destination, input=content, text=True)
+        self.compose.run('exec', '-T', 'nginx', 'sh', '/docker-entrypoint.d/20-envsubst-on-templates.sh')
+        self.drain('nginx', self.reload('nginx'))
+
     def reload(self, service):
         workers = self.worker_pids(service)
         self.compose.run('exec', '-T', service, 'nginx', '-t')

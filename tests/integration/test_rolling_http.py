@@ -187,11 +187,26 @@ print(json.dumps(ports))
 
 
 def test_finish_release_reloads_nginx_without_recreating_it_when_compose_changes(tmp_path, monkeypatch):
-    configuration = tmp_path / 'nginx.conf'
-    configuration.write_text('server { listen 80; location / { return 200 "before"; } }\n')
-    service = {'image': 'nginx:stable-alpine', 'environment': {'GENERATION': 'before'},
-               'volumes': [str(configuration) + ':/etc/nginx/conf.d/default.conf:ro'],
+    legacy = tmp_path / 'nginx'
+    current = tmp_path / '.docker/nginx'
+    destinations = {
+        'default.conf': '/etc/nginx/includes/default.conf',
+        'templates/http.conf.template': '/etc/nginx/templates/website.conf.template',
+    }
+    for folder, version in ((legacy, 'before'), (current, 'after')):
+        (folder / 'templates').mkdir(parents=True)
+        (folder / 'default.conf').write_text(f'location / {{ return 200 "{version}"; }}\n')
+        (folder / 'templates/http.conf.template').write_text(
+            f'server {{ listen 80; add_header X-Config "{version}"; include /etc/nginx/includes/default.conf; }}\n')
+
+    def mounts(config_root):
+        return [f'{config_root / source}:{destination}' for source, destination in destinations.items()]
+
+    service = {'image': 'nginx:stable-alpine', 'volumes': mounts(legacy),
+               'command': ['nginx', '-g', 'daemon off;'],
                'healthcheck': {'test': ['CMD', 'nginx', '-t'], 'interval': '1s', 'retries': 5}}
+    (tmp_path / 'legacy-default.conf').write_text('')
+    service['volumes'].append(f'{tmp_path / "legacy-default.conf"}:/etc/nginx/conf.d/default.conf:ro')
     config = {'name': 'argus-nginx-test-' + uuid4().hex[:10], 'services': {'nginx': service}}
     path = tmp_path / 'docker-compose.yml'
     path.write_text(json.dumps(config))
@@ -211,12 +226,16 @@ def test_finish_release_reloads_nginx_without_recreating_it_when_compose_changes
     try:
         run('up', '-d', '--pull', 'never', '--wait', 'nginx')
         container = run('ps', '-q', 'nginx', capture=True)
-        service['environment']['GENERATION'] = 'after'
+        def response():
+            return run('exec', '-T', 'nginx', 'wget', '-qO-', 'http://127.0.0.1/', capture=True)
+        assert response() == 'before'
+        service['volumes'][:2] = mounts(current)
         path.write_text(json.dumps(config))
-        configuration.write_text('server { listen 80; location / { return 200 "after"; } }\n')
         monkeypatch.setattr(compose, 'run', nginx_only)
         deployment.finish_release()
         assert run('ps', '-q', 'nginx', capture=True) == container
-        assert run('exec', '-T', 'nginx', 'wget', '-qO-', 'http://127.0.0.1/', capture=True) == 'after'
+        assert response() == 'after'
+        for source in destinations:
+            assert (legacy / source).read_text() == (current / source).read_text()
     finally:
         run('down', '--timeout', '1', '--volumes', '--remove-orphans')

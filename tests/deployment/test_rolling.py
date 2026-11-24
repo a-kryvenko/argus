@@ -349,6 +349,10 @@ def test_marker_is_required_for_rolling_but_not_for_maintenance(tmp_path, monkey
 
 def test_finish_release_keeps_existing_nginx_and_reloads_configuration(tmp_path, monkeypatch):
     deployment = harness(tmp_path)
+    config_root = tmp_path / '.docker/nginx'
+    (config_root / 'templates').mkdir(parents=True)
+    (config_root / 'default.conf').write_text('include after\n')
+    (config_root / 'templates/http.conf.template').write_text('template after\n')
     monkeypatch.setattr(deployment.release, 'install_crontab', lambda: deployment.calls.append(('crontab',)))
     deployment.finish_release()
     worker_start = deployment.calls[0]
@@ -359,5 +363,9 @@ def test_finish_release_keeps_existing_nginx_and_reloads_configuration(tmp_path,
     assert len(nginx_up) == 1
     assert '--no-recreate' in nginx_up[0] and '--pull' in nginx_up[0]
     assert not any(call[0] in ('stop', 'restart', 'rm') and 'nginx' in call for call in deployment.calls)
+    render = deployment.calls.index(('exec', '-T', 'nginx', 'sh', '/docker-entrypoint.d/20-envsubst-on-templates.sh'))
+    for destination in ('/etc/nginx/includes/default.conf', '/etc/nginx/templates/website.conf.template'):
+        sync = ('exec', '-T', 'nginx', 'sh', '-c', 'cat > "$1"', 'nginx-config', destination)
+        assert deployment.calls.index(sync) < render
     assert ('exec', '-T', 'nginx', 'nginx', '-t') in deployment.calls
     assert ('exec', '-T', 'nginx', 'nginx', '-s', 'reload') in deployment.calls

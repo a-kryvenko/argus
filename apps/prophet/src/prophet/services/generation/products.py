@@ -71,12 +71,3 @@ def select_products(selection: str) -> tuple[str, ...]:
     if selection not in PRODUCTS:
         raise ValueError(f'Unsupported forecast product: {selection}')
     return (selection,)
-
-
-def attempt_selections(product: str) -> list[str]:
-    """Include old CLI aliases when looking up historical attempts."""
-    if product not in PRODUCTS:
-        return []
-    historical_names = {'solar-wind-speed': 'wind', 'geomagnetic-activity': 'kp',
-                        'atmospheric-density': 'density'}
-    return ['all', product] + ([historical_names[product]] if product in historical_names else [])

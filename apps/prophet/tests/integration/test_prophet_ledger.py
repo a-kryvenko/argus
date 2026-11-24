@@ -212,7 +212,6 @@ async def test_only_completed_products_publish_and_history_survives(recorder_set
 
 
 async def test_latest_reads_and_publication_reject_delayed_run(recorder_setup):
-    from prophet.services.releases.status import product_status
     dsn, passwords, config, writer = recorder_setup
     first = await RunRecorder.begin('dst', 'manual', config, writer=writer)
     await store_product(first)
@@ -223,11 +222,9 @@ async def test_latest_reads_and_publication_reject_delayed_run(recorder_setup):
     await store_product(current)
     await current.finish()
     current_release = await read_release('dst')
-    assert (await read_release('dst')) == current_release
-    assert (await product_status('dst')).current_release.release_id == current_release.release_id
+    assert current_release.run_id == current.run_id
     outcome = await delayed.finish()
     assert outcome.status == 'kept_current' and outcome.reason == 'newer_run'
-    assert (await product_status('dst')).latest_attempt.publication.status == 'published'
     assert (await read_release('dst')) == current_release
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT count(*) FROM prophet.forecast_release WHERE run_id=%s',
@@ -241,9 +238,7 @@ async def test_latest_reads_and_publication_reject_delayed_run(recorder_setup):
     await store_product(stale, issue='2026-09-12T00:00:00+00:00')
     outcome = await stale.finish()
     assert outcome.status == 'kept_current' and outcome.reason == 'newer_issue_time'
-    status = await product_status('dst')
-    assert status.current_release.release_id == newest.release_id
-    assert status.latest_attempt.run_id == stale.run_id and status.latest_attempt.publication == outcome
+    assert await read_release('dst') == newest
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute("SELECT to_regclass('prophet.current_forecast')").fetchone()[0] is None
     assert newest.run_id == next_run.run_id
@@ -297,29 +292,6 @@ async def test_publication_failure_does_not_roll_back_another_product(recorder_s
         (await read_release('dst'))
     with runtime(dsn, 'prophet', passwords) as conn:
         assert conn.execute('SELECT status FROM prophet.forecast_run WHERE id=%s', (failed.run_id,)).fetchone()[0] == 'running'
-
-
-async def test_status_reports_product_failure_not_unrelated_success(recorder_setup):
-    from prophet.services.releases.status import product_status
-    _, _, config, writer = recorder_setup
-    run = (await RunRecorder.begin('dst', 'manual', config, writer=writer))
-    now = datetime(2026, 9, 13, 1, tzinfo=UTC)
-    (await run.snapshot(ForecastInputs(as_of=now, read_at=now, observations=Observation(points=[]))))
-    (await store_product(run))
-    (await run.finish())
-    failure = (await RunRecorder.begin('dst', 'manual', config, writer=writer))
-    (await failure.finish(error=ValueError('model unavailable')))
-    unrelated = (await RunRecorder.begin('solar-wind-density', 'manual', config, writer=writer))
-    (await store_product(unrelated, names=('plasma_density_quantile',)))
-    (await unrelated.finish())
-    status = (await product_status('dst', now=now))
-    assert status.current_release.run_id == run.run_id
-    assert status.current_release.input_diagnostics['normalized']['count'] == 0
-    assert status.release_age_hours == 1 and status.freshness == 'unconfigured'
-    assert status.latest_attempt.run_id == failure.run_id
-    assert status.latest_attempt.status == 'failed'
-    assert status.latest_attempt_artifacts == []
-    assert (await product_status('solar-wind-density', now=now)).latest_attempt.run_id == unrelated.run_id
 
 
 async def test_export_migration_preserves_release_bytes_on_upgrade_and_downgrade(recorder_setup):

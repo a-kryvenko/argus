@@ -119,6 +119,9 @@ case "${1:-}" in
         else
             lock s
             if [[ "$domain" == prophet ]]; then
+                if [[ "${1:-}" == serve ]]; then
+                    exec "${templates[@]}" run --rm --no-deps -T prophet-api prophet-api "$@"
+                fi
                 scheduled=()
                 # A legacy cron job can already be queued when the crontab is replaced.
                 if [[ -n "${ARGUS_CRON_JOB:-}" ]]; then

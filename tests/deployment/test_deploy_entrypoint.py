@@ -189,6 +189,10 @@ if 'alembic' in args:
     assert [args[-2:] for args in clio_checks] == [
         ['http://127.0.0.1:8000', ''], ['http://observations-router:8101', 'clio-green'],
     ]
+    prophet_checks = [args for args in calls if 'prophet-api-smoke' in args]
+    assert [args[-2:] for args in prophet_checks] == [
+        ['http://127.0.0.1:8000', ''], ['http://forecasts-router:8102', 'prophet-api-green'],
+    ]
     assert not any('.rolling-compose.json' in argument for args in calls for argument in args)
     with (root / '.deployment.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -3,13 +3,10 @@
 x-clio-healthcheck: &clio-healthcheck
   start_interval: 1s
 
-x-prophet-runtime: &prophet-runtime
-  environment: &prophet-environment
-    OBSERVATIONS_URL: http://observations-router:8101
-    S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
-    S3_ACCESS_KEY_ID: ${S3_READ_ACCESS_KEY_ID:-}
-    S3_SECRET_ACCESS_KEY: ${S3_READ_SECRET_ACCESS_KEY:-}
-    S3_REGION: ${S3_REGION:-auto}
+x-prophet-environment: &prophet-environment
+  OBSERVATIONS_URL: http://observations-router:8101
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  S3_REGION: ${S3_REGION:-auto}
 
 x-prophet-jobs: &prophet-jobs
   environment:
@@ -67,11 +64,6 @@ services:
       file: docker-compose.yml
       service: prophet-api
     profiles: [templates]
-    <<: *prophet-runtime
-    environment:
-      <<: *prophet-environment
-      OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
-      SENTRY_COLLECT_POINT: ${SENTRY_COLLECT_POINT:-}
     restart: unless-stopped
     expose:
       - '8000'

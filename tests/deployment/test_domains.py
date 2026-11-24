@@ -46,6 +46,9 @@ def test_forecast_read_service_is_internal_and_requires_token():
     assert set(reader['networks']) == {'backend', 'forecasts'}
     assert './data/prophet:/var/www/data/prophet:ro' in reader['volumes']
     assert reader['environment']['FORECASTS_SERVICE_TOKEN'].startswith('${FORECASTS_SERVICE_TOKEN:?')
+    assert reader['image'] != services['prophet-worker']['image']
+    assert reader['healthcheck']['test'][1] == 'wget'
+    assert not any(key.startswith(('S3_', 'OBSERVATIONS_')) for key in reader['environment'])
     assert services['api']['environment']['FORECASTS_URL'] == 'http://forecasts-router:8102'
 
 
@@ -152,7 +155,7 @@ def test_observation_storage_uses_s3_in_both_environments():
         assert {key for key in clio['environment'] if key.startswith('S3_')} == {'S3_PUBLIC_BASE_URL'}
         assert clio['healthcheck']['test'][1] == 'wget'
         assert clio['image'] != services['clio-worker']['image']
-        for name in ('clio-worker', 'prophet', 'prophet-worker', 'prophet-api', 'proswin'):
+        for name in ('clio-worker', 'prophet', 'prophet-worker', 'proswin'):
             assert 'DATA_STORAGE' not in services[name]['environment']
             assert services[name]['environment']['S3_ENDPOINT_URL']
     dev = load_compose('docker-compose.dev.yml')
@@ -162,11 +165,13 @@ def test_observation_storage_uses_s3_in_both_environments():
     assert 'seaweed-data:/data' in storage['volumes']
     assert all(port.startswith('127.0.0.1:') for port in storage['ports'])
     assert dev['services']['clio']['build']['dockerfile'] == '.docker/clio-api.Dockerfile'
+    assert dev['services']['prophet-api']['build']['dockerfile'] == '.docker/prophet-api.Dockerfile'
     assert dev['services']['clio-worker']['build']['dockerfile'] == '.docker/clio.Dockerfile'
     assert 'storage' not in dev['services']['clio']['depends_on']
     assert dev['services']['clio-worker']['environment']['S3_ACCESS_KEY_ID'] == dev['services']['prophet']['environment']['S3_ACCESS_KEY_ID']
-    for name in ('clio-worker', 'prophet', 'prophet-worker', 'prophet-api', 'proswin'):
+    for name in ('clio-worker', 'prophet', 'prophet-worker', 'proswin'):
         assert dev['services'][name]['depends_on']['storage']['condition'] == 'service_healthy'
+    assert 'storage' not in dev['services']['prophet-api']['depends_on']
     assert 'storage' not in load_compose('.deploy/docker-compose.yml')['services']
 
 

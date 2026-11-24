@@ -48,6 +48,7 @@ Scheduler: `clio-worker` in dev and prod. Logs: `./argus logs clio`.
 | `./argus prophet generation [product]` | Generate/publish; default all |
 | `./argus prophet summary` | Prepare local summary and upload SVGs to S3 |
 | `./argus prophet verification [product]` | Verify saved releases against observations |
+| `./argus prophet verification-summary` | Refresh the prepared rolling verification response |
 | `./argus prophet cleanup [--apply]` | Preview/clear diagnostics older than 14 days; preserve forecasts |
 
 Generation products: [catalog](../apps/prophet/README.md#products).

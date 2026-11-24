@@ -29,7 +29,7 @@ Generation requires private `forecast-core` and configured models.
 
 Products publish independently; failures retain the previous release.
 Cron: events and summary every five minutes; other products hourly at :10. Jobs run sequentially.
-Verification runs every six hours; window: `prophet.verification_days` (30 days).
+Verification runs every six hours. The worker prepares rolling statistics at startup and every five minutes using `prophet.verification_days` (30 days).
 
 Prophet prepares calibrated GOES indices and reads PROSWIN predictions before freezing the
 input snapshot. Derivative cache: `data/prophet/source-cache`
@@ -37,7 +37,7 @@ input snapshot. Derivative cache: `data/prophet/source-cache`
 
 ## HTTP
 
-Bearer token: `FORECASTS_SERVICE_TOKEN`.
+Go read API. Bearer token: `FORECASTS_SERVICE_TOKEN`.
 Prefix `/internal/v1/forecasts/{product}`: `latest`, `releases/{id}`, `verification`.
 All-product diagnostics: `/internal/v1/forecasts/status`.
 `summary` saves `data/prophet/summary/latest.json` and uploads SVGs to public S3. `/internal/v1/summary` returns the prepared summary.

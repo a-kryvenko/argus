@@ -3,9 +3,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi.testclient import TestClient
 
-from prophet import main
 from prophet.services import verification
 
 
@@ -26,37 +24,6 @@ def install_rows(monkeypatch, rows):
     conn = Mock(execute=AsyncMock(return_value=result))
     conn.begin.return_value = nullcontext()
     monkeypatch.setattr(verification, 'get_db_session', lambda: nullcontext(conn))
-
-
-@pytest.fixture(autouse=True)
-def clear_monthly_cache():
-    verification._monthly_cache.clear()
-    yield
-    verification._monthly_cache.clear()
-
-
-async def test_monthly_cache_reuses_results_until_expiry_and_isolates_products(monkeypatch):
-    clock = Mock(return_value=0)
-    calculate = AsyncMock(side_effect=lambda product: object())
-    monkeypatch.setattr(verification, 'monotonic', clock)
-    monkeypatch.setattr(verification, 'monthly_accuracy', calculate)
-    first = (await verification.cached_monthly_accuracy('dst'))
-    clock.return_value = 299
-    assert (await verification.cached_monthly_accuracy('dst')) is first
-    assert (await verification.cached_monthly_accuracy('solar-wind-density')) is not first
-    assert calculate.call_count == 2
-    clock.return_value = 300
-    assert (await verification.cached_monthly_accuracy('dst')) is not first
-    assert calculate.call_count == 3
-
-
-async def test_monthly_cache_does_not_cache_errors(monkeypatch):
-    calculate = AsyncMock(side_effect=[RuntimeError('unavailable'), object()])
-    monkeypatch.setattr(verification, 'monthly_accuracy', calculate)
-    with pytest.raises(RuntimeError):
-        (await verification.cached_monthly_accuracy('dst'))
-    assert (await verification.cached_monthly_accuracy('dst')) is not None
-    assert calculate.call_count == 2
 
 
 async def test_monthly_separates_model_hashes_and_filters_valid_times(monkeypatch):
@@ -112,19 +79,6 @@ async def test_monthly_brier_and_empty_history(monkeypatch):
     assert short.continuous is None
     install_rows(monkeypatch, [])
     assert (await verification.monthly_accuracy('dst')).groups == []
-
-
-def test_monthly_endpoint_requires_auth(monkeypatch):
-    install_rows(monkeypatch, [])
-    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    with TestClient(main.app) as client:
-        path = '/internal/v1/forecasts/dst/verification'
-        assert client.get(path).status_code == 401
-        headers = {'Authorization': 'Bearer test-secret'}
-        response = client.get(path, headers=headers)
-        assert response.status_code == 200
-        assert response.json()['groups'] == []
-        assert client.get('/internal/v1/forecasts/unknown/verification', headers=headers).status_code == 404
 
 
 async def test_monthly_separates_names_and_missing_version_metadata(monkeypatch):

@@ -13,6 +13,7 @@ SERVICE_IMAGES = {
     "clio": "ghcr.io/a-kryvenko/argus-clio",
     "clio-api": "ghcr.io/a-kryvenko/argus-clio-api",
     "prophet": "ghcr.io/a-kryvenko/argus-prophet",
+    "prophet-api": "ghcr.io/a-kryvenko/argus-prophet-api",
     "proswin": "ghcr.io/a-kryvenko/argus-proswin",
     "intelligence": "ghcr.io/a-kryvenko/argus-intelligence",
 }
@@ -60,6 +61,7 @@ SERVICES_TRACKABLE_FILES = {
         + _PACKAGES_TRACKABLE_FILES["forecast-core"]
         + ["./.docker/prophet.Dockerfile"]
     ,
+    "prophet-api": ["apps/prophet/api-go", "./.docker/prophet-api.Dockerfile"],
     "proswin": [
         "apps/prophet/src",
         "packages/common/src",
@@ -102,6 +104,7 @@ _SERVICES_TESTS = {
     "clio": ["apps/clio/tests"]
             + _PACKAGES_TESTS["common"],
     "clio-api": [],
+    "prophet-api": [],
     "prophet": ["apps/prophet/tests"]
             + _PACKAGES_TESTS["common"]
             + _PACKAGES_TESTS["forecast"]

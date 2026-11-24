@@ -46,8 +46,8 @@ After updating Clio, event reads require one successful DONKI collection to prep
 DONKI keeps current events by source ID; successful polls replace each endpoint's set without accumulating DB snapshots.
 Production `S3_PUBLIC_BASE_URL` defaults to `https://media.argussun.com`. Prophet commands use
 `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` with read/write access; charts use `argus-public/forecasts/summary/`.
-Prophet HTTP/PROSWIN use `S3_READ_ACCESS_KEY_ID`/`S3_READ_SECRET_ACCESS_KEY` for private sources.
-Prophet HTTP reads the prepared summary from the shared `data/prophet` directory (read-only mount).
+PROSWIN uses `S3_READ_ACCESS_KEY_ID`/`S3_READ_SECRET_ACCESS_KEY` for private sources.
+The Go Prophet API reads PostgreSQL and the prepared summary from the read-only `data/prophet` mount.
 
 One-time local archive migration (after migrating Clio):
 ```bash

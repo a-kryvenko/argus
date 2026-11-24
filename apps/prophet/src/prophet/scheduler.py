@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from apscheduler.triggers.cron import CronTrigger
@@ -32,6 +33,9 @@ def register_jobs(worker):
                  minute='*/5' if product == 'solar-wind-events' else 10)
     schedule('summary', ('summary',), minute='*/5')
     schedule('verification', ('verification', 'all'), minute=30, hour='*/6')
+    worker.add_job(run_command, CronTrigger(minute='*/5', timezone=worker.scheduler.timezone),
+                   id='verification-summary', args=('verification-summary', ('verification-summary',), worker.stop),
+                   next_run_time=datetime.now(UTC))
     schedule('cleanup', ('cleanup', '--apply'), minute=45)
 
 
@@ -45,7 +49,7 @@ async def run_command(job_id, command, stop):
     stopping = asyncio.create_task(stop.wait())
     try:
         done, _ = await asyncio.wait((completed, stopping), return_when=asyncio.FIRST_COMPLETED)
-        if stopping in done and not completed.done() and command[0] in ('generation', 'verification'):
+        if stopping in done and not completed.done() and command[0] in ('generation', 'verification', 'verification-summary'):
             try:
                 process.terminate()
             except ProcessLookupError:

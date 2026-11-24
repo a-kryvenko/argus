@@ -220,14 +220,6 @@ def test_catalog_matches_public_contract():
         assert product.artifacts == PRODUCT_ARTIFACTS[name]
 
 
-
-def test_status_selections_include_canonical_names_and_historical_aliases():
-    from prophet.services.generation.products import attempt_selections
-    assert attempt_selections('solar-wind-speed') == ['all', 'solar-wind-speed', 'wind']
-    assert attempt_selections('dst') == ['all', 'dst']
-    assert attempt_selections('solar-radiation') == ['all', 'solar-radiation']
-
-
 def test_temperature_verification_uses_hourly_observations():
     from prophet.services.verification import targets
     frame = pd.DataFrame({'metric': ['t', 't'], 'observed_at': [NOW, NOW+timedelta(minutes=30)],

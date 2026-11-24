@@ -60,11 +60,12 @@ if(!result.ok || !(await result.arrayBuffer()).byteLength) throw Error('Static a
         options = {'service': service, 'base': routed_url(service) if routed else 'http://127.0.0.1:8000',
                    'expected_upstream': slot if routed else None}
         command = ('.venv/bin/python', '-')
-        if service == 'clio':
+        if service in ('clio', 'prophet-api'):
             # A failed first Go rollout can route back to a running FastAPI slot.
+            binary = {'clio': 'clio-api', 'prophet-api': 'prophet-api'}[service]
             command = ('sh', '-c',
-                       'if command -v clio-api >/dev/null; then exec clio-api smoke "$@"; fi; exec .venv/bin/python -',
-                       'clio-smoke', options['base'], options['expected_upstream'] or '')
+                       f'if command -v {binary} >/dev/null; then exec {binary} smoke "$@"; fi; exec .venv/bin/python -',
+                       f'{service}-smoke', options['base'], options['expected_upstream'] or '')
         self.compose.run('exec', '-T', slot, *command, input=source + '\ncheck(' + repr(options) + ')\n', text=True)
 
     def start(self, color):

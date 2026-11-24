@@ -165,6 +165,7 @@ services:
 
   prophet-api:
     <<: *prophet-runtime
+    image: ghcr.io/a-kryvenko/argus-prophet-api:latest
     volumes:
       - ./configs:/var/www/configs:ro
       - ./data/prophet:/var/www/data/prophet:ro
@@ -172,12 +173,11 @@ services:
       <<: *prophet-environment
       FORECASTS_SERVICE_TOKEN: ${FORECASTS_SERVICE_TOKEN:?FORECASTS_SERVICE_TOKEN is required}
     healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=15)"]
+      test: [CMD, wget, -q, -O, /dev/null, -T, '5', 'http://127.0.0.1:8000/health/ready']
       interval: 30s
       timeout: 20s
       retries: 3
       start_period: 30s
-    command: [prophet, serve]
 
   proswin:
     command: [python, -m, prophet.services.proswin.queue]

@@ -341,7 +341,3 @@ async def publish_summary():
         finally:
             temporary.unlink(missing_ok=True)
     logger.info('Published summary with %s charts', len(images))
-
-
-def read_summary():
-    return json.loads((get_config().data_root/'prophet/summary/latest.json').read_bytes())

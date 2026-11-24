@@ -58,6 +58,8 @@ def test_registry_lookup_distinguishes_cache_misses_from_failures(monkeypatch, e
     ('apps/clio/src/clio/db/migrations/versions/test.py', {'clio'}),
     ('apps/clio/api-go/history.go', {'clio-api'}),
     ('.docker/clio-api.Dockerfile', {'clio-api'}),
+    ('apps/prophet/api-go/releases.go', {'prophet-api'}),
+    ('.docker/prophet-api.Dockerfile', {'prophet-api'}),
     ('apps/web/src/app/page.tsx', {'frontend'}),
     ('apps/web/tests/example.spec.ts', set()),
     ('configs/project.yaml', set()),

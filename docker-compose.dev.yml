@@ -142,8 +142,14 @@ services:
     <<: *prophet-jobs
 
   prophet-api:
-    <<: *prophet-runtime
-    command: [.venv/bin/uvicorn, 'prophet.main:app', --host, 0.0.0.0, --port, '8000', --reload, --reload-dir, src, --reload-dir, /var/www/packages]
+    build:
+      context: .
+      dockerfile: .docker/prophet-api.Dockerfile
+    image: argus-prophet-api-dev
+    user: ${LOCAL_UID:-1000}:${LOCAL_GID:-1000}
+    environment:
+      PROPHET_DB_HOST: postgres
+      PROPHET_DB_PORT: '5432'
     ports:
       - 127.0.0.1:8002:8000
 

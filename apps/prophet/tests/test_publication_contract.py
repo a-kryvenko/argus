@@ -1,15 +1,10 @@
-from unittest.mock import AsyncMock
 import hashlib
 from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
 
-from common.schemas.forecast_release import ForecastArtifact, ForecastRelease, PRODUCT_ARTIFACTS
-from common.schemas.forecast_status import ForecastsStatus
-from prophet import main
-from prophet.services.releases.publication import ReleaseNotFound
+from common.schemas.forecast_release import ForecastArtifact, ForecastRelease
 
 
 def artifact(name='dst_quantile', value='-10'):
@@ -39,42 +34,6 @@ def test_rejects_corrupt_and_incomplete_releases():
         ForecastRelease.model_validate(payload)
 
 
-def test_internal_reads_require_auth_and_return_exact_release(monkeypatch):
-    expected = release()
-    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    calls = []
-    async def read(product, release_id=None):
-        calls.append((product, release_id))
-        return expected
-    monkeypatch.setattr(main, 'read_release', read)
-    with TestClient(main.app) as client:
-        path = '/internal/v1/forecasts/dst/latest'
-        assert client.get(path).status_code == 401
-        assert client.get(path, headers={'Authorization': 'Bearer wrong'}).status_code == 401
-        assert calls == []
-        headers = {'Authorization': 'Bearer test-secret'}
-        response = client.get(path, headers=headers)
-        assert ForecastRelease.model_validate(response.json()) == expected
-        assert client.get(f'/internal/v1/forecasts/dst/releases/{expected.release_id}', headers=headers).status_code == 200
-        assert calls[-1] == ('dst', expected.release_id)
-        assert client.get('/internal/v1/forecasts/unknown/latest', headers=headers).status_code == 404
-
-
-def test_missing_release_storage_failure_and_missing_configuration(monkeypatch):
-    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    with TestClient(main.app) as client:
-        headers = {'Authorization': 'Bearer test-secret'}
-        for failure in (ReleaseNotFound('dst'), RuntimeError('private database details')):
-            def read(*_, **__):
-                raise failure
-            monkeypatch.setattr(main, 'read_release', read)
-            response = client.get('/internal/v1/forecasts/dst/latest', headers=headers)
-            assert response.status_code == 503
-            assert 'private database' not in response.text
-        monkeypatch.delenv('FORECASTS_SERVICE_TOKEN')
-        assert client.get('/internal/v1/forecasts/dst/latest', headers=headers).status_code == 503
-
-
 @pytest.mark.parametrize('value', ['nan', 'inf', 'not-a-number'])
 def test_nonfinite_or_invalid_predictions_cannot_be_published(value):
     with pytest.raises(ValueError):
@@ -87,46 +46,3 @@ def test_missing_prediction_columns_are_rejected():
     payload.update(csv_text=text, columns=text.splitlines()[0].split(','), sha256=hashlib.sha256(text.encode()).hexdigest())
     with pytest.raises(ValueError, match='prediction columns'):
         ForecastArtifact.model_validate(payload)
-
-
-def test_status_contract_requires_auth_and_returns_all_products(monkeypatch):
-    from prophet.services.releases import status as diagnostics
-    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    expected = ForecastsStatus(products=[dict(product=product, assessed_at=datetime.now(UTC), current_release=None,
-        release_age_hours=None, existing_public_max_age_hours=None, freshness='unavailable',
-        latest_attempt=None, latest_attempt_artifacts=[]) for product in PRODUCT_ARTIFACTS])
-    read = AsyncMock(return_value=expected)
-    monkeypatch.setattr(diagnostics, 'forecasts_status', read)
-    with TestClient(main.app) as client:
-        path = '/internal/v1/forecasts/status'
-        assert client.get(path).status_code == 401
-        assert client.get(path, headers={'Authorization': 'Bearer wrong'}).status_code == 401
-        read.assert_not_awaited()
-        response = client.get(path, headers={'Authorization': 'Bearer test-secret'})
-        assert response.status_code == 200
-        assert ForecastsStatus.model_validate(response.json()) == expected
-        read.assert_awaited_once()
-        read.side_effect = RuntimeError('private storage details')
-        response = client.get(path, headers={'Authorization': 'Bearer test-secret'})
-        assert response.status_code == 503 and 'private storage details' not in response.text
-
-
-def test_solar_indices_require_auth_and_keep_storage_errors_private(monkeypatch):
-    from prophet.services import solar_indices
-    from common.schemas.solar_indices import SolarIndices
-    now = datetime.now(UTC)
-    expected = SolarIndices(as_of=now, items=[dict(metric='s10', value=100., observed_at=now)])
-    read = AsyncMock(return_value=expected)
-    monkeypatch.setattr(solar_indices, 'read_solar_indices', read)
-    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-secret')
-    with TestClient(main.app) as client:
-        path = '/internal/v1/solar-indices'
-        assert client.get(path).status_code == 401
-        read.assert_not_awaited()
-        headers = {'Authorization': 'Bearer test-secret'}
-        assert client.get(path, headers=headers).json() == expected.model_dump(mode='json')
-        read.return_value = None
-        assert client.get(path, headers=headers).status_code == 503
-        read.side_effect = RuntimeError('private storage details')
-        response = client.get(path, headers=headers)
-        assert response.status_code == 503 and 'private storage details' not in response.text

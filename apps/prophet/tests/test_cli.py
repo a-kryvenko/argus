@@ -10,7 +10,7 @@ def test_cli_help_is_available_without_loading_models():
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert '{serve,generation,verification,summary,cleanup}' in result.stdout
+    assert '{generation,verification,summary,verification-summary,cleanup}' in result.stdout
 
 
 def test_generation_generates_selected_product(monkeypatch):
@@ -52,7 +52,7 @@ def test_invoke_disposes_database_after_command(monkeypatch, failure):
 
 
 @pytest.mark.parametrize('arguments', [
-    ['unknown-command'], ['verification', '--unknown-option'],
+    ['unknown-command'], ['serve'], ['verification', '--unknown-option'],
     ['generation', 'unknown-product'],
 ])
 def test_invalid_arguments_fail_before_loading_handlers(monkeypatch, arguments):

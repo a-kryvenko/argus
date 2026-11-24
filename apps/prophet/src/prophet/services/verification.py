@@ -1,5 +1,6 @@
 """Score actual published releases; never regenerate historical forecasts."""
 import asyncio
+from contextlib import asynccontextmanager
 import hashlib
 import io
 import json
@@ -22,25 +23,7 @@ from prophet.db.locks import transaction
 from prophet.services.releases.publication import read_release
 
 from prophet.services.generation.products import VERIFIED_PRODUCTS as PRODUCTS
-from prophet.execution import before_dispatch
-
-
-MONTHLY_CACHE_SECONDS = 300
-_monthly_cache = {}
-_monthly_locks = {product: asyncio.Lock() for product in PRODUCT_ARTIFACTS}
-
-
-async def cached_monthly_accuracy(product):
-    """Reuse a rolling summary for five minutes; coalesce concurrent reads."""
-    if product not in _monthly_locks:
-        raise ValueError('Unknown forecast product')
-    async with _monthly_locks[product]:
-        cached = _monthly_cache.get(product)
-        if cached is not None and monotonic() < cached[0]:
-            return cached[1]
-        result = await monthly_accuracy(product)
-        _monthly_cache[product] = (monotonic() + MONTHLY_CACHE_SECONDS, result)
-        return result
+from prophet.execution import before_dispatch, execute
 
 
 def targets(frame, start, end):
@@ -185,16 +168,68 @@ async def monthly_accuracy(product, *, now=None):
         raise ValueError('Unknown forecast product')
     now = now or datetime.now(UTC)
     start = now - timedelta(days=load_config().verification_days)
-    async with get_db_session() as session, session.begin():
-        query = await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        query = await session.execute(text('SET LOCAL statement_timeout=10000'))
-        # Include releases before the window whose forecast horizons enter it.
-        query = await session.execute(text("""SELECT v.artifact,v.evaluated_at,v.report,r.issue_time
-            FROM forecast_verification v JOIN forecast_release r ON r.id=v.release_id
-            WHERE r.product=:product AND r.issue_time >= :start AND r.issue_time <= :now
-            ORDER BY r.issue_time,r.id"""), {'product': product, 'start': start-timedelta(hours=96), 'now': now})
-        rows = query.mappings().all()
+    async with _monthly_session() as session:
+        rows = await _monthly_rows(session, product, start, now)
     return await asyncio.to_thread(_monthly_summary, rows, product, start, now)
+
+
+@asynccontextmanager
+async def _monthly_session():
+    async with get_db_session() as session, session.begin():
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        await session.execute(text('SET LOCAL statement_timeout=10000'))
+        yield session
+
+
+async def _monthly_rows(session, product, start, now):
+    # Include releases before the window whose forecast horizons enter it.
+    query = await session.execute(text("""SELECT v.artifact,v.evaluated_at,v.report,r.issue_time
+        FROM forecast_verification v JOIN forecast_release r ON r.id=v.release_id
+        WHERE r.product=:product AND r.issue_time >= :start AND r.issue_time <= :now
+        ORDER BY r.issue_time,r.id,v.artifact"""), {
+            'product': product, 'start': start-timedelta(hours=96), 'now': now,
+        })
+    return query.mappings().all()
+
+
+def _monthly_documents(products, start, now):
+    from common.db.session import dispose_engine
+
+    async def build():
+        reports = []
+        try:
+            async with _monthly_session() as session:
+                for product in products:
+                    rows = await _monthly_rows(session, product, start, now)
+                    report = _monthly_summary(rows, product, start, now)
+                    reports.append({'product': product, 'as_of': now, 'report': report.model_dump(mode='json')})
+                    del rows
+            return reports
+        finally:
+            await dispose_engine()
+
+    return asyncio.run(build())
+
+
+async def publish_monthly_accuracy(*, deadline, now=None):
+    """Publish one complete set of summaries from a consistent source snapshot."""
+    now = now or datetime.now(UTC)
+    start = now - timedelta(days=load_config().verification_days)
+    products = tuple(product for product in PRODUCT_ARTIFACTS if product != 'solar-wind-events')
+    check_progress(deadline)
+    reports = await asyncio.to_thread(
+        execute, _monthly_documents, products, start, now,
+        timeout_seconds=max(0.001, deadline-monotonic()),
+    )
+    check_progress(deadline)
+    async with get_db_session() as session, session.begin():
+        await session.execute(text("""INSERT INTO forecast_verification_summary (product,as_of,report)
+            VALUES (:product,:as_of,:report)
+            ON CONFLICT (product) DO UPDATE SET as_of=EXCLUDED.as_of,report=EXCLUDED.report
+            WHERE forecast_verification_summary.as_of < EXCLUDED.as_of""").bindparams(
+                bindparam('report', type_=JSONB),
+            ), reports)
+    return len(reports)
 
 
 def _monthly_summary(rows, product, start, now):

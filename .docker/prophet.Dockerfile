@@ -28,4 +28,4 @@ ENV XDG_CONFIG_HOME=/tmp/prophet-config \
 
 RUN install -d -m 1777 "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME"
 
-CMD ["prophet", "serve"]
+CMD ["prophet", "--help"]

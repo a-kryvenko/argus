@@ -117,35 +117,21 @@ def test_uploads_svg_and_atomically_saves_local_summary(monkeypatch, tmp_path, f
         uploaded.append((content,bucket,prefix,name,kwargs))
         return prefix+'/'+name
     monkeypatch.setattr(charts.datamanager, 'upload_file', upload)
+    path = tmp_path/'prophet/summary/latest.json'
     if fail_upload:
-        path = tmp_path/'prophet/summary/latest.json'
         path.parent.mkdir(parents=True)
         path.write_text('{"previous": true}')
         with pytest.raises(OSError): asyncio.run(charts.publish_summary())
         assert len(uploaded) == 1 and uploaded[0][3].endswith('.svg')
-        assert charts.read_summary() == {'previous': True}
+        assert json.loads(path.read_text()) == {'previous': True}
     else:
         asyncio.run(charts.publish_summary())
         assert len(uploaded) == len(images)
-        stored = charts.read_summary()
+        stored = json.loads(path.read_text())
         speed = stored['observations']['plasma']['items'][0]
         assert speed['risk_level'] == 2
         assert speed['image_url'].startswith('https://media.example/forecasts/summary/images/v-')
         assert all(row[-1]['content_type']=='image/svg+xml' for row in uploaded)
-
-
-def test_reads_prepared_summary_from_local_file(monkeypatch, tmp_path):
-    monkeypatch.setattr(charts, 'get_config', lambda: SimpleNamespace(data_root=tmp_path))
-    path = tmp_path/'prophet/summary/latest.json'
-    path.parent.mkdir(parents=True)
-    path.write_text('{"observations": {"ready": true}}')
-    assert charts.read_summary() == {'observations': {'ready': True}}
-
-
-def test_missing_summary_is_not_generated_on_read(monkeypatch, tmp_path):
-    monkeypatch.setattr(charts, 'get_config', lambda: SimpleNamespace(data_root=tmp_path))
-    with pytest.raises(FileNotFoundError):
-        charts.read_summary()
 
 
 @pytest.mark.parametrize('probabilities,expected', [
@@ -182,27 +168,6 @@ def test_numeric_clio_contract_preserves_metric_times_and_gaps(monkeypatch, tmp_
     assert requests[1].url.params['interval'] == '1h'
     assert requests[2].url.params['interval'] == '1m'
     assert all(r.headers['Authorization'] == 'Bearer test-token' for r in requests)
-
-
-def test_http_returns_prepared_summary_and_never_generates(monkeypatch, tmp_path):
-    from prophet.main import app
-    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-token')
-    data = {'observations': {'plasma': {'items': [{'risk_level': 2, 'image_url': 'https://media.example/v.svg'}]}}}
-    read = Mock(return_value=data)
-    monkeypatch.setattr(charts, 'read_summary', read)
-    monkeypatch.setattr(charts, 'build_summary', Mock(side_effect=AssertionError('unexpected generation')))
-    async def verify():
-        async with charts.httpx.AsyncClient(transport=charts.httpx.ASGITransport(app=app), base_url='http://prophet') as client:
-            assert (await client.get('/internal/v1/summary')).status_code == 401
-            read.assert_not_called()
-            headers = {'Authorization': 'Bearer test-token'}
-            response = await client.get('/internal/v1/summary', headers=headers)
-            assert response.status_code == 200
-            assert response.json() == data
-            read.side_effect = FileNotFoundError('private storage details')
-            response = await client.get('/internal/v1/summary', headers=headers)
-            assert response.status_code == 503 and 'private storage' not in response.text
-    asyncio.run(verify())
 
 
 def test_cme_age_filter_and_exact_public_fields(monkeypatch, tmp_path):

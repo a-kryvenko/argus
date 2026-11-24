@@ -14,7 +14,8 @@ def test_prophet_scheduler_preserves_products_and_cadences(monkeypatch):
         monkeypatch.setattr(scheduler, 'run_command', run)
         scheduler.register_jobs(worker)
         jobs = {job.id: job for job in worker.scheduler.get_jobs()}
-        assert set(jobs) == {*(f'generation:{product}' for product in PRODUCTS), 'summary', 'verification', 'cleanup'}
+        assert set(jobs) == {*(f'generation:{product}' for product in PRODUCTS),
+                             'summary', 'verification', 'verification-summary', 'cleanup'}
         now = datetime(2026, 11, 24, 1, 1, tzinfo=UTC)
         for job_id, job in jobs.items():
             if job_id.startswith('generation:'):
@@ -25,6 +26,7 @@ def test_prophet_scheduler_preserves_products_and_cadences(monkeypatch):
                 command, expected = {
                     'summary': (('summary',), (1, 5)),
                     'verification': (('verification', 'all'), (6, 30)),
+                    'verification-summary': (('verification-summary',), (1, 5)),
                     'cleanup': (('cleanup', '--apply'), (1, 45)),
                 }[job_id]
             fire = job.trigger.get_next_fire_time(None, now)

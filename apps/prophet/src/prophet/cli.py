@@ -10,10 +10,6 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
 
-    serve = commands.add_parser('serve')
-    serve.add_argument('--host', default='0.0.0.0')
-    serve.add_argument('--port', type=int, default=8000)
-
     generation = commands.add_parser('generation')
     generation.add_argument('product', nargs='?', choices=GENERATION_CHOICES, default='all')
 
@@ -21,6 +17,7 @@ def main(argv=None):
     verification.add_argument('product', nargs='?', choices=(*VERIFIED_PRODUCTS, 'all'), default='solar-wind-speed')
 
     commands.add_parser('summary')
+    commands.add_parser('verification-summary')
 
     cleanup = commands.add_parser('cleanup')
     cleanup.add_argument('--apply', action='store_true')
@@ -36,14 +33,12 @@ def main(argv=None):
 
 
 def invoke(name, args):
-    if name == 'serve':
-        import uvicorn
-        uvicorn.run('prophet.main:app', host=args.host, port=args.port)
-        return
     if name == 'generation':
         from prophet.commands.generation import run
     elif name == 'verification':
         from prophet.commands.verification import run
+    elif name == 'verification-summary':
+        from prophet.commands.verification_summary import run
     elif name == 'summary':
         from prophet.commands.summary import run
     elif name == 'cleanup':

@@ -1,13 +1,8 @@
 """Diagnostic evidence only: no inferred scientific freshness thresholds."""
 import math
-from datetime import UTC, datetime
-
-from sqlalchemy import text
+from datetime import UTC
 
 from forecast.observation_inputs import DENSITY_METRICS
-from common.schemas.forecast_status import ForecastStatus, ForecastsStatus
-from common.schemas.forecast_release import PRODUCT_ARTIFACTS
-from prophet.services.releases.queries import LATEST_RELEASES
 
 
 NORMALIZED_FIELDS = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', 'ap', 'f10_7', 's10', 'm10', 'y10')
@@ -71,70 +66,3 @@ def input_diagnostics(inputs):
                               'read_at': inputs.solar_wind_events.read_at.isoformat()}
                              if inputs.solar_wind_events else None),
     }
-
-
-def classify_freshness(issue_time, now, max_age_hours=None):
-    if issue_time is None:
-        return 'unavailable'
-    age = (now - issue_time).total_seconds() / 3600
-    if age < 0:
-        return 'future_issue_time'
-    if max_age_hours is None:
-        return 'unconfigured'
-    return 'stale' if age > max_age_hours else 'within_age_limit'
-
-
-async def product_status(product, *, now=None):
-    """Read metadata without decompressing forecast payloads or running models."""
-
-    from prophet.db.session import get_db_session
-    if product not in PRODUCT_ARTIFACTS:
-        raise ValueError('Unknown forecast product')
-    now = now or datetime.now(UTC)
-    if now.tzinfo is None or now.utcoffset() is None:
-        raise ValueError('Assessment time must be timezone-aware')
-    async with get_db_session() as session, session.begin():
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        return await _product_status(session, product, now)
-
-
-async def forecasts_status():
-    """Assess all products against one database snapshot and timestamp."""
-    from prophet.db.session import get_db_session
-    now = datetime.now(UTC)
-    async with get_db_session() as session, session.begin():
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        products = [await _product_status(session, product, now) for product in PRODUCT_ARTIFACTS]
-    return ForecastsStatus(products=products)
-
-
-async def _product_status(session, product, now):
-    from common.config import get_config
-    query = await session.execute(text(f'''SELECT r.id AS release_id,r.run_id,r.issue_time,r.published_at,
-        f.started_at,f.provenance->'input_diagnostics' AS input_diagnostics
-        FROM ({LATEST_RELEASES}) r
-        JOIN forecast_run f ON f.id=r.run_id WHERE r.product=:product'''), {'product': product})
-    current = query.mappings().first()
-    from prophet.services.generation.products import attempt_selections
-    query = await session.execute(text("""SELECT id AS run_id,status,started_at,finished_at,error,
-        provenance->'input_diagnostics' AS input_diagnostics, provenance->'publication' AS publication FROM forecast_run
-        WHERE product=ANY(:products) ORDER BY started_at DESC,id DESC LIMIT 1"""), {'products': attempt_selections(product)})
-    attempt = query.mappings().first()
-    artifacts = []
-    if attempt:
-        query = await session.execute(text("""SELECT name,status,error FROM forecast_artifact
-            WHERE run_id=:run_id AND name=ANY(:names) ORDER BY name"""), {'run_id': attempt['run_id'], 'names': list(PRODUCT_ARTIFACTS[product])})
-        artifacts = query.mappings().all()
-    max_age = None
-    if product == 'atmospheric-density':
-        max_age = get_config().models_registry['models']['atmospheric_density'].get('max_age_hours', 6)
-    age = (now - current['issue_time']).total_seconds() / 3600 if current else None
-    return ForecastStatus(**{
-        'contract_version': 1, 'product': product, 'assessed_at': now,
-        'mode': 'observe', 'current_release': current,
-        'release_age_hours': age,
-        'existing_public_max_age_hours': max_age,
-        'freshness': classify_freshness(current['issue_time'] if current else None, now, max_age),
-        'latest_attempt': attempt, 'latest_attempt_artifacts': artifacts,
-        'note': 'Diagnostic status does not establish model readiness or individual sensor freshness.',
-    })

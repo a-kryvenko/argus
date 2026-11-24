@@ -47,12 +47,3 @@ def test_empty_inputs_are_not_reported_as_healthy():
     report = input_diagnostics(inputs([]))
     assert report['normalized']['age_hours'] is None
     assert report['issues'] == ['no_aware_normalized_timestamps']
-
-
-def test_existing_density_age_boundary_and_unconfigured_products():
-    from prophet.services.releases.status import classify_freshness
-    assert classify_freshness(None, NOW, 6) == 'unavailable'
-    assert classify_freshness(NOW - timedelta(hours=6), NOW, 6) == 'within_age_limit'
-    assert classify_freshness(NOW - timedelta(hours=6, seconds=1), NOW, 6) == 'stale'
-    assert classify_freshness(NOW - timedelta(days=30), NOW) == 'unconfigured'
-    assert classify_freshness(NOW + timedelta(seconds=1), NOW) == 'future_issue_time'

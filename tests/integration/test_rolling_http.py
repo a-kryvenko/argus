@@ -74,11 +74,12 @@ def deployment_with_static_slots(root):
     for color in ('blue', 'green'):
         for service, name in zip(HTTP, slot_names(color)):
             spec = copy.deepcopy(config['services'][name])
+            health_path = '/api/v1/health/ready' if service in ('api', 'public-api') else '/'
             spec.update(image='python:3.12-alpine', command=['python', '/server.py'],
                         environment={'VERSION': name, 'PORT': str(HTTP[service].port)},
                         volumes=[{'type': 'bind', 'source': str(server), 'target': '/server.py', 'read_only': True}],
                         healthcheck={'test': ['CMD', 'python', '-c',
-                            f"import urllib.request; urllib.request.urlopen('http://127.0.0.1:{HTTP[service].port}/')"],
+                            f"import urllib.request; urllib.request.urlopen('http://127.0.0.1:{HTTP[service].port}{health_path}')"],
                             'interval': '1s', 'timeout': '2s', 'retries': 20})
             spec['stop_grace_period'] = '1s'
             services[name] = spec
@@ -114,9 +115,8 @@ def test_static_slots_switch_as_one_group_and_preserve_inflight_requests(tmp_pat
         return json.loads(deployment.compose.run('exec', '-T', client, 'python', '-c', source, url, capture=True))
     def smoke(service, slot, routed=False):
         url = routed_url(service) if routed else f'http://127.0.0.1:{HTTP[service].port}'
-        if routed and service == 'public-api':
-            url += '/api/v1/ping'
-        assert get_from_container(slot, url)['version'] == slot
+        path = {'api': '/api/v1/dashboard/me', 'public-api': '/api/v1/ping'}.get(service, '/')
+        assert get_from_container(slot, url + path)['version'] == slot
         if slot == 'api-green' and ((failure == 'direct' and not routed) or (failure == 'routed' and routed)):
             raise RuntimeError('injected smoke failure')
     deployment.applications.check = smoke

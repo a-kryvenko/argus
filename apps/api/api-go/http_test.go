@@ -104,6 +104,16 @@ func TestPublicRoutes(t *testing.T) {
 		}
 		return response
 	}
+	t.Run("versioned health routes", func(t *testing.T) {
+		for _, path := range []string{"/health/live", "/health/ready"} {
+			check("GET", path, "", 200)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			if response.Code != http.StatusNotFound {
+				t.Errorf("GET %s = %d, want 404", path, response.Code)
+			}
+		}
+	})
 	t.Run("documentation", func(t *testing.T) {
 		got := check("GET", "/openapi.json", "", 200)
 		var specification struct {

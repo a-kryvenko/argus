@@ -4,7 +4,7 @@ import time
 import sentry_sdk
 from common.config import get_config
 from common.runtime import setup_sentry
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -31,7 +31,6 @@ setup_sentry()
 app = FastAPI(
     title="ARGUS SUNWATCH Dashboard",
     debug=config.debug,
-    root_path="/api/v1",
     lifespan=lifespan,
     openapi_url=None,
 )
@@ -71,10 +70,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(dashboard_router, include_in_schema=False)
-app.include_router(drag_monitor_router, include_in_schema=False)
-app.include_router(density_advisory_router, include_in_schema=False)
-app.include_router(healthcheck_router)
+router = APIRouter(prefix="/api/v1")
+router.include_router(dashboard_router)
+router.include_router(drag_monitor_router)
+router.include_router(density_advisory_router)
+router.include_router(healthcheck_router)
+app.include_router(router, include_in_schema=False)
+
+
 @app.middleware("http")
 async def add_processing_time_header(request: Request, call_next):
     start_time = time.perf_counter()

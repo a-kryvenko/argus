@@ -20,10 +20,24 @@ def check(options):
         except HTTPError as error:
             raise RuntimeError(f'{service}: smoke endpoint {path} returned {error.code}') from None
 
+    def dashboard():
+        path = '/api/v1/dashboard/me'
+        try:
+            opener.open(Request(base + path), timeout=5).close()
+        except HTTPError as error:
+            with error:
+                if error.code == 401:
+                    return error.headers
+            raise RuntimeError(f'Dashboard session check returned {error.code}') from None
+        raise RuntimeError('Dashboard accepted a request without a session')
+
+    expected_upstream = options.get('expected_upstream')
+    routed_dashboard = service == 'api' and expected_upstream
+    ready_path = '/api/v1/health/ready' if service == 'api' else '/health/ready'
     deadline = time.monotonic() + 5
     while True:
-        _, headers = request('/health/ready')
-        if not options.get('expected_upstream') or headers.get('X-Argus-Upstream') == options['expected_upstream']:
+        headers = dashboard() if routed_dashboard else request(ready_path)[1]
+        if not expected_upstream or headers.get('X-Argus-Upstream') == expected_upstream:
             break
         if time.monotonic() >= deadline:
             raise RuntimeError('Router did not select the expected application instance')
@@ -46,12 +60,6 @@ def check(options):
             'Authorization': 'Bearer ' + os.environ['INTELLIGENCE_SERVICE_TOKEN']})
         if not isinstance(data, list):
             raise RuntimeError('Invalid Intelligence profile list')
-    elif service == 'api':
-        try:
-            opener.open(Request(base + '/api/v1/dashboard/me'), timeout=5).close()
-        except HTTPError as error:
-            if error.code != 401:
-                raise RuntimeError(f'Dashboard session check returned {error.code}') from None
-        else:
-            raise RuntimeError('Dashboard accepted a request without a session')
+    elif service == 'api' and not routed_dashboard:
+        dashboard()
     print(f'[deploy] {service}: smoke passed', flush=True)

@@ -52,17 +52,25 @@ func registerRoute(mux *http.ServeMux, method, path string, handler http.Handler
 func (a *api) routes() http.Handler {
 	mux := http.NewServeMux()
 	spec := newOpenAPI()
+
 	a.publicRoutes(mux, spec)
+
 	completeSchemas(spec.Components.Schemas)
+
 	openAPI, err := json.Marshal(spec)
 	if err != nil {
 		panic(fmt.Errorf("encode OpenAPI: %w", err))
 	}
-	for _, path := range []string{"/health/live", "/health/ready", prefix + "/health/live", prefix + "/health/ready"} {
+
+	for _, path := range []string{
+		prefix + "/health/live",
+		prefix + "/health/ready",
+	} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 200, map[string]string{"service": "public-api", "status": "ok"})
 		})
 	}
+
 	registerRoute(mux, "GET", "/openapi.json", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(openAPI)
@@ -75,6 +83,7 @@ func (a *api) routes() http.Handler {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		io.WriteString(w, redocHTML)
 	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Match the old public API's trailing-slash redirect only for known routes.
 		if path, found := strings.CutSuffix(r.URL.Path, "/"); found && path != "" {
@@ -88,6 +97,7 @@ func (a *api) routes() http.Handler {
 		}
 		writeError(w, failure{404, "Not Found"})
 	})
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		w.Header().Add("Vary", "Origin")

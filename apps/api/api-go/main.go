@@ -34,10 +34,12 @@ func main() {
 		}
 		return
 	}
+
 	app, err := loadAPI(os.Getenv("ARGUS_WORKDIR"))
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	address := os.Getenv("PUBLIC_API_HTTP_ADDR")
 	if address == "" {
 		address = ":8000"
@@ -46,8 +48,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	server := &http.Server{Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, WriteTimeout: 115 * time.Second}
+
+	server := &http.Server{
+		Handler:           app.routes(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		WriteTimeout:      115 * time.Second,
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	serverErr := make(chan error, 1)

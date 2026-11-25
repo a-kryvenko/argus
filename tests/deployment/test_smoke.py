@@ -60,7 +60,7 @@ def test_dashboard_smoke_requires_a_session(monkeypatch, status):
             assert request.get_method() == 'GET'
             assert request.get_header('Cookie') is None
             assert request.get_header('Authorization') is None
-            if path != '/health/ready':
+            if path != '/api/v1/health/ready':
                 assert path == '/api/v1/dashboard/me'
                 if status != 200:
                     raise HTTPError(request.full_url, status, 'Dashboard response', {}, None)
@@ -76,4 +76,20 @@ def test_dashboard_smoke_requires_a_session(monkeypatch, status):
     else:
         with pytest.raises(RuntimeError, match='Dashboard'):
             smoke.check(options)
-    assert calls == ['/health/ready', '/api/v1/dashboard/me']
+    assert calls == ['/api/v1/health/ready', '/api/v1/dashboard/me']
+
+
+def test_routed_dashboard_smoke_waits_for_expected_slot(monkeypatch):
+    slots = iter(['api-blue', 'api-green'])
+    calls = []
+
+    class Opener:
+        def open(self, request, timeout):
+            calls.append(request.full_url)
+            headers = {'X-Argus-Upstream': next(slots)}
+            raise HTTPError(request.full_url, 401, 'Unauthorized', headers, None)
+
+    monkeypatch.setattr(smoke, 'build_opener', lambda *args: Opener())
+    monkeypatch.setattr(smoke.time, 'sleep', lambda _: None)
+    smoke.check({'service': 'api', 'base': 'http://router', 'expected_upstream': 'api-green'})
+    assert calls == ['http://router/api/v1/dashboard/me'] * 2

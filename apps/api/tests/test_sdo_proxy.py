@@ -9,4 +9,4 @@ from api.main import app
 @pytest.mark.parametrize('path', ['/sdo', '/sdo/images/2026103012_094_' + 'a'*64 + '_256.webp', '/sdo/movies/0131.mp4'])
 async def test_file_proxy_routes_are_not_exposed(path):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://api') as client:
-        assert (await client.get(path)).status_code == 404
+        assert (await client.get('/api/v1' + path)).status_code == 404

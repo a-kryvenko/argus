@@ -22,7 +22,7 @@ flight-loss accuracy remains unvalidated.
 Supply actual spacecraft parameters. Optional `thresholds` compares cumulative
 loss against user limits; without them `drag_risk` is `not_assessed`.
 Response: density, drag acceleration/impulse, estimated altitude loss, hourly
-predictions, echoed inputs, source and assumptions. `?meta=true` adds model metadata.
+predictions, echoed inputs, source, model details and assumptions.
 
 Limits: circular orbit, 200–800 km, 24/48 hours **from release issue time**,
 constant area/Cd, fixed altitude and longitude-mean density. No maneuvers, winds or

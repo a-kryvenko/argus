@@ -126,7 +126,7 @@ def load_density_forecast() -> DensityForecast:
         raise ArtifactNotReadyError("Atmospheric density forecast is not ready") from exc
 
 
-def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
+def load_forecast(product: Product) -> Forecast:
     frames = _load_variable_frames(product)
     if not frames:
         raise ArtifactNotReadyError(product.target)
@@ -185,12 +185,12 @@ def load_forecast(product: Product, *, meta: bool = False) -> Forecast:
         horizon_hours=max(point.lead_hours for point in predictions),
         available_variables=available,
         predictions=predictions,
-        meta=product_metadata(product, available) if meta else None,
+        meta=product_metadata(product, available),
         cme_speed=cme_speed,
     )
 
 
-def load_metrics(product: Product, *, meta: bool = False) -> ForecastMetrics:
+def load_metrics(product: Product) -> ForecastMetrics:
     config = get_config()
     for variable in product.variables:
         report_path = config.models_registry["models"][variable.registry_name].get("metrics_report")
@@ -207,6 +207,6 @@ def load_metrics(product: Product, *, meta: bool = False) -> ForecastMetrics:
                                                        if r.lead_hours <= product.max_horizon_hours]
                 for series in metrics.binary:
                     series.by_lead_hour = [r for r in series.by_lead_hour if r.lead_hours <= product.max_horizon_hours]
-            report.meta = product_metadata(product, list(report.variables)) if meta else None
+            report.meta = product_metadata(product, list(report.variables))
             return report
     raise ArtifactNotReadyError(product.target)

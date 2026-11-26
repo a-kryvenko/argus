@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+from apscheduler.events import EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from clio.scheduler import warmup, worker
@@ -20,7 +20,8 @@ def state_path(tmp_path):
 @pytest.fixture(autouse=True)
 def donki_job(monkeypatch):
     job = AsyncMock(return_value={"status": "complete"})
-    monkeypatch.setattr(warmup, "run_donki", job)
+    monkeypatch.setattr(worker, "run_donki", job)
+    monkeypatch.setattr(worker, "restore_donki", AsyncMock(return_value={"status": "complete"}))
     return job
 
 
@@ -43,17 +44,6 @@ def test_worker_passes_heartbeat_file_to_main(monkeypatch, tmp_path):
     main.assert_awaited_once_with(path)
 
 
-async def run_until_scheduler_starts(monkeypatch, state_path):
-    class Scheduler(AsyncIOScheduler):
-        def start(self, *args, **kwargs):
-            super().start(*args, **kwargs)
-            asyncio.get_running_loop().call_soon(asyncio.current_task().cancel)
-
-    monkeypatch.setattr(worker, "AsyncIOScheduler", Scheduler)
-    monkeypatch.setattr(asyncio.get_running_loop(), "add_signal_handler", lambda *args: None)
-    await worker.main(state_path)
-
-
 @pytest.mark.parametrize("seconds,pending,expected", [
     (10, False, False),
     (60, False, False),
@@ -73,142 +63,84 @@ def test_warmup_threshold(monkeypatch, seconds, pending, expected):
     assert warmup.needs_warmup(None)
 
 
-def test_cold_start_backfills_before_collect_and_persists_state(monkeypatch, state_path, donki_job):
-    calls = []
-    events = []
-
-    async def backfill():
-        assert warmup.read_state(state_path)["warmup_pending"]
-        calls.append("backfill")
-        return {"status": "complete"}
-
-    async def collect(metrics):
-        calls.append(metrics)
-        return {"status": "complete"}
-
-    monkeypatch.setattr(warmup, "run_backfill", backfill)
-    monkeypatch.setattr(warmup, "run_collect", collect)
-    monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1), (["dst"], 5)])
-    monkeypatch.setattr(worker, "on_job_finished", events.append)
+def test_cold_start_collects_while_archive_is_blocked(monkeypatch, state_path, donki_job):
+    from clio.scheduler.healthcheck import ready
 
     async def check():
-        await run_until_scheduler_starts(monkeypatch, state_path)
-        assert calls == ["backfill", ["v"], ["dst"]]
-        assert not warmup.read_state(state_path)["warmup_pending"]
-        assert len(asyncio.all_tasks()) == 1
+        collecting = asyncio.Event()
+        backfilling = asyncio.Event()
+        completed = asyncio.Event()
+        cancelled = asyncio.Event()
+        signals = {}
 
-    asyncio.run(check())
-    assert [event.job_id for event in events] == [
-        "warmup:backfill", "warmup:collect:v", "warmup:collect:dst", "warmup:donki",
-    ]
-    donki_job.assert_awaited_once_with(worker.load_observation_config().solar_wind_events)
-    assert all(event.code == EVENT_JOB_EXECUTED for event in events)
-    assert warmup.read_state(state_path)["last_checked_at"]
-    assert not state_path.with_suffix(".tmp").exists()
-
-
-@pytest.mark.parametrize("seconds,expected_calls", [(10, 0), (120, 1)])
-def test_restart_checks_previous_heartbeat(monkeypatch, state_path, seconds, expected_calls):
-    state_path.write_text(json.dumps({
-        "last_checked_at": (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat(),
-        "warmup_pending": False,
-    }))
-    backfill = AsyncMock(return_value={"status": "complete"})
-    collect = AsyncMock(return_value={"status": "complete"})
-    monkeypatch.setattr(warmup, "run_backfill", backfill)
-    monkeypatch.setattr(warmup, "run_collect", collect)
-    monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1)])
-    monkeypatch.setattr(worker, "on_job_finished", lambda event: None)
-
-    async def check():
-        await run_until_scheduler_starts(monkeypatch, state_path)
-
-    asyncio.run(check())
-    assert backfill.await_count == collect.await_count == expected_calls
-
-
-def test_backfill_failure_is_reported_and_collect_continues(monkeypatch, state_path):
-    error = RuntimeError("source unavailable")
-    monkeypatch.setattr(warmup, "run_backfill", AsyncMock(side_effect=error))
-    collect = AsyncMock(return_value={"status": "partial", "failed_metrics": ["v"]})
-    monkeypatch.setattr(warmup, "run_collect", collect)
-    events = []
-    monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1)])
-    monkeypatch.setattr(worker, "on_job_finished", events.append)
-
-    async def check():
-        await run_until_scheduler_starts(monkeypatch, state_path)
-
-    asyncio.run(check())
-    assert events[0].code == EVENT_JOB_ERROR
-    assert events[0].exception is error
-    assert events[1].retval["status"] == "partial"
-    collect.assert_awaited_once_with(["v"])
-    assert not warmup.read_state(state_path)["warmup_pending"]
-
-
-@pytest.mark.parametrize("during_warmup", [True, False])
-def test_worker_signal_stops_during_warmup_or_scheduler(monkeypatch, state_path, during_warmup):
-    ready = None
-    signals = {}
-    schedulers = []
-    backfill_cancelled = []
-    events = []
-
-    async def backfill():
-        if during_warmup:
-            ready.set()
+        async def backfill():
+            assert ready(state_path)
+            backfilling.set()
             try:
                 await asyncio.Event().wait()
             finally:
-                backfill_cancelled.append(True)
-        return {"status": "complete"}
+                cancelled.set()
 
-    class Scheduler(AsyncIOScheduler):
-        def start(self, *args, **kwargs):
-            super().start(*args, **kwargs)
-            assert not warmup.read_state(state_path)["warmup_pending"]
-            config = worker.load_observation_config()
-            assert len(self.get_jobs()) == len(worker.collecting_schedules(config)) + 4
-            donki = self.get_job("donki")
-            assert donki.func is worker.run_donki
-            assert donki.trigger.interval.total_seconds() == config.solar_wind_events.poll_minutes * 60
-            ready.set()
+        async def collect(metrics):
+            assert metrics == ["v"]
+            collecting.set()
+            return {"status": "complete"}
 
-    def create_scheduler(**kwargs):
-        scheduler = Scheduler(**kwargs)
-        schedulers.append(scheduler)
-        return scheduler
+        def report(event):
+            if event.job_id == 'collect:v':
+                assert event.code == EVENT_JOB_EXECUTED
+                completed.set()
 
-    monkeypatch.setattr(warmup, "run_backfill", backfill)
-    collect = AsyncMock(return_value={"status": "complete"})
-    monkeypatch.setattr(warmup, "run_collect", collect)
-    monkeypatch.setattr(worker, "on_job_finished", events.append)
-    monkeypatch.setattr(worker, "AsyncIOScheduler", create_scheduler)
-
-    async def check():
-        nonlocal ready
-        ready = asyncio.Event()
+        monkeypatch.setattr(worker, "run_backfill", backfill)
+        monkeypatch.setattr(worker, "run_collect", collect)
+        monkeypatch.setattr(worker, "collecting_schedules", lambda config: [(["v"], 1)])
+        monkeypatch.setattr(worker, "on_job_finished", report)
         loop = asyncio.get_running_loop()
         monkeypatch.setattr(loop, "add_signal_handler", lambda sig, callback: signals.update({sig: callback}))
+
         task = asyncio.create_task(worker.main(state_path))
-        await asyncio.wait_for(ready.wait(), timeout=2)
+        await asyncio.wait_for(asyncio.gather(collecting.wait(), backfilling.wait(), completed.wait()), timeout=2)
+        assert ready(state_path) and warmup.read_state(state_path)["warmup_pending"]
+        assert donki_job.await_count == 1
         signals[signal.SIGTERM]()
         await asyncio.wait_for(task, timeout=2)
-        assert len(asyncio.all_tasks()) == 1
+        assert cancelled.is_set()
+        assert not ready(state_path)
+        assert warmup.read_state(state_path)["jobs"]["collect:v"]["status"] == "complete"
 
     asyncio.run(check())
-    assert not schedulers[0].running
-    assert warmup.read_state(state_path)["warmup_pending"] is during_warmup
-    if during_warmup:
-        assert backfill_cancelled == [True]
-        collect.assert_not_awaited()
-        assert events == []
-    else:
-        assert collect.await_count == len(worker.collecting_schedules(worker.load_observation_config()))
-        assert [call.args[0] for call in collect.await_args_list] == [
-            metrics for metrics, _ in worker.collecting_schedules(worker.load_observation_config())
-        ]
+
+
+@pytest.mark.parametrize("warmup_required", [True, False])
+def test_scheduler_sets_initial_run_time_and_recurrence(warmup_required):
+    async def check():
+        scheduler = AsyncIOScheduler(timezone=UTC)
+        config = worker.load_observation_config()
+        before = datetime.now(UTC)
+        worker.configure_jobs(scheduler, config, warmup_required=warmup_required)
+        scheduler.start(paused=True)
+        try:
+            assert len(scheduler.get_jobs()) == len(worker.collecting_schedules(config)) + 5
+            for job in (scheduler.get_job("backfill"), scheduler.get_job("donki")):
+                if warmup_required:
+                    assert before <= job.next_run_time <= datetime.now(UTC)
+                else:
+                    assert job.next_run_time > datetime.now(UTC)
+            assert scheduler.get_job("donki").trigger.interval.total_seconds() == config.solar_wind_events.poll_minutes * 60
+        finally:
+            scheduler.shutdown()
+            await asyncio.sleep(0)
+
+    asyncio.run(check())
+
+
+def test_healthcheck_rejects_recent_heartbeat_before_scheduler_started(state_path):
+    from clio.scheduler.healthcheck import ready
+    assert not ready(state_path)
+    warmup.write_state(state_path, {"scheduler_started": False})
+    assert not ready(state_path)
+    warmup.write_state(state_path, {"scheduler_started": True})
+    assert ready(state_path)
 
 
 def test_heartbeat_updates_timestamp_and_preserves_pending(monkeypatch, state_path):

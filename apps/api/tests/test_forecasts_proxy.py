@@ -161,7 +161,7 @@ def test_temperature_public_forecast_contract(monkeypatch):
     frame = pd.DataFrame({'issue_time': [issue], 'valid_time': [issue+pd.Timedelta(hours=96)],
                           'lead_hours': [96], 't_q10': [10000.], 't_q50': [100000.], 't_q90': [200000.]})
     monkeypatch.setattr(forecast_products, 'read_frames', lambda _: {'plasma_temperature_quantile': frame})
-    result = forecast_products.load_forecast(forecast_products.PRODUCTS['solar-wind-temperature'], meta=True)
+    result = forecast_products.load_forecast(forecast_products.PRODUCTS['solar-wind-temperature'])
     assert result.horizon_hours == 96 and result.available_variables == ['t']
     assert result.meta.variables['t'].unit == 'K'
     assert result.predictions[0].variables['t'].continuous.q50 == 100000.

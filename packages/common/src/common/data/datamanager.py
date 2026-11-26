@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from tempfile import TemporaryDirectory
 
 import boto3
@@ -143,20 +143,21 @@ def upload_file(
     return key
 
 
-def put_immutable_file(content: bytes, bucket: str, key: str, *, content_type: str) -> datetime:
+def put_immutable_file(content: bytes | Path, bucket: str, key: str, *, content_type: str) -> datetime:
     """Create an object once and return its stored upload time."""
     return create_immutable_file(content, bucket, key, content_type=content_type)[0]
 
 
-def create_immutable_file(content: bytes, bucket: str, key: str, *, content_type: str) -> tuple[datetime, bool]:
+def create_immutable_file(content: bytes | Path, bucket: str, key: str, *, content_type: str) -> tuple[datetime, bool]:
     """Return the upload time and whether this call created the immutable object."""
     created = False
     client = _get_client()
     for attempt in range(3):
         try:
-            client.put_object(Bucket=bucket, Key=key, Body=content, ContentType=content_type,
-                              CacheControl=IMMUTABLE_CACHE if bucket == 'argus-public' else 'private',
-                              IfNoneMatch='*')
+            with content.open('rb') if isinstance(content, Path) else nullcontext(content) as body:
+                client.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type,
+                                  CacheControl=IMMUTABLE_CACHE if bucket == 'argus-public' else 'private',
+                                  IfNoneMatch='*')
             created = True
             break
         except ClientError as exc:

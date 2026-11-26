@@ -47,6 +47,16 @@ async def test_real_releases_are_verified_and_revisions_replace_evidence(recorde
     quantiles = next(group for group in report['groups'] if group['artifact'] == 'plasma_speed_quantile')
     assert quantiles['tables']['regression.csv'][0]['mae'] == 450.
 
+    truth['points'] = []
+    later = await verification.verify(now=now + timedelta(days=7), writer=writer)
+    assert later['products']['solar-wind-speed']['plasma_speed_quantile'] == {
+        'total': 3, 'verified': 1, 'missing': 2, 'pending': 0}
+    async with get_db_session() as session:
+        expired = await session.scalar(text(
+            "SELECT report FROM prophet.forecast_verification WHERE artifact='plasma_speed_quantile'"))
+    assert expired['pairs'][0]['value'] == 450.
+    assert expired['pairs'][0]['sample_count'] == 1
+
 
 import pytest
 

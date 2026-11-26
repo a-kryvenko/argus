@@ -172,6 +172,7 @@ def test_legacy_snapshots_are_imported_once_and_removed_without_touching_other_f
     save(profile, observation='enlil', observed_at=NOW, source_product='noaa.enlil',
         details=dict(payload=dict(points=[dict(speed_km_s=900)])))
     unrelated = save(profile, observation='gong', observed_at=NOW, source_product='gong.live')
+    assert donki.restore_legacy_polls()['status'] == 'complete'
     record('HSS', [], minute=2)
     inputs = stored_inputs(storage)
     assert inputs.events[0].initial_speed_km_s == 900
@@ -189,8 +190,9 @@ def test_corrupt_legacy_original_rolls_back_import_and_keeps_existing_receipts(s
     location = 'argus-private', receipt['file']['key']
     storage.objects[location] = (b'[]', *storage.objects[location][1:])
     with pytest.raises(ValueError, match='checksum'):
-        record('HSS', [])
+        donki.restore_legacy_polls()
     assert counts(storage) == (0, 0, 0, 1, 1) and len(storage.objects) == 1
     # A fresh successful response for that endpoint can recover without its old original.
     record('CME', [cme(speed=1000)], minute=1)
+    assert donki.restore_legacy_polls()['status'] == 'complete'
     assert counts(storage) == (1, 1, 0, 0, 1)

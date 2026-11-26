@@ -25,7 +25,7 @@ def test_legacy_metadata_is_pruned_after_normalized_predictions_are_published(fi
     from sqlalchemy import func, select
     from clio.db.models.file_observation import FileObservation
     from clio.db.models.file import File
-    from clio.ingestion.extras.donki import record_poll
+    from clio.ingestion.extras.donki import record_poll, restore_legacy_polls
     from clio.ingestion.utils.file_observations import save
 
     now = datetime.now(UTC)
@@ -36,6 +36,7 @@ def test_legacy_metadata_is_pruned_after_normalized_predictions_are_published(fi
     path.write_text(json.dumps([cme]))
     save(path, observation='donki.CME', observed_at=now, source_product='CME',
         details=dict(metadata, records=[cme]))
+    assert restore_legacy_polls()['status'] == 'complete'
     record_poll('WSAEnlilSimulations', metadata=metadata, observed_at=now,
         raw=json.dumps([dict(link='run1', cmeInputs=[dict(CMEID='cme1')],
             modelCompletionTime=(now-timedelta(hours=1)).isoformat(),
@@ -50,6 +51,22 @@ def test_legacy_metadata_is_pruned_after_normalized_predictions_are_published(fi
     assert result['enlil_arrivals'][0]['cme_ids'] == ['cme1']
     assert len(result['polls']) == 2
     assert all(poll['record_count'] == 1 and 'records' not in poll for poll in result['polls'])
+
+
+def test_failed_poll_is_distinct_from_last_success(file_database, file_api):
+    from clio.ingestion.extras.donki import record_attempt, record_poll
+
+    now = datetime.now(UTC)
+    later = now + timedelta(minutes=1)
+    record_poll('CME', raw=b'[]', observed_at=now,
+                metadata=dict(request_start=now-timedelta(days=30), request_end=now+timedelta(days=1)))
+    with file_database.begin() as connection:
+        record_attempt(connection, 'CME', later, 'Timeout')
+        record_attempt(connection, 'HSS', later, 'ConnectionError')
+        record_attempt(connection, 'CME', now, 'OutdatedFailure')
+    attempts = read_event_inputs(file_api)['latest_attempts']
+    assert attempts['CME'] == {'received_at': later.isoformat(), 'last_success_at': now.isoformat(), 'error': 'Timeout'}
+    assert attempts['HSS'] == {'received_at': later.isoformat(), 'last_success_at': None, 'error': 'ConnectionError'}
 
 
 def test_repeated_polls_upsert_unique_ids_and_failed_writes_roll_back(file_database, monkeypatch):

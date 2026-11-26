@@ -1,0 +1,41 @@
+{
+  "metrics": [
+    {"id":"bx","label":"Bx","unit":"nT","group":"wind","native_seconds":60,"signed":true,"frame":"GSM","products":["swpc.rtsw_mag"]},
+    {"id":"by","label":"By","unit":"nT","group":"wind","native_seconds":60,"signed":true,"frame":"GSM","products":["swpc.rtsw_mag"]},
+    {"id":"bz","label":"Bz","unit":"nT","group":"wind","native_seconds":60,"signed":true,"frame":"GSM","products":["swpc.rtsw_mag"]},
+    {"id":"bt","label":"Total magnetic field","unit":"nT","group":"wind","native_seconds":60,"products":["swpc.rtsw_mag"]},
+    {"id":"v","label":"Solar wind speed","unit":"km/s","group":"wind","native_seconds":60,"products":["swpc.rtsw_plasma"]},
+    {"id":"n","label":"Proton density","unit":"cm⁻³","group":"wind","native_seconds":60,"products":["swpc.rtsw_plasma"]},
+    {"id":"t","label":"Proton temperature","unit":"K","group":"wind","native_seconds":60,"products":["swpc.rtsw_plasma"]},
+    {"id":"kp","label":"Estimated Kp","unit":"1","group":"index","native_seconds":10800,"max":9,"products":["swpc.kp"],"source_interval":true},
+    {"id":"dst","label":"Real-time Dst","unit":"nT","group":"index","native_seconds":3600,"signed":true,"products":["swpc.dst"],"source_interval":true},
+    {"id":"ap","label":"Estimated ap","unit":"nT","group":"background","native_seconds":10800,"products":["swpc.kp"],"source_interval":true},
+    {"id":"f10_7","label":"10.7 cm solar radio flux","unit":"sfu","group":"background","native_seconds":86400,"products":["celestrak.f107","swpc.f107"],"archive_products":["celestrak.f107_archive","gfz.f107","omni.hourly"]},
+    {"id":"s10","label":"S10","unit":"sfu","group":"background","native_seconds":86400},
+    {"id":"m10","label":"M10","unit":"sfu","group":"background","native_seconds":86400},
+    {"id":"y10","label":"Y10","unit":"sfu","group":"background","native_seconds":86400},
+    {"id":"xrs_a","label":"XRS-A solar X-ray flux (0.5–4 Å)","unit":"W/m²","group":"xrs","native_seconds":60,"products":["goes.xrs"]},
+    {"id":"xrs_b","label":"XRS-B solar X-ray flux (1–8 Å)","unit":"W/m²","group":"xrs","native_seconds":60,"products":["goes.xrs"]},
+    {"id":"proton_10mev","label":"Integral proton flux ≥10 MeV","unit":"pfu","group":"protons","native_seconds":300,"products":["goes.protons"]},
+    {"id":"proton_100mev","label":"Integral proton flux ≥100 MeV","unit":"pfu","group":"protons","native_seconds":300,"products":["goes.protons"]},
+    {"id":"f10_7_81mean","label":"F10.7 81-day mean","unit":"sfu","group":"model","native_seconds":86400,"products":["celestrak.f107","solfsmy.means"],"archive_products":["celestrak.f107_archive","solfsmy.means_archive"]},
+    {"id":"s10_81mean","label":"S10 81-day mean","unit":"sfu","group":"model","native_seconds":86400,"products":["solfsmy.means"],"archive_products":["solfsmy.means_archive"]},
+    {"id":"m10_81mean","label":"M10 81-day mean","unit":"sfu","group":"model","native_seconds":86400,"products":["solfsmy.means"],"archive_products":["solfsmy.means_archive"]},
+    {"id":"y10_81mean","label":"Y10 81-day mean","unit":"sfu","group":"model","native_seconds":86400,"products":["solfsmy.means"],"archive_products":["solfsmy.means_archive"]}
+  ],
+  "product_urls": {
+    "swpc.rtsw_mag": "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
+    "swpc.rtsw_plasma": "https://services.swpc.noaa.gov/json/rtsw/rtsw_wind_1m.json",
+    "swpc.kp": "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",
+    "swpc.dst": "https://services.swpc.noaa.gov/products/kyoto-dst.json",
+    "swpc.f107": "https://services.swpc.noaa.gov/json/f107_cm_flux.json",
+    "goes.xrs": "https://services.swpc.noaa.gov/json/goes/primary/xrays-7-day.json",
+    "goes.protons": "https://services.swpc.noaa.gov/json/goes/primary/integral-protons-7-day.json",
+    "celestrak.f107": "https://celestrak.org/SpaceData/SW-Last5Years.csv",
+    "celestrak.f107_archive": "https://celestrak.org/SpaceData/SW-All.csv",
+    "gfz.f107": "https://kp.gfz.de/en/data",
+    "omni.hourly": "https://omniweb.gsfc.nasa.gov/html/ow_data.html",
+    "solfsmy.means": "https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT",
+    "solfsmy.means_archive": "https://sol.spacenvironment.net/JB2008/indices/SOLFSMY.TXT"
+  }
+}

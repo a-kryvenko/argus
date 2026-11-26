@@ -68,7 +68,7 @@ def test_files_migration_adds_registry(tmp_path):
 
 
 def test_event_storage_has_unique_identities(tmp_path):
-    result = migration_sql('clio', '20261107_file_observation:head', tmp_path)
+    result = migration_sql('clio', '20261107_file_observation:20261107_event_identities', tmp_path)
     assert result.returncode == 0, result.stderr
     assert 'file_observation ADD COLUMN source_id TEXT' in result.stdout
     assert 'UNIQUE (observation, source_id)' in result.stdout

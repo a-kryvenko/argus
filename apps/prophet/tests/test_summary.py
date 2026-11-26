@@ -145,28 +145,36 @@ def test_modal_threshold_interval(probabilities, expected):
 def test_numeric_clio_contract_preserves_metric_times_and_gaps(monkeypatch, tmp_path):
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
-    responses = [
-        [dict(time=(NOW-timedelta(minutes=2)).isoformat(), v=455., n=None),
-         dict(time=(NOW-timedelta(hours=1)).isoformat(), v=None, n=5.),
-         dict(time=(NOW+timedelta(minutes=1)).isoformat(), v=999.)],
-        [dict(time=(ISSUE-timedelta(hours=1)).isoformat(), v=450., n=None, kp=2.)],
-        [dict(time=(ISSUE-timedelta(hours=3)).isoformat(), kp=4., dst=-20.)],
-    ]
+    def series(at, value):
+        return {'points': [{'observed_at': at.isoformat(), 'value': value}]}
+
+    latest = {
+        'v': series(NOW-timedelta(minutes=2), 455.),
+        'n': series(NOW-timedelta(hours=1), 5.),
+        't': series(NOW+timedelta(minutes=1), 999.),
+    }
+    history = {
+        'v': series(ISSUE-timedelta(hours=1), 450.),
+        'n': series(ISSUE-timedelta(hours=1), None),
+        'kp': series(ISSUE-timedelta(hours=3), 4.33),
+        'dst': series(ISSUE-timedelta(hours=3), -20.),
+    }
     requests = []
     def handle(request):
         requests.append(request)
-        return charts.httpx.Response(200, json={'success': True, 'data': {'points': responses[len(requests)-1]}})
+        return charts.httpx.Response(200, json={
+            'success': True, 'data': history if 'from' in request.url.params else latest})
     client = charts.httpx.Client(transport=charts.httpx.MockTransport(handle))
     monkeypatch.setattr(charts.httpx, 'Client', lambda **kwargs: client)
     current, histories = charts.read_observations(NOW)
     assert current['v']['time'] == NOW-timedelta(minutes=2) and current['v']['value'] == 455.
     assert current['n']['time'] == NOW-timedelta(hours=1)
+    assert 't' not in current
     assert histories['v'][0]['value'] == 450. and 'n' not in histories
-    assert histories['kp'][0]['value'] == 4.
-    assert [r.url.path for r in requests] == ['/internal/v1/observations/latest',
-        '/internal/v1/observations/history', '/internal/v1/observations/history']
+    assert histories['kp'][0]['value'] == 4.33
+    assert [r.url.path for r in requests] == ['/internal/v1/observations/series'] * 2
     assert requests[1].url.params['interval'] == '1h'
-    assert requests[2].url.params['interval'] == '1m'
+    assert requests[1].url.params['time_basis'] == 'l1'
     assert all(r.headers['Authorization'] == 'Bearer test-token' for r in requests)
 
 

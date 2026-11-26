@@ -53,10 +53,10 @@ class PublicLeoDragAssessment(BaseModel):
     risk_reason: str
     assumptions: list[str]
     predictions: list[DragPoint]
-    meta: PublicDragMetadata | None = None
+    meta: PublicDragMetadata
 
     @classmethod
-    def from_assessment(cls, assessment: LeoDragAssessment, *, meta: bool) -> PublicLeoDragAssessment:
+    def from_assessment(cls, assessment: LeoDragAssessment) -> PublicLeoDragAssessment:
         source = assessment.source
         return cls(
             **assessment.model_dump(exclude={'source', 'model'}),
@@ -79,5 +79,5 @@ class PublicLeoDragAssessment(BaseModel):
                     dtc_method=source.dtc_method,
                     geomagnetic_method=source.geomagnetic_method,
                 ),
-            ) if meta else None,
+            ),
         )

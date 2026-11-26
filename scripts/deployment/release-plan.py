@@ -55,10 +55,11 @@ SERVICES_TRACKABLE_FILES = {
         + _PACKAGES_TRACKABLE_FILES["common"]
         + ["./.docker/clio.Dockerfile"]
     ,
-    "clio-api": ["apps/clio/api-go", "./.docker/clio-api.Dockerfile"],
+    "clio-api": ["apps/clio/api-go", "./.docker/clio-api.Dockerfile", "packages/common/src/common/observationcatalog"],
     "public-api": [
         "apps/api/api-go", "./.docker/public-api.Dockerfile",
         "apps/prophet/api-go/publicforecast", "apps/prophet/api-go/go.mod",
+        "packages/common/src/common/observationcatalog",
     ],
     "prophet": _default_service_files("prophet")
         + _PACKAGES_TRACKABLE_FILES["common"]

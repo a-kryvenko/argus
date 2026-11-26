@@ -34,15 +34,13 @@ func TestPreparedForecastsReuseImmutableRelease(t *testing.T) {
 	cache.refresh(context.Background())
 	cache.refresh(context.Background())
 	handler := newHandler(emptyStore{}, "token", "", 6, cache, metricReports{})
-	for _, query := range []string{"", "?meta=true"} {
-		request := httptest.NewRequest("GET", preparedForecastPath+"dst"+query, nil)
-		request.Header.Set("Authorization", "Bearer token")
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		if response.Code != 200 || !strings.Contains(response.Body.String(), `"q50":-10`) ||
-			strings.Contains(response.Body.String(), `"meta"`) != (query != "") {
-			t.Fatalf("unexpected forecast: %d %s", response.Code, response.Body)
-		}
+	request := httptest.NewRequest("GET", preparedForecastPath+"dst", nil)
+	request.Header.Set("Authorization", "Bearer token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"q50":-10`) ||
+		!strings.Contains(response.Body.String(), `"meta"`) {
+		t.Fatalf("unexpected forecast: %d %s", response.Code, response.Body)
 	}
 	if source.reads != 1 {
 		t.Fatalf("read %d releases, want one preparation", source.reads)
@@ -52,7 +50,7 @@ func TestPreparedForecastsReuseImmutableRelease(t *testing.T) {
 	cache.refresh(context.Background())
 	cache.refresh(context.Background())
 	record, synced := cache.get("dst")
-	if !synced || record.compact != nil || source.reads != 2 {
+	if !synced || record.body != nil || source.reads != 2 {
 		t.Fatalf("invalid replacement fell back or was prepared twice: read %d, cache %v", source.reads, record)
 	}
 }
@@ -61,7 +59,7 @@ func TestPreparedDensityExpiresAtReadTime(t *testing.T) {
 	cache := newPreparedForecasts(nil)
 	cache.synced = true
 	cache.latest[densityProduct] = preparedForecast{
-		issueTime: time.Now().Add(-7 * time.Hour), compact: []byte(`{"target":"atmospheric-density"}`),
+		issueTime: time.Now().Add(-7 * time.Hour), body: []byte(`{"target":"atmospheric-density"}`),
 	}
 	handler := newHandler(emptyStore{}, "token", "", 6, cache, metricReports{})
 	request := httptest.NewRequest("GET", preparedForecastPath+densityProduct, nil)

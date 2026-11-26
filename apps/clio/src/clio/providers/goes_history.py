@@ -13,6 +13,7 @@ import json
 import logging
 import re
 import tempfile
+import time
 from typing import Iterator, Sequence
 from urllib.parse import urljoin, urlparse
 
@@ -28,6 +29,11 @@ from clio.providers.goes import EUVS_LINE_COLUMNS
 ARCHIVE_URL = "https://data.ngdc.noaa.gov/platforms/solar-space-observing-satellites/goes/"
 EUVS_PRODUCT = "euvs-l2-avg1m"
 XRS_PRODUCT = "xrsf-l2-bkd1d"
+# NOAA's current annual EUVS files are at most about 41 MB.
+MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
+MAX_CACHE_BYTES = 256 * 1024 * 1024
+CACHE_AGE_SECONDS = 14 * 86400
+REVALIDATE_SECONDS = 86400
 logger = logging.getLogger(__name__)
 
 
@@ -101,28 +107,62 @@ def discover_goes_history(
     return files
 
 
+def _http_metadata_path(path: Path) -> Path:
+    return path.with_suffix(path.suffix + '.http.json')
+
+
+def _last_archive_check(path: Path) -> float:
+    try:
+        return _http_metadata_path(path).stat().st_mtime
+    except FileNotFoundError:
+        return path.stat().st_mtime
+
+
+def prune_archive_cache(cache_dir: Path) -> None:
+    now = time.time()
+    entries, total = [], 0
+    for path in cache_dir.glob('*.nc'):
+        stamp, size = _last_archive_check(path), path.stat().st_size
+        entries.append((stamp, size, path))
+        total += size
+    for stamp, size, path in sorted(entries):
+        if now - stamp > CACHE_AGE_SECONDS or total > MAX_CACHE_BYTES:
+            path.unlink(missing_ok=True)
+            _http_metadata_path(path).unlink(missing_ok=True)
+            total -= size
+    for path in cache_dir.glob('*.part'):
+        if now - path.stat().st_mtime > REVALIDATE_SECONDS:
+            path.unlink(missing_ok=True)
+
+
 def cache_archive_file(
     source: GoesArchiveFile,
     cache_dir: Path,
     session: requests.Session,
     *,
     refresh: bool = False,
+    refresh_after: int = 0,
 ) -> Path:
     """Cache complete NetCDF downloads atomically; reuse them after interruption."""
     import xarray as xr
 
     path = cache_dir / Path(urlparse(source.url).path).name
     cache_dir.mkdir(parents=True, exist_ok=True)
-    if path.is_file() and not refresh:
+    if path.is_file() and (not refresh or time.time() - _last_archive_check(path) < refresh_after):
         with xr.open_dataset(path, engine="h5netcdf"):
             pass
         return path
     temporary = None
     try:
         headers = {}
-        metadata_path = path.with_suffix(path.suffix + '.http.json')
+        metadata_path = _http_metadata_path(path)
         if path.is_file():
-            metadata = json.loads(metadata_path.read_text()) if metadata_path.is_file() else {}
+            try:
+                metadata = json.loads(metadata_path.read_text())
+            except (FileNotFoundError, ValueError):
+                metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
             if metadata.get('etag'):
                 headers['If-None-Match'] = metadata['etag']
             headers['If-Modified-Since'] = metadata.get('last_modified') or formatdate(path.stat().st_mtime, usegmt=True)
@@ -131,12 +171,20 @@ def cache_archive_file(
             if response.status_code == 304 and path.is_file():
                 with xr.open_dataset(path, engine='h5netcdf'):
                     pass
+                metadata_path.touch()
                 return path
             response.raise_for_status()
+            content_length = response.headers.get('Content-Length')
+            if isinstance(content_length, str) and content_length.isdigit() and int(content_length) > MAX_ARCHIVE_BYTES:
+                raise ValueError(f'{path.name}: archive exceeds {MAX_ARCHIVE_BYTES} bytes')
             logger.info("Downloading GOES archive %s", path.name)
             with tempfile.NamedTemporaryFile(dir=cache_dir, suffix=".part", delete=False) as stream:
                 temporary = Path(stream.name)
+                size = 0
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    size += len(chunk)
+                    if size > MAX_ARCHIVE_BYTES:
+                        raise ValueError(f'{path.name}: archive exceeds {MAX_ARCHIVE_BYTES} bytes')
                     stream.write(chunk)
             metadata = {name: value for name, header in [('etag', 'ETag'), ('last_modified', 'Last-Modified')]
                         if isinstance(value := response.headers.get(header), str) and value}
@@ -145,13 +193,14 @@ def cache_archive_file(
             pass
         temporary.replace(path)
         metadata_path.write_text(json.dumps(metadata))
+        prune_archive_cache(cache_dir)
     finally:
         if temporary is not None and temporary.exists():
             temporary.unlink()
     return path
 
 
-def read_euvs_archive(path: Path, satellite: int) -> pd.DataFrame:
+def read_euvs_archive(path: Path, satellite: int, *, days: pd.DatetimeIndex | None = None) -> pd.DataFrame:
     """Read usable measured line irradiances and standardized Mg II."""
     import xarray as xr
 
@@ -165,11 +214,19 @@ def read_euvs_archive(path: Path, satellite: int) -> pd.DataFrame:
             raise ValueError(f"{path.name}: missing EUVS variables {sorted(missing)}")
         if data.attrs.get("platform") != f"g{satellite}":
             raise ValueError(f"{path.name}: unexpected satellite platform")
-        frame = data[required].to_dataframe().reset_index().rename(columns={
+        selected = data[required]
+        if days is not None:
+            dates = pd.to_datetime(selected.time.values, utc=True).normalize()
+            matches = np.flatnonzero(dates.isin(days))
+            window = slice(matches[0], matches[-1] + 1) if matches.size else slice(0, 0)
+            selected = selected.isel(time=window)
+        frame = selected.to_dataframe().reset_index().rename(columns={
             "time": "timestamp", "MgII_standard": "goes_mgii_index",
             "au_factor": "goes_au_factor", **mapping,
         })
     frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+    if days is not None:
+        frame = frame.loc[frame.timestamp.dt.normalize().isin(days)].copy()
     numeric = [*mapping.values(), "goes_mgii_index", "goes_au_factor"]
     frame[numeric] = frame[numeric].astype(float)
     for original, column in {**mapping, 'MgII': 'goes_mgii_index'}.items():
@@ -234,6 +291,7 @@ def iter_goes_history(
     session: requests.Session,
     *,
     refresh: bool = False,
+    refresh_after: int = 0,
 ) -> Iterator[pd.DataFrame]:
     """Download and normalize one year at a time to bound memory use."""
     xrs = {}
@@ -246,10 +304,11 @@ def iter_goes_history(
             xrs[source.satellite] = read_xrs_archive(path, source.satellite)
             if refresh and was_cached and not background_days.issubset(set(
                     xrs[source.satellite].goes_xray_background_timestamp.dt.normalize().unique())):
-                path = cache_archive_file(source, cache_dir, session, refresh=True)
+                path = cache_archive_file(source, cache_dir, session, refresh=True, refresh_after=refresh_after)
                 xrs[source.satellite] = read_xrs_archive(path, source.satellite)
     for year in sorted(set(days.year)):
         frames = []
+        year_days = days[days.year == year].normalize()
         for source in files:
             if source.product != EUVS_PRODUCT or source.year != year:
                 continue
@@ -257,11 +316,10 @@ def iter_goes_history(
                 raise ValueError(f"No XRS background archive for GOES-{source.satellite}")
             was_cached = (cache_dir / Path(urlparse(source.url).path).name).is_file()
             path = cache_archive_file(source, cache_dir, session)
-            euvs = read_euvs_archive(path, source.satellite)
-            if refresh and was_cached and not set(days[days.year == year]).issubset(set(euvs.timestamp.dt.normalize().unique())):
-                path = cache_archive_file(source, cache_dir, session, refresh=True)
-                euvs = read_euvs_archive(path, source.satellite)
-            euvs = euvs.loc[euvs.timestamp.dt.floor("D").isin(days) & euvs.timestamp.dt.year.eq(year)]
+            euvs = read_euvs_archive(path, source.satellite, days=year_days)
+            if refresh and was_cached and not set(year_days).issubset(set(euvs.timestamp.dt.normalize().unique())):
+                path = cache_archive_file(source, cache_dir, session, refresh=True, refresh_after=refresh_after)
+                euvs = read_euvs_archive(path, source.satellite, days=year_days)
             frames.append(join_archive_background(euvs, xrs[source.satellite]))
         if frames:
             yield select_satellite_records(pd.concat(frames, ignore_index=True), satellites)

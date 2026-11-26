@@ -8,17 +8,18 @@ from clio.providers.omniweb import OMNIWeb_Loader
 
 def test_column_specific_fill_and_fractional_kp():
     result = OMNIWeb_Loader._parse_omni_text(
-        '2025 001 00 999.9 999.9 999.9 9999999 999.9 9999 99 99999 999 999.9\n'
-        '2025 001 01 1 2 -3 10000 5 400 27 -20 12 123.4')
+        '2025 001 00 999.9 999.9 999.9 999.9 9999999 999.9 9999 99 99999 999 999.9\n'
+        '2025 001 01 4.6 1 2 -3 10000 5 400 27 -20 12 123.4')
     assert len(result) == 1
     row = result.iloc[0]
     assert row.kp == pytest.approx(2.7)
     assert row.t == 10000  # Real temperature, not the old generic fill mask.
     assert row.f10_7 == 123.4
+    assert row.bt == 4.6
 
 
 def test_requested_end_day_includes_last_hour():
-    response = Mock(text='2025 365 23 1 2 -3 10000 5 400 27 -20 12 123.4')
+    response = Mock(text='2025 365 23 4.6 1 2 -3 10000 5 400 27 -20 12 123.4')
     with patch('clio.providers.omniweb.requests.post', return_value=response):
         result = OMNIWeb_Loader.load(pd.Timestamp('2025-12-31', tz='UTC'),
                                     pd.Timestamp('2026-01-01', tz='UTC'))
@@ -53,7 +54,7 @@ def test_unpublished_range_is_empty_not_source_failure():
 
 def test_partial_coverage_retries_only_available_dates():
     responses = [Mock(text='Error INVALID END DATE, correct range: 19631128 - 20260916'),
-                 Mock(text='2026 259 23 1 2 -3 10000 5 400 27 -20 12 123.4')]
+                 Mock(text='2026 259 23 4.6 1 2 -3 10000 5 400 27 -20 12 123.4')]
     calls = []
     def post(url, data, **kwargs):
         calls.append(dict(data))

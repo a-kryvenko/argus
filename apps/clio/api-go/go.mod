@@ -4,6 +4,12 @@ go 1.25.0
 
 require github.com/jackc/pgx/v5 v5.13.0
 
+require gopkg.in/yaml.v3 v3.0.1
+
+require github.com/a-kryvenko/argus/observationcatalog v0.0.0
+
+replace github.com/a-kryvenko/argus/observationcatalog => ../../../packages/common/src/common/observationcatalog
+
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

@@ -1,13 +1,13 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Double
+from sqlalchemy import DateTime, Double, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from clio.db.base import Base
 
 
 class NormalizedObservation(Base):
-    """Hourly, wide observation assembled from raw measurements."""
+    """Prepared hourly model inputs."""
 
     __tablename__ = "normalized_observation"
 
@@ -28,3 +28,4 @@ class NormalizedObservation(Base):
     s10: Mapped[float | None] = mapped_column(Double, nullable=True)
     m10: Mapped[float | None] = mapped_column(Double, nullable=True)
     y10: Mapped[float | None] = mapped_column(Double, nullable=True)
+    wind_time_basis: Mapped[str | None] = mapped_column(String(16), nullable=True)

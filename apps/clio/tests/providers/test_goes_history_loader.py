@@ -1,6 +1,7 @@
 import json
+import os
 from pathlib import Path
-from types import SimpleNamespace
+import time
 from unittest.mock import Mock
 
 import numpy as np
@@ -136,6 +137,51 @@ def test_refresh_checks_unchanged_source_without_downloading_body(tmp_path):
     response.iter_content.assert_not_called()
     assert session.get.call_args.kwargs['headers'] == {
         'If-None-Match': 'original-version', 'If-Modified-Since': 'Thu, 01 Jan 2026 00:00:00 GMT'}
+
+
+def test_missing_day_revalidation_refreshes_once_per_day(tmp_path):
+    path = _euvs_file(tmp_path / 'source.nc')
+    response = Mock(status_code=304)
+    context = Mock(__enter__=Mock(return_value=response), __exit__=Mock(return_value=False))
+    session = Mock(get=Mock(return_value=context))
+    source = loader.GoesArchiveFile(16, loader.EUVS_PRODUCT, 'https://example.test/source.nc', 2025)
+    interval = loader.REVALIDATE_SECONDS
+    loader.cache_archive_file(source, tmp_path, session, refresh=True, refresh_after=interval)
+    session.get.assert_not_called()
+    yesterday = time.time() - interval - 1
+    os.utime(path, (yesterday, yesterday))
+    loader.cache_archive_file(source, tmp_path, session, refresh=True, refresh_after=interval)
+    loader.cache_archive_file(source, tmp_path, session, refresh=True, refresh_after=interval)
+    session.get.assert_called_once()
+    response.iter_content.assert_not_called()
+
+
+@pytest.mark.parametrize('headers', [{}, {'Content-Length': '5'}])
+def test_oversize_download_leaves_no_partial_file(monkeypatch, tmp_path, headers):
+    monkeypatch.setattr(loader, 'MAX_ARCHIVE_BYTES', 4)
+    response = Mock(status_code=200, headers=headers)
+    response.iter_content.return_value = [b'123', b'45']
+    context = Mock(__enter__=Mock(return_value=response), __exit__=Mock(return_value=False))
+    session = Mock(get=Mock(return_value=context))
+    source = loader.GoesArchiveFile(16, loader.EUVS_PRODUCT, 'https://example.test/source.nc', 2025)
+    with pytest.raises(ValueError, match='archive exceeds'):
+        loader.cache_archive_file(source, tmp_path, session)
+    assert not list(tmp_path.iterdir())
+
+
+def test_cache_evicts_expired_and_oldest_files_under_byte_budget(monkeypatch, tmp_path):
+    monkeypatch.setattr(loader, 'MAX_CACHE_BYTES', 4)
+    now = time.time()
+    for name, stamp in [('expired', now - loader.CACHE_AGE_SECONDS - 1),
+                        ('older', now - 60), ('fresh', now)]:
+        path = tmp_path / f'{name}.nc'
+        path.write_bytes(b'abcd')
+        os.utime(path, (stamp, stamp))
+        metadata = tmp_path / f'{name}.nc.http.json'
+        metadata.write_text('{}')
+        os.utime(metadata, (stamp, stamp))
+    loader.prune_archive_cache(tmp_path)
+    assert {path.name for path in tmp_path.iterdir()} == {'fresh.nc', 'fresh.nc.http.json'}
 
 
 def test_cached_archives_covering_missing_snapshot_days_need_no_http_refresh(tmp_path):

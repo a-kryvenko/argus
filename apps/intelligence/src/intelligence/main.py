@@ -8,7 +8,6 @@ from intelligence.db.session import get_db_session
 from sqlalchemy import text
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from common.schemas.leo_drag import LeoDragAssessment, LeoDragRequest
 from intelligence.drag import assess_drag, DragDomainError, DragNotReadyError
@@ -58,9 +57,8 @@ def leo_drag(request: LeoDragRequest):
 
 @app.post('/internal/v1/public-risks/leo-drag', response_model=PublicLeoDragAssessment,
           dependencies=[Depends(require_service_token)])
-def public_leo_drag(request: LeoDragRequest, meta: bool = False):
-    assessment = PublicLeoDragAssessment.from_assessment(calculate_leo_drag(request), meta=meta)
-    return JSONResponse(assessment.model_dump(mode='json', exclude=None if meta else {'meta'}))
+def public_leo_drag(request: LeoDragRequest):
+    return PublicLeoDragAssessment.from_assessment(calculate_leo_drag(request))
 
 
 @app.get('/health/live')

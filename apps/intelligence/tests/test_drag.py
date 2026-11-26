@@ -112,19 +112,17 @@ def test_real_backend_end_to_end(release, monkeypatch):
         assessment = LeoDragAssessment.model_validate(result)
         monkeypatch.setattr(main, 'assess_drag', lambda _: assessment)
         assert client.post(public_path, json=inputs).status_code == 401
-        compact = client.post(public_path, json=inputs, headers=headers)
-        expanded = client.post(public_path + '?meta=true', json=inputs, headers=headers)
-        assert compact.status_code == expanded.status_code == 200
+        public = client.post(public_path, json=inputs, headers=headers)
+        assert public.status_code == 200
 
     expected = {key: value for key, value in result.items() if key not in {'model', 'source'}}
     expected['source'] = {key: result['source'][key] for key in (
         'release_id', 'issue_time', 'observed_at', 'dtc_observed_at', 'geomagnetic_observed_at', 'driver_mode',
     )}
     expected['source']['background_interpolated'] = False
-    assert compact.json() == expected
-    expanded = expanded.json()
-    metadata = expanded.pop('meta')
-    assert expanded == expected
+    public_data = public.json()
+    metadata = public_data.pop('meta')
+    assert public_data == expected
     assert metadata['model'] == result['model']
     assert metadata['source']['model'] == result['source']['density_model']
     assert metadata['source']['dtc_method'] == result['source']['dtc_method']

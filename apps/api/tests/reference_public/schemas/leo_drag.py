@@ -41,10 +41,10 @@ class LeoDragAssessment(BaseModel):
     meta: DragMetadata | None = metadata_field()
 
     @classmethod
-    def from_internal(cls, assessment: InternalAssessment, *, meta: bool = False):
+    def from_internal(cls, assessment: InternalAssessment):
         data = assessment.model_dump()
         source = data.pop('source')
         return cls(**data, source=DragSource(**source,
                    background_interpolated=any(assessment.source.background_interpolated_days.values())),
                    meta=DragMetadata(model=assessment.model,
-                       source=DensityMetadata(**source, model=assessment.source.density_model)) if meta else None)
+                       source=DensityMetadata(**source, model=assessment.source.density_model)))

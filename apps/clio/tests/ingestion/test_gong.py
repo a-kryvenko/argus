@@ -2,6 +2,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 import gzip
 import hashlib
+import io
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 import subprocess
@@ -16,6 +17,20 @@ from clio.providers import gong as provider
 from contextlib import asynccontextmanager
 
 NOW = datetime(2026, 9, 29, 12, tzinfo=UTC)
+
+
+def magnetogram(at):
+    from astropy.io import fits
+    import numpy as np
+
+    buffer = io.BytesIO()
+    hdu = fits.PrimaryHDU(np.zeros((180, 360), dtype='float32'))
+    hdu.header['TELESCOP'] = 'NSO-GONG'
+    hdu.header['IMTYPE'] = 'MAGNETIC'
+    hdu.header['MAPDATE'] = at.date().isoformat()
+    hdu.header['MAPTIME'] = at.strftime('%H:%M')
+    hdu.writeto(buffer)
+    return buffer.getvalue()
 
 
 def test_provider_candidates_use_observed_time_and_bound_range(monkeypatch):
@@ -60,10 +75,22 @@ assert 'astropy' not in sys.modules
 
 def test_original_is_uploaded_and_recorded(storage, monkeypatch):
     from clio.ingestion.utils.file_observations import find
-    monkeypatch.setattr(provider, 'download', Mock(return_value=b'original FITS'))
+    content = magnetogram(NOW)
+    monkeypatch.setattr(provider, 'download', Mock(return_value=content))
     row = gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
-    assert row['sha256'] == hashlib.sha256(b'original FITS').hexdigest()
+    assert row['sha256'] == hashlib.sha256(content).hexdigest()
     assert find('gong')[0]['details']['source_url'] == 'https://example.test/gong.fits'
+
+
+@pytest.mark.parametrize('invalid', ['bytes', 'time'])
+def test_gong_rejects_bad_format_or_time(storage, monkeypatch, invalid):
+    from clio.ingestion.utils.file_observations import find
+
+    content = b'not a magnetogram' if invalid == 'bytes' else magnetogram(NOW - timedelta(hours=1))
+    monkeypatch.setattr(provider, 'download', Mock(return_value=content))
+    with pytest.raises(ValueError):
+        gong.snapshot_values(NOW, 'https://example.test/gong.fits', 'gong.live')
+    assert find('gong') == [] and storage.objects == {}
 
 
 def test_complete_backfill_uses_db_references_without_source_download(storage, monkeypatch):
@@ -87,7 +114,7 @@ def test_gong_reports_success_and_observation_time_after_saving(storage, monkeyp
     monkeypatch.setattr(provider, 'candidates', Mock(return_value=pd.DataFrame([
         {'timestamp': observed, 'gong_url': 'https://example.test/gong.fits'},
     ])))
-    monkeypatch.setattr(provider, 'download', Mock(return_value=b'original FITS'))
+    monkeypatch.setattr(provider, 'download', Mock(return_value=magnetogram(observed)))
     report = asyncio.run(gong.collect(policy, source='gong.live', mode='live', now=NOW))
 
     assert report['status'] == 'complete'

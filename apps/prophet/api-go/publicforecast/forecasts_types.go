@@ -46,7 +46,7 @@ type Forecast struct {
 	HorizonHours       int                         `json:"horizon_hours" doc:"Largest lead_hours among returned predictions; may be shorter than the product's maximum horizon."`
 	AvailableVariables []string                    `json:"available_variables" doc:"Variable names available for this forecast issuance. A particular prediction may contain only a subset."`
 	Predictions        []*ForecastPoint            `json:"predictions" doc:"Forecast points, each with its own valid_time and lead_hours."`
-	Meta               *ForecastMetadata           `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Additional descriptions, included only with meta=true."`
+	Meta               *ForecastMetadata           `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Units of the reported variables."`
 	CMESpeed           *Published[CMESpeedOutlook] `json:"cme_speed" required:"false" allowNull:"true" doc:"CME-conditioned speed scenarios from this release; separate from background quantiles and threshold probabilities."`
 }
 
@@ -58,7 +58,7 @@ type ForecastMetrics struct {
 	Evaluation *EvaluationContext         `json:"evaluation" required:"false" allowNull:"true"`
 	Target     string                     `json:"target" doc:"Forecast product identifier; see the endpoint's target list."`
 	Variables  map[string]VariableMetrics `json:"variables" doc:"Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted."`
-	Meta       *ForecastMetadata          `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Additional descriptions, included only with meta=true."`
+	Meta       *ForecastMetadata          `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Units of the reported variables."`
 }
 
 type ForecastPoint struct {

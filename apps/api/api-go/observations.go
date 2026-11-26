@@ -9,17 +9,27 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/a-kryvenko/argus/observationcatalog"
 )
 
 var (
-	windMetrics     = []string{"bx", "by", "bz", "bt", "v", "n", "t"}
-	indexMetrics    = []string{"kp", "dst"}
-	hourlyMetrics   = []string{"ap", "f10_7", "s10", "m10", "y10"}
-	xrsMetrics      = []string{"xrs_a", "xrs_b"}
-	protonMetrics   = []string{"proton_10mev", "proton_100mev"}
+	windMetrics     = observationcatalog.IDs("wind")
+	indexMetrics    = observationcatalog.IDs("index")
+	hourlyMetrics   = observationcatalog.IDs("background")
+	xrsMetrics      = observationcatalog.IDs("xrs")
+	protonMetrics   = observationcatalog.IDs("protons")
 	historyDefaults = slices.Concat(windMetrics, indexMetrics, hourlyMetrics)
 	allMetrics      = slices.Concat(historyDefaults, xrsMetrics, protonMetrics)
-	indexDuration   = map[string]time.Duration{"kp": 3 * time.Hour, "dst": time.Hour, "ap": 3 * time.Hour}
+	indexDuration   = func() map[string]time.Duration {
+		intervals := make(map[string]time.Duration)
+		for _, metric := range observationcatalog.Metrics {
+			if metric.SourceInterval {
+				intervals[metric.ID] = time.Duration(metric.NativeSeconds) * time.Second
+			}
+		}
+		return intervals
+	}()
 )
 
 const (
@@ -27,57 +37,44 @@ const (
 	nearEarthTimeBasis = "near_earth"
 )
 
-type sample struct {
-	at    time.Time
-	value *float64
-}
+type sample = observationcatalog.Point
 
-func (a *api) numeric(ctx context.Context, resource string, metrics []string, from, to time.Time, interval, timeBasis string) (map[string][]sample, error) {
+func (a *api) numeric(ctx context.Context, metrics []string, from, to time.Time, interval, timeBasis string) (map[string]observationcatalog.Series, error) {
 	query := url.Values{"metrics": {strings.Join(metrics, ",")}}
-	if resource == "history" {
+	if !from.IsZero() {
 		query.Set("from", from.Format(time.RFC3339Nano))
 		query.Set("to", to.Format(time.RFC3339Nano))
 		query.Set("interval", interval)
-		if timeBasis != "" {
-			query.Set(timeBasisParameter, timeBasis)
-		}
 	}
-	raw, _, err := a.request(ctx, a.clio, "GET", "/internal/v1/observations/"+resource, query, nil, 90*time.Second)
+	if timeBasis != "" {
+		query.Set(timeBasisParameter, timeBasis)
+	}
+	raw, _, err := a.request(ctx, a.clio, "GET", "/internal/v1/observations/series", query, nil, 90*time.Second)
 	if err != nil {
 		return nil, unavailable("Observation service is unavailable")
 	}
 	var result struct {
-		Success bool `json:"success"`
-		Data    struct {
-			Points    []map[string]json.RawMessage `json:"points"`
-			TimeBasis string                       `json:"time_basis"`
-		} `json:"data"`
+		Success bool                                 `json:"success"`
+		Data    map[string]observationcatalog.Series `json:"data"`
 	}
-	if json.Unmarshal(raw, &result) != nil || !result.Success || result.Data.Points == nil ||
-		(timeBasis != "" && result.Data.TimeBasis != timeBasis) {
+	if json.Unmarshal(raw, &result) != nil || !result.Success || result.Data == nil {
 		return nil, unavailable("Observation service returned an invalid response")
 	}
-	series := make(map[string][]sample, len(metrics))
-	var previous time.Time
-	for _, row := range result.Data.Points {
-		var at time.Time
-		if json.Unmarshal(row["time"], &at) != nil || at.IsZero() || (previous.After(at)) {
-			return nil, unavailable("Observation service returned an invalid response")
+	for _, metric := range metrics {
+		series := result.Data[metric]
+		if series.Points == nil || series.ResolutionSeconds <= 0 || series.TimeBasis == "" ||
+			(timeBasis != "" && slices.Contains(windMetrics, metric) && series.TimeBasis != timeBasis) {
+			return nil, unavailable("Observation service returned an invalid series")
 		}
-		previous = at
-		for _, metric := range metrics {
-			encoded, found := row[metric]
-			if !found {
-				continue
+		var previous time.Time
+		for _, point := range series.Points {
+			if point.ObservedAt.IsZero() || !point.ObservedAt.After(previous) {
+				return nil, unavailable("Observation service returned an invalid series")
 			}
-			var value *float64
-			if json.Unmarshal(encoded, &value) != nil {
-				return nil, unavailable("Observation service returned an invalid response")
-			}
-			series[metric] = append(series[metric], sample{at.UTC(), value})
+			previous = point.ObservedAt
 		}
 	}
-	return series, nil
+	return result.Data, nil
 }
 
 func observationSelection(query url.Values, defaults []string) ([]string, error) {
@@ -108,21 +105,29 @@ func selectedMetrics(selected, group []string) []string {
 }
 
 func quality(point sample) *string {
-	if point.value == nil {
+	if point.Quality != "" {
+		return pointer(point.Quality)
+	}
+	if point.Value == nil {
 		return pointer("missing")
 	}
 	return nil
 }
 
+func provenance(point sample) Provenance {
+	return Provenance{SourceProduct: point.SourceProduct, Spacecraft: point.Spacecraft, ReceivedAt: point.ReceivedAt}
+}
+
 func pointer[T any](value T) *T { return &value }
 
-func (data *CurrentObservations) setSample(metric string, points []sample) {
+func (data *CurrentObservations) setSample(metric string, series observationcatalog.Series) {
+	points := series.Points
 	if slices.Contains(indexMetrics, metric) {
 		var index *CurrentIndexSample
 		if len(points) > 0 {
 			point := points[len(points)-1]
-			index = &CurrentIndexSample{IntervalStart: point.at, IntervalEnd: point.at.Add(indexDuration[metric]),
-				Value: point.value, Quality: quality(point)}
+			index = &CurrentIndexSample{IntervalStart: point.ObservedAt, IntervalEnd: point.ObservedAt.Add(indexDuration[metric]),
+				Value: point.Value, Quality: quality(point), Provenance: provenance(point), TimeBasis: series.TimeBasis}
 		}
 		if metric == "kp" {
 			data.Kp = &index
@@ -134,9 +139,9 @@ func (data *CurrentObservations) setSample(metric string, points []sample) {
 	var solar *CurrentSolarSample
 	if len(points) > 0 {
 		point := points[len(points)-1]
-		solar = &CurrentSolarSample{ObservedAt: point.at, Value: point.value, Quality: quality(point)}
+		solar = &CurrentSolarSample{ObservedAt: point.ObservedAt, Value: point.Value, Quality: quality(point), Provenance: provenance(point), TimeBasis: series.TimeBasis}
 		if metric == "ap" {
-			solar.IntervalEnd = pointer(point.at.Add(indexDuration[metric]))
+			solar.IntervalEnd = pointer(point.ObservedAt.Add(indexDuration[metric]))
 		}
 	}
 	switch metric {
@@ -183,32 +188,20 @@ func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respon
 		writeError(w, err)
 		return
 	}
-	meta, err := booleanQuery(query, metaParameter)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
 	trends, err := booleanQuery(query, trendsParameter)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	now := time.Now().UTC()
-	current, err := a.numeric(r.Context(), "latest", selected, time.Time{}, time.Time{}, "", "")
+	current, err := a.numeric(r.Context(), selected, time.Time{}, time.Time{}, "", l1TimeBasis)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	data := CurrentObservations{}
-	series := make(map[string]SeriesMetadata)
 	for _, metric := range selected {
 		data.setSample(metric, current[metric])
-		if meta && !slices.Contains(hourlyMetrics, metric) {
-			series[metric] = observationMetadata(metric, "1m", l1TimeBasis)
-		}
-	}
-	if len(series) > 0 {
-		data.Meta = &ObservationMetadata{Series: series}
 	}
 	if trends {
 		changes, err := a.observationChanges(r.Context(), current, selected, now)
@@ -277,23 +270,10 @@ func historyQuery(query url.Values, now time.Time, nearEarthWind bool) (from, to
 	return
 }
 
-type historyRead struct {
-	metrics      []string
-	start, end   time.Time
-	interval     string
-	timeBasis    string
-	hourlyPoints bool
-}
-
 func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond func(ObservationHistory)) {
 	w.Header().Set("Cache-Control", "no-store")
 	query := r.URL.Query()
 	selected, err := observationSelection(query, historyDefaults)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	meta, err := booleanQuery(query, metaParameter)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -330,97 +310,79 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		writeError(w, invalid("GOES history interval must be at most 7 days"))
 		return
 	}
-	metadata := make(map[string]SeriesMetadata)
 	data := ObservationHistory{From: from, To: to, Series: make(map[string]HistorySeries)}
 	if len(wind) > 0 {
 		data.TimeBasis = &timeBasis
 		data.ResolutionSeconds = pointer(int(resolutionDuration(resolution).Seconds()))
 	}
-	reads := []historyRead{
-		{metrics: wind, start: from, end: to, interval: resolution, timeBasis: timeBasis},
-		{metrics: indices, start: from.Add(-3 * time.Hour), end: to, interval: "1m"},
-		{metrics: xrs, start: from, end: to, interval: "1m"},
-		{metrics: protons, start: from, end: to, interval: "5m"},
-	}
 	hourlyFrom := from
 	if !bounded {
 		hourlyFrom = to.Add(-time.Duration(limit) * time.Hour)
 	}
+	if len(hourly) > 0 && to.Sub(hourlyFrom) > 366*24*time.Hour {
+		writeError(w, invalid("Use an interval of at most 366 days"))
+		return
+	}
+	readFrom := from
+	if len(hourly) > 0 && hourlyFrom.Before(readFrom) {
+		readFrom = hourlyFrom
+	}
+	series, err := a.numeric(r.Context(), selected, readFrom, to, resolution, timeBasis)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	if len(hourly) > 0 {
-		if to.Sub(hourlyFrom) > 366*24*time.Hour {
-			writeError(w, invalid("Use an interval of at most 366 days"))
-			return
+		data.Points = pointer(hourlyPoints(series, hourly, hourlyFrom, to, limit))
+	}
+	for _, metric := range selected {
+		result := series[metric]
+		step := time.Duration(result.ResolutionSeconds) * time.Second
+		properties := SeriesContext{TimeBasis: result.TimeBasis, Aggregation: result.Aggregation,
+			ResolutionSeconds: result.ResolutionSeconds}
+		seriesFrom := from
+		if slices.Contains(hourly, metric) {
+			seriesFrom = hourlyFrom
 		}
-		reads = append(reads, historyRead{metrics: hourly, start: hourlyFrom, end: to, interval: "1h", hourlyPoints: true})
-	}
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	type result struct {
-		series map[string][]sample
-		err    error
-	}
-	results := make([]chan result, len(reads))
-	for i, read := range reads {
-		if len(read.metrics) == 0 {
+		if duration := indexDuration[metric]; duration > 0 {
+			points := overlapping(result.Points, seriesFrom, to, duration)
+			items := make([]IndexSample, 0, len(points))
+			for _, point := range points {
+				end := point.ObservedAt.Add(duration)
+				status := "completed"
+				if end.After(now) {
+					status = "in_progress"
+				}
+				items = append(items, IndexSample{IntervalStart: point.ObservedAt, IntervalEnd: end,
+					IntervalStatus: status, Value: point.Value, Quality: quality(point), Provenance: provenance(point)})
+			}
+			data.Series[metric] = HistorySeries{Index: &IndexHistorySeries{Points: items, SeriesContext: properties,
+				Coverage: observationCoverage(points, seriesFrom, to, now, duration, overlappingCoverage), DataStatus: indexDataStatus(metric)}}
 			continue
 		}
-		results[i] = make(chan result, 1)
-		go func(out chan<- result, read historyRead) {
-			rows, err := a.numeric(ctx, "history", read.metrics, read.start, read.end, read.interval, read.timeBasis)
-			out <- result{rows, err}
-		}(results[i], read)
-	}
-	for i, output := range results {
-		if output == nil {
-			continue
-		}
-		part := <-output
-		if part.err != nil {
-			writeError(w, part.err)
-			return
-		}
-		read := reads[i]
-		if read.hourlyPoints {
-			data.Points = pointer(hourlyPoints(part.series, hourly, hourlyFrom, to, limit))
-			continue
-		}
-		step := resolutionDuration(read.interval)
 		coverageBasis := sampledCoverage
-		if read.timeBasis == l1TimeBasis && step != time.Minute {
+		if result.Aggregation == "mean" {
 			coverageBasis = aggregateCoverage
 		}
-		for _, metric := range read.metrics {
-			points := part.series[metric]
-			duration := indexDuration[metric]
-			if duration > 0 {
-				points = overlapping(points, from, to, duration)
-				items := make([]IndexSample, 0, len(points))
-				for _, point := range points {
-					end := point.at.Add(duration)
-					status := "completed"
-					if end.After(now) {
-						status = "in_progress"
-					}
-					items = append(items, IndexSample{IntervalStart: point.at, IntervalEnd: end,
-						IntervalStatus: status, Value: point.value, Quality: quality(point)})
-				}
-				data.Series[metric] = HistorySeries{Index: &IndexHistorySeries{Points: items,
-					Coverage: observationCoverage(points, from, to, now, duration, overlappingCoverage), DataStatus: indexDataStatus(metric)}}
-			} else {
-				items := make([]SolarSample, 0, len(points))
-				for _, point := range points {
-					items = append(items, SolarSample{ObservedAt: point.at, Value: point.value, Quality: quality(point)})
-				}
-				data.Series[metric] = HistorySeries{Solar: &SolarHistorySeries{Points: items,
-					Coverage: observationCoverage(points, from, to, now, step, coverageBasis)}}
-			}
-			if meta {
-				metadata[metric] = observationMetadata(metric, read.interval, read.timeBasis)
-			}
+		points := result.Points
+		items := make([]SolarSample, 0, len(points))
+		first := 0
+		for first < len(points) && points[first].ObservedAt.Before(seriesFrom) {
+			first++
 		}
-	}
-	if meta && len(metadata) > 0 {
-		data.Meta = &ObservationMetadata{Series: metadata, GapFilling: pointer("none")}
+		points = points[first:]
+		for _, point := range points {
+			item := SolarSample{ObservedAt: point.ObservedAt, Value: point.Value, Quality: quality(point),
+				Provenance: provenance(point), Min: point.Min, Max: point.Max,
+				Count: point.Count, ExpectedCount: point.ExpectedCount}
+			if point.Count != nil && point.ExpectedCount != nil && *point.ExpectedCount > 0 {
+				item.CoveragePercent = pointer(100 * float64(*point.Count) / float64(*point.ExpectedCount))
+				item.IntervalEnd = pointer(point.ObservedAt.Add(step))
+			}
+			items = append(items, item)
+		}
+		data.Series[metric] = HistorySeries{Solar: &SolarHistorySeries{Points: items, SeriesContext: properties,
+			Coverage: observationCoverage(points, seriesFrom, to, now, step, coverageBasis)}}
 	}
 	respond(data)
 }
@@ -429,24 +391,24 @@ func resolutionDuration(resolution string) time.Duration {
 	return map[string]time.Duration{"1m": time.Minute, "5m": 5 * time.Minute, "1h": time.Hour}[resolution]
 }
 
-func hourlyPoints(series map[string][]sample, metrics []string, from, to time.Time, limit int) []map[string]any {
+func hourlyPoints(series map[string]observationcatalog.Series, metrics []string, from, to time.Time, limit int) []map[string]any {
 	rows := map[time.Time]map[string]any{}
 	var times []time.Time
 	for _, metric := range metrics {
-		for _, point := range series[metric] {
-			if point.at.Before(from) || !point.at.Before(to) {
+		for _, point := range series[metric].Points {
+			if point.ObservedAt.Before(from) || !point.ObservedAt.Before(to) {
 				continue
 			}
-			row := rows[point.at]
+			row := rows[point.ObservedAt]
 			if row == nil {
-				row = map[string]any{"issue_time": point.at}
+				row = map[string]any{"issue_time": point.ObservedAt}
 				for _, selected := range metrics {
 					row[selected] = nil
 				}
-				rows[point.at] = row
-				times = append(times, point.at)
+				rows[point.ObservedAt] = row
+				times = append(times, point.ObservedAt)
 			}
-			row[metric] = point.value
+			row[metric] = point.Value
 		}
 	}
 	slices.SortFunc(times, time.Time.Compare)
@@ -460,7 +422,7 @@ func hourlyPoints(series map[string][]sample, metrics []string, from, to time.Ti
 func overlapping(points []sample, from, to time.Time, duration time.Duration) []sample {
 	result := make([]sample, 0, len(points))
 	for _, point := range points {
-		if point.at.Before(to) && point.at.Add(duration).After(from) {
+		if point.ObservedAt.Before(to) && point.ObservedAt.Add(duration).After(from) {
 			result = append(result, point)
 		}
 	}

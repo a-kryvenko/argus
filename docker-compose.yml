@@ -127,7 +127,10 @@ services:
         condition: service_healthy
     environment:
       <<: *clio-database
+      ARGUS_WORKDIR: /var/www
       OBSERVATIONS_SERVICE_TOKEN: ${OBSERVATIONS_SERVICE_TOKEN:?OBSERVATIONS_SERVICE_TOKEN is required}
+    volumes:
+      - ./configs:/var/www/configs:ro
     healthcheck:
       <<: *clio-healthcheck
       test: [CMD, wget, -q, -O, /dev/null, -T, '5', 'http://127.0.0.1:8000/health/ready']

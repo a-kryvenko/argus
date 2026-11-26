@@ -14,7 +14,7 @@ class SDOBrowseImage(BaseModel):
     model_config = ConfigDict(extra='forbid')
     channel: Literal['094', '131', '171', '193', '211', '304', '335', '1600', '1700']
     asset_id: str = Field(pattern='^' + ASSET_PATTERN + '$')
-    captured_at: AwareDatetime
+    captured_at: AwareDatetime | None
     source_updated_at: AwareDatetime | None = None
     urls: dict[str, str] = Field(default_factory=dict)
 

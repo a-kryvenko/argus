@@ -19,6 +19,7 @@ from common.schemas.forecast_release import PREDICTION_COLUMNS
 from common.schemas.sdo_browse import SDOBrowseCatalog
 from common.schemas.solar_wind_events import SolarWindEventForecast
 from prophet.config import load_config
+from prophet.services.inputs.observations import read_series
 from prophet.services.releases.publication import read_release, ReleaseNotFound
 from prophet.services.solar_indices import read_solar_indices
 
@@ -197,38 +198,26 @@ def read_observations(now):
     url, token = os.getenv('OBSERVATIONS_URL'), os.getenv('OBSERVATIONS_SERVICE_TOKEN')
     if not url or not token:
         raise RuntimeError('Observation service is not configured')
-    metrics = 'v,n,t,bx,by,bz,bt,kp,ap,dst,f10_7,s10,m10,y10'
+    metrics = tuple(metric for _, variables in GROUPS.values() for metric, _, _ in variables)
     with httpx.Client(timeout=httpx.Timeout(30, connect=5), follow_redirects=False, trust_env=False) as client:
-        def read(resource, **params):
-            response = client.get(url.rstrip('/')+'/internal/v1/observations/'+resource,
-                                  params=params, headers={'Authorization': f'Bearer {token}'})
-            response.raise_for_status()
-            payload = response.json()
-            if payload.get('success') is not True or not isinstance(payload.get('data', {}).get('points'), list):
-                raise ValueError('Invalid chart observation response')
-            return payload['data']['points']
-        latest = read('latest', metrics=metrics)
+        latest = read_series(client.get, url, token, metrics)
         bounds = {'from': (now-timedelta(hours=12)).isoformat(), 'to': now.isoformat()}
         try:
-            hourly = read('history', metrics=metrics, interval='1h', **bounds)
-            geo = read('history', metrics='kp,dst', interval='1m', **bounds)
+            history = read_series(client.get, url, token, metrics, time_basis='l1', interval='1h', **bounds)
         except (httpx.HTTPError, ValueError):
             logger.warning('Summary observation history is unavailable')
-            hourly, geo = [], []
+            history = {}
     current, histories = {}, {}
-    for row in latest:
-        for metric in metrics.split(','):
-            if metric in row and (point := sample(row['time'], row[metric], now)) is not None:
-                if metric not in current or point['time'] > current[metric]['time']:
-                    current[metric] = point
-    for rows, selected in ((hourly, set(metrics.split(','))-{'kp', 'dst'}), (geo, {'kp', 'dst'})):
-        for row in rows:
-            for metric in selected:
-                if metric in row and (point := sample(row['time'], row[metric], now)) is not None:
-                    histories.setdefault(metric, []).append(point)
+    for metric, series in latest.items():
+        points = series['points']
+        if points and (point := sample(points[-1]['observed_at'], points[-1]['value'], now)) is not None:
+            current[metric] = point
+    for metric, series in history.items():
+        points = [point for row in series['points']
+                  if (point := sample(row['observed_at'], row['value'], now)) is not None]
+        if points:
+            histories[metric] = points
     return current, histories
-
-
 
 
 def risk_level(point, future, levels):

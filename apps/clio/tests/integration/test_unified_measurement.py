@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from clio.db import session as db
 from clio.db.models.measurement import Measurement
-from clio.ingestion.utils.adapters import wide_to_measurements
 from clio.providers.solar_wind import parse_records
 from clio.ingestion.utils.measurements import WritePolicy, write_measurements
 from clio.ingestion.utils.measurements import load_measurements
@@ -24,8 +23,8 @@ NOW = datetime(2026, 9, 1, tzinfo=UTC)
 
 
 def wind_rows(payload, received):
-    return wide_to_measurements(parse_records('mag', payload, received)).assign(
-        received_at=received, source_product='swpc.rtsw_mag').to_dict('records')
+    frame = parse_records('mag', payload, received).assign(received_at=received, source_product='swpc.rtsw_mag')
+    return frame.astype(object).where(frame.notna(), None).to_dict('records')
 
 
 @pytest.fixture
@@ -102,7 +101,7 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                                 bz_gsm=value, overall_quality=1 if i == 2 else 0)
                            for i, value in enumerate([-8, 2, 99, None, -2])]
                 received = NOW+timedelta(hours=1)
-                assert await write_measurements(session, wind_rows(payload, received), policy=WritePolicy.LIVE) == 3
+                assert await write_measurements(session, wind_rows(payload, received), policy=WritePolicy.LIVE) == 20
                 await session.commit()
                 received += timedelta(hours=1)
                 assert await write_measurements(session, wind_rows(payload, received), policy=WritePolicy.LIVE) == 0
@@ -110,7 +109,8 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(Measurement.metric == 'bz').limit(1))
                 assert receipt == NOW+timedelta(hours=1)
                 frame = await load_measurements(session, NOW)
-                assert frame.loc[frame.metric == 'bz', 'value'].tolist() == [-8, 2, -2]
+                assert frame.loc[frame.metric.eq('bz') & frame.quality.isna(), 'value'].tolist() == [-8, 2, -2]
+                assert frame.loc[frame.metric.eq('bz') & frame.quality.notna(), 'quality'].tolist() == ['flagged', 'missing']
                 session.add_all([Measurement(metric=metric, value=2, observed_at=NOW,
                     received_at=NOW+timedelta(minutes=5), source_product=source)
                     for metric, source in [('kp', 'swpc.kp'), ('ap', 'swpc.kp'), ('dst', 'swpc.dst')]])
@@ -124,6 +124,18 @@ def test_statistics_and_receipts_use_only_canonical_measurements(database_url):
                 receipt = await session.scalar(sa.select(Measurement.received_at).where(
                     Measurement.metric == 'bz', Measurement.observed_at == NOW))
                 assert receipt == NOW+timedelta(hours=2)
+                session.add(Measurement(metric='bz', value=1.5, observed_at=NOW, source_product='omni.hourly'))
+                await session.commit()
+                payload[0]['overall_quality'] = 1
+                await write_measurements(session, wind_rows(payload, received+timedelta(minutes=1)), policy=WritePolicy.LIVE)
+                await session.commit()
+                results = await session.scalars(sa.select(Measurement).where(
+                    Measurement.metric == 'bz', Measurement.observed_at == NOW))
+                by_source = {r.source_product: r for r in results}
+                assert by_source['omni.hourly'].value == 1.5
+                assert by_source['swpc.rtsw_mag'].value is None
+                assert by_source['swpc.rtsw_mag'].quality == 'flagged'
+                assert by_source['swpc.rtsw_mag'].spacecraft == 'A'
         finally:
             await engine.dispose()
     asyncio.run(verify())
@@ -174,19 +186,22 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, project_config, 
                 await session.commit()
                 report = await backfill.backfill_numeric(session, config, list(REQUIRED_METRICS), now=now)
                 assert report['status'] == 'complete'
-                assert report['normalized_hours'] == 48
+                assert await session.scalar(sa.select(sa.func.count()).select_from(NormalizedObservation)) == 1
+                await normalized.refresh_normalized_observations(config, now)
                 assert await session.scalar(sa.select(sa.func.count()).select_from(NormalizedObservation)) == 48
-                assert await session.scalar(sa.select(NormalizedObservation.bz).where(
-                    NormalizedObservation.observed_at == existing)) == 7.
+                original = await session.get(NormalizedObservation, existing)
+                assert original.bz == 2. and original.wind_time_basis == 'near_earth'
                 # Filling a missing hourly row must also work when all raw history is already stored.
                 await session.execute(sa.delete(NormalizedObservation).where(NormalizedObservation.observed_at == start))
                 await session.commit()
                 await backfill.backfill_numeric(session, config, list(REQUIRED_METRICS), now=now)
                 provider.fetch.assert_called_once()
+                await normalized.refresh_normalized_observations(config, now)
                 assert await session.scalar(sa.select(NormalizedObservation.bz).where(
                     NormalizedObservation.observed_at == start)) == 2.
                 live_hour = now - timedelta(hours=1)
-                session.add_all([Measurement(metric=m, value=5., observed_at=live_hour+timedelta(minutes=15),
+                session.add_all([Measurement(metric=m, value=5., observed_at=live_hour+timedelta(
+                    minutes=15 if m in ('bx', 'by', 'bz', 'n', 'v', 't') else 0),
                     source_product=config.observations[m].sources.live[0], received_at=now)
                     for m in REQUIRED_METRICS])
                 await session.commit()
@@ -194,9 +209,16 @@ def test_backfill_normalize_and_cleanup_lifecycle(database_url, project_config, 
                 assert await session.scalar(sa.select(NormalizedObservation.bz).where(
                     NormalizedObservation.observed_at == live_hour)) == 5.
                 assert await session.scalar(sa.select(NormalizedObservation.bz).where(
-                    NormalizedObservation.observed_at == existing)) == 7.
+                    NormalizedObservation.observed_at == existing)) == 2.
                 assert await session.scalar(sa.select(Measurement.value).where(
                     Measurement.metric == 'bz', Measurement.observed_at == live_hour)) == 2.
+                await write_measurements(session, [dict(metric='bz', value=None, quality='flagged',
+                    observed_at=live_hour+timedelta(minutes=15), source_product='swpc.rtsw_mag',
+                    received_at=now)], policy=WritePolicy.LIVE)
+                await session.commit()
+                await normalized.refresh_normalized_observations(config, now)
+                rebuilt = await session.get(NormalizedObservation, live_hour)
+                assert rebuilt.bz == 2. and rebuilt.wind_time_basis == 'near_earth'
                 boundary = now - timedelta(days=6)
                 old = now - timedelta(days=7)
                 ancient = now - timedelta(days=90)

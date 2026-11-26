@@ -52,7 +52,7 @@ async function observations(page: Page, options: { stale?: boolean; unavailable?
     if (!url.pathname.endsWith('/history')) {
       expect(url.searchParams.get('trends')).toBe('true');
       data = {
-        f10_7: { observed_at: new Date(Date.now() - 24 * 3600000).toISOString(), value: 145.2 },
+        f10_7: { observed_at: new Date(Date.now() - 24 * 3600000).toISOString(), value: 145.2, source_product: 'celestrak.f107' },
         changes_1h: { v: 10, n: .4, bt: .8, bz: -1.2 },
         ...Object.fromEntries(Object.entries(solarWind).map(([metric, { latest }]) => [metric, {
           observed_at: options.stale ? new Date(Date.now() - 900000).toISOString() : latest.observed_at,
@@ -140,8 +140,9 @@ test('workspace renders compact observations and opens details from summary card
   await expect(inspector).not.toContainText('420 km/s');
   await summary.getByRole('button', { name: 'Inspect F10.7', exact: true }).click();
   await expect(inspector).toContainText('Solar radio flux');
+  await expect(inspector).toContainText('CelesTrak');
   await expect(inspector).toContainText('48 h');
-  await expect(inspector.getByRole('link', { name: 'Measurement data & metadata' })).toHaveAttribute('href', '/api/v1/observations?meta=true&observations=f10_7');
+  await expect(inspector.getByRole('link', { name: 'Measurement data' })).toHaveAttribute('href', '/api/v1/observations?observations=f10_7');
   expect(errors).toEqual([]);
 });
 

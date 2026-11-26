@@ -246,10 +246,10 @@ async def test_public_forecasts_match_existing_contract_and_refresh(recorder_set
                 assert (await prophet.get('/internal/v1/public-forecasts/dst')).status_code == 401
                 assert (await prophet.get('/internal/v1/public-forecast-metrics/dst')).status_code == 401
 
-                async def read_forecast(target, meta, accept=lambda _: True):
+                async def read_forecast(target, accept=lambda _: True):
                     deadline = monotonic() + 8
                     while True:
-                        response = await public.get(f'/api/v1/forecasts/{target}', params={'meta': str(meta).lower()})
+                        response = await public.get(f'/api/v1/forecasts/{target}')
                         if response.status_code == 200:
                             data = response.json()['data']
                             if accept(data):
@@ -258,20 +258,18 @@ async def test_public_forecasts_match_existing_contract_and_refresh(recorder_set
                         await asyncio.sleep(0.05)
 
                 for target in targets:
-                    for meta in (False, True):
-                        assert await read_forecast(target, meta) == reference[target][int(meta)]
-                assert await read_forecast('solar-wind-events', False) == event_report
-                for meta in (False, True):
-                    metrics = await public.get('/api/v1/forecasts/dst/metrics', params={'meta': str(meta).lower()})
-                    assert metrics.status_code == 200
-                    assert metrics.json()['data'] == reference['dst-metrics'][int(meta)]
+                    assert await read_forecast(target) == reference[target]
+                assert await read_forecast('solar-wind-events') == event_report
+                metrics = await public.get('/api/v1/forecasts/dst/metrics')
+                assert metrics.status_code == 200
+                assert metrics.json()['data'] == reference['dst-metrics']
                 assert (await public.get('/api/v1/forecasts/hmf/metrics')).status_code == 503
 
                 updated_issue = issue + timedelta(hours=1)
                 updated = await RunRecorder.begin('dst', 'manual', config, writer=writer)
                 await store_product(updated, issue=updated_issue.isoformat())
                 await updated.finish()
-                received = await read_forecast('dst', False, lambda data: datetime.fromisoformat(data['issue_time']) == updated_issue)
+                received = await read_forecast('dst', lambda data: datetime.fromisoformat(data['issue_time']) == updated_issue)
                 assert received['predictions'][0]['valid_time'] == (updated_issue + timedelta(hours=1)).isoformat().replace('+00:00', 'Z')
 
 
@@ -297,12 +295,9 @@ products.read_frames = lambda target: {
     for artifact in releases[target]['artifacts']
 }
 print(json.dumps({
-    'dst': [products.load_forecast(products.PRODUCTS['dst'], meta=meta).model_dump(mode='json')
-            for meta in (False, True)],
-    'atmospheric-density': [DensityForecast.from_internal(products.load_density_forecast(), meta=meta).model_dump(mode='json')
-                            for meta in (False, True)],
-    'dst-metrics': [products.load_metrics(products.PRODUCTS['dst'], meta=meta).model_dump(mode='json')
-                    for meta in (False, True)],
+    'dst': products.load_forecast(products.PRODUCTS['dst']).model_dump(mode='json'),
+    'atmospheric-density': DensityForecast.from_internal(products.load_density_forecast()).model_dump(mode='json'),
+    'dst-metrics': products.load_metrics(products.PRODUCTS['dst']).model_dump(mode='json'),
 }))
 """
     result = subprocess.run([ROOT / 'apps/api/.venv/bin/python', '-c', code, str(workdir)], cwd=ROOT,

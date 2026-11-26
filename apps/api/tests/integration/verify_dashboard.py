@@ -31,7 +31,6 @@ from api.services.authentication import create_user
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
-from apps.api.tests.reference_public.routers.observations import router as public_router
 from tests.support.clio import CLIO_ROOT, clio_server, go_http_server, migrate_clio
 from tests.support.database import provisioned_database
 
@@ -102,8 +101,6 @@ async def verify():
             await db.commit()
         app = FastAPI()
         app.include_router(router)
-        reference_api = FastAPI()
-        reference_api.include_router(public_router)
         async def session():
             async with factory() as db:
                 yield db
@@ -113,17 +110,14 @@ async def verify():
         with dashboard_clio() as (clio_url, public_url), patch.dict('os.environ', {'DASHBOARD_ORIGINS': 'https://dashboard.test', 'DASHBOARD_COOKIE_SECURE': 'true', 'OBSERVATIONS_URL': clio_url, 'OBSERVATIONS_SERVICE_TOKEN': 'test-token'}):
             async with AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as client, \
                        AsyncClient(transport=transport, base_url='https://dashboard.test', headers=headers) as secondary, \
-                       AsyncClient(base_url=public_url, trust_env=False) as public, \
-                       AsyncClient(transport=ASGITransport(app=reference_api), base_url='http://reference') as reference:
-                for params in ({}, {'trends': 'true'}, {'meta': 'true', 'trends': 'true'}):
+                       AsyncClient(base_url=public_url, trust_env=False) as public:
+                for params in ({}, {'trends': 'true'}):
                     response = await public.get('/api/v1/observations', params=params)
                     assert response.status_code == 200, (params, response.text)
                     data = response.json()['data']
-                    expected = (await reference.get('/observations', params=params)).json()['data']
-                    assert data == expected, (params, data, expected)
                     assert data['v']['value'] == 400 and data['bt']['value'] == 5
                     assert data['kp']['value'] == 2 and data['f10_7']['value'] == 145
-                    assert 'southward_bz' not in data
+                    assert 'southward_bz' not in data and 'meta' not in data
                     if params.get('trends') == 'true':
                         assert data['changes_1h']['v'] == 0
                 for path in ['me', 'users', 'groups']:

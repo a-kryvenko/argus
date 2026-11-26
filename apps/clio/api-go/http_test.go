@@ -63,7 +63,7 @@ func TestLatest(t *testing.T) {
 	if !slices.Equal(db.selected, []string{"n", "bz", "dst"}) {
 		t.Fatalf("selected metrics = %v", db.selected)
 	}
-	want := `{"success":true,"data":{"points":[{"bz":-2.5,"dst":-10,"time":"2026-11-24T12:00:00Z"},{"n":null,"time":"2026-11-24T12:01:00Z"}]},"error":null}` + "\n"
+	want := `{"success":true,"data":{"points":[{"bz":-2.5,"dst":-10.75,"time":"2026-11-24T12:00:00Z"},{"n":null,"time":"2026-11-24T12:01:00Z"}]},"error":null}` + "\n"
 	if response.Body.String() != want {
 		t.Fatalf("response = %s, want %s", response.Body, want)
 	}
@@ -119,7 +119,7 @@ func TestHistoryTimeBasisAndCadences(t *testing.T) {
 func TestGOESHistoryPreservesFractionalFlux(t *testing.T) {
 	at := time.Date(2026, 11, 24, 12, 10, 0, 0, time.UTC)
 	protons := 0.31
-	db := &stubReader{historyPoints: numericPoints{at: {"proton_10mev": &protons}}}
+	db := &stubReader{historyPoints: numericPoints{at: {values: map[string]*float64{"proton_10mev": &protons}}}}
 	query := "?from=2026-11-24T12:00:00Z&to=2026-11-24T13:00:00Z&metrics=proton_10mev&interval=5m"
 	response := request(newHandler(db, "secret", ""), historyPath+query, "Bearer secret")
 	want := `{"success":true,"data":{"interval":"5m","points":[{"proton_10mev":0.31,"time":"2026-11-24T12:10:00Z"}]},"error":null}` + "\n"

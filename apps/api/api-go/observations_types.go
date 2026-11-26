@@ -20,6 +20,8 @@ type Coverage struct {
 }
 
 type CurrentIndexSample struct {
+	Provenance
+	TimeBasis     string    `json:"time_basis"`
 	IntervalStart time.Time `json:"interval_start"`
 	IntervalEnd   time.Time `json:"interval_end"`
 	Value         *float64  `json:"value" nullable:"true"`
@@ -47,10 +49,11 @@ type CurrentObservations struct {
 	Proton10MeV  **CurrentSolarSample `json:"proton_10mev,omitempty" required:"false" allowNull:"true"`
 	Proton100MeV **CurrentSolarSample `json:"proton_100mev,omitempty" required:"false" allowNull:"true"`
 	Changes1h    map[string]*float64  `json:"changes_1h,omitempty" required:"false" nullable:"true"`
-	Meta         *ObservationMetadata `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Additional descriptions, included only with meta=true."`
 }
 
 type CurrentSolarSample struct {
+	Provenance
+	TimeBasis   string     `json:"time_basis"`
 	ObservedAt  time.Time  `json:"observed_at"`
 	IntervalEnd *time.Time `json:"interval_end,omitempty" required:"false" nullable:"true"`
 	Value       *float64   `json:"value" nullable:"true"`
@@ -65,18 +68,19 @@ type Gap struct {
 }
 
 type IndexHistorySeries struct {
+	SeriesContext
 	Points     []IndexSample `json:"points"`
 	Coverage   Coverage      `json:"coverage"`
 	DataStatus string        `json:"data_status" enum:"estimated,realtime"`
 }
 
 type IndexSample struct {
-	IntervalStart  time.Time  `json:"interval_start"`
-	IntervalEnd    time.Time  `json:"interval_end"`
-	IntervalStatus string     `json:"interval_status" enum:"in_progress,completed"`
-	Value          *float64   `json:"value" nullable:"true"`
-	Quality        *string    `json:"quality,omitempty" required:"false" nullable:"true" enum:"missing,flagged"`
-	ReceivedAt     *time.Time `json:"received_at,omitempty" required:"false" nullable:"true"`
+	Provenance
+	IntervalStart  time.Time `json:"interval_start"`
+	IntervalEnd    time.Time `json:"interval_end"`
+	IntervalStatus string    `json:"interval_status" enum:"in_progress,completed"`
+	Value          *float64  `json:"value" nullable:"true"`
+	Quality        *string   `json:"quality,omitempty" required:"false" nullable:"true" enum:"missing,flagged"`
 }
 
 type ObservationHistory struct {
@@ -88,15 +92,6 @@ type ObservationHistory struct {
 	EvaluatedFrom     *time.Time               `json:"evaluated_from,omitempty" required:"false" nullable:"true"`
 	EvaluatedTo       *time.Time               `json:"evaluated_to,omitempty" required:"false" nullable:"true"`
 	Points            *[]map[string]any        `json:"points,omitempty" required:"false" nullable:"true"`
-	Meta              *ObservationMetadata     `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Additional descriptions, included only with meta=true."`
-}
-
-type ObservationMetadata struct {
-	Series             map[string]SeriesMetadata `json:"series"`
-	Interval           *string                   `json:"interval,omitempty" required:"false" nullable:"true"`
-	Selection          *string                   `json:"selection,omitempty" required:"false" nullable:"true"`
-	GapFilling         *string                   `json:"gap_filling,omitempty" required:"false" nullable:"true"`
-	AggregationVersion *int                      `json:"aggregation_version,omitempty" required:"false" nullable:"true"`
 }
 
 type Processing struct {
@@ -106,32 +101,16 @@ type Processing struct {
 	ExpectedBuckets             int `json:"expected_buckets"`
 }
 
-type SeriesMetadata struct {
-	Label             string  `json:"label"`
-	Unit              string  `json:"unit"`
-	Source            string  `json:"source"`
-	SourceURL         string  `json:"source_url"`
-	CoordinateSystem  *string `json:"coordinate_system,omitempty" required:"false" nullable:"true"`
-	Location          *string `json:"location,omitempty" required:"false" nullable:"true"`
-	TimeBasis         string  `json:"time_basis"`
-	Propagated        *bool   `json:"propagated,omitempty" required:"false" nullable:"true"`
-	ResolutionSeconds int     `json:"resolution_seconds"`
-	Aggregation       *string `json:"aggregation,omitempty" required:"false" nullable:"true"`
-	Selection         *string `json:"selection,omitempty" required:"false" nullable:"true"`
-	PollSeconds       *int    `json:"poll_seconds,omitempty" required:"false" nullable:"true"`
-	FreshnessBasis    *string `json:"freshness_basis,omitempty" required:"false" nullable:"true"`
-	GapFilling        *string `json:"gap_filling,omitempty" required:"false" nullable:"true"`
-}
-
 type SolarHistorySeries struct {
+	SeriesContext
 	Points     []SolarSample `json:"points"`
 	Coverage   Coverage      `json:"coverage"`
 	Processing *Processing   `json:"processing,omitempty" required:"false" allowNull:"true"`
 }
 
 type SolarSample struct {
+	Provenance
 	ObservedAt           time.Time  `json:"observed_at"`
-	ReceivedAt           *time.Time `json:"received_at,omitempty" required:"false" nullable:"true"`
 	Value                *float64   `json:"value" nullable:"true"`
 	Quality              *string    `json:"quality,omitempty" required:"false" nullable:"true" enum:"missing,flagged"`
 	IntervalEnd          *time.Time `json:"interval_end,omitempty" required:"false" nullable:"true"`
@@ -157,4 +136,16 @@ func (series HistorySeries) MarshalJSON() ([]byte, error) {
 
 func (HistorySeries) Schema(registry huma.Registry) *huma.Schema {
 	return &huma.Schema{AnyOf: []*huma.Schema{schemaFor[SolarHistorySeries](registry), schemaFor[IndexHistorySeries](registry)}}
+}
+
+type Provenance struct {
+	SourceProduct string     `json:"source_product,omitempty" required:"false"`
+	Spacecraft    string     `json:"spacecraft,omitempty" required:"false"`
+	ReceivedAt    *time.Time `json:"received_at,omitempty" required:"false" nullable:"true"`
+}
+
+type SeriesContext struct {
+	TimeBasis         string `json:"time_basis"`
+	ResolutionSeconds int    `json:"resolution_seconds"`
+	Aggregation       string `json:"aggregation"`
 }

@@ -5,9 +5,10 @@ export const windUnits: Record<Metric, string> = { bx: 'nT', by: 'nT', bz: 'nT',
 export const windCoordinates: Partial<Record<Metric, string>> = { bx: 'GSM', by: 'GSM', bz: 'GSM' };
 export type Sample = {
   observed_at: string;
-  received_at: string;
+  received_at?: string;
   value: number | null;
   quality?: 'missing' | 'flagged';
+  source_product?: string;
   min?: number; max?: number; count?: number; expected_count?: number;
   coverage_percent?: number;
 };

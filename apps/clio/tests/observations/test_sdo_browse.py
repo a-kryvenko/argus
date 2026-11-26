@@ -49,6 +49,8 @@ def test_images_are_prepared_in_tmp_and_only_completed_uploads_are_saved(storage
     assert all(not path.parent.exists() for path in paths)
     assert row['file']['key'].endswith('original.jpg')
     assert any(key.endswith('/512.webp') for _, key in storage.objects)
+    assert row['details']['captured_at'] is None
+    assert row['details']['source_updated_at'] == NOW.isoformat()
 
 
 def test_unchanged_image_does_not_create_extra_database_rows(storage, browse):
@@ -59,7 +61,7 @@ def test_unchanged_image_does_not_create_extra_database_rows(storage, browse):
     assert len(find('aia_193_browse')) == 1 and len(storage.objects) == 6
 
 
-def test_interrupted_upload_is_discarded_and_next_attempt_downloads_again(storage, browse):
+def test_interrupted_upload_stays_hidden_and_next_attempt_completes(storage, browse):
     downloaded, paths = browse
     collect()
     downloaded.return_value = (jpeg('blue'), NOW+timedelta(hours=1))
@@ -70,11 +72,13 @@ def test_interrupted_upload_is_discarded_and_next_attempt_downloads_again(storag
         return put(**kwargs)
     storage.client.put_object.side_effect = fail
     assert collect(NOW+timedelta(hours=1))['failed'] == 1
-    assert len(find('aia_193_browse')) == 1 and len(storage.objects) == 6
+    assert len(find('aia_193_browse')) == 1
+    assert len(storage.objects) == 10
     assert all(not path.parent.exists() for path in paths)
     storage.client.put_object.side_effect = put
     assert collect(NOW+timedelta(hours=1))['status'] == 'complete'
     assert downloaded.call_count == 3 and len(find('aia_193_browse')) == 2
+    assert len(storage.objects) == 12
 
 
 def test_invalid_download_is_not_uploaded(storage, browse):

@@ -44,11 +44,11 @@ PRODUCTS = {
         ('hourly',), ('proswin_cache', 'proswin_queue')),
     'solar-wind-temperature': Product((Model('plasma_temperature_quantile',
         'inference.plasma.temperature.proswin:ProswinPlasmaTemperatureQuantileFS'),),
-        ('minute',), ('hourly', 'proswin_cache', 'proswin_queue')),
+        ('native_hourly',), ('hourly', 'proswin_cache', 'proswin_queue')),
     'hmf': Product((
         Model('hmf_total_threshold', 'inference.imf.bt.lightgbm:LightgbmBtProbabilityFS'),
         Model('hmf_southward_threshold', 'inference.imf.bz.lightgbm:LightgbmBzProbabilityFS')),
-        ('minute',)),
+        ('native_hourly',)),
     'solar-radiation': Product((
         Model('f10_7_quantile', 'inference.radiation.f107.lightgbm:LightgbmF107QuantileFS'),
         Model('s10_quantile', 'inference.radiation.daily:DailyS10QuantileFS'),

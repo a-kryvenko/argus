@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.dialects.sqlite import DATETIME
 
 from common.data import datamanager
+from clio.db.models.donki_poll_status import DonkiPollStatus
 from clio.db.models.file import File
 from clio.db.models.file_observation import FileObservation
 from clio.db import session as db
@@ -82,6 +83,7 @@ def storage(monkeypatch, tmp_path, object_store):
     engine.dialect.colspecs = {**engine.dialect.colspecs, DateTime: SQLiteDateTime}
     File.__table__.create(engine)
     FileObservation.__table__.create(engine)
+    DonkiPollStatus.__table__.create(engine)
     monkeypatch.setattr(db, 'get_sync_engine', lambda: engine)
     def registered_files(*, id=None):
         statement = select(File.__table__)

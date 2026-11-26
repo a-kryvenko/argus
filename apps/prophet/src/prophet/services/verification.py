@@ -16,6 +16,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from forecast.evaluation import TARGETS, match_observations, score, validate_predictions
+from common.config import get_config
 from common.schemas.forecast_release import PRODUCT_ARTIFACTS
 from prophet.config import load_config
 from prophet.db.session import get_db_session
@@ -28,14 +29,14 @@ from prophet.execution import before_dispatch, execute
 
 def targets(frame, start, end):
     """Prepare verification targets from raw observations, without filling gaps."""
-    data = frame[frame.metric.isin(['v', 'n', 't', 'kp', 'ap', 'dst', 'bx', 'by', 'bz'])].copy()
+    data = frame[frame.metric.isin(['v', 'n', 't', 'kp', 'ap', 'dst', 'bt', 'bx', 'by', 'bz'])].copy()
     data['observed_at'] = pd.to_datetime(data.observed_at, utc=True)
     # Keep the verification cutoff half-open even for revised remote responses.
     data = data[(data.observed_at >= start) & (data.observed_at < end)]
     if data.empty:
         return []
     wide = data.pivot(index='observed_at', columns='metric', values='value')
-    if {'bx', 'by', 'bz'} <= set(wide):
+    if 'bt' not in wide and {'bx', 'by', 'bz'} <= set(wide):
         wide['bt'] = np.sqrt(wide[['bx', 'by', 'bz']].pow(2).sum(axis=1, min_count=3))
     if 'bz' in wide:
         wide['bs'] = (-wide.bz).clip(lower=0)
@@ -99,7 +100,13 @@ async def verify(selection='solar-wind-speed', *, writer, now=None, deadline=Non
             ORDER BY issue_time,id'''), {'products': list(products), 'start': start, 'now': now})).all()
     if not releases:
         return {'status': 'no_releases', 'releases': 0, 'from': start.isoformat(), 'products': list(products)}
-    observed = await asyncio.to_thread(read_targets, start, end, **({} if deadline is None else {"deadline": deadline}))
+    retention = get_config().project_config.get('clio', {}).get('retention', {}).get('live_days', 6)
+    cutoff = now - timedelta(days=retention)
+    retained_from = cutoff.replace(minute=0, second=0, microsecond=0)
+    if retained_from < cutoff:
+        retained_from += timedelta(hours=1)
+    observed = await asyncio.to_thread(read_targets, max(start, retained_from), end,
+                                       **({} if deadline is None else {"deadline": deadline}))
     truth = pd.DataFrame(observed['points'], columns=['valid_time', 'metric', 'value', 'sample_count'])
     summary = {'status': 'ok', 'releases': len(releases), 'from': start.isoformat(),
                'source': observed['source'], 'products': {}, 'evaluated_at': now.isoformat()}
@@ -112,25 +119,51 @@ async def verify(selection='solar-wind-speed', *, writer, now=None, deadline=Non
                 raise ValueError('No observed target protocol for ' + artifact.name)
             prediction = validate_predictions(pd.read_csv(io.StringIO(artifact.csv_text)), artifact.name)
             subset = truth[truth.metric.eq(TARGETS[artifact.name])]
-            matched = match_observations(prediction, subset, as_of=now)
-            # Exact target values (including gaps) are retained for replay and revisions.
-            records = json.loads(matched.to_json(orient='records', date_format='iso'))
-            evidence = json.dumps(records, sort_keys=True, allow_nan=False).encode()
-            report = {'protocol': 'published-hourly-v1', 'release_id': str(release_id),
-                      'source': observed['source'], 'observation_status': observed['status'],
-                      'forecast_sha256': artifact.sha256, 'model_info': artifact.model_info,
-                      'evidence_sha256': hashlib.sha256(evidence).hexdigest(),
-                      **score(matched, artifact.name), 'pairs': records}
             async with transaction(writer) as session:
+                previous = await session.scalar(text('''SELECT report FROM forecast_verification
+                    WHERE release_id=:release_id AND artifact=:name FOR UPDATE'''),
+                    {'release_id': release_id, 'name': artifact.name})
+                if (previous and previous['forecast_sha256'] == artifact.sha256
+                        and previous['source'] == observed['source']):
+                    subset = retain_expired_targets(subset, previous['pairs'], retained_from)
+                matched = match_observations(prediction, subset, as_of=now)
+                records = json.loads(matched.to_json(orient='records', date_format='iso'))
+                evidence = json.dumps(records, sort_keys=True, allow_nan=False).encode()
+                report = {'protocol': 'published-hourly-v1', 'release_id': str(release_id),
+                          'source': observed['source'], 'observation_status': observed['status'],
+                          'forecast_sha256': artifact.sha256, 'model_info': artifact.model_info,
+                          'evidence_sha256': hashlib.sha256(evidence).hexdigest(),
+                          **score(matched, artifact.name), 'pairs': records}
                 await session.execute(text('''INSERT INTO forecast_verification
                     (release_id,artifact,evaluated_at,report) VALUES (:release_id,:name,:now,:report)
                     ON CONFLICT (release_id,artifact) DO UPDATE
-                    SET evaluated_at=EXCLUDED.evaluated_at,report=EXCLUDED.report''').bindparams(bindparam('report', type_=JSONB)), {'release_id': release_id, 'name': artifact.name, 'now': now, 'report': report})
+                    SET evaluated_at=EXCLUDED.evaluated_at,report=EXCLUDED.report
+                    WHERE forecast_verification.evaluated_at <= EXCLUDED.evaluated_at''')
+                    .bindparams(bindparam('report', type_=JSONB)),
+                    {'release_id': release_id, 'name': artifact.name, 'now': now, 'report': report})
             totals = summary['products'].setdefault(product, {}).setdefault(
                 artifact.name, dict.fromkeys(('total', 'verified', 'missing', 'pending'), 0))
             for key, value in report['counts'].items():
                 totals[key] += value
     return summary
+
+
+def retain_expired_targets(current, previous_pairs, retained_from):
+    known = set(pd.to_datetime(current.valid_time, utc=True, format='mixed'))
+    retained = {}
+    for pair in previous_pairs:
+        if pair.get('state') != 'verified' or pair.get('value') is None:
+            continue
+        time = pd.Timestamp(pair['valid_time'])
+        if time.tzinfo is None:
+            time = time.tz_localize('UTC')
+        if time < retained_from and time not in known:
+            retained[time] = {'valid_time': time.isoformat(), 'value': pair['value'],
+                              'sample_count': pair.get('sample_count')}
+    if not retained:
+        return current
+    prior = pd.DataFrame(retained.values())
+    return prior if current.empty else pd.concat([current, prior], ignore_index=True)
 
 
 async def verification_report(product):

@@ -35,7 +35,7 @@ def read_source(source, as_of, *, inputs=None):
                       trust_env=False) as client:
         if source == 'hourly':
             return read_observations(client, url, token, as_of)
-        if source == 'minute':
+        if source == 'native_hourly':
             return read_native_history(client, url, token, as_of)
         if source == 'events':
             response = client.get(url.rstrip('/') + '/internal/v1/observations/solar-wind-events/inputs',
@@ -82,7 +82,7 @@ async def load_product_inputs(product, as_of, cache, *, executor, timeout_second
             inputs.density_observations = result.density_observations
             if spec.requires_normalized and not inputs.observations.points:
                 raise RuntimeError('No stored observations available in the requested history range; check ingestion')
-        elif source == 'minute':
+        elif source == 'native_hourly':
             inputs.solar_wind_hourly = result
         elif source == 'events':
             inputs.solar_wind_events = result

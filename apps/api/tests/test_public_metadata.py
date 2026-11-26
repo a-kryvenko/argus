@@ -1,4 +1,4 @@
-"""Exercise HTTP serialization: compact and expanded responses share all data."""
+"""Exercise public response serialization and observation selection."""
 from copy import deepcopy
 from unittest.mock import AsyncMock
 
@@ -51,7 +51,7 @@ def observation_payload(kind):
     ('geomagnetic/latest', 'kp'), ('geomagnetic/history', 'kp'),
     ('summary', 'bz,kp'),
 ])
-def test_observation_metadata_is_opt_in_and_data_does_not_change(monkeypatch, kind, selection):
+def test_observation_projection_preserves_input_and_documents_one_response_shape(monkeypatch, kind, selection):
     payload = observation_payload(kind)
     original = deepcopy(payload)
     read = AsyncMock(return_value={'success': True, 'data': payload, 'error': None})
@@ -67,14 +67,7 @@ def test_observation_metadata_is_opt_in_and_data_does_not_change(monkeypatch, ki
         compact = response.json()['data']
         assert 'unverified' not in str(compact)
         assert 'meta' not in compact
-        expanded = api.get(path, params={**params, 'meta': 'true'}).json()['data']
-        metadata = expanded.pop('meta')
-        assert expanded == compact
-        assert api.get(path, params={**params, 'meta': 'false'}).json()['data'] == compact
-        assert api.get(path, params={**params, 'meta': 'invalid'}).status_code == 422
         assert 'unit' not in str(compact) and 'source_url' not in str(compact)
-        descriptions = metadata['series']
-        assert next(iter(descriptions.values()))['unit'] in ('nT', '')
         if kind == 'solar-wind/latest':
             assert compact['bz'] == {'observed_at': TIME, 'value': None, 'quality': 'flagged'}
         if kind.endswith('history'):
@@ -84,8 +77,7 @@ def test_observation_metadata_is_opt_in_and_data_does_not_change(monkeypatch, ki
             assert compact['changes_1h']['bz'] is None
             assert 'southward_bz' not in compact
         spec = api.get('/openapi.json').json()
-        parameter = next(p for p in spec['paths'][path]['get']['parameters'] if p['name'] == 'meta')
-        assert parameter['schema']['default'] is False
+        assert all(p['name'] != 'meta' for p in spec['paths'][path]['get']['parameters'])
     assert payload == original
     assert all('meta' not in (call.args[1] if len(call.args) > 1 and call.args[1] else {}) for call in read.await_args_list)
 
@@ -105,9 +97,7 @@ def test_aggregate_history_keeps_completeness(monkeypatch):
     app.include_router(observations.router)
     with TestClient(app) as api:
         compact = api.get('/observations/history?observations=bz&resolution=5m').json()['data']
-        expanded = api.get('/observations/history?observations=bz&resolution=5m&meta=true').json()['data']
-    assert expanded.pop('meta')['aggregation_version'] == 1
-    assert expanded == compact
+
     assert compact['resolution_seconds'] == 300
     point = compact['series']['bz']['points'][0]
     assert point['value'] == -2 and point['min'] == -5 and point['max'] == 1
@@ -127,7 +117,7 @@ def test_observation_projection_preserves_errors(monkeypatch, response, status):
     app = FastAPI()
     app.include_router(observations.router)
     with TestClient(app) as api:
-        assert api.get('/observations?observations=bz&meta=true').status_code == status
+        assert api.get('/observations?observations=bz').status_code == status
 
 
 @pytest.mark.parametrize('target,product', forecast_products.PRODUCTS.items())
@@ -154,18 +144,12 @@ def test_forecast_and_metrics_metadata_for_every_product(monkeypatch, tmp_path, 
     with TestClient(app) as api:
         response = api.get(path)
         assert response.status_code == 200
-        compact = response.json()['data']
-        expanded = api.get(path + '?meta=true').json()['data']
-        metadata = expanded.pop('meta')
-        assert compact == expanded and 'meta' not in compact
+        metadata = response.json()['data']['meta']
         assert metadata['variables'] == {v.name: {'unit': v.unit} for v in product.variables}
-        assert 'unit' not in str(compact)
-        assert api.get(path + '?meta=false').json()['data'] == compact
-        assert api.get(path + '?meta=invalid').status_code == 422
 
 
 @pytest.mark.parametrize('suffix', ['', '/history'])
-def test_unified_observations_select_series_and_metadata(monkeypatch, suffix):
+def test_unified_observations_select_series(monkeypatch, suffix):
     async def read(resource, params=None):
         if resource == 'history':
             return dict(success=True, data={'points': [{'issue_time': TIME, 'ap': 5, 's10': None}]})
@@ -182,12 +166,8 @@ def test_unified_observations_select_series_and_metadata(monkeypatch, suffix):
         assert compact.status_code == 200
         assert compact.headers['cache-control'] == 'no-store'
         compact = compact.json()['data']
-        expanded = client.get(path + '&meta=true').json()['data']
-        metadata = expanded.pop('meta')
-        assert expanded == compact
         if suffix:
             assert set(compact['series']) == {'bz', 'kp'}
-            assert set(metadata['series']) == {'bz', 'kp'}
             assert compact['series']['kp']['data_status'] == 'estimated'
             assert compact['points'] == [{'issue_time': TIME, 'ap': 5, 's10': None}]
         else:
@@ -200,7 +180,6 @@ def test_unified_observations_select_series_and_metadata(monkeypatch, suffix):
             assert compact['bz']['quality'] == 'flagged'
             assert not {'changes_1h', 'southward_bz', 'collection_status', 'bx', 'by', 'v', 'dst'} & compact.keys()
             assert not {'summary', 'status'} & {call.args[0] for call in reader.await_args_list}
-            assert set(metadata['series']) == {'bz', 'kp'}
         for selected in ['', 'unknown', 'bz,unknown']:
             assert client.get('/observations' + suffix, params={'observations': selected}).status_code == 422
         for old in ['/public/observations/latest', '/observations/latest', '/observations/summary',
@@ -208,8 +187,7 @@ def test_unified_observations_select_series_and_metadata(monkeypatch, suffix):
             assert client.get(old).status_code == 404
 
 
-@pytest.mark.parametrize('meta', [False, True])
-def test_current_observations_only_include_trends_when_requested(monkeypatch, meta):
+def test_current_observations_only_include_trends_when_requested(monkeypatch):
     async def read(resource, params=None):
         assert resource != 'status'
         return dict(success=True, data=observation_payload(resource))
@@ -219,7 +197,7 @@ def test_current_observations_only_include_trends_when_requested(monkeypatch, me
     app = FastAPI()
     app.include_router(observations.router)
     with TestClient(app) as client:
-        params = {'observations': 'bz,kp', 'meta': str(meta).lower()}
+        params = {'observations': 'bz,kp'}
         compact = client.get('/observations', params=params)
         assert compact.status_code == 200
         compact = compact.json()['data']
@@ -276,8 +254,7 @@ def test_normal_observations_omit_quality_without_changing_source_payload(monkey
 
 
 @pytest.mark.parametrize('trends', [False, True])
-@pytest.mark.parametrize('meta', [False, True])
-def test_current_observations_never_load_hourly_snapshot(monkeypatch, trends, meta):
+def test_current_observations_never_load_hourly_snapshot(monkeypatch, trends):
     async def read(resource, params=None):
         assert resource in {'solar-wind/latest', 'geomagnetic/latest', 'summary', 'current-indices'}
         if resource == 'current-indices':
@@ -292,7 +269,7 @@ def test_current_observations_never_load_hourly_snapshot(monkeypatch, trends, me
     app = FastAPI()
     app.include_router(observations.router)
     with TestClient(app) as client:
-        result = client.get('/observations', params={'trends': trends, 'meta': meta})
+        result = client.get('/observations', params={'trends': trends})
         assert result.status_code == 200
         data = result.json()['data']
         assert data['bz']['observed_at'] == TIME

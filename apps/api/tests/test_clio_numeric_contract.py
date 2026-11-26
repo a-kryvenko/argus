@@ -31,17 +31,16 @@ def configure(monkeypatch, respond):
     return TestClient(app), calls
 
 
-def test_current_values_preserve_independent_times_and_build_optional_metadata(monkeypatch):
+def test_current_values_preserve_independent_times(monkeypatch):
     def respond(request):
         return {'points': [dict(time=(NOW-timedelta(hours=4)).isoformat(), kp=3.),
                            dict(time=(NOW-timedelta(minutes=2)).isoformat(), v=400., bz=-5.)]}
     client, calls = configure(monkeypatch, respond)
-    response = client.get('/observations?observations=v,bz,kp&meta=true')
+    response = client.get('/observations?observations=v,bz,kp')
     assert response.status_code == 200, response.text
     data = response.json()['data']
     assert data['v']['value'] == 400 and data['kp']['value'] == 3
     assert data['v']['observed_at'] != data['kp']['interval_start']
-    assert data['meta']['series']['bz']['coordinate_system'] == 'GSM'
     assert {request.url.path for request in calls} == {'/internal/v1/observations/latest'}
 
 
@@ -64,11 +63,12 @@ def test_dashboard_status_is_derived_from_values_and_configured_freshness(monkey
     config = Mock(project_config={'clio': {'observations': {
         'bz': {'freshness_minutes': 10}, 'dst': {'freshness_minutes': 120}, 'v': {'freshness_minutes': 10}}}})
     monkeypatch.setattr(project_status, 'get_config', lambda: config)
-    result = project_status.status_from_points([
-        dict(time=(NOW-timedelta(minutes=11)).isoformat(), bz=-2.),
-        dict(time=(NOW-timedelta(hours=2)).isoformat(), dst=-10.)], now=NOW)
+    result = project_status.status_from_observations({
+        'bz': dict(observed_at=(NOW-timedelta(minutes=11)).isoformat(), received_at=NOW.isoformat(), usable=True),
+        'dst': dict(observed_at=(NOW-timedelta(hours=2)).isoformat(), usable=True),
+    }, now=NOW)
     values = {item['metric']: item for item in result['measurements']}
-    assert values['bz']['status'] == 'delayed'
+    assert values['bz']['status'] == 'delayed' and values['bz']['received_at'] == NOW
     assert values['dst']['status'] == 'fresh' and values['dst']['age_seconds'] == 3600
     assert values['v']['status'] == 'unavailable'
     assert result['status'] == 'degraded'

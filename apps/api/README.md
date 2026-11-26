@@ -17,7 +17,8 @@ Schemas and parameters: `/api/v1/docs`.
 | `/summary` | Prepared Prophet summary with observations, risks and public S3 chart URLs |
 | `/sdo/images/{name}` | Immutable AIA JPEG/WebP variants; `summary.sdo_images` maps channels to asset IDs |
 | `/observations` | Latest measurements with individual timestamps; `trends=true` adds observed changes |
-| `/observations/history` | History, including normalized hourly indices; select variables with `observations=bx,bz,v,kp` |
+| `/observations/history` | History with sample provenance and aggregate coverage |
+| `/observations/catalog` | Metric identifiers, units, native cadence and products |
 | `/forecasts/{target}` | Published forecast |
 | `/forecasts/{target}/metrics` | Static evaluation metrics |
 | `/forecasts/{target}/verification` | Rolling observed accuracy |
@@ -40,6 +41,5 @@ Summary is prepared by Prophet; API forwards the response.
 Summary CME: Earth arrivals only, at most 7 days old; retained until arrival window end (or arrival time) plus `cme_grace_hours` (24 by default).
 Summary `risk_level`: 0 green, 1 yellow, 2 orange, 3 red, 4 crimson; maximum absolute current/future value. No data or configured levels yields 0.
 Missing measurements remain null/gaps; history timestamps require a timezone.
-Supported data routes accept `?meta=true` for units and descriptions.
 
 [Setup](../../README_DEPLOY.md#local-development) · [Commands](../../docs/commands.md)

@@ -36,11 +36,11 @@ type DensityForecast struct {
 	ObservedAt             time.Time          `json:"observed_at"`
 	DTCObservedAt          *time.Time         `json:"dtc_observed_at" required:"false" nullable:"true"`
 	GeomagneticObservedAt  *time.Time         `json:"geomagnetic_observed_at" required:"false" nullable:"true"`
-	BackgroundInterpolated bool               `json:"background_interpolated" doc:"True when background drivers include gap-filled daily values. Details are available with meta=true."`
+	BackgroundInterpolated bool               `json:"background_interpolated" doc:"True when background drivers include gap-filled daily values."`
 	HorizonHours           int                `json:"horizon_hours"`
 	Predictions            []DensityPoint     `json:"predictions"`
 	Reference              *DensityBackground `json:"reference" required:"false" allowNull:"true"`
-	Meta                   *DensityMetadata   `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Additional descriptions, included only with meta=true."`
+	Meta                   *DensityMetadata   `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Density model and background inputs for this forecast."`
 }
 
 type DensityMetadata struct {

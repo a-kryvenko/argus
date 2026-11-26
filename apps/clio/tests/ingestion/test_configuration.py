@@ -68,12 +68,12 @@ def test_resolution_is_checked_against_source_capabilities():
 
 def test_scheduler_supports_seven_minute_intervals():
     from clio.scheduler.schedule import collecting_schedules
-    from clio.scheduler.worker import _init_collect_job
+    from clio.scheduler.worker import configure_jobs
     settings = policy('v')
     settings['poll_minutes'] = 7
     config = ClioObservations(observations={'v': settings})
     assert collecting_schedules(config) == [(['v'], 7)]
     scheduler = Mock(timezone=UTC)
-    scheduler.get_job.return_value = None
-    _init_collect_job(scheduler, ['v'], 7)
-    assert scheduler.add_job.call_args.kwargs['trigger'].interval.total_seconds() == 420
+    configure_jobs(scheduler, config, warmup_required=False)
+    collection = next(call for call in scheduler.add_job.call_args_list if call.kwargs['id'] == 'collect:v')
+    assert collection.args[1].interval.total_seconds() == 420

@@ -24,12 +24,7 @@ func (reports metricReports) serve(w http.ResponseWriter, r *http.Request) {
 		detail(w, 404, "Unknown forecast product")
 		return
 	}
-	meta, ok := includeMetadata(r)
-	if !ok {
-		detail(w, 422, "meta must be a boolean")
-		return
-	}
-	report, err := reports.read(target, product, meta)
+	report, err := reports.read(target, product)
 	if err != nil {
 		unavailable(w, "Metrics are not ready", err)
 		return
@@ -37,7 +32,7 @@ func (reports metricReports) serve(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, report)
 }
 
-func (reports metricReports) read(target string, product publicforecast.Product, meta bool) (*publicforecast.ForecastMetrics, error) {
+func (reports metricReports) read(target string, product publicforecast.Product) (*publicforecast.ForecastMetrics, error) {
 	var path string
 	for _, variable := range product.Variables {
 		if path = reports.models[variable.Artifact].MetricsReport; path != "" {
@@ -54,15 +49,14 @@ func (reports metricReports) read(target string, product publicforecast.Product,
 	if err != nil {
 		return nil, err
 	}
-	return metricsData(raw, target, product, meta)
+	return metricsData(raw, target, product)
 }
 
-func metricsData(raw []byte, target string, product publicforecast.Product, meta bool) (*publicforecast.ForecastMetrics, error) {
+func metricsData(raw []byte, target string, product publicforecast.Product) (*publicforecast.ForecastMetrics, error) {
 	var report publicforecast.ForecastMetrics
 	if json.Unmarshal(raw, &report) != nil || report.Target != target || report.Variables == nil {
 		return nil, errors.New("invalid evaluation report")
 	}
-	report.Meta = nil
 	available := make([]string, 0, len(report.Variables))
 	for name, variable := range report.Variables {
 		available = append(available, name)
@@ -102,9 +96,7 @@ func metricsData(raw []byte, target string, product publicforecast.Product, meta
 		}
 		report.Variables[name] = variable
 	}
-	if meta {
-		report.Meta = publicforecast.Metadata(product, available)
-	}
+	report.Meta = publicforecast.Metadata(product, available)
 	return &report, nil
 }
 

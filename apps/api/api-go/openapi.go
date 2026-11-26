@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/a-kryvenko/argus/apps/prophet/api-go/publicforecast"
+	"github.com/a-kryvenko/argus/observationcatalog"
 	"github.com/danielgtaylor/huma/v2"
 )
 
@@ -60,7 +61,6 @@ func completeSchemas(registry huma.Registry) {
 }
 
 const (
-	metaParameter           = "meta"
 	trendsParameter         = "trends"
 	observationsParameter   = "observations"
 	limitParameter          = "limit"
@@ -80,13 +80,10 @@ const (
 var observationResolutions = []string{"1m", "5m", "1h", "auto"}
 
 func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
-	meta := queryParameter(metaParameter, "Include descriptive metadata in data.meta. Defaults to false; data values and structure are unchanged.",
-		&huma.Schema{Type: "boolean", Default: false})
 	trends := queryParameter(trendsParameter, "Include observed one-hour changes", &huma.Schema{Type: "boolean", Default: false})
 	observations := queryParameter(observationsParameter, "Comma-separated observations: "+strings.Join(allMetrics, ","), &huma.Schema{Type: "string"})
 	minLimit, maxLimit := float64(1), float64(maxObservationLimit)
 	historyParameters := []*huma.Param{
-		meta,
 		queryParameter(limitParameter, "Maximum number of hourly index points.", &huma.Schema{
 			Type: "integer", Default: defaultObservationLimit, Minimum: &minLimit, Maximum: &maxLimit,
 		}),
@@ -105,26 +102,39 @@ func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/ping", OperationID: "ping", Tags: []string{"ping"},
 		Summary: "Ping"}, a.ping)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations", OperationID: "currentObservations",
-		Tags: []string{"observations"}, Summary: "Current observations", Parameters: []*huma.Param{meta, trends, observations},
+		Tags: []string{"observations"}, Summary: "Current observations", Parameters: []*huma.Param{trends, observations},
 		Description: "Latest available observations, including NOAA L1 solar wind and NOAA primary GOES X-ray and integral proton fluxes.",
 		Errors:      []int{422, 503}}, a.currentObservations)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations/history", OperationID: "observationHistory",
 		Tags: []string{"observations"}, Summary: "Observation history", Parameters: historyParameters, Errors: []int{422, 503},
 		Description: "Missing measurements remain gaps. Times must include a timezone. Wind query ranges are limited to 7 days at 1m, 31 days at 5m and 366 days at 1h. Kp and Dst history is limited to 31 days. GOES history requires an explicit observations selection and accepts ranges of up to 7 days. XRS uses 1-minute samples in W/m². Proton flux uses 5-minute samples in pfu. The limit parameter applies to hourly index points."}, a.observationHistory)
+	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations/catalog", OperationID: "observationCatalog",
+		Tags: []string{"observations"}, Summary: "Observation catalog",
+		Description: "Metric identifiers, units, native cadence and live products."},
+		func(w http.ResponseWriter, _ *http.Request, respond func(observationcatalog.Catalog)) {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			metrics := make([]observationcatalog.Metric, 0, len(allMetrics))
+			for _, metric := range observationcatalog.Metrics {
+				if slices.Contains(allMetrics, metric.ID) {
+					metrics = append(metrics, metric)
+				}
+			}
+			respond(observationcatalog.Catalog{Metrics: metrics, ProductURLs: observationcatalog.ProductURLs})
+		})
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/summary", OperationID: "summary",
 		Tags: []string{"summary"}, Summary: "Get the latest published summary", Errors: []int{503},
 		Description: "Observation groups, chart links and published CME arrival windows."}, a.summary)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/forecasts/atmospheric-density", OperationID: "atmosphericDensity",
-		Tags: []string{"forecasts"}, Summary: "Get the latest atmospheric density forecast", Parameters: []*huma.Param{meta},
-		Errors: []int{422, 503}, Description: "Returns a precomputed 48-hour thermospheric density grid. Drivers are held constant at issue time. Backgrounds use trailing 81-day means. Longitude percentiles describe spatial variation. Returns 503 when the grid is missing, invalid or stale."}, a.density)
+		Tags: []string{"forecasts"}, Summary: "Get the latest atmospheric density forecast",
+		Errors: []int{503}, Description: "Returns a precomputed 48-hour thermospheric density grid. Drivers are held constant at issue time. Backgrounds use trailing 81-day means. Longitude percentiles describe spatial variation. Returns 503 when the grid is missing, invalid or stale."}, a.density)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/forecasts/solar-wind-events", OperationID: "solarWindEvents",
 		Tags: []string{"forecasts"}, Summary: "Get CME arrivals and conditional solar-wind speed forecasts", Errors: []int{503},
 		Description: "Published DONKI/ENLIL Earth impacts with a separate CME-conditioned speed outlook. Nominal, early and late scenarios retain the event peak. Scenario envelopes are not calibrated quantiles or hit probabilities. HSS forecasts are disabled in the current release."}, a.solarWindEvents)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/forecasts/{target}", OperationID: "forecast",
-		Tags: []string{"forecasts"}, Summary: "Get a forecast", Parameters: []*huma.Param{target, meta}, Errors: []int{404, 422, 503},
+		Tags: []string{"forecasts"}, Summary: "Get a forecast", Parameters: []*huma.Param{target}, Errors: []int{404, 503},
 		Description: forecastDescription(targets)}, a.forecast)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/forecasts/{target}/metrics", OperationID: "forecastMetrics",
-		Tags: []string{"forecasts"}, Summary: "Get forecast metrics", Parameters: []*huma.Param{target, meta}, Errors: []int{404, 422, 503},
+		Tags: []string{"forecasts"}, Summary: "Get forecast metrics", Parameters: []*huma.Param{target}, Errors: []int{404, 503},
 		Description: forecastDescription(targets)}, a.metrics)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/forecasts/{target}/verification", OperationID: "forecastVerification",
 		Tags: []string{"forecasts"}, Summary: "Get last 30 days published forecast accuracy", Parameters: []*huma.Param{target},
@@ -133,7 +143,7 @@ func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
 	requestSchema := schemaFor[LeoDragRequest](registry)
 	registry.SchemaFromRef(requestSchema.Ref).Properties[dragHorizonField].Default = defaultDragHorizon
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodPost, Path: "/risks/leo-drag", OperationID: "assessLeoDrag",
-		Tags: []string{"risks"}, Summary: "Estimate drag for a circular LEO orbit", Parameters: []*huma.Param{meta},
+		Tags: []string{"risks"}, Summary: "Estimate drag for a circular LEO orbit",
 		Description: "First-order drag assessment for 200–800 km using a fresh density grid. The 24/48-hour horizon starts at forecast issue time. Optional cumulative altitude-loss thresholds determine risk categories. Returns 422 outside the grid or above 1000 m estimated decay.",
 		RequestBody: &huma.RequestBody{Required: true, Content: schemaContent(requestSchema)},
 		Errors:      []int{413, 422, 503}}, func(w http.ResponseWriter, r *http.Request, respond func(Published[LeoDragAssessment])) {

@@ -2,12 +2,11 @@
 https://www.spaceweather.gov/products/solar-wind
 """
 from datetime import UTC, datetime
-import math
 
 import pandas as pd
 import requests
 
-from clio.providers._contract import dataset
+from clio.providers._contract import sample, samples_frame
 
 SOURCES = {
     "mag": "https://services.swpc.noaa.gov/json/rtsw/rtsw_mag_1m.json",
@@ -35,22 +34,24 @@ def parse_records(kind: str, payload: object, received_at: datetime) -> pd.DataF
             raise ValueError(f"NOAA {kind}: invalid source selection")
         if observed_at > received_at:
             continue
-        values = {}
+        # Last revision wins per spacecraft, including revisions that invalidate it.
+        records[(observed_at, row['source'])] = row
+    selected = {}
+    for (timestamp, source), row in records.items():
+        if not row['active']:
+            continue
+        flagged = row.get('overall_quality') not in (None, 0)
+        if timestamp not in selected or selected[timestamp][0] and not flagged:
+            selected[timestamp] = (flagged, source, row)
+    result = []
+    for timestamp, (flagged, spacecraft, row) in selected.items():
         for metric, field in FIELDS[kind].items():
             try:
-                value = float(row[field]) if row[field] is not None and not isinstance(row[field], bool) else None
-            except (ValueError, TypeError):
-                value = None
-            if value is not None and (not math.isfinite(value) or value <= -9999 or (metric in {"bt", "v", "n", "t"} and value < 0)):
-                value = None
-            values[metric] = value
-        # Last revision wins per spacecraft, including revisions that invalidate it.
-        records[(observed_at, row['source'])] = (row['active'], row.get('overall_quality'), values)
-    selected = {}
-    for (timestamp, source), (active, quality, values) in records.items():
-        if active and quality in (None, 0):
-            selected.setdefault(timestamp, {'timestamp': timestamp, **values})
-    return dataset(pd.DataFrame(selected.values()), FIELDS[kind])
+                fill = float(row[field]) <= -9999
+            except (TypeError, ValueError, OverflowError):
+                fill = False
+            result.append(sample(metric, timestamp, row[field], flagged=flagged or fill, spacecraft=spacecraft))
+    return samples_frame(result)
 
 
 def fetch_records(kind: str) -> pd.DataFrame:

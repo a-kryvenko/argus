@@ -10,7 +10,8 @@ export type IndexSample = {
   interval_status: 'in_progress' | 'completed';
   value: number | null;
   quality?: 'missing' | 'flagged';
-  received_at: string;
+  received_at?: string;
+  source_product?: string;
 };
 export type IndexLatest = {
   generated_at: string;

@@ -116,21 +116,17 @@ def test_live_saves_partial_results_without_normalization(monkeypatch):
     fetch.assert_called_once_with('plasma')
 
 
-def test_live_noop_does_not_refresh_receipt_and_update_requires_priority():
+def test_live_noop_does_not_refresh_receipt_and_revisions_must_be_ordered():
     session = AsyncMock()
     session.execute.return_value = Mock(rowcount=0)
     records = frame(('v', 450., NOW)).assign(source_product='backup').to_dict('records')
-    written = asyncio.run(write_measurements(
-        session, records, policy=WritePolicy.LIVE, source_priorities={'v': ['primary', 'backup']},
-    ))
+    written = asyncio.run(write_measurements(session, records, policy=WritePolicy.LIVE))
     assert written == 0
     session.execute.assert_awaited_once()
     compiled = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     sql = str(compiled)
-    assert 'source_product IS DISTINCT FROM' in sql
-    # A backup may correct its own observations, but not a known primary value.
-    lists = [value for value in compiled.params.values() if isinstance(value, list)]
-    assert ['backup'] in lists and ['primary', 'backup'] in lists
+    assert 'quality IS DISTINCT FROM' in sql
+    assert 'excluded.received_at >= measurement.received_at' in sql
 
 
 def test_live_receipt_uses_actual_changed_record_time():
@@ -139,7 +135,7 @@ def test_live_receipt_uses_actual_changed_record_time():
     session.execute.return_value = Mock(rowcount=1)
     records = frame(('v', 450., NOW - timedelta(minutes=1))).assign(
         source_product='primary', received_at=received).to_dict('records')
-    asyncio.run(write_measurements(session, records, policy=WritePolicy.LIVE, source_priorities={'v': ['primary']}))
+    asyncio.run(write_measurements(session, records, policy=WritePolicy.LIVE))
     assert session.execute.await_count == 1
     receipt = session.execute.call_args_list[0].args[0].compile(dialect=postgresql.dialect())
     assert receipt.params['received_at_m0'] == received
@@ -154,14 +150,14 @@ def storage(monkeypatch):
     return session
 
 
-def test_locked_product_does_not_fetch_or_write(monkeypatch):
+def test_locked_product_fetches_outside_transaction_without_writing(monkeypatch):
     session = storage(monkeypatch)
     session.execute.return_value = Mock(scalar_one=Mock(return_value=False))
-    fetch = Mock(side_effect=AssertionError('must not fetch'))
+    fetch = Mock(return_value=frame(('bz', -3., NOW)).assign(source_product='swpc.rtsw_mag'))
     monkeypatch.setitem(live.LIVE_LOADERS, 'swpc.rtsw_mag', fetch)
     result = asyncio.run(live.collect_numeric(load_observation_config(), ['bz'], now=NOW))
-    assert result['downloaded_measurements'] == result['stored_measurements'] == 0
-    fetch.assert_not_called()
+    assert result['downloaded_measurements'] == 1 and result['stored_measurements'] == 0
+    fetch.assert_called_once()
     session.commit.assert_not_awaited()
 
 
@@ -180,7 +176,7 @@ def test_collection_writes_full_feed_once_and_reports_only_usable_selected_value
     assert session.execute.await_count == 2
     insert = session.execute.call_args_list[1].args[0].compile(dialect=postgresql.dialect())
     assert [insert.params[f'metric_m{i}'] for i in range(3)] == ['bx', 'bz', 'bt']
-    assert not any('quality' in name for name in insert.params)
+    assert all(insert.params[f'quality_m{i}'] is None for i in range(3))
     assert insert.params['received_at_m2'] >= NOW
     session.commit.assert_awaited_once()
 
@@ -206,7 +202,7 @@ def test_rejected_provider_records_are_not_written(monkeypatch):
     report = asyncio.run(live.collect_numeric(load_observation_config(), ['kp'], now=NOW))
     assert report['downloaded_measurements'] == 0
     assert report['failed_metrics'] == ['kp']
-    assert session.execute.await_count == 1  # Lock only; no invalid measurements inserted.
+    session.execute.assert_not_awaited()
 
 
 def test_f107_uses_common_persistence_and_keeps_last_duplicate(monkeypatch):
@@ -222,5 +218,5 @@ def test_f107_uses_common_persistence_and_keeps_last_duplicate(monkeypatch):
     insert = session.execute.call_args.args[0].compile(dialect=postgresql.dialect())
     assert insert.params['value_m0'] == 160.
     assert insert.params['source_product_m0'] == 'swpc.f107'
-    assert 'quality' not in str(insert)
+    assert insert.params['quality_m0'] is None
     session.commit.assert_awaited_once()

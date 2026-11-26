@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import signal
+from datetime import UTC, datetime
 from pathlib import Path
 
 import sentry_sdk
@@ -12,42 +13,33 @@ from apscheduler.events import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from common.runtime import setup_sentry
 
 from clio.config import load_observation_config
 from clio.scheduler import warmup
-from clio.scheduler.jobs import run_backfill, run_cleanup, run_collect, run_donki, run_normalize
+from clio.scheduler.jobs import restore_donki, run_backfill, run_cleanup, run_collect, run_donki, run_normalize
 from clio.scheduler.schedule import collecting_schedules
 
 logger = logging.getLogger(__name__)
 
 
-def _init_job(scheduler, func, job_id, args=(), **schedule):
-    options = {
-        "func": func,
-        "args": args,
-        "trigger": CronTrigger(timezone=scheduler.timezone, **schedule),
-        "name": job_id,
-    }
-    if scheduler.get_job(job_id) is None:
-        scheduler.add_job(id=job_id, **options)
-    else:
-        scheduler.modify_job(job_id, **options)
+def configure_jobs(scheduler, config, *, warmup_required):
+    def schedule(func, trigger, job_id, *, args=(), priority=False):
+        options = {"next_run_time": datetime.now(UTC)} if priority and warmup_required else {}
+        scheduler.add_job(func, trigger, id=job_id, args=args, **options)
 
-
-def _init_collect_job(scheduler, metrics, minutes):
-    job_id = 'collect:' + '|'.join(metrics)
-    options = {
-        "func": run_collect,
-        "args": (metrics,),
-        "trigger": IntervalTrigger(minutes=minutes, timezone=scheduler.timezone),
-        "name": job_id
-    }
-    if scheduler.get_job(job_id) is None:
-        scheduler.add_job(id=job_id, **options)
-    else:
-        scheduler.modify_job(job_id, **options)
+    for metrics, minutes in collecting_schedules(config):
+        schedule(run_collect, IntervalTrigger(minutes=minutes, timezone=UTC),
+                 "collect:" + "|".join(metrics), args=(metrics,), priority=True)
+    if config.solar_wind_events.enabled:
+        schedule(restore_donki, DateTrigger(timezone=UTC), "restore-donki")
+        schedule(run_donki, IntervalTrigger(minutes=config.solar_wind_events.poll_minutes, timezone=UTC),
+                 "donki", args=(config.solar_wind_events,), priority=True)
+    schedule(run_backfill, CronTrigger(hour="*/6", minute=0, timezone=UTC), "backfill", priority=True)
+    schedule(run_normalize, CronTrigger(minute=0, timezone=UTC), "normalize")
+    schedule(run_cleanup, CronTrigger(minute=15, timezone=UTC), "cleanup")
 
 
 def on_job_finished(event):
@@ -75,7 +67,8 @@ def on_job_finished(event):
             or bool(result.get("failed"))
         )
 
-        if incomplete:
+        errors = any(attempt.get("error") for attempt in result.get("source_attempts", ()))
+        if incomplete and (event.job_id != "backfill" or errors or result.get("failed_metrics")):
             details = {
                 "status": result.get("status"),
                 "failed_metrics": result.get("failed_metrics"),
@@ -114,37 +107,29 @@ def entrypoint(argv=None):
         sentry_sdk.flush(timeout=2)
 
 async def main(heartbeat_path: Path):
+    required = warmup.needs_warmup(warmup.read_state(heartbeat_path))
+    state = {"warmup_pending": required, "scheduler_started": False, "jobs": {}}
+    warmup.write_state(heartbeat_path, state)
     scheduler = AsyncIOScheduler(
+        timezone=UTC,
         job_defaults={
             "misfire_grace_time": None,
             "coalesce": True,
             "max_instances": 1,
         },
     )
-    scheduler.add_listener(
-        on_job_finished,
-        EVENT_JOB_ERROR | EVENT_JOB_EXECUTED,
-    )
+    def report(event):
+        status = "failed" if event.code == EVENT_JOB_ERROR else "complete"
+        if isinstance(event.retval, dict):
+            status = event.retval.get("status", status)
+        if event.job_id == "backfill" and status in {"complete", "partial"}:
+            state["warmup_pending"] = False
+        state["jobs"][event.job_id] = {"status": status, "finished_at": datetime.now(UTC).isoformat()}
+        on_job_finished(event)
 
-    """
-    The Core of worker.
-    Scheduled jobs
-    """
-    config = load_observation_config()
-    schedules = collecting_schedules(config)
-    for metrics, minutes in schedules:
-        _init_collect_job(scheduler, metrics, minutes)
+    scheduler.add_listener(report, EVENT_JOB_ERROR | EVENT_JOB_EXECUTED)
+    configure_jobs(scheduler, load_observation_config(), warmup_required=required)
 
-    if config.solar_wind_events.enabled:
-        scheduler.add_job(
-            run_donki, IntervalTrigger(minutes=config.solar_wind_events.poll_minutes, timezone=scheduler.timezone),
-            args=(config.solar_wind_events,), id="donki",
-        )
-
-    _init_job(scheduler, run_backfill, "backfill", hour="*/6", minute=0)
-    _init_job(scheduler, run_normalize, "normalize", minute=0)
-    _init_job(scheduler, run_cleanup, "cleanup", minute=15)
-    
     scheduler_stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
     main_task = asyncio.current_task()
@@ -156,15 +141,6 @@ async def main(heartbeat_path: Path):
         lambda event: scheduler_stopped.set(),
         EVENT_SCHEDULER_SHUTDOWN,
     )
-
-    """
-    Hearthbeat.
-    To be able warm up whole application after long downtime.
-    Run regular backfill + all metrics collecting
-    """
-    required = warmup.needs_warmup(warmup.read_state(heartbeat_path))
-    state = {"warmup_pending": required}
-    warmup.write_state(heartbeat_path, state)
 
     heartbeat_task = asyncio.create_task(warmup.heartbeat(heartbeat_path, state))
 
@@ -179,20 +155,14 @@ async def main(heartbeat_path: Path):
     heartbeat_task.add_done_callback(on_heartbeat_finished)
 
     try:
-        if required:
-            await warmup.run(
-                [metrics for metrics, _ in schedules],
-                on_job_finished,
-                donki_policy=config.solar_wind_events,
-            )
-            state["warmup_pending"] = False
-            warmup.write_state(heartbeat_path, state)
-
         scheduler.start()
+        state["scheduler_started"] = True
+        warmup.write_state(heartbeat_path, state)
         await asyncio.Event().wait()
     except asyncio.CancelledError:
         logger.info("Worker stopped")
     finally:
+        state["scheduler_started"] = False
         if scheduler.running:
             logger.info("Stopping scheduler...")
             scheduler.shutdown(wait=False)

@@ -1,12 +1,17 @@
-"""Group configured observations by polling interval."""
+"""Batch metrics that share a provider and polling interval."""
+
+from clio.ingestion.utils.products import OBSERVATIONS
 
 
 def collecting_schedules(config):
     groups = {}
     for metric, policy in config.observations.items():
-        if policy.sources.live:
-            groups.setdefault(policy.poll_minutes, []).append(metric)
-    return [(metrics, minutes) for minutes, metrics in groups.items()]
+        if not policy.sources.live:
+            continue
+        definition = OBSERVATIONS[metric]
+        lane = definition.file_kind if definition.kind == 'file' else policy.sources.live[0]
+        groups.setdefault((definition.kind, lane, policy.poll_minutes), []).append(metric)
+    return [(metrics, minutes) for (_, _, minutes), metrics in groups.items()]
 
 
 def poll_seconds(metric: str) -> int:

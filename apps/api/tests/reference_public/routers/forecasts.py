@@ -5,7 +5,6 @@ from typing import Annotated, Literal
 
 from apps.api.tests.reference_public.schemas.forecast import Forecast
 from apps.api.tests.reference_public.schemas.metrics import ForecastMetrics
-from apps.api.tests.reference_public.schemas.metadata import MetaQuery
 from common.schemas.response import ApiResponse, success_response
 from apps.api.tests.reference_public.services.forecasts.products import (
     load_forecast,
@@ -69,10 +68,9 @@ def solar_wind_events():
 )
 def forecast(
     target: Annotated[TargetType, Path(description=TARGET_DESCRIPTION)],
-    meta: MetaQuery = False,
 ):
     try:
-        return success_response(load_forecast(_product(target), meta=meta))
+        return success_response(load_forecast(_product(target)))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Forecast is not ready")
 
@@ -87,10 +85,9 @@ def forecast(
 )
 def metrics(
     target: Annotated[str, Path(description=TARGET_DESCRIPTION)],
-    meta: MetaQuery = False,
 ):
     try:
-        return success_response(load_metrics(_product(target), meta=meta))
+        return success_response(load_metrics(_product(target)))
     except ArtifactNotReadyError:
         raise HTTPException(status_code=503, detail="Metrics are not ready")
 

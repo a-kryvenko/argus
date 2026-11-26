@@ -1,11 +1,10 @@
 """Native NOAA estimated Kp and Kyoto real-time Dst, without gap filling."""
 from datetime import UTC, datetime
-import math
 
 import pandas as pd
 import requests
 
-from clio.providers._contract import dataset
+from clio.providers._contract import sample, samples_frame
 
 SOURCES = {
     'kp': 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',
@@ -17,7 +16,7 @@ def parse_records(metric: str, payload: object, received_at: datetime) -> pd.Dat
     if not isinstance(payload, list) or not payload:
         raise ValueError(f'{metric}: expected a nonempty JSON record list')
     field = 'Kp' if metric == 'kp' else 'dst'
-    records = {}
+    records = []
     for row in payload:
         if not isinstance(row, dict) or not {'time_tag', field} <= row.keys():
             raise ValueError(f'{metric}: unexpected source schema')
@@ -30,23 +29,15 @@ def parse_records(metric: str, payload: object, received_at: datetime) -> pd.Dat
             raise ValueError(f'{metric}: unexpected interval alignment')
         if start > received_at:
             continue
+        no_stations = metric == 'kp' and row.get('station_count') == 0
         try:
-            value = float(row[field]) if row[field] is not None and not isinstance(row[field], bool) else None
-        except (TypeError, ValueError):
-            value = None
-        if value is not None and (not math.isfinite(value) or abs(value) >= 9999 or (metric == 'kp' and not 0 <= value <= 9)):
-            value = None
-        values = {metric: value}
-        if metric == 'kp':
-            try:
-                ap = row.get('a_running')
-                values['ap'] = float(ap) if ap is not None and not isinstance(ap, bool) else None
-            except (ValueError, TypeError):
-                values['ap'] = None
-            if row.get('station_count') == 0:
-                values = dict.fromkeys(values)
-        records[start] = {'timestamp': start, **values}
-    return dataset(pd.DataFrame(records.values()), ('kp', 'ap') if metric == 'kp' else ('dst',))
+            fill = abs(float(row[field])) >= 9999
+        except (TypeError, ValueError, OverflowError):
+            fill = False
+        records.append(sample(metric, start, row[field], flagged=no_stations or fill))
+        if metric == 'kp' and ('a_running' in row or no_stations):
+            records.append(sample('ap', start, row.get('a_running'), flagged=no_stations))
+    return samples_frame(records)
 
 
 def fetch_records(metric: str) -> pd.DataFrame:

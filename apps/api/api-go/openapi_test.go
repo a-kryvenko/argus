@@ -40,6 +40,9 @@ func TestGeneratedOpenAPIContract(t *testing.T) {
 	}
 	for _, methods := range gotPaths {
 		for _, operation := range contractObject(methods) {
+			if contractParameters(contractObject(operation)["parameters"])["query meta"] != nil {
+				t.Errorf("unexpected metadata switch in %v", contractObject(operation)["operationId"])
+			}
 			for status, reply := range contractObject(contractObject(operation)["responses"]) {
 				if len(status) == 3 && status[0] == '2' {
 					assertNoExamples(t, reply, gotSchemas, make(map[string]bool))

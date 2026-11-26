@@ -13,8 +13,10 @@ def snapshot_values(observed, url, source):
     from clio.providers import gong as provider
     with TemporaryDirectory(prefix='clio-gong-') as temporary:
         path = Path(temporary) / 'original.fits'
-        path.write_bytes(provider.download(url))
-        return save(path, observation='gong', observed_at=observed,
+        content = provider.download(url)
+        recorded_at = provider.validate_magnetogram(content, observed)
+        path.write_bytes(content)
+        return save(path, observation='gong', observed_at=recorded_at,
                     source_product=source, details={'source_url': url})
 
 
@@ -70,10 +72,11 @@ async def _collect(policy, *, source, mode, now, start, end):
             if int(hour.timestamp()) % (resolution * 60) or hour in hours or (historical and hour not in required):
                 continue
             try:
-                await asyncio.to_thread(snapshot_values, observed, url, source)
+                recorded = await asyncio.to_thread(snapshot_values, observed, url, source)
                 report['received'] += 1
                 hours.add(hour)
-                latest = max(latest, observed) if latest else observed
+                received_at = recorded['observed_at']
+                latest = max(latest, received_at) if latest else received_at
             except Exception as exc:
                 report['failed'] += 1
                 if len(report['source_errors']) < 20:

@@ -1,15 +1,15 @@
 """Convert and validate provider records; adapt historical loaders."""
 from functools import cache, partial
-import math
 
 import pandas as pd
 
-from clio.db.models.measurement import MEASUREMENT_METRICS
 from clio.ingestion.utils.products import OBSERVATIONS, PRODUCTS
 
 
 def wide_to_measurements(frame: pd.DataFrame) -> pd.DataFrame:
-    metrics = [metric for metric in (*MEASUREMENT_METRICS, 'bt') if metric in frame]
+    if 'metric' in frame:
+        return frame.copy()
+    metrics = [metric for metric in frame if metric in OBSERVATIONS and OBSERVATIONS[metric].kind == 'numeric']
     return (frame.melt(id_vars='timestamp', value_vars=metrics, var_name='metric', value_name='value')
             .rename(columns={'timestamp': 'observed_at'}).dropna(subset=['observed_at', 'value']))
 
@@ -21,9 +21,7 @@ class WideHistoryAdapter:
 
     def fetch(self, start, end):
         frame = self.loader(start, end)
-        columns = [column for column in self.metrics if column in frame]
-        frame = wide_to_measurements(frame[['timestamp', *columns]])
-        return clean_records(frame, start, end, self.metrics)
+        return clean_records(wide_to_measurements(frame), start, end, self.metrics)
 
 
 def clean_records(frame, start, end, metrics):
@@ -33,8 +31,8 @@ def clean_records(frame, start, end, metrics):
     def accepts(row):
         if row.metric not in metrics:
             return False
-        if row.metric == 'bt':
-            return math.isfinite(row.value) and row.value >= 0
+        if getattr(row, 'quality', None) in ('flagged', 'missing'):
+            return pd.isna(row.value)
         return OBSERVATIONS[row.metric].accepts(row.value)
 
     valid = pd.Series([accepts(row) for row in frame.itertuples(index=False)],

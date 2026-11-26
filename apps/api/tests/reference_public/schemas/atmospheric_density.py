@@ -24,14 +24,14 @@ class DensityForecast(BaseModel):
     observed_at: datetime
     dtc_observed_at: datetime | None = None
     geomagnetic_observed_at: datetime | None = None
-    background_interpolated: bool = Field(description='True when background drivers include gap-filled daily values. Details are available with meta=true.')
+    background_interpolated: bool = Field(description='True when background drivers include gap-filled daily values.')
     horizon_hours: int
     predictions: list[DensityPoint]
     reference: DensityBackground | None = None
     meta: DensityMetadata | None = metadata_field()
 
     @classmethod
-    def from_internal(cls, forecast: InternalDensityForecast, *, meta: bool = False):
+    def from_internal(cls, forecast: InternalDensityForecast):
         data = forecast.model_dump()
         return cls(**data, background_interpolated=any(forecast.background_interpolated_days.values()),
-                   meta=DensityMetadata.model_validate(data) if meta else None)
+                   meta=DensityMetadata.model_validate(data))

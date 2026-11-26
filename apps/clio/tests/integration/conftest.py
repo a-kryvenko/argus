@@ -23,6 +23,7 @@ def file_database(database, project_config, monkeypatch, object_store):
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     from clio.db import session as db
+    from clio.db.models.donki_poll_status import DonkiPollStatus
     from clio.db.models.file import File
     from clio.db.models.file_observation import FileObservation
     from clio.db.models.measurement import Measurement
@@ -30,7 +31,7 @@ def file_database(database, project_config, monkeypatch, object_store):
     try:
         with engine.begin() as connection:
             connection.exec_driver_sql('CREATE SCHEMA clio')
-            for model in (File, FileObservation, Measurement):
+            for model in (File, FileObservation, Measurement, DonkiPollStatus):
                 model.__table__.create(connection)
         yield engine
     finally:

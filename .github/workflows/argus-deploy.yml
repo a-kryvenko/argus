@@ -99,7 +99,21 @@ jobs:
         shell: bash
         run: |
           args=()
-          if [[ "$PROJECT_PATH" == apps/* ]]; then
+          if [[ "$PROJECT_PATH" == apps/clio ]]; then
+            test_container="clio-test-postgres"
+            docker run --rm --detach --name "$test_container" --publish 127.0.0.1::5432 \
+              --env POSTGRES_PASSWORD=clio-test postgres:17-alpine > /dev/null
+            trap 'docker stop "$test_container" > /dev/null' EXIT
+            for attempt in {1..40}; do
+              if docker exec "$test_container" pg_isready -h 127.0.0.1 -U postgres -d postgres > /dev/null; then
+                break
+              fi
+              sleep 0.5
+            done
+            docker exec "$test_container" pg_isready -h 127.0.0.1 -U postgres -d postgres
+            test_address=$(docker port "$test_container" 5432/tcp)
+            export TEST_DATABASE_ADMIN_DSN="postgresql://postgres:clio-test@${test_address}/postgres"
+          elif [[ "$PROJECT_PATH" == apps/* ]]; then
             args+=(--ignore="$TESTS_PATH/integration")
           fi
 

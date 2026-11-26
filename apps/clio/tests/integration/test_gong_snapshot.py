@@ -1,7 +1,10 @@
 """The GONG collector stores original objects and metadata without local archives."""
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+from io import BytesIO
 from unittest.mock import Mock
+from astropy.io import fits
+import numpy as np
 import pandas as pd
 from sqlalchemy import select
 from clio.db.models.file_observation import FileObservation
@@ -15,7 +18,14 @@ def test_gong_collection_writes_s3_reference_and_retains_existing_snapshot(file_
     now = datetime.now(UTC).replace(minute=30,second=0,microsecond=0)
     observed = now.replace(minute=0)
     monkeypatch.setattr(provider,'candidates',Mock(return_value=pd.DataFrame([dict(timestamp=observed,gong_url='https://example.test/gong.fits')])) )
-    download = Mock(return_value=b'original FITS')
+    picture = fits.PrimaryHDU(np.ones((2, 2), dtype='float32'))
+    picture.header['TELESCOP'] = 'GONG'
+    picture.header['IMTYPE'] = 'MAGNETIC'
+    picture.header['MAPDATE'] = observed.date().isoformat()
+    picture.header['MAPTIME'] = observed.strftime('%H:%M:%S')
+    contents = BytesIO()
+    picture.writeto(contents)
+    download = Mock(return_value=contents.getvalue())
     monkeypatch.setattr(provider,'download',download)
     async def check():
         try:

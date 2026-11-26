@@ -12,6 +12,8 @@ from tests.support.clio import clio_server, migrate_clio
 
 LATEST = '/internal/v1/observations/latest'
 HISTORY = '/internal/v1/observations/history'
+SERIES = '/internal/v1/observations/series'
+MODEL_INPUTS = '/internal/v1/observations/model-inputs'
 FILES = '/internal/v1/files'
 SDO = '/internal/v1/observations/sdo'
 EVENTS = '/internal/v1/observations/solar-wind-events/inputs'
@@ -62,7 +64,7 @@ def test_go_api_contract(go_api):
         check('/health/live', 200)
         check('/health/ready', 503)
         check(LATEST, 503, headers=headers)
-        for path in (HISTORY, FILES, SDO, EVENTS):
+        for path in (HISTORY, SERIES, MODEL_INPUTS, FILES, SDO, EVENTS):
             check(path, 401)
         check(SDO, 503, headers=headers)
         check(EVENTS, 503, headers=headers)
@@ -78,10 +80,10 @@ def test_go_api_contract(go_api):
                     [
                         ('v', now, 400.5, 'swpc.rtsw_plasma'), ('v', recent, None, 'swpc.rtsw_plasma'),
                         ('v', now + timedelta(hours=1), 999, 'omni.hourly'),
-                        ('bz', now, -3.75, 'swpc.rtsw_mag'), ('dst', now, -12.5, None),
-                        ('f10_7', now, 109.8, None), ('kp', recent, 10.0, None), ('ap', recent, 2.9, None),
+                        ('bz', now, -3.75, 'swpc.rtsw_mag'), ('dst', now, -12.5, 'swpc.dst'),
+                        ('f10_7', now, 109.8, 'swpc.f107'), ('kp', recent, 10.0, 'swpc.kp'), ('ap', recent, 2.9, 'swpc.kp'),
                         ('n', recent, float('inf'), 'swpc.rtsw_plasma'), ('t', recent, float('nan'), 'swpc.rtsw_plasma'),
-                        ('s10', recent, 100.0, None), ('s10_81mean', recent, 110.25, None),
+                        ('s10', recent, 100.0, None), ('s10_81mean', recent, 110.25, 'solfsmy.means'),
                         ('bt', recent, -1.0, 'swpc.rtsw_mag'),
                     ],
                 )
@@ -92,11 +94,11 @@ def test_go_api_contract(go_api):
             check(LATEST + '?metrics=invalid&metrics=bz,%20v,bz', 200, headers=headers)
             data = check(LATEST, 200, headers=headers)
             assert data['data']['points'] == [
-                {'time': '2026-11-24T12:00:00Z', 'bz': -3.75, 'dst': -12, 'f10_7': 109},
-                {'time': '2026-11-24T12:01:00.120000Z', 'v': None, 'kp': None, 'ap': 2,
-                 'n': None, 't': None, 's10': None, 's10_81mean': 110.25, 'bt': None},
+                {'time': '2026-11-24T12:00:00Z', 'bz': -3.75, 'dst': -12.5, 'f10_7': 109.8},
+                {'time': '2026-11-24T12:01:00.120000Z', 'v': None, 'kp': None, 'ap': 2.9,
+                 'n': None, 't': None, 's10_81mean': 110.25, 'bt': None},
             ]
-            assert type(data['data']['points'][0]['dst']) is int
+            assert type(data['data']['points'][0]['dst']) is float
             check_history(check, connection, now, headers)
             check_explicit_history(check, connection, now, headers)
             check_file_routes(check, connection, now, headers)
@@ -128,14 +130,15 @@ def check_history(check, connection, now, headers):
             ('s10_81mean', start, 105.5, 'solfsmy.means_archive'),
             ('s10_81mean', start + timedelta(minutes=7), 110.5, 'solfsmy.means'),
         ])
-    hourly = (check(HISTORY, 200, headers=headers, params=params))['data']
+    hourly = (check(MODEL_INPUTS, 200, headers=headers, params=params))['data']
     assert hourly['points'][0] == {
         'time': start.isoformat().replace('+00:00', 'Z'), 'bz': 0., 'v': 400.5,
-        'ap': 2, 'bt': 5., 's10_81mean': 105.5,
+        'ap': 2.9, 'bt': 5., 's10_81mean': 105.5, 'wind_time_basis': 'legacy',
     }
     check(HISTORY, 200, headers=headers, params={**params, 'interval': '1m'})
     five = (check(HISTORY, 200, headers=headers, params={**params, 'interval': '5m'}))['data']
-    assert [(row['v'], row['ap']) for row in five['points']] == [(400, 2), (None, None)]
+    assert [row['v'] for row in five['points'] if 'v' in row] == [400, None]
+    assert [row['ap'] for row in five['points'] if 'ap' in row] == [1.9, 2.9]
     check(HISTORY, 200, headers=headers, params={
         **params, 'interval': '5m', 'to': (now - timedelta(minutes=1)).isoformat(),
         'from': (start + timedelta(seconds=1)).isoformat(),
@@ -158,7 +161,8 @@ def check_explicit_history(check, connection, now, headers):
     with connection.cursor() as cursor:
         cursor.executemany('''INSERT INTO clio.measurement (metric, observed_at, value, source_product)
             VALUES (%s, %s, %s, %s)''', [
-            ('v', at, 710, 'omni.hourly'), ('bx', at, 3, 'omni.hourly'),
+            ('v', at, 710, 'omni.hourly'), ('v', at, 460, 'swpc.rtsw_plasma'),
+            ('bt', at, 14, 'omni.hourly'), ('bx', at, 3, 'omni.hourly'),
             ('by', at, -4, 'omni.hourly'), ('bz', at, 12, 'omni.hourly'),
             ('v', at + timedelta(minutes=1), 400, 'swpc.rtsw_plasma'),
             ('v', at + timedelta(minutes=36), 520, 'swpc.rtsw_plasma'),
@@ -175,8 +179,8 @@ def check_explicit_history(check, connection, now, headers):
     archive = check(HISTORY, 200, headers=headers,
                     params={**params, 'metrics': 'v,bt', 'time_basis': 'near_earth', 'interval': '1h'})['data']
     assert archive == {'time_basis': 'near_earth', 'interval': '1h', 'points': [
-        {'time': at_iso, 'v': 710, 'bt': 13},
-        {'time': (at + timedelta(hours=1)).isoformat().replace('+00:00', 'Z'), 'v': 777, 'bt': None},
+        {'time': at_iso, 'v': 710, 'bt': 14},
+        {'time': (at + timedelta(hours=1)).isoformat().replace('+00:00', 'Z'), 'v': 777},
     ]}
     xrs = check(HISTORY, 200, headers=headers,
                 params={**params, 'metrics': 'xrs_b', 'interval': '1m'})['data']['points']
@@ -184,12 +188,34 @@ def check_explicit_history(check, connection, now, headers):
     protons = check(HISTORY, 200, headers=headers,
                     params={**params, 'metrics': 'proton_10mev', 'interval': '5m'})['data']['points']
     assert protons == [{'time': (at + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), 'proton_10mev': 0.312}]
+    read = check(SERIES, 200, headers=headers, params={**params, 'metrics': 'v,bt,xrs_b,proton_10mev',
+        'time_basis': 'l1', 'interval': '1h'})['data']
+    assert read['v']['points'][0] == {
+        'observed_at': at_iso, 'value': 460, 'count': 3, 'expected_count': 60,
+        'min': 400, 'max': 520, 'source_product': 'swpc.rtsw_plasma',
+    }
+    assert read['xrs_b']['resolution_seconds'] == 60 and read['proton_10mev']['resolution_seconds'] == 300
+    archive = check(SERIES, 200, headers=headers,
+                    params={**params, 'metrics': 'v,bt', 'time_basis': 'near_earth', 'interval': '1h'})['data']
+    assert archive['bt']['points'][0]['value'] == 14
+    assert archive['v']['points'][0]['value'] == 710
+    interval_start = at.replace(hour=0)
+    connection.execute('''INSERT INTO clio.measurement
+        (metric, observed_at, value, source_product) VALUES ('ap', %s, 5.67, 'swpc.kp')''', [interval_start])
+    active = check(SERIES, 200, headers=headers, params={
+        'from': (interval_start + timedelta(hours=1)).isoformat(),
+        'to': (interval_start + timedelta(hours=2)).isoformat(), 'metrics': 'ap',
+    })['data']['ap']
+    assert active['time_basis'] == 'source_interval_start'
+    assert active['points'][0]['value'] == 5.67
 
 
-def add_file_observation(connection, observation, at, key, *, product='test', source_id=None, details=None):
+
+def add_file_observation(connection, observation, at, key, *, product='test', source_id=None, details=None,
+                         bucket='argus-test'):
     file_id = uuid4()
     connection.execute('INSERT INTO clio.files (id, timestamp, bucket, key) VALUES (%s, %s, %s, %s)',
-                       (file_id, at + timedelta(seconds=1), 'argus-test', key))
+                       (file_id, at + timedelta(seconds=1), bucket, key))
     connection.execute('''INSERT INTO clio.file_observation
         (id, observation, observed_at, source_product, source_id, file_id, sha256, details)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
@@ -207,6 +233,7 @@ def check_file_routes(check, connection, now, headers):
     file_id = add_file_observation(connection, 'goes', now, 'goes/a', product='goes.live',
                                    details={'source_metadata': 'irrelevant'})
     add_file_observation(connection, 'goes', now, 'goes/excluded', source_id='source-event')
+    add_file_observation(connection, 'goes', now, 'goes/deleting', details={'file_state': 'deleting'})
     add_file_observation(connection, 'goes', now + timedelta(hours=1), 'goes/excluded-end')
     data = (check(FILES, 200, headers=headers, params=params))['data']
     assert [row['file']['key'] for row in data] == ['goes/a', 'goes/z']
@@ -219,19 +246,22 @@ def check_file_routes(check, connection, now, headers):
     assert check(FILES, 200, headers=headers, params={**params, 'observation': 'other'})['data'] == []
 
     for channel, key in [('193', 'new/é +?@/original.jpg'), ('094', '094/original.jpg')]:
-        add_file_observation(connection, 'aia_' + channel + '_browse', now, key, details={
+        add_file_observation(connection, 'aia_' + channel + '_browse', now, key, bucket='argus-public', details={
             'channel': channel, 'asset_id': f'2026112412_{channel}_' + 'a'*64,
-            'captured_at': now.isoformat(), 'source_updated_at': '2026-11-24T14:00:00+01:00',
+            'captured_at': None, 'source_updated_at': '2026-11-24T14:00:00+01:00',
+            'extra_files': [key.replace('original.jpg', '512.webp'), 'unrelated/1024.webp'],
         })
     add_file_observation(connection, 'aia_193_browse', now - timedelta(hours=1), 'old/original.jpg')
     images = (check(SDO, 200, headers=headers))['data']['images']
     assert [image['channel'] for image in images] == ['094', '193']
     assert images[1]['urls']['jpg.original'].endswith('/new/%C3%A9%20%2B%3F%40/original.jpg')
-    assert 'jpg.4096' not in images[1]['urls']
+    assert set(images[1]['urls']) == {'jpg.original', 'webp.512'}
+    assert images[1]['captured_at'] is None
 
     add_file_observation(connection, 'aia_193_browse', now + timedelta(hours=1), 'bad/original.jpg',
+                         bucket='argus-public',
                          details={'channel': '193', 'asset_id': 'invalid', 'captured_at': now.isoformat()})
-    check(SDO, 503, headers=headers)
+    assert check(SDO, 200, headers=headers)['data']['images'] == images
 
 
 def check_events(check, connection, now, headers):
@@ -246,7 +276,7 @@ def check_events(check, connection, now, headers):
     })
     add_file_observation(connection, 'donki.CME', now, 'donki/cme1', product='CME', source_id='cme1', details={
         'kind': 'event', 'data': {'event_id': 'cme1', 'kind': 'cme', 'status': 'detected', 'source': 'DONKI',
-                                  'available_at': stamp, 'arrival_receipts': [receipt]},
+                                  'available_at': stamp, 'arrival_receipts': [receipt], 'optional': 'future field'},
     })
     add_file_observation(connection, 'donki.WSAEnlilSimulations', now, 'donki/run1', product='WSAEnlilSimulations',
                          source_id='run1', details={'kind': 'arrival', 'data': {

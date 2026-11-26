@@ -8,4 +8,8 @@ require github.com/danielgtaylor/huma/v2 v2.38.0
 
 require github.com/a-kryvenko/argus/apps/prophet/api-go v0.0.0
 
+require github.com/a-kryvenko/argus/observationcatalog v0.0.0
+
 replace github.com/a-kryvenko/argus/apps/prophet/api-go => ../../prophet/api-go
+
+replace github.com/a-kryvenko/argus/observationcatalog => ../../../packages/common/src/common/observationcatalog

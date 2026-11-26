@@ -3,7 +3,7 @@ from contextlib import ExitStack
 from datetime import datetime, timedelta
 import logging
 
-from sqlalchemy import select, delete, exists, or_, and_
+from sqlalchemy import select, delete, exists, or_, and_, update
 
 from common.data import datamanager
 from clio.db import session as db
@@ -14,6 +14,7 @@ from clio.db.models.measurement import Measurement
 from clio.db.models.normalized_observation import NormalizedObservation
 from clio.db.session import get_db_session
 from clio.ingestion.utils.products import PRODUCTS, OBSERVATIONS
+from clio.ingestion.utils.file_observations import file_state
 
 logger = logging.getLogger(__name__)
 MAX_FILE_DELETIONS = 1000
@@ -46,16 +47,31 @@ async def cleanup(config, now: datetime):
     return result
 
 
-def expire_files(observation, cutoff, *, max_files):
+def expire_files(observation, cutoff, *, max_files, upload_cutoff):
     counts = dict(expired=0, files_deleted=0, failed=0)
     with db.get_sync_engine().connect() as connection:
         rows = connection.execute(select(FileObservation.id, FileObservation.file_id, FileObservation.details,
             File.bucket, File.key).join(File, File.id == FileObservation.file_id)
-            .where(FileObservation.observation == observation, FileObservation.observed_at < cutoff)
+            .where(FileObservation.observation == observation, FileObservation.source_id.is_(None),
+                   or_(file_state() == 'deleting',
+                       and_(file_state() == 'uploading', File.timestamp < upload_cutoff),
+                       and_(file_state().is_(None), FileObservation.observed_at < cutoff)))
             .order_by(FileObservation.observed_at).limit(max_files)).mappings().all()
     for row in rows:
         try:
-            for key in [row['key'], *(row['details'] or {}).get('extra_files', [])]:
+            details = row['details'] or {}
+            others = exists(select(FileObservation.id).where(
+                FileObservation.file_id == row['file_id'], FileObservation.id != row['id']))
+            with db.get_sync_engine().begin() as connection:
+                if connection.scalar(select(others)):
+                    connection.execute(delete(FileObservation).where(FileObservation.id == row['id']))
+                    counts['expired'] += 1
+                    continue
+                # Commit the tombstone before touching storage. Failed deletes
+                # remain hidden and can safely be retried.
+                connection.execute(update(FileObservation).where(FileObservation.id == row['id'])
+                                   .values(details={**details, 'file_state': 'deleting'}))
+            for key in [*details.get('extra_files', []), row['key']]:
                 datamanager.delete_file(row['bucket'], key)
             with db.get_sync_engine().begin() as connection:
                 connection.execute(delete(FileObservation).where(FileObservation.id == row['id']))
@@ -84,5 +100,6 @@ def cleanup_files(config, now, *, max_files=MAX_FILE_DELETIONS):
             if not all(stack.enter_context(ingestion_lock(lane, FILE_LOCKS[lane])) for lane in lanes):
                 report[observation] = dict(busy=True, expired=0, files_deleted=0, failed=0)
                 continue
-            report[observation] = expire_files(observation, now-timedelta(days=days), max_files=max_files)
+            report[observation] = expire_files(observation, now-timedelta(days=days), max_files=max_files,
+                                               upload_cutoff=now-timedelta(hours=1))
     return report

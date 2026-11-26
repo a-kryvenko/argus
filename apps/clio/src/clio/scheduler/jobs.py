@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 
 from clio.config import load_observation_config
@@ -13,6 +14,15 @@ async def run_donki(policy):
     from clio.ingestion.extras.donki import collect
 
     return await collect(policy, now=datetime.now(UTC))
+
+async def restore_donki():
+    from clio.ingestion.extras.donki import restore_legacy_polls
+
+    while True:
+        result = await asyncio.to_thread(restore_legacy_polls)
+        if result['status'] != 'busy':
+            return result
+        await asyncio.sleep(5)
 
 async def run_backfill():
     from clio.ingestion.backfill import backfill

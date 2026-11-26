@@ -16,7 +16,7 @@ def test_every_configured_observation_is_scheduled_once():
 
 
 def test_monitored_source_intervals_match_scheduler():
-    from clio.ingestion.collect_numeric import SOURCE_IDS
+    from clio.ingestion.utils.products import PRODUCTS
     from clio.scheduler.schedule import poll_seconds
 
     config = load_observation_config()
@@ -25,13 +25,20 @@ def test_monitored_source_intervals_match_scheduler():
         for metric in metrics:
             policy = config.observations.get(metric)
             for product in policy.sources.live if policy else []:
-                source = SOURCE_IDS.get(product)
+                source = PRODUCTS[product].lock
                 if source is None:
                     continue
                 seconds = poll_seconds(metric)
                 assert minute * 60 == seconds
                 checked.add(source)
-    assert checked == set(SOURCE_IDS.values())
+    assert checked == {definition.lock for definition in PRODUCTS.values() if definition.lock is not None}
+
+
+def test_file_work_cannot_block_numeric_collection():
+    assert [metrics for metrics, _ in COLLECTING_SCHEDULES if 'proton_10mev' in metrics] == [
+        ['proton_10mev', 'proton_100mev'],
+    ]
+    assert all('dst' not in metrics for metrics, _ in COLLECTING_SCHEDULES if 'aia_171_nrt' in metrics)
 
 
 def test_sdo_polling_follows_product_policy():

@@ -3,6 +3,7 @@ FROM golang:1.26-alpine AS build
 WORKDIR /src/apps/api/api-go
 COPY apps/api/api-go/go.mod apps/api/api-go/go.sum ./
 COPY apps/prophet/api-go/go.mod /src/apps/prophet/api-go/go.mod
+COPY packages/common/src/common/observationcatalog /src/packages/common/src/common/observationcatalog
 RUN go mod download
 COPY apps/api/api-go/*.go ./
 COPY apps/prophet/api-go/publicforecast /src/apps/prophet/api-go/publicforecast

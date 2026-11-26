@@ -7,10 +7,10 @@ from clio.providers.omni import OMNI_WORDS as WORDS, parse_annual, clean_omni_va
 def record(year=2000, day=1, hour=0, fills=False):
     values = ['0'] * 55
     values[:3] = [str(year), str(day), str(hour)]
-    fields = dict(bx=-5.6, by=2.2, bz=1.6, t=324194, n=2.9, v=675,
+    fields = dict(bt=8.4, bx=-5.6, by=2.2, bz=1.6, t=324194, n=2.9, v=675,
                   kp=53, dst=-45, ap=56, f10_7=125.6)
     if fills:
-        fields.update(bx=999.9, by=999.9, bz=999.9, t=9999999, n=999.9,
+        fields.update(bt=999.9, bx=999.9, by=999.9, bz=999.9, t=9999999, n=999.9,
                       v=9999, kp=99, dst=99999, ap=999, f10_7=999.9)
     for name, word in WORDS.items(): values[word-1] = str(fields[name])
     return ' '.join(values)

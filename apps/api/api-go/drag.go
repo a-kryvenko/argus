@@ -6,18 +6,11 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
 
 func (a *api) leoDrag(w http.ResponseWriter, r *http.Request, respond func(Published[LeoDragAssessment]), validBody func(any) bool) {
-	meta, err := booleanQuery(r.URL.Query(), metaParameter)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
 	if contentType := r.Header.Get("Content-Type"); contentType != "" {
 		mediaType, _, err := mime.ParseMediaType(contentType)
 		if err != nil || (mediaType != "application/json" &&
@@ -52,8 +45,7 @@ func (a *api) leoDrag(w http.ResponseWriter, r *http.Request, respond func(Publi
 		writeError(w, invalid("Invalid orbit or drag parameters"))
 		return
 	}
-	query := url.Values{metaParameter: {strconv.FormatBool(meta)}}
-	raw, status, err := a.request(r.Context(), a.intelligence, "POST", "/internal/v1/public-risks/leo-drag", query, body, 90*time.Second)
+	raw, status, err := a.request(r.Context(), a.intelligence, "POST", "/internal/v1/public-risks/leo-drag", nil, body, 90*time.Second)
 	if status == 422 {
 		writeError(w, invalid("Orbit is outside the available grid or the fixed-orbit approximation (maximum decay 1000 m)"))
 		return

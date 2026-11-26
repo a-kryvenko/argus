@@ -17,13 +17,17 @@ def source_frames(start, end, historical, *, days=None):
         yield fetch_goes(end=end, timeout=25)
         return
     import pandas as pd
-    from clio.providers.goes_history import archive_session, discover_goes_history, iter_goes_history
+    from clio.providers.goes_history import (
+        REVALIDATE_SECONDS, archive_session, discover_goes_history, iter_goes_history, prune_archive_cache,
+    )
     satellites = [int(value) for value in os.getenv('GOES_ARCHIVE_SATELLITES', '18,16').split(',')]
     days = days if days is not None else pd.date_range(start, end - timedelta(microseconds=1), freq='D')
-    with archive_session() as session, TemporaryDirectory(prefix='clio-goes-') as temporary:
+    cache = Path(os.getenv('XDG_CACHE_HOME') or Path.home() / '.cache') / 'clio' / 'goes-archive'
+    prune_archive_cache(cache)
+    with archive_session() as session:
         files = discover_goes_history(sorted(set(days.year)), satellites, session)
-        for frame in iter_goes_history(files, days, satellites, Path(temporary), session, refresh=True):
-            yield frame
+        yield from iter_goes_history(files, days, satellites, cache, session,
+                                     refresh=True, refresh_after=REVALIDATE_SECONDS)
 
 
 def download_snapshots(start, end, historical, expected=None, *, source, resolution_minutes):

@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
-from apps.api.tests.reference_public.schemas.metadata import MetaQuery
 from apps.api.tests.reference_public.schemas.observations import (
     CurrentObservations,
     CurrentAdditionalIndices,
@@ -14,8 +13,6 @@ from apps.api.tests.reference_public.schemas.observations import (
     IndexLatest,
     ObservationHistory,
     ObservationSummary,
-    ObservationMetadata,
-    SummaryMetadata,
     SolarHistory,
     SolarLatest,
 )
@@ -39,7 +36,7 @@ def selected_observations(observations: str | None = Query(
     return selected
 
 
-def observation_data(response, model=None, *, meta=False):
+def observation_data(response, model=None):
     if isinstance(response, JSONResponse) or not response.get('success') or response.get('data') is None:
         return None, response
     data = response['data']
@@ -47,23 +44,20 @@ def observation_data(response, model=None, *, meta=False):
         return data, None
     try:
         result = model.model_validate(data)
-        if meta:
-            result.meta = (SummaryMetadata.model_validate(data) if model is ObservationSummary
-                           else ObservationMetadata.model_validate(data))
         return result.model_dump(by_alias=True), None
     except ValidationError:
         raise HTTPException(503, 'Observation service returned an invalid response') from None
 
 
 @router.get('', response_model=ApiResponse[CurrentObservations], response_model_exclude_unset=True)
-async def current_observations(response: Response, meta: MetaQuery = False,
+async def current_observations(response: Response,
                                trends: bool = Query(default=False, description='Include observed one-hour changes'),
                                selected: list[str] = Depends(selected_observations)):
     response.headers['Cache-Control'] = 'no-store'
     data = {}
     trend_data = None
     if trends and set(selected) & set((*WIND, *INDICES)):
-        trend_data, error = observation_data(await read_observations('summary'), ObservationSummary, meta=meta)
+        trend_data, error = observation_data(await read_observations('summary'), ObservationSummary)
         if error is not None:
             return error
         data['changes_1h'] = {key: value['value'] for key, value in trend_data['changes_1h'].items() if key in selected}
@@ -76,17 +70,12 @@ async def current_observations(response: Response, meta: MetaQuery = False,
             continue
         if trend_data is not None:
             current = {'generated_at': trend_data['generated_at'], 'series': trend_data[group]}
-            if meta:
-                current['meta'] = {'series': trend_data['meta'][group]}
         else:
             params = {'metrics': ','.join(requested)} if group == 'solar_wind' else None
-            current, error = observation_data(await read_observations(resource, params), model, meta=meta)
+            current, error = observation_data(await read_observations(resource, params), model)
             if error is not None:
                 return error
         data.update({key: value['latest'] for key, value in current['series'].items() if key in requested})
-        if meta:
-            data.setdefault('meta', {'series': {}})['series'].update({
-                key: value for key, value in current['meta']['series'].items() if key in requested})
     additional = [key for key in selected if key in HOURLY]
     if additional:
         params = {'metrics': ','.join(additional)}
@@ -105,7 +94,6 @@ async def current_observations(response: Response, meta: MetaQuery = False,
 @router.get('/history', response_model=ApiResponse[ObservationHistory])
 async def observation_history(
     response: Response,
-    meta: MetaQuery = False,
     selected: list[str] = Depends(selected_observations),
     limit: int = Query(default=24, ge=1, le=168),
     start: datetime | None = Query(default=None, alias='from'),
@@ -142,15 +130,11 @@ async def observation_history(
     results = await asyncio.gather(*(read_observations(resource, params) for resource, _, params in reads))
     data = {'from': start, 'to': end, 'series': {}}
     for (_, model, _), result in zip(reads, results):
-        part, error = observation_data(result, model, meta=meta)
+        part, error = observation_data(result, model)
         if error is not None:
             return error
         data['series'].update({key: value for key, value in part['series'].items() if key in selected})
-        if 'meta' in part:
-            metadata = data.setdefault('meta', {'series': {}})
-            metadata['series'].update({key: value for key, value in part['meta']['series'].items() if key in selected})
-            metadata.update({key: value for key, value in part['meta'].items() if key != 'series' and value is not None})
-        data.update({key: value for key, value in part.items() if key not in {'series', 'meta'} and value is not None})
+        data.update({key: value for key, value in part.items() if key != 'series' and value is not None})
     if set(selected) & set(HOURLY):
         params = {'limit': limit}
         if bounded:

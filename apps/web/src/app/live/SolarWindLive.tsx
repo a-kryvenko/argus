@@ -53,7 +53,7 @@ export default function SolarWindLive({ hours, history }: {
                   {chart.metrics.map(metric => <div key={metric}>
                     <strong style={{ color: metricColors[metric] }}>{windLabels[metric]}</strong>
                     {(['min', 'mean', 'max'] as const).map(stat => <p key={stat}>{stat}: {number(point[stat === 'mean' ? metric : `${metric}_${stat}`])} {chart.unit}</p>)}
-                    <p>Coverage: {number(point[`${metric}_coverage`])}%</p>
+                    <p>Minute coverage: {point[`${metric}_coverage`] == null ? '—' : `${number(point[`${metric}_coverage`])}%`}</p>
                   </div>)}
                 </div>;
               } : undefined} />
@@ -72,6 +72,6 @@ export default function SolarWindLive({ hours, history }: {
         </details>
       </section>)}
     </div>
-    <p className={styles.sectionNote}>{aggregated ? 'Closed UTC windows · min/max and coverage in tooltips · coverage includes all expected minutes.' : 'Native L1 measurements · no Earth-arrival time shift · gaps break lines.'}</p>
+    <p className={styles.sectionNote}>{aggregated ? 'Data coverage counts closed UTC windows with usable averages. Tooltips show the share of minutes used in each window.' : 'Native L1 measurements · gaps break lines.'}</p>
   </section>;
 }

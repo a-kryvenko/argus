@@ -1,7 +1,8 @@
 FROM golang:1.26-alpine AS build
 
-WORKDIR /src
+WORKDIR /src/apps/clio/api-go
 COPY apps/clio/api-go/go.mod apps/clio/api-go/go.sum ./
+COPY packages/common/src/common/observationcatalog /src/packages/common/src/common/observationcatalog
 RUN go mod download
 COPY apps/clio/api-go/*.go ./
 ENV CGO_ENABLED=0

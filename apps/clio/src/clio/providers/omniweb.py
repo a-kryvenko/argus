@@ -49,6 +49,7 @@ Specific order is mandatory. Columns in response ordered by: id => asc
 So we should use same order in dictionary to handle this
 """
 DEFAULT_VARS = {
+    "bt": {"id": 8, "title": "IMF Magnitude Avg, nT"},
     "bx": {"id": 12, "title": "Bx, GSE/GSM, nT"},
     "by": {"id": 15, "title": "BY, nT (GSM)"},
     "bz": {"id": 16, "title": "BZ, nT (GSM)"},
@@ -167,4 +168,4 @@ class OMNIWeb_Loader:
 
         df = df.sort_values("timestamp").drop_duplicates("timestamp", keep="last")
 
-        return df[["timestamp", "bx", "by", "bz", "v", "n", "t", "kp", "dst", "ap", "f10_7"]]
+        return df[["timestamp", "bx", "by", "bz", "bt", "v", "n", "t", "kp", "dst", "ap", "f10_7"]]

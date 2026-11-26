@@ -38,11 +38,20 @@ def load_inputs(product='dst', cache=None):
 
 def resource_response(request, payload):
     resource = request.url.path.removeprefix('/internal/v1/observations/') if request.url.path != '/internal/v1/files' else 'files'
-    if resource == 'history':
-        interval = request.url.params['interval']
-        data = {'interval': payload.get('interval', interval), 'points': [
+    if resource == 'model-inputs':
+        assert 'interval' not in request.url.params
+        data = {'interval': payload.get('interval', '1h'), 'points': [
             dict(time=point['issue_time'], **{k: v for k, v in point.items() if k != 'issue_time'})
             for point in payload['observations']['points']]}
+    elif resource == 'series':
+        data = {}
+        start = NOW - timedelta(hours=1)
+        for metric in request.url.params['metrics'].split(','):
+            point = {'observed_at': start.isoformat(), 'value': payload['observations']['points'][0][metric],
+                     'expected_count': 60, 'count': 59}
+            if metric != 'bx':
+                point['received_at'] = (NOW - timedelta(minutes=2)).isoformat()
+            data[metric] = {'points': [point], 'time_basis': 'l1', 'aggregation': 'mean', 'resolution_seconds': 3600}
     elif resource == 'files':
         data = []
     else:
@@ -63,11 +72,17 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
     assert len(calls) == 1
     assert all('as_of' not in request.url.params for request in calls)
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
-    assert calls[0].url.params['interval'] == '1h'
+    assert calls[0].url.path.endswith('/model-inputs')
     assert set(calls[0].url.params['metrics'].split(',')) >= {'f10_7', 'dst', 'ap', 's10_81mean'}
-    assert load_inputs('hmf', shared).solar_wind_hourly is not None
-    assert calls[1].url.params['interval'] == '1m'
+    native = load_inputs('hmf', shared).solar_wind_hourly
+    assert calls[1].url.path.endswith('/series')
+    assert calls[1].url.params['interval'] == '1h'
+    assert calls[1].url.params['time_basis'] == 'l1'
     assert calls[1].url.params['from'] == (NOW-timedelta(hours=168)).isoformat()
+    assert native['series']['bx']['points'] == []
+    point = native['series']['bz']['points'][0]
+    assert point['received_at'] == (NOW - timedelta(minutes=2)).isoformat()
+    assert point['interval_end'] == NOW and point['count'] == 59
     assert load_inputs('solar-radiation', shared).as_of == NOW
     assert [request.url.params['observation'] for request in calls[2:]] == ['goes']
     assert calls[2].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
@@ -88,7 +103,7 @@ def test_goes_failure_does_not_prevent_numeric_forecast(monkeypatch):
         with pytest.raises(RuntimeError, match='goes input unavailable'):
             load_inputs(product, cache)
     assert load_inputs('dst', cache).observations.points[0].v == 420
-    assert [request.url.path for request in calls] == ['/internal/v1/observations/history', '/internal/v1/files']
+    assert [request.url.path for request in calls] == ['/internal/v1/observations/model-inputs', '/internal/v1/files']
 
 
 
@@ -115,6 +130,15 @@ def test_rejects_incompatible_contract(monkeypatch):
     with pytest.raises(RuntimeError, match='hourly input unavailable') as error:
         load_inputs()
     assert isinstance(error.value.__cause__, ValueError)
+
+
+def test_fractional_inputs_are_converted_only_for_legacy_model_schema(monkeypatch):
+    payload = stored_inputs().model_dump(mode='json')
+    payload['observations']['points'][0]['f10_7'] = 112.75
+    configure(monkeypatch, lambda request: resource_response(request, payload))
+    result = load_inputs()
+    assert result.observations.points[0].f10_7 == 112
+    assert next(row.value for row in result.measurements if row.metric == 'f10_7') == 112.75
 
 
 def test_verification_reads_compact_live_metrics_and_excludes_end(monkeypatch):
@@ -244,7 +268,7 @@ def test_runtime_catalog_selects_explicit_services():
 
 def test_assembles_hourly_measurements_and_goes_references(monkeypatch):
     def handler(request):
-        if request.url.path.endswith('/history'):
+        if request.url.path.endswith('/model-inputs'):
             payload = stored_inputs().model_dump(mode='json')
             payload['observations']['points'][0].update(v=430., n=4.5, dst=-20.)
             return resource_response(request, payload)

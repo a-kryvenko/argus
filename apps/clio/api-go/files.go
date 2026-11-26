@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -61,6 +60,7 @@ func (db postgres) files(ctx context.Context, observation string, start, end tim
 		FROM clio.file_observation AS o
 		JOIN clio.files AS f ON f.id = o.file_id
 		WHERE o.observation = $1 AND (o.source_id IS NULL OR o.source_id = '')
+		  AND COALESCE(o.details ->> 'file_state', '') = ''
 		  AND o.observed_at >= $2 AND o.observed_at < $3
 		ORDER BY o.observed_at, o.source_product, f.key
 		LIMIT $4
@@ -96,7 +96,7 @@ func (db postgres) files(ctx context.Context, observation string, start, end tim
 }
 
 var sdoChannels = []string{"094", "131", "171", "193", "211", "304", "335", "1600", "1700"}
-var sdoSizes = []int{128, 256, 512, 1024, 2048, 4096}
+var sdoVariantPattern = regexp.MustCompile(`^([1-9][0-9]{1,3})\.(jpg|webp)$`)
 var assetPattern = regexp.MustCompile(`^[0-9]{10}_(` + strings.Join(sdoChannels, "|") + `)_[0-9a-f]{64}$`)
 
 type sdoMetadata struct {
@@ -121,16 +121,28 @@ func (api api) sdo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (db postgres) sdoImages(ctx context.Context, base string) ([]sdoImage, error) {
+	origin, err := url.Parse(base)
+	if err != nil || (origin.Scheme != "https" && origin.Scheme != "http") || origin.Host == "" ||
+		origin.RawQuery != "" || origin.Fragment != "" || origin.User != nil {
+		return nil, errors.New("S3_PUBLIC_BASE_URL must be the public bucket origin")
+	}
 	observations := make([]string, 0, len(sdoChannels))
 	for _, channel := range sdoChannels {
 		observations = append(observations, "aia_"+channel+"_browse")
 	}
 	rows, err := db.pool.Query(ctx, `
-		SELECT DISTINCT ON (o.observation) o.observation, o.details, f.key
-		FROM clio.file_observation AS o
-		JOIN clio.files AS f ON f.id = o.file_id
-		WHERE o.observation = ANY($1::varchar[])
-		ORDER BY o.observation, o.observed_at DESC, o.id DESC
+		SELECT wanted.observation, latest.details, latest.key
+		FROM unnest($1::varchar[]) AS wanted(observation)
+		CROSS JOIN LATERAL (
+			SELECT o.details, f.key, o.observed_at, o.id
+			FROM clio.file_observation o
+			JOIN clio.files f ON f.id = o.file_id
+			WHERE o.observation = wanted.observation AND o.source_id IS NULL
+			  AND f.bucket = 'argus-public' AND COALESCE(o.details ->> 'file_state', '') = ''
+			ORDER BY o.observed_at DESC, o.id DESC
+			LIMIT 8
+		) latest
+		ORDER BY wanted.observation, latest.observed_at DESC, latest.id DESC
 	`, observations)
 	if err != nil {
 		return nil, err
@@ -143,35 +155,23 @@ func (db postgres) sdoImages(ctx context.Context, base string) ([]sdoImage, erro
 		if err := rows.Scan(&observation, &details, &key); err != nil {
 			return nil, err
 		}
-		if details == nil {
-			continue
-		}
-		var metadata map[string]json.RawMessage
-		if err := json.Unmarshal(details, &metadata); err != nil {
-			return nil, err
-		}
-		var channel string
-		if err := json.Unmarshal(metadata["channel"], &channel); err != nil || !slices.Contains(sdoChannels, channel) {
-			continue
-		}
+		channel := strings.TrimSuffix(strings.TrimPrefix(observation, "aia_"), "_browse")
 		if _, seen := images[channel]; seen {
 			continue
 		}
-		if !strings.HasPrefix(base, "https://") && !strings.HasPrefix(base, "http://") {
-			return nil, errors.New("S3_PUBLIC_BASE_URL must be the public bucket origin")
+		var metadata struct {
+			sdoMetadata
+			ExtraFiles []string `json:"extra_files"`
 		}
-		if observation != "aia_"+channel+"_browse" {
-			return nil, errors.New("SDO image channel does not match its observation")
+		matches := []string(nil)
+		if err := json.Unmarshal(details, &metadata); err == nil {
+			matches = assetPattern.FindStringSubmatch(metadata.AssetID)
 		}
-		var image sdoImage
-		if err := json.Unmarshal(details, &image.sdoMetadata); err != nil {
-			return nil, err
+		if metadata.Channel != channel || len(matches) != 2 || matches[1] != channel || path.Base(key) != "original.jpg" {
+			log.Printf("Ignoring invalid SDO browse manifest for %s", observation)
+			continue
 		}
-		if image.CapturedAt == nil || !assetPattern.MatchString(image.AssetID) {
-			return nil, fmt.Errorf("invalid SDO image metadata for channel %s", channel)
-		}
-		image.URLs = sdoImageURLs(base, key)
-		images[channel] = image
+		images[channel] = sdoImage{sdoMetadata: metadata.sdoMetadata, URLs: sdoImageURLs(base, key, metadata.ExtraFiles)}
 	}
 	ordered := make([]sdoImage, 0, len(images))
 	for _, channel := range sdoChannels {
@@ -182,20 +182,17 @@ func (db postgres) sdoImages(ctx context.Context, base string) ([]sdoImage, erro
 	return ordered, rows.Err()
 }
 
-func sdoImageURLs(base, key string) map[string]string {
-	prefix := key
-	if lastSlash := strings.LastIndexByte(key, '/'); lastSlash >= 0 {
-		prefix = key[:lastSlash]
+func sdoImageURLs(base, key string, variants []string) map[string]string {
+	escape := strings.NewReplacer("+", "%20", "%2F", "/")
+	objectURL := func(objectKey string) string {
+		return base + "/" + escape.Replace(url.QueryEscape(objectKey))
 	}
-	escaped := strings.NewReplacer("+", "%20", "%2F", "/").Replace(url.QueryEscape(prefix))
-	root := base + "/" + escaped + "/"
-	urls := map[string]string{"jpg.original": root + "original.jpg"}
-	for _, size := range sdoSizes {
-		width := strconv.Itoa(size)
-		if size != 4096 {
-			urls["jpg."+width] = root + width + ".jpg"
+	urls := map[string]string{"jpg.original": objectURL(key)}
+	for _, variant := range variants {
+		match := sdoVariantPattern.FindStringSubmatch(path.Base(variant))
+		if path.Dir(variant) == path.Dir(key) && len(match) == 3 {
+			urls[match[2]+"."+match[1]] = objectURL(variant)
 		}
-		urls["webp."+width] = root + width + ".webp"
 	}
 	return urls
 }

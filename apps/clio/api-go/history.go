@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-kryvenko/argus/observationcatalog"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -22,28 +23,27 @@ const (
 var historyOverflow = errors.New("Numeric read exceeds the supported batch size")
 
 var normalizedMetrics = []string{"bx", "by", "bz", "v", "n", "t", "kp", "dst", "ap", "f10_7", "s10", "m10", "y10"}
-var windMetrics = []string{"bx", "by", "bz", "bt", "v", "n", "t"}
+var windMetrics = observationcatalog.IDs("wind")
 var fieldComponents = []string{"bx", "by", "bz"}
-var nativeWindProducts = []string{"swpc.rtsw_plasma", "swpc.rtsw_mag"}
-var xrsMetrics = []string{"xrs_a", "xrs_b"}
-var protonMetrics = []string{"proton_10mev", "proton_100mev"}
+var xrsMetrics = observationcatalog.IDs("xrs")
+var protonMetrics = observationcatalog.IDs("protons")
 
-// Numeric products collected in live mode by Clio.
-var liveProducts = slices.Concat(nativeWindProducts, []string{
-	"swpc.kp", "swpc.dst", "swpc.f107", "celestrak.f107", "solfsmy.means", "goes.xrs", "goes.protons",
-})
+type numericRow struct {
+	values        map[string]*float64
+	windTimeBasis string
+}
 
-type numericPoints map[time.Time]map[string]*float64
+type numericPoints map[time.Time]*numericRow
 
 func (points numericPoints) set(at time.Time, metric string, value *float64) {
 	at = at.UTC()
 	if points[at] == nil {
-		points[at] = make(map[string]*float64)
+		points[at] = &numericRow{values: make(map[string]*float64)}
 	}
-	points[at][metric] = value
+	points[at].values[metric] = value
 }
 
-func (points numericPoints) jsonPoints(selected []string) []map[string]any {
+func (points numericPoints) jsonPoints(selected []string, modelInputs bool) []map[string]any {
 	times := make([]time.Time, 0, len(points))
 	for at := range points {
 		times = append(times, at)
@@ -51,16 +51,21 @@ func (points numericPoints) jsonPoints(selected []string) []map[string]any {
 	slices.SortFunc(times, time.Time.Compare)
 	output := make([]map[string]any, 0, len(times))
 	for _, at := range times {
-		values := points[at]
+		point := points[at]
 		row := map[string]any{"time": apiTime{at}}
 		if selected == nil {
-			for metric, value := range values {
-				row[metric] = observationValue(metric, value)
+			for metric, value := range point.values {
+				row[metric] = value
 			}
 		} else {
 			for _, metric := range selected {
-				row[metric] = observationValue(metric, values[metric])
+				if value, found := point.values[metric]; found {
+					row[metric] = value
+				}
 			}
+		}
+		if modelInputs && point.windTimeBasis != "" {
+			row["wind_time_basis"] = point.windTimeBasis
 		}
 		output = append(output, row)
 	}
@@ -68,6 +73,14 @@ func (points numericPoints) jsonPoints(selected []string) []map[string]any {
 }
 
 func (api api) history(w http.ResponseWriter, r *http.Request) {
+	api.readHistory(w, r, false)
+}
+
+func (api api) modelInputs(w http.ResponseWriter, r *http.Request) {
+	api.readHistory(w, r, true)
+}
+
+func (api api) readHistory(w http.ResponseWriter, r *http.Request, modelInputs bool) {
 	query := requestQuery(r)
 	selected := selectedMetrics(w, query)
 	if selected == nil {
@@ -88,6 +101,10 @@ func (api api) history(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	interval := "1h"
+	if modelInputs && (query.Has("time_basis") || query.Has("interval")) {
+		writeError(w, http.StatusUnprocessableEntity, "HTTP_ERROR", "Model inputs use the prepared hourly series")
+		return
+	}
 	if values := query["interval"]; len(values) != 0 {
 		interval = values[len(values)-1]
 		if interval != "1m" && interval != "5m" && interval != "1h" {
@@ -131,7 +148,7 @@ func (api api) history(w http.ResponseWriter, r *http.Request) {
 		writeStorageError(w, "Numeric observation storage is unavailable", err, historyOverflow)
 		return
 	}
-	data := map[string]any{"interval": interval, "points": points.jsonPoints(selected)}
+	data := map[string]any{"interval": interval, "points": points.jsonPoints(selected, modelInputs)}
 	if timeBasis != "" {
 		data["time_basis"] = timeBasis
 	}
@@ -157,75 +174,38 @@ func unsupportedHistory(selected []string, interval, timeBasis string) string {
 
 func (db postgres) history(ctx context.Context, selected []string, start, end time.Time, interval, timeBasis string) (numericPoints, error) {
 	points := make(numericPoints)
-	means := make([]string, 0)
-	for _, metric := range selected {
-		if strings.HasSuffix(metric, "_81mean") {
-			means = append(means, metric)
-		}
-	}
 	native := selected
-	legacyHourly := interval == "1h" && timeBasis == ""
-	if legacyHourly {
+	if interval == "1h" && timeBasis == "" {
+		// Preserve the compact history of the original internal contract.
 		if err := db.readHourly(ctx, points, selected, start, end); err != nil {
 			return nil, err
 		}
-		native = means
+		native = nil
+		for _, metric := range selected {
+			if slices.Contains(observationcatalog.IDs("model"), metric) {
+				native = append(native, metric)
+			}
+		}
 	}
 	if len(native) == 0 {
 		return points, nil
 	}
-	products := liveProducts
-	deriveTotalField := false
-	switch timeBasis {
-	case l1TimeBasis:
-		products = nativeWindProducts
-	case nearEarthTimeBasis:
-		products = []string{"omni.hourly"}
-		if slices.Contains(native, "bt") {
-			native = withFieldComponents(native)
-			deriveTotalField = true
-		}
+	step, _ := time.ParseDuration(interval)
+	if timeBasis == "" {
+		timeBasis = l1TimeBasis
 	}
-	var bucketSize time.Duration
-	if interval == "5m" {
-		bucketSize = 5 * time.Minute
-	} else if interval == "1h" && timeBasis == l1TimeBasis {
-		bucketSize = time.Hour
-	}
-	const statement = `SELECT metric, observed_at, value FROM clio.measurement
-		WHERE observed_at >= $1 AND observed_at < $2 AND metric = ANY($3::varchar[])
-		  AND ($4::boolean OR source_product = ANY($5::varchar[]) OR metric = ANY($6::varchar[]))
-		ORDER BY observed_at LIMIT $7`
-	rows, err := db.pool.Query(ctx, statement, start, end, native, legacyHourly, products, means, maxHistoryRows+1)
+	series, err := db.series(ctx, seriesQuery{metrics: native, from: start, to: end, windStep: step, windBasis: timeBasis})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	buckets := make(historyBuckets)
-	for count := 0; rows.Next(); count++ {
-		if count == maxHistoryRows {
-			return nil, historyOverflow
-		}
-		row, err := scanMeasurement(rows)
-		if err != nil {
-			return nil, err
-		}
-		row.value = validatedValue(row.metric, row.value)
-		if bucketSize == 0 || slices.Contains(protonMetrics, row.metric) {
-			points.set(row.observedAt, row.metric, row.value)
-			continue
-		}
-		buckets.add(row, start, end, bucketSize)
-	}
-	for key, samples := range buckets {
-		points.set(key.time, key.metric, minuteAverage(samples))
-	}
-	if deriveTotalField {
-		for at, row := range points {
-			points.set(at, "bt", totalField(row))
+	for metric, series := range series {
+		for _, point := range series.Points {
+			if !point.ObservedAt.Before(start) {
+				points.set(point.ObservedAt, metric, point.Value)
+			}
 		}
 	}
-	return points, rows.Err()
+	return points, nil
 }
 
 func withFieldComponents(metrics []string) []string {
@@ -245,6 +225,9 @@ func totalField(row map[string]*float64) *float64 {
 	}
 	bx, by, bz := *x, *y, *z
 	value := math.Sqrt(bx*bx + by*by + bz*bz)
+	if math.IsInf(value, 0) || math.IsNaN(value) {
+		return nil
+	}
 	return &value
 }
 
@@ -266,7 +249,7 @@ func (db postgres) readHourly(ctx context.Context, points numericPoints, selecte
 	for _, column := range columns {
 		identifiers = append(identifiers, pgx.Identifier{column}.Sanitize())
 	}
-	query := "SELECT observed_at, " + strings.Join(identifiers, ", ") + ` FROM clio.normalized_observation
+	query := "SELECT observed_at, wind_time_basis, " + strings.Join(identifiers, ", ") + ` FROM clio.normalized_observation
 		WHERE observed_at >= $1 AND observed_at < $2 ORDER BY observed_at LIMIT $3`
 	rows, err := db.pool.Query(ctx, query, start, end, maxHistoryRows+1)
 	if err != nil {
@@ -278,8 +261,9 @@ func (db postgres) readHourly(ctx context.Context, points numericPoints, selecte
 			return historyOverflow
 		}
 		var at time.Time
+		var basis *string
 		values := make([]*float64, len(columns))
-		targets := []any{&at}
+		targets := []any{&at, &basis}
 		for i := range values {
 			targets = append(targets, &values[i])
 		}
@@ -289,30 +273,16 @@ func (db postgres) readHourly(ctx context.Context, points numericPoints, selecte
 		for i, metric := range columns {
 			points.set(at, metric, validatedValue(metric, values[i]))
 		}
+		row := points[at.UTC()]
+		row.windTimeBasis = "legacy"
+		if basis != nil {
+			row.windTimeBasis = *basis
+		}
 		if deriveTotalField {
-			points.set(at, "bt", totalField(points[at.UTC()]))
+			points.set(at, "bt", totalField(row.values))
 		}
 	}
 	return rows.Err()
-}
-
-type historyBucket struct {
-	time   time.Time
-	metric string
-}
-
-type historyBuckets map[historyBucket][]*float64
-
-func (buckets historyBuckets) add(row measurement, start, end time.Time, step time.Duration) {
-	window := row.observedAt.UTC().Truncate(step)
-	if window.Before(start) || window.Add(step).After(end) {
-		return
-	}
-	key := historyBucket{window, row.metric}
-	if buckets[key] == nil {
-		buckets[key] = make([]*float64, int(step/time.Minute))
-	}
-	buckets[key][int(row.observedAt.Sub(window)/time.Minute)] = row.value
 }
 
 func minuteAverage(samples []*float64) *float64 {

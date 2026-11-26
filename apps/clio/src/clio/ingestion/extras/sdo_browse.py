@@ -41,12 +41,13 @@ def snapshot(channel, now, *, source=None):
                     variant = root / f'{size}.{format}'
                     resized.save(variant, format='JPEG' if format == 'jpg' else 'WEBP', quality=85 if size <= 512 else 90)
                     variants.append(variant)
-        captured = now.replace(second=0, microsecond=0)
-        save(path, observation=observation, observed_at=captured,
+        published = updated if updated and updated.tzinfo and updated <= now else None
+        received = (published or now).replace(second=0, microsecond=0)
+        save(path, observation=observation, observed_at=received,
             source_product=source or 'nasa.aia_browse', bucket='argus-public', variants=variants,
-            details=dict(channel=channel, captured_at=captured.isoformat(),
-                asset_id=f'{captured:%Y%m%d%H}_{channel}_{digest}',
-                source_updated_at=updated.isoformat() if updated else None))
+            details=dict(channel=channel, captured_at=None,
+                asset_id=f'{received:%Y%m%d%H}_{channel}_{digest}',
+                source_updated_at=published.isoformat() if published else None))
         return True
 
 

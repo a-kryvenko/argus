@@ -30,9 +30,9 @@ type projectionSource interface {
 }
 
 type preparedForecast struct {
-	releaseID         string
-	issueTime         time.Time
-	compact, withMeta []byte
+	releaseID string
+	issueTime time.Time
+	body      []byte
 }
 
 type preparedForecasts struct {
@@ -199,18 +199,15 @@ func prepareForecast(source release) (preparedForecast, error) {
 		}, report.ModelVersion) {
 			return result, errors.New("invalid solar-wind event report")
 		}
-		result.compact, result.withMeta = raw, raw
+		result.body = raw
 		return result, nil
 	}
-	var err error
 	if source.Product == densityProduct {
 		data, err := publicforecast.DensityData(frames["atmospheric_density"], result.issueTime)
 		if err != nil {
 			return result, err
 		}
-		compact := *data
-		compact.Meta = nil
-		result.compact, result.withMeta, err = encodeForecast(compact, data)
+		result.body, err = json.Marshal(data)
 		return result, err
 	}
 	product := publicforecast.Products[source.Product]
@@ -218,22 +215,8 @@ func prepareForecast(source release) (preparedForecast, error) {
 	if err != nil {
 		return result, err
 	}
-	compact := *data
-	compact.Meta = nil
-	result.compact, result.withMeta, err = encodeForecast(compact, data)
+	result.body, err = json.Marshal(data)
 	return result, err
-}
-
-func encodeForecast(compact, withMeta any) ([]byte, []byte, error) {
-	left, err := json.Marshal(compact)
-	if err != nil {
-		return nil, nil, err
-	}
-	right, err := json.Marshal(withMeta)
-	if err != nil {
-		return nil, nil, err
-	}
-	return left, right, nil
 }
 
 func forecastRows(item artifact, issue time.Time) ([]publicforecast.Row, error) {
@@ -271,35 +254,15 @@ func (p *preparedForecasts) serve(densityMaxAge float64) http.HandlerFunc {
 			detail(w, http.StatusNotFound, "Unknown forecast product")
 			return
 		}
-		meta, ok := includeMetadata(r)
-		if !ok {
-			detail(w, http.StatusUnprocessableEntity, "meta must be a boolean")
-			return
-		}
 		result, synced := p.get(target)
-		body := result.compact
-		if meta {
-			body = result.withMeta
-		}
 		age := time.Since(result.issueTime).Hours()
-		if !synced || body == nil || (target == densityProduct && (age < 0 || age > densityMaxAge)) {
+		if !synced || result.body == nil || (target == densityProduct && (age < 0 || age > densityMaxAge)) {
 			detail(w, http.StatusServiceUnavailable, "Forecast is not ready")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if _, err := w.Write(body); err != nil {
+		if _, err := w.Write(result.body); err != nil {
 			log.Printf("write prepared forecast: %v", err)
 		}
-	}
-}
-
-func includeMetadata(r *http.Request) (bool, bool) {
-	switch r.URL.Query().Get("meta") {
-	case "true":
-		return true, true
-	case "", "false":
-		return false, true
-	default:
-		return false, false
 	}
 }

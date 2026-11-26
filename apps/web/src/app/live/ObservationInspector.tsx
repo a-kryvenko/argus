@@ -17,6 +17,16 @@ const explanations: Record<Selection, string> = {
   f10_7: 'Solar radio flux at a wavelength of 10.7 cm, measured in solar flux units (sfu).',
 };
 
+const rtsw = { label: 'NOAA SWPC RTSW', docs: 'https://www.spaceweather.gov/products/solar-wind' };
+const sources: Record<string, { label: string; docs: string }> = {
+  'swpc.rtsw_mag': rtsw,
+  'swpc.rtsw_plasma': rtsw,
+  'swpc.kp': { label: 'NOAA SWPC', docs: 'https://www.spaceweather.gov/products/planetary-k-index' },
+  'swpc.dst': { label: 'WDC Kyoto via NOAA SWPC', docs: 'https://wdc.kugi.kyoto-u.ac.jp/dstdir/' },
+  'swpc.f107': { label: 'NOAA SWPC', docs: 'https://www.spaceweather.gov/phenomena/f107-cm-radio-emissions' },
+  'celestrak.f107': { label: 'CelesTrak', docs: 'https://celestrak.org/SpaceData/SW-Last5Years.csv' },
+};
+
 export default function ObservationInspector({ selected, snapshot }: {
   selected: Selection; snapshot: LiveSnapshot;
 }) {
@@ -26,12 +36,13 @@ export default function ObservationInspector({ selected, snapshot }: {
   const windPoint = wind ? snapshot.data?.[selected] : undefined;
   const indexPoint = selected === 'kp' || selected === 'dst' ? snapshot.data?.[selected] : undefined;
   const solarPoint = selected === 'f10_7' ? snapshot.data?.f10_7 : windPoint;
-  const source = wind ? 'NOAA SWPC RTSW' : selected === 'kp' || selected === 'f10_7' ? 'NOAA SWPC' : 'WDC Kyoto via NOAA SWPC';
+  const product = point?.source_product ?? (wind ? 'swpc.rtsw_mag' : selected === 'f10_7' ? 'swpc.f107' : `swpc.${selected}`);
+  const source = sources[product];
   return <section id="observation-inspector" className={styles.inspector} aria-label="Selected observation">
     <div id="inspector-details" className={styles.inspectorBody}>
       <div className={styles.inspectorDescription}><p>{explanations[selected]}</p></div>
         <dl className={styles.inspectorFacts}>
-          <div><dt>Source</dt><dd>{source}</dd></div>
+          <div><dt>Source</dt><dd>{source?.label ?? product}</dd></div>
           <div><dt>{wind || selected === 'f10_7' ? selected === 'bz' ? 'Bz observed · UTC' : 'Observed · UTC' : 'Interval start · UTC'}</dt><dd className={styles.mono}>{stamp(solarPoint?.observed_at ?? indexPoint?.interval_start)}</dd></div>
           {selected === 'bz' && <div><dt>Bt observed · UTC</dt><dd className={styles.mono}>{stamp(snapshot.data?.bt?.observed_at)}</dd></div>}
           {indexPoint && <div><dt>Interval end · UTC</dt><dd className={styles.mono}>{stamp(indexPoint.interval_end)}</dd></div>}
@@ -48,8 +59,8 @@ export default function ObservationInspector({ selected, snapshot }: {
           <p>{selected === 'f10_7' ? 'Daily source observations retain their original timestamps. The latest available observation is shown.' : wind ? 'Native measurements are taken at L1 and are not shifted to Earth arrival time. Gaps break chart lines.' : 'Source intervals retain their original boundaries. A completed interval may still be revised. Freshness is measured from its end and allows for publication delay.'}</p>
           {wind && <p>One-hour changes compare five-minute means one hour apart, using available samples in each window. Flags and stale data suppress trends.</p>}
         </div>
-        <a className={styles.inspectorLink} href={`/api/v1/observations?meta=true&observations=${selected === 'bz' ? 'bz,bt' : selected}`}>Measurement data & metadata <ArrowUpRight size={14} aria-hidden="true" /></a>
-        <a className={styles.inspectorLink} href={wind ? 'https://www.spaceweather.gov/products/solar-wind' : selected === 'f10_7' ? 'https://www.spaceweather.gov/phenomena/f107-cm-radio-emissions' : selected === 'kp' ? 'https://www.spaceweather.gov/products/planetary-k-index' : 'https://wdc.kugi.kyoto-u.ac.jp/dstdir/'}>Source documentation <ArrowUpRight size={14} aria-hidden="true" /></a>
+        <a className={styles.inspectorLink} href={`/api/v1/observations?observations=${selected === 'bz' ? 'bz,bt' : selected}`}>Measurement data <ArrowUpRight size={14} aria-hidden="true" /></a>
+        {source && <a className={styles.inspectorLink} href={source.docs}>Source documentation <ArrowUpRight size={14} aria-hidden="true" /></a>}
       </div>
     </div>
   </section>;

@@ -50,11 +50,9 @@ def test_normalize_measurements_builds_hourly_wide_rows() -> None:
 
     result = normalize_measurements(measurements)
 
-    assert list(result.columns) == ["observed_at", *OBSERVATION_METRICS]
-    assert list(result["observed_at"]) == list(pd.date_range(start, periods=3, freq="1h"))
-    middle = result.iloc[1]
-    assert middle["bx"] == 1
-    assert middle["f10_7"] == 10
+    assert list(result.columns) == ["observed_at", *OBSERVATION_METRICS, "wind_time_basis"]
+    assert list(result["observed_at"]) == [start, start + timedelta(hours=2)]
+    assert result.bx.tolist() == [0, 2]
 
 
 def test_normalize_measurements_requires_every_metric() -> None:
@@ -67,6 +65,39 @@ def test_normalize_measurements_requires_every_metric() -> None:
     assert result.empty
 
 
+def test_model_preparation_uses_closed_mean_and_carries_only_previous_indices():
+    start = datetime(2026, 8, 30, tzinfo=UTC)
+    later = start + timedelta(hours=2)
+    rows = _measurement_rows(start)
+    rows += [
+        {**row, 'value': 7.}
+        for row in _measurement_rows(start + timedelta(hours=1))
+        if row['metric'] not in ('kp', 'ap', 'f10_7')
+    ]
+    rows += [{'metric': 'v', 'observed_at': start + timedelta(minutes=30), 'value': 404.}]
+    rows += _measurement_rows(later, offset=50.)
+    result = normalize_measurements(pd.DataFrame(rows), now=later + timedelta(minutes=5))
+    assert result.observed_at.tolist() == [start, start + timedelta(hours=1)]
+    assert result.v.tolist() == [203.5, 7.]
+    assert result.kp.tolist() == [6., 6.]
+
+
+def test_daily_flux_prefers_configured_source_without_looking_ahead():
+    start = datetime(2026, 8, 30, tzinfo=UTC)
+    rows = [
+        {**row, 'source_product': 'swpc.rtsw_mag'}
+        for hour in (1, 3)
+        for row in _measurement_rows(start + timedelta(hours=hour))
+        if row['metric'] != 'f10_7'
+    ]
+    for source, hour, value in [('backup', 0, 120.), ('primary', 2, 130.),
+                                ('backup', 3, 140.), ('disabled', 3, 150.)]:
+        rows.append({'metric': 'f10_7', 'source_product': source, 'value': value,
+                     'observed_at': start + timedelta(hours=hour)})
+    result = normalize_measurements(pd.DataFrame(rows), priorities={'f10_7': ['primary', 'backup']})
+    assert result.f10_7.tolist() == [120., 130.]
+
+
 def test_database_models_match_narrow_and_wide_storage_contracts() -> None:
     assert set(Measurement.__table__.columns.keys()) == {
         "id",
@@ -75,10 +106,13 @@ def test_database_models_match_narrow_and_wide_storage_contracts() -> None:
         "observed_at",
         "source_product",
         "received_at",
+        "quality",
+        "spacecraft",
     }
     assert set(NormalizedObservation.__table__.columns.keys()) == {
         "observed_at",
         *OBSERVATION_METRICS,
+        "wind_time_basis",
     }
 
 
@@ -90,7 +124,7 @@ def test_legacy_calibrated_indices_are_not_published_as_observations():
         frame["metric"].isin(REQUIRED_METRICS) | (frame["observed_at"] == start)
     ]
     result = normalize_measurements(frame)
-    assert len(result) == 3
+    assert len(result) == 2
     assert result.loc[0, list(SOLAR_INDEX_METRICS)].isna().all()
     assert result.loc[1:, list(SOLAR_INDEX_METRICS)].isna().all().all()
     assert result.loc[:, list(REQUIRED_METRICS)].notna().all().all()
@@ -105,7 +139,7 @@ def test_solar_only_measurements_do_not_create_core_observations():
 
 def test_refresh_reads_stored_values_without_fetching(monkeypatch, storage):
     now = datetime(2026, 9, 5, 2, 45, tzinfo=UTC)
-    stored = pd.DataFrame(_measurement_rows(now.replace(minute=0)))
+    stored = pd.DataFrame(_measurement_rows(now.replace(minute=0) - timedelta(hours=1)))
     load = AsyncMock(return_value=stored)
     monkeypatch.setattr(service, "load_measurements", load)
     session, context = storage
@@ -120,9 +154,10 @@ def test_refresh_reads_stored_values_without_fetching(monkeypatch, storage):
     fetch = Mock(side_effect=AssertionError("refresh must not fetch"))
     monkeypatch.setattr('requests.sessions.Session.request', fetch)
     result = asyncio.run(service.refresh_normalized_observations(config, now))
-    load.assert_awaited_once_with(session, now - timedelta(days=6), until=now + timedelta(microseconds=1),
-                                 source_products=['swpc.rtsw_plasma', 'swpc.rtsw_mag', 'swpc.kp', 'swpc.dst', 'swpc.f107',
-                                                  'celestrak.f107', 'solfsmy.means'])
+    load.assert_awaited_once_with(session, now - timedelta(days=62), until=now + timedelta(microseconds=1),
+        source_products=['omni.hourly', 'soho.plasma_hourly', 'ace.plasma_hourly', 'swpc.rtsw_plasma',
+                         'swpc.rtsw_mag', 'swpc.kp', 'swpc.dst', 'swpc.f107', 'gfz.f107',
+                         'celestrak.f107', 'celestrak.f107_archive'], metrics=REQUIRED_METRICS)
     assert len(result.points) == 1
     assert result.points[0].s10 is None
     fetch.assert_not_called()
@@ -154,15 +189,15 @@ def test_normalized_upsert_writes_sql_null_for_missing_indices():
     assert all(parameters[f"{name}_m0"] is None for name in SOLAR_INDEX_METRICS)
 
 
-def test_live_normalization_uses_configured_retention(monkeypatch, storage):
+def test_model_preparation_uses_configured_retention(monkeypatch, storage):
     now = datetime(2026, 10, 27, tzinfo=UTC)
-    config = ClioObservations(observations={}, retention={'live_days': 8})
+    config = ClioObservations(observations={}, retention={'normalized_days': 8})
     load = AsyncMock(return_value=pd.DataFrame(columns=['metric', 'value', 'observed_at']))
     monkeypatch.setattr(service, 'load_measurements', load)
     with pytest.raises(RuntimeError, match='collect first'):
         asyncio.run(service.refresh_normalized_observations(config, now))
-    assert load.call_args.args[1] == now - timedelta(days=8)
-    assert 'omni.hourly' not in load.call_args.kwargs['source_products']
+    assert load.call_args.args[1] == now - timedelta(days=10)
+    assert 'omni.hourly' in load.call_args.kwargs['source_products']
 
 
 def test_normalized_reader_converts_indices_to_contract_integers():

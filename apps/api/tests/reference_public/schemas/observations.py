@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
-from apps.api.tests.reference_public.schemas.metadata import metadata_field
 
 Metric = Literal['bx', 'by', 'bz', 'bt', 'v', 'n', 't']
 Index = Literal['kp', 'dst']
@@ -22,31 +21,6 @@ Freshness = Literal['missing', 'stale', 'fresh']
 
 def optional_field():
     return Field(default=None, exclude_if=lambda value: value is None)
-
-
-class SeriesMetadata(BaseModel):
-    label: str
-    unit: str
-    source: str
-    source_url: str
-    coordinate_system: str | None = optional_field()
-    location: str | None = optional_field()
-    time_basis: str
-    propagated: bool | None = optional_field()
-    resolution_seconds: int
-    aggregation: str | None = optional_field()
-    selection: str | None = optional_field()
-    poll_seconds: int | None = optional_field()
-    freshness_basis: str | None = optional_field()
-    gap_filling: str | None = optional_field()
-
-
-class ObservationMetadata(BaseModel):
-    series: dict[str, SeriesMetadata]
-    interval: str | None = optional_field()
-    selection: str | None = optional_field()
-    gap_filling: str | None = optional_field()
-    aggregation_version: int | None = optional_field()
 
 
 class SolarSample(BaseModel):
@@ -94,7 +68,6 @@ class SolarLatest(BaseModel):
     """
     generated_at: datetime
     series: dict[Metric, SolarLatestSeries]
-    meta: ObservationMetadata | None = metadata_field()
 
 
 class IndexLatest(BaseModel):
@@ -103,7 +76,6 @@ class IndexLatest(BaseModel):
     """
     generated_at: datetime
     series: dict[Index, IndexLatestSeries]
-    meta: ObservationMetadata | None = metadata_field()
 
 
 class TimeRange(BaseModel):
@@ -158,7 +130,6 @@ class SolarHistory(TimeRange):
     evaluated_from: datetime | None = optional_field()
     evaluated_to: datetime | None = optional_field()
     series: dict[Metric, SolarHistorySeries]
-    meta: ObservationMetadata | None = metadata_field()
 
 
 class IndexHistory(TimeRange):
@@ -166,7 +137,6 @@ class IndexHistory(TimeRange):
     Kp retains three-hour intervals; Dst retains hourly intervals. No gap filling.
     """
     series: dict[Index, IndexHistorySeries]
-    meta: ObservationMetadata | None = metadata_field()
 
 
 class ChangeCoverage(BaseModel):
@@ -190,13 +160,6 @@ class ChangeMetadata(BaseModel):
     previous_mean: float | None = optional_field()
 
 
-class SummaryMetadata(BaseModel):
-    solar_wind: dict[Metric, SeriesMetadata]
-    geomagnetic: dict[Index, SeriesMetadata]
-    changes_1h: dict[ObservationMetric, ChangeMetadata]
-    lookback_minutes: int
-
-
 class ObservationSummary(BaseModel):
     """Native observations and trends in fixed units: v km/s, n cm^-3, t K,
     bx/by/bz GSM nT, bt nT, Kp index, Dst nT. changes_1h shares the variable's
@@ -206,7 +169,6 @@ class ObservationSummary(BaseModel):
     solar_wind: dict[Metric, SolarLatestSeries]
     geomagnetic: dict[Index, IndexLatestSeries]
     changes_1h: dict[ObservationMetric, DerivedValue]
-    meta: SummaryMetadata | None = metadata_field()
 
 
 class CurrentSolarSample(BaseModel):
@@ -244,7 +206,6 @@ class CurrentObservations(BaseModel):
     m10: CurrentSolarSample | None = None
     y10: CurrentSolarSample | None = None
     changes_1h: dict[ObservationMetric, float | None] | None = optional_field()
-    meta: ObservationMetadata | None = metadata_field()
 
 
 class ObservationHistory(TimeRange):
@@ -253,4 +214,3 @@ class ObservationHistory(TimeRange):
     evaluated_from: datetime | None = optional_field()
     evaluated_to: datetime | None = optional_field()
     points: list[dict] | None = optional_field()
-    meta: ObservationMetadata | None = metadata_field()

@@ -1,4 +1,4 @@
-"""Bounded GONG transfers; observation times come from provider filenames."""
+"""Bounded GONG transfers with FITS and observation-time validation."""
 import gzip
 import io
 import re
@@ -61,3 +61,32 @@ def download(url):
     if len(content) > MAX_FITS_BYTES:
         raise ValueError('GONG original exceeds 32 MiB')
     return content
+
+
+def validate_magnetogram(content, expected):
+    from astropy.io import fits
+    from astropy.io.fits.verify import VerifyError
+    import numpy as np
+
+    try:
+        with fits.open(io.BytesIO(content)) as picture:
+            picture.verify('exception')
+            primary = picture[0]
+            header = primary.header
+            if (
+                header.get('NAXIS') != 2
+                or 'GONG' not in header.get('TELESCOP', '').upper()
+                or header.get('IMTYPE', '').strip().upper() != 'MAGNETIC'
+            ):
+                raise ValueError('Expected a two-dimensional GONG magnetogram')
+            date = header.get('MAPDATE') or header['DATE-OBS']
+            time = header.get('MAPTIME') or header.get('TIME-OBS')
+            stamp = datetime.fromisoformat(f'{date.strip()}T{time.strip()}' if time else date.strip())
+            observed = stamp.replace(tzinfo=UTC) if stamp.tzinfo is None else stamp.astimezone(UTC)
+            if observed.replace(second=0, microsecond=0) != expected.astimezone(UTC):
+                raise ValueError('GONG FITS observation time disagrees with filename')
+            if primary.data is None or not np.isfinite(primary.data).any():
+                raise ValueError('GONG magnetogram has no finite pixels')
+            return observed
+    except (OSError, VerifyError, KeyError, TypeError, AttributeError) as error:
+        raise ValueError('Invalid GONG FITS') from error

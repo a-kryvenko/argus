@@ -10,11 +10,13 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -56,6 +58,10 @@ func run(args []string) error {
 		return fmt.Errorf("configure PostgreSQL: %w", err)
 	}
 	defer pool.Close()
+	sources, err := observationPolicies(os.Getenv("ARGUS_WORKDIR"))
+	if err != nil {
+		return err
+	}
 
 	addr := os.Getenv("CLIO_HTTP_ADDR")
 	if addr == "" {
@@ -66,7 +72,7 @@ func run(args []string) error {
 		return err
 	}
 	server := &http.Server{
-		Handler:           newHandler(postgres{pool}, os.Getenv("OBSERVATIONS_SERVICE_TOKEN"), os.Getenv("S3_PUBLIC_BASE_URL")),
+		Handler:           newHandler(postgres{pool: pool, sources: sources}, os.Getenv("OBSERVATIONS_SERVICE_TOKEN"), os.Getenv("S3_PUBLIC_BASE_URL")),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	serveErr := make(chan error, 1)
@@ -87,6 +93,32 @@ func run(args []string) error {
 		}
 		return nil
 	}
+}
+
+type sourcePolicy struct {
+	Sources struct {
+		Live       []string `yaml:"live"`
+		Historical []string `yaml:"historical"`
+	} `yaml:"sources"`
+}
+
+func observationPolicies(workdir string) (map[string]sourcePolicy, error) {
+	if workdir == "" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(filepath.Join(workdir, "configs", "project.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var project struct {
+		Clio struct {
+			Observations map[string]sourcePolicy `yaml:"observations"`
+		} `yaml:"clio"`
+	}
+	if err := yaml.Unmarshal(data, &project); err != nil {
+		return nil, fmt.Errorf("read Clio observation policies: %w", err)
+	}
+	return project.Clio.Observations, nil
 }
 
 func databaseURL() (string, error) {

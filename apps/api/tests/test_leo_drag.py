@@ -54,16 +54,14 @@ def test_http_contract_and_public_envelope(result, monkeypatch):
         assert response.json()['data']['estimated_altitude_loss_m'] == 100
         assert response.json()['success'] is True
         compact = response.json()['data']
-        assert 'meta' not in compact and 'model' not in compact
+        assert 'model' not in compact
         assert 'background_method' not in compact['source']
         assert compact['source']['release_id'] == result['source']['release_id']
         assert compact['source']['driver_mode'] == 'observed_persistence'
         assert compact['source']['background_interpolated'] is False
-        expanded = api.post('/risks/leo-drag?meta=true', json=REQUEST).json()['data']
-        metadata = expanded.pop('meta')
+        metadata = compact['meta']
         assert metadata['source']['model'] == 'JB2008'
         assert metadata['source']['dtc_method'] == 'causal_dst_ap_v1'
-        assert expanded == compact
         assert '/risks/leo-drag' in api.get('/openapi.json').json()['paths']
 
 
@@ -115,7 +113,7 @@ def test_dtm_source_survives_public_projection(result, monkeypatch):
     monkeypatch.setattr(leo_drag, 'assess_drag', lambda request: service.assess_drag(
         request, transport=httpx.MockTransport(lambda _: httpx.Response(200, json=result))))
     with client() as api:
-        response = api.post('/risks/leo-drag?meta=true', json=REQUEST)
+        response = api.post('/risks/leo-drag', json=REQUEST)
     assert response.status_code == 200
     data = response.json()['data']
     assert data['meta']['source']['model'] == 'DTM2020'

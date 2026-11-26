@@ -1,12 +1,11 @@
 """Native GOES primary X-ray irradiance and integral proton flux from NOAA SWPC."""
 from datetime import UTC, datetime
-import math
 
 import pandas as pd
 import requests
 
 from clio.ingestion.utils.products import PRODUCTS
-from clio.providers._contract import dataset
+from clio.providers._contract import sample, samples_frame
 
 
 BASE_URL = 'https://services.swpc.noaa.gov/json/goes/primary'
@@ -21,7 +20,7 @@ def parse_records(product: str, payload: object, received_at: datetime) -> pd.Da
         raise ValueError(f'{product}: expected a nonempty JSON record list')
     _, bands = FEEDS[product]
     slot_minutes = PRODUCTS[product].slot_minutes
-    rows = {}
+    rows = []
     for row in payload:
         if not isinstance(row, dict) or not {'time_tag', 'energy', 'flux'} <= row.keys():
             raise ValueError(f'{product}: unexpected record schema')
@@ -39,12 +38,10 @@ def parse_records(product: str, payload: object, received_at: datetime) -> pd.Da
             continue
         # SWPC XRS flux already includes the electron correction. The source
         # contamination marker describes that correction and is not a fill flag.
-        try:
-            value = float(row['flux']) if not isinstance(row['flux'], bool) else math.nan
-        except (TypeError, ValueError, OverflowError):
-            value = math.nan
-        rows.setdefault(observed, {'timestamp': observed})[bands[energy]] = value
-    return dataset(pd.DataFrame(rows.values()), bands.values())
+        satellite = row.get('satellite')
+        spacecraft = f'GOES-{satellite}' if isinstance(satellite, int) and not isinstance(satellite, bool) else None
+        rows.append(sample(bands[energy], observed, row['flux'], spacecraft=spacecraft))
+    return samples_frame(rows)
 
 
 def fetch_records(product: str, *, historical: bool = False) -> pd.DataFrame:

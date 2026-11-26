@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,32 +14,26 @@ type measurement struct {
 }
 
 type postgres struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	sources map[string]sourcePolicy
 }
 
 func (db postgres) ready(ctx context.Context) error {
-	_, err := db.pool.Exec(ctx, "SELECT 1 FROM clio.measurement LIMIT 1")
+	_, err := db.pool.Exec(ctx, `SELECT m.spacecraft, m.quality, n.wind_time_basis, o.id, f.id
+		FROM clio.measurement m, clio.normalized_observation n, clio.file_observation o, clio.files f LIMIT 0`)
 	return err
 }
 
 func (db postgres) latest(ctx context.Context, metrics []string) ([]measurement, error) {
-	rows, err := db.pool.Query(ctx, latestMeasurements, metrics, windMetrics, nativeWindProducts)
+	series, err := db.series(ctx, seriesQuery{metrics: metrics, to: time.Now().UTC(), windBasis: l1TimeBasis, windStep: time.Minute})
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, scanMeasurement)
-}
-
-const latestMeasurements = `
-		SELECT DISTINCT ON (metric) metric, observed_at, value
-		FROM clio.measurement
-		WHERE metric = ANY($1::varchar[])
-		  AND (metric <> ALL($2::varchar[]) OR source_product = ANY($3::varchar[]))
-		ORDER BY metric, observed_at DESC
-	`
-
-func scanMeasurement(row pgx.CollectableRow) (measurement, error) {
-	var reading measurement
-	err := row.Scan(&reading.metric, &reading.observedAt, &reading.value)
-	return reading, err
+	result := make([]measurement, 0, len(series))
+	for metric, readings := range series {
+		for _, point := range readings.Points {
+			result = append(result, measurement{metric: metric, observedAt: point.ObservedAt, value: point.Value})
+		}
+	}
+	return result, nil
 }

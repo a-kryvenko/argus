@@ -37,7 +37,7 @@ def report_config(tmp_path, monkeypatch):
 @pytest.mark.parametrize('target', ['solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'])
 def test_report_limits_horizon(report_config, target, calibrated):
     product, variable = report_config(target, calibrated)
-    result = service.load_metrics(product, meta=True)
+    result = service.load_metrics(product)
     assert result.evaluation.sample == 'Test cohort'
     assert result.meta.variables[variable.name].unit == variable.unit
     metrics = result.variables[variable.name]

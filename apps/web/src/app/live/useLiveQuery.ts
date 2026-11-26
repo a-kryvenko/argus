@@ -6,8 +6,8 @@ import type { IndexMetric, IndexSample } from './geomagnetic';
 
 export type Summary = {
   changes_1h?: Record<string, number | null>;
-} & Partial<Record<Metric | 'f10_7', Pick<Sample, 'observed_at' | 'value' | 'quality'> | null>>
-  & Partial<Record<IndexMetric, Pick<IndexSample, 'interval_start' | 'interval_end' | 'value' | 'quality'> | null>>;
+} & Partial<Record<Metric | 'f10_7', Pick<Sample, 'observed_at' | 'value' | 'quality' | 'source_product'> | null>>
+  & Partial<Record<IndexMetric, Pick<IndexSample, 'interval_start' | 'interval_end' | 'value' | 'quality' | 'source_product'> | null>>;
 export type QueryResult<T> = { data?: T; receivedAt?: number; failed: boolean; loading: boolean };
 export type LiveSnapshot = QueryResult<Summary> & { now?: number };
 export type HistoryWindow = { from: string; to: string };

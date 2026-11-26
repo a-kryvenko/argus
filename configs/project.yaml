@@ -183,6 +183,15 @@ clio:
       live_resolution_minutes: 1
       poll_minutes: 1
       freshness_minutes: 10
+    bt:
+      sources:
+        live: [swpc.rtsw_mag]
+        historical: [omni.hourly]
+      backfill_days: 60
+      resolution_minutes: 60
+      live_resolution_minutes: 1
+      poll_minutes: 1
+      freshness_minutes: 10
     v:
       sources:
         live: [swpc.rtsw_plasma]

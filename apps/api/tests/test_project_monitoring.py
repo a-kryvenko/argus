@@ -19,6 +19,7 @@ def forecast_payload(product='dst', **changes):
 
 @pytest.mark.parametrize('forecast_unavailable', [False, True])
 def test_each_dashboard_request_reads_current_service_status(monkeypatch, forecast_unavailable):
+    policies = monitoring.get_config().project_config['clio']['observations']
     monkeypatch.setenv('OBSERVATIONS_URL', 'http://clio')
     monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'observation-secret')
     monkeypatch.setenv('FORECASTS_URL', 'http://prophet')
@@ -27,8 +28,10 @@ def test_each_dashboard_request_reads_current_service_status(monkeypatch, foreca
     def respond(request):
         requests.append((str(request.url), request.headers['Authorization']))
         if request.url.host == 'clio':
+            stamp = datetime.now(UTC).isoformat()
             return httpx.Response(200, json={'success': True, 'data': {
-                'points': [dict(time=datetime.now(UTC).isoformat(), **{m: 2. for m in monitoring.get_config().project_config['clio']['observations'] if m not in ('goes', 'gong')})]}})
+                metric: {'observed_at': stamp, 'received_at': stamp, 'usable': True}
+                for metric in policies}})
         return httpx.Response(503 if forecast_unavailable else 200,
             json={'products': [forecast_payload(p) for p in monitoring.PRODUCT_ARTIFACTS]})
     client = httpx.AsyncClient
@@ -43,7 +46,7 @@ def test_each_dashboard_request_reads_current_service_status(monkeypatch, foreca
     assert set(result) == {'status', 'observations', 'forecasts', 'checked_at', 'stale'}
     assert {item['product'] for item in result['forecasts']} == set(monitoring.PRODUCT_ARTIFACTS)
     assert sorted(requests) == [
-        ('http://clio/internal/v1/observations/latest', 'Bearer observation-secret'),
+        ('http://clio/internal/v1/observations/status', 'Bearer observation-secret'),
         ('http://prophet/internal/v1/forecasts/status', 'Bearer forecast-secret')]
     second = asyncio.run(project_monitoring(Response())).data
     assert len(requests) == 4

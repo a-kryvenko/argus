@@ -49,7 +49,7 @@ type LeoDragAssessment struct {
 	RiskReason             string         `json:"risk_reason"`
 	Assumptions            []string       `json:"assumptions"`
 	Predictions            []DragPoint    `json:"predictions"`
-	Meta                   *DragMetadata  `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Additional descriptions, included only with meta=true."`
+	Meta                   *DragMetadata  `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Drag model and density inputs used for this assessment."`
 }
 
 type LeoDragRequest struct {

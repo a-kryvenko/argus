@@ -3,15 +3,18 @@ import asyncio
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
+from botocore.exceptions import BotoCoreError, ClientError
 
 from common.data import datamanager
 from common.schemas.solar_wind_events import EventInputs, SourcePoll
 from clio.db import session as db
 from clio.db.locks import ingestion_lock, FILE_LOCKS
+from clio.db.models.donki_poll_status import DonkiPollStatus
 from clio.db.models.file import File
 from clio.db.models.file_observation import FileObservation
 from clio.ingestion.extras.solar_wind_events import merge_arrivals, normalize_event_inputs
@@ -74,19 +77,20 @@ def store_poll(connection, poll, *, file_id, normalized):
                 details=dict(kind='arrival', sources=sources, data=merged.model_dump(mode='json'))))
 
 
-def import_legacy(connection, *, replacing):
+def import_legacy(connection):
     """Normalize the latest legacy originals once, without retaining snapshot history."""
     latest_ids = select(FileObservation.id, func.row_number().over(
         partition_by=FileObservation.source_product,
         order_by=(FileObservation.observed_at.desc(), File.timestamp.desc(), FileObservation.id.desc())
     ).label('position')).join(File, File.id == FileObservation.file_id).where(
-        FileObservation.observation.in_(OBSERVATIONS), FileObservation.source_id.is_(None)).subquery()
+        FileObservation.observation.in_(OBSERVATIONS), FileObservation.source_id.is_(None),
+        FileObservation.details['file_state'].as_string().is_(None)).subquery()
     previous = connection.execute(select(FileObservation.__table__, File.bucket, File.key)
         .join(File, File.id == FileObservation.file_id)
         .join(latest_ids, latest_ids.c.id == FileObservation.id)
         .where(latest_ids.c.position == 1)).mappings().all()
     known = set(connection.execute(select(FileObservation.source_product).where(
-        FileObservation.observation.in_(OBSERVATIONS), FileObservation.source_id == '')).scalars()) | {replacing}
+        FileObservation.observation.in_(OBSERVATIONS), FileObservation.source_id == '')).scalars())
     for row in previous:
         endpoint = row['source_product']
         if endpoint in known:
@@ -101,18 +105,40 @@ def import_legacy(connection, *, replacing):
         store_poll(connection, poll, file_id=row['file_id'], normalized=normalized)
 
 
-def prune_legacy(connection, previous_file_id):
-    # Originals stay in S3; remove retired snapshots and unreferenced registry rows.
-    retired = FileObservation.source_id.is_(None) & (
-        FileObservation.observation.in_([*OBSERVATIONS, 'enlil']) |
-        FileObservation.source_product.in_([*donki.ENDPOINTS, 'noaa.enlil']))
-    file_ids = connection.execute(delete(FileObservation).where(retired)
-        .returning(FileObservation.file_id)).scalars().all()
-    if previous_file_id is not None:
-        file_ids.append(previous_file_id)
+def delete_unreferenced_files(connection, file_ids):
     for offset in range(0, len(file_ids), 1000):
         connection.execute(delete(File).where(File.id.in_(file_ids[offset:offset+1000]),
             ~exists(select(FileObservation.id).where(FileObservation.file_id == File.id))))
+
+
+def restore_legacy_polls():
+    with ingestion_lock('donki', FILE_LOCKS['donki']) as acquired:
+        if not acquired:
+            return {'status': 'busy'}
+        with db.get_sync_engine().begin() as connection:
+            import_legacy(connection)
+            prune_legacy(connection)
+    return {'status': 'complete'}
+
+
+def prune_legacy(connection):
+    # Originals stay in S3; remove retired snapshots and unreferenced registry rows.
+    retired = FileObservation.source_id.is_(None) & (
+        FileObservation.observation.in_([*OBSERVATIONS, 'enlil']) |
+        FileObservation.source_product.in_([*donki.ENDPOINTS, 'noaa.enlil'])) & (
+        FileObservation.details['file_state'].as_string().is_(None))
+    file_ids = connection.execute(delete(FileObservation).where(retired)
+        .returning(FileObservation.file_id)).scalars().all()
+    delete_unreferenced_files(connection, file_ids)
+
+
+def record_attempt(connection, endpoint, attempted_at, error=None):
+    attempt = insert(DonkiPollStatus).values(endpoint=endpoint, attempted_at=attempted_at, error=error)
+    connection.execute(attempt.on_conflict_do_update(
+        index_elements=[DonkiPollStatus.endpoint],
+        set_={'attempted_at': attempt.excluded.attempted_at, 'error': attempt.excluded.error},
+        where=attempt.excluded.attempted_at >= DonkiPollStatus.attempted_at,
+    ))
 
 
 def record_poll(endpoint, *, raw, metadata, observed_at=None):
@@ -122,21 +148,29 @@ def record_poll(endpoint, *, raw, metadata, observed_at=None):
         request_start=metadata['request_start'], request_end=metadata['request_end'])
     normalized = normalize_event_inputs(EventInputs(read_at=poll.received_at, polls=[poll]))
     key = f'observations/donki.{endpoint}/{poll.sha256}/original.json'
-    with db.get_sync_engine().begin() as connection:
-        last = connection.execute(select(FileObservation.__table__).where(
-            FileObservation.observation == 'donki.' + endpoint, FileObservation.source_id == '')
-            .with_for_update()).mappings().one_or_none()
+    latest = select(FileObservation.__table__).where(
+        FileObservation.observation == 'donki.' + endpoint, FileObservation.source_id == '')
+    with db.get_sync_engine().connect() as connection:
+        last = connection.execute(latest).mappings().one_or_none()
         if last and last['observed_at'] > poll.received_at:
-            return SourcePoll.model_validate(dict(last['details'], endpoint=endpoint,
-                received_at=last['observed_at'], sha256=last['sha256'])).poll_id
-        import_legacy(connection, replacing=endpoint)
-        uploaded_at = datamanager.put_immutable_file(raw, BUCKET, key, content_type='application/json')
+            return uuid_from_poll(last)
+    uploaded_at = datamanager.put_immutable_file(raw, BUCKET, key, content_type='application/json')
+    with db.get_sync_engine().begin() as connection:
+        last = connection.execute(latest.with_for_update()).mappings().one_or_none()
+        if last and last['observed_at'] > poll.received_at:
+            return uuid_from_poll(last)
         connection.execute(insert(File).values(id=uuid4(), timestamp=uploaded_at, bucket=BUCKET, key=key)
             .on_conflict_do_nothing(index_elements=['bucket', 'key']))
         file_id = connection.scalar(select(File.id).where(File.bucket == BUCKET, File.key == key))
         store_poll(connection, poll, file_id=file_id, normalized=normalized)
-        prune_legacy(connection, last['file_id'] if last else None)
+        record_attempt(connection, endpoint, poll.received_at)
+        if last:
+            delete_unreferenced_files(connection, [last['file_id']])
     return poll.poll_id
+
+
+def uuid_from_poll(row):
+    return UUID(row['details']['poll_id'])
 
 
 async def collect(policy, *, now=None):
@@ -150,9 +184,16 @@ async def collect(policy, *, now=None):
         for endpoint in donki.ENDPOINTS:
             try:
                 raw, _ = await asyncio.to_thread(donki.fetch, endpoint, start, now)
-                await asyncio.to_thread(record_poll, endpoint, raw=raw, observed_at=now,
+                await asyncio.to_thread(record_poll, endpoint, raw=raw, observed_at=datetime.now(UTC),
                     metadata=dict(request_start=start, request_end=end, source_url=donki.BASE_URL+endpoint))
-            except (OSError, ValueError, donki.requests.RequestException) as exc:
+            except (OSError, ValueError, donki.requests.RequestException, BotoCoreError, ClientError, SQLAlchemyError) as exc:
                 failed.append(endpoint)
-                logger.warning('DONKI %s failed: %s', endpoint, type(exc).__name__)
+                error = type(exc).__name__
+                logger.warning('DONKI %s failed: %s', endpoint, error)
+                await asyncio.to_thread(record_failure, endpoint, error)
         return {'status': 'partial' if failed else 'complete', 'failed_endpoints': failed}
+
+
+def record_failure(endpoint, error):
+    with db.get_sync_engine().begin() as connection:
+        record_attempt(connection, endpoint, datetime.now(UTC), error)

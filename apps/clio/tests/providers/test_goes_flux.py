@@ -23,7 +23,10 @@ def test_xrs_uses_corrected_flux_and_clips_to_native_valid_data():
         record('0.1-0.8nm', None, NOW - timedelta(minutes=1)),
         record('0.1-0.8nm', 1.e-6, NOW + timedelta(minutes=1)),
     ], NOW)
-    assert frame.to_dict('records') == [{'timestamp': NOW, 'xrs_a': 2.e-8, 'xrs_b': 3.e-7}]
+    good = frame.loc[frame.quality.isna()]
+    assert good.set_index('metric').value.to_dict() == {'xrs_a': 2.e-8, 'xrs_b': 3.e-7}
+    assert good.observed_at.eq(NOW).all() and good.spacecraft.eq('GOES-18').all()
+    assert frame.quality.dropna().tolist() == ['flagged', 'missing']
 
 
 def test_proton_feeds_keep_only_10_and_100_mev_at_five_minute_slots():
@@ -33,7 +36,10 @@ def test_proton_feeds_keep_only_10_and_100_mev_at_five_minute_slots():
         record('>=100 MeV', float('inf'), NOW - timedelta(minutes=5)),
         record('>=10 MeV', True, NOW - timedelta(minutes=5)),
     ], NOW)
-    assert frame.to_dict('records') == [{'timestamp': NOW, 'proton_10mev': .5, 'proton_100mev': 0.}]
+    good = frame.loc[frame.quality.isna()]
+    assert good.set_index('metric').value.to_dict() == {'proton_10mev': .5, 'proton_100mev': 0.}
+    assert good.observed_at.eq(NOW).all()
+    assert frame.quality.dropna().tolist() == ['flagged', 'flagged']
 
 
 @pytest.mark.parametrize(('product', 'feed', 'energy', 'metric'), [

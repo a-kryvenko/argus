@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/a-kryvenko/argus/apps/prophet/api-go/publicforecast"
@@ -81,12 +79,7 @@ func (a *api) density(w http.ResponseWriter, r *http.Request, respond func(Publi
 }
 
 func (a *api) projectedForecast(r *http.Request, path, message string) (json.RawMessage, error) {
-	meta, err := booleanQuery(r.URL.Query(), metaParameter)
-	if err != nil {
-		return nil, err
-	}
-	query := url.Values{metaParameter: {strconv.FormatBool(meta)}}
-	raw, _, err := a.request(r.Context(), a.prophet, "GET", path, query, nil, 10*time.Second)
+	raw, _, err := a.request(r.Context(), a.prophet, "GET", path, nil, nil, 10*time.Second)
 	if err != nil {
 		return nil, unavailable(message)
 	}

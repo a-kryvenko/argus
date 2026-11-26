@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 from common.schemas.sdo_images import OBSERVED_CHANNELS
 from common.schemas.sdo_browse import CHANNELS as BROWSE_CHANNELS
+from common.observationcatalog import METRICS
 
 if TYPE_CHECKING:
     import pandas as pd
 
 XRS_METRICS = ('xrs_a', 'xrs_b')
 PROTON_METRICS = ('proton_10mev', 'proton_100mev')
+WIND_METRICS = ('bx', 'by', 'bz', 'v', 'n', 't')
 
 
 @dataclass(frozen=True)
@@ -32,21 +34,12 @@ class ObservationDefinition:
 
 
 OBSERVATIONS = {
-    'bx': ObservationDefinition('nT', signed=True),
-    'by': ObservationDefinition('nT', signed=True),
-    'bz': ObservationDefinition('nT', signed=True),
-    'v': ObservationDefinition('km/s'),
-    'n': ObservationDefinition('cm^-3'),
-    't': ObservationDefinition('K'),
-    'kp': ObservationDefinition('index', max_value=9),
-    'ap': ObservationDefinition('nT'),
-    'dst': ObservationDefinition('nT', signed=True),
-    'f10_7': ObservationDefinition('sfu'),
-    'f10_7_81mean': ObservationDefinition('sfu', coverage='latest'),
-    **{name + '_81mean': ObservationDefinition('sfu', coverage='latest')
-       for name in ('s10', 'm10', 'y10')},
-    **{name: ObservationDefinition('W/m²') for name in XRS_METRICS},
-    **{name: ObservationDefinition('pfu') for name in PROTON_METRICS},
+    **{
+        name: ObservationDefinition(
+            entry['unit'], signed=entry.get('signed', False), max_value=entry.get('max'),
+            coverage='latest' if entry['group'] == 'model' else 'slots')
+        for name, entry in METRICS.items() if name not in ('s10', 'm10', 'y10')
+    },
     'goes': ObservationDefinition('JSON', kind='file'),
     'gong': ObservationDefinition('FITS', kind='file'),
 }
@@ -58,26 +51,27 @@ class Product:
     modes: frozenset[str]
     kind: Literal['numeric', 'file'] = 'numeric'
     slot_minutes: int | None = None
+    lock: int | None = None
 
 
 # All numeric products feed measurement; live wind uses native minute RTSW.
 PRODUCTS = {
-    'omni.hourly': Product(frozenset({'bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'ap', 'dst', 'f10_7'}),
-                          frozenset({'historical'})),
-    'soho.plasma_hourly': Product(frozenset({'v', 'n', 't'}), frozenset({'historical'})),
-    'ace.plasma_hourly': Product(frozenset({'v', 'n', 't'}), frozenset({'historical'})),
-    'swpc.rtsw_plasma': Product(frozenset({'v', 'n', 't'}), frozenset({'live'})),
-    'swpc.rtsw_mag': Product(frozenset({'bx', 'by', 'bz'}), frozenset({'live'})),
-    'swpc.kp': Product(frozenset({'kp', 'ap'}), frozenset({'live'})),
-    'swpc.dst': Product(frozenset({'dst'}), frozenset({'live'})),
+    'omni.hourly': Product(frozenset({*WIND_METRICS, 'bt', 'kp', 'ap', 'dst', 'f10_7'}),
+                          frozenset({'historical'}), slot_minutes=60),
+    'soho.plasma_hourly': Product(frozenset({'v', 'n', 't'}), frozenset({'historical'}), slot_minutes=60),
+    'ace.plasma_hourly': Product(frozenset({'v', 'n', 't'}), frozenset({'historical'}), slot_minutes=60),
+    'swpc.rtsw_plasma': Product(frozenset({'v', 'n', 't'}), frozenset({'live'}), slot_minutes=1, lock=730101),
+    'swpc.rtsw_mag': Product(frozenset({'bx', 'by', 'bz', 'bt'}), frozenset({'live'}), slot_minutes=1, lock=730100),
+    'swpc.kp': Product(frozenset({'kp', 'ap'}), frozenset({'live'}), slot_minutes=180, lock=730110),
+    'swpc.dst': Product(frozenset({'dst'}), frozenset({'live'}), slot_minutes=60, lock=730111),
     'swpc.f107': Product(frozenset({'f10_7'}), frozenset({'live'})),
     'gfz.f107': Product(frozenset({'f10_7'}), frozenset({'historical'})),
     'celestrak.f107': Product(frozenset({'f10_7', 'f10_7_81mean'}), frozenset({'live'})),
     'celestrak.f107_archive': Product(frozenset({'f10_7', 'f10_7_81mean'}), frozenset({'historical'})),
     'solfsmy.means': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'live'})),
     'solfsmy.means_archive': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'historical'})),
-    'goes.xrs': Product(frozenset(XRS_METRICS), frozenset({'live', 'historical'}), slot_minutes=1),
-    'goes.protons': Product(frozenset(PROTON_METRICS), frozenset({'live', 'historical'}), slot_minutes=5),
+    'goes.xrs': Product(frozenset(XRS_METRICS), frozenset({'live', 'historical'}), slot_minutes=1, lock=730120),
+    'goes.protons': Product(frozenset(PROTON_METRICS), frozenset({'live', 'historical'}), slot_minutes=5, lock=730121),
     'goes.live': Product(frozenset({'goes'}), frozenset({'live'}), kind='file', slot_minutes=60),
     'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file', slot_minutes=1440),
     'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file', slot_minutes=60),
@@ -102,16 +96,6 @@ PRODUCTS['nasa.aia_browse'] = Product(frozenset(browse_metrics), frozenset({'liv
 
 FILE_OBSERVATIONS = {(definition.file_kind or name, definition.channel): name
                      for name, definition in OBSERVATIONS.items() if definition.kind == 'file'}
-
-
-SOURCE_IDS = {
-    'swpc.rtsw_mag': 'solar_wind_mag',
-    'swpc.rtsw_plasma': 'solar_wind_plasma',
-    'swpc.kp': 'kp',
-    'swpc.dst': 'dst',
-    'goes.xrs': 'goes_xrs',
-    'goes.protons': 'goes_protons',
-}
 
 
 class NumericAdapter(Protocol):

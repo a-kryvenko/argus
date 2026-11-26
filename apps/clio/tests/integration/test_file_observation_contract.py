@@ -6,8 +6,6 @@ import subprocess
 import sys
 from uuid import uuid4
 
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 import sqlalchemy as sa
 from sqlalchemy.engine import make_url
@@ -18,12 +16,14 @@ from tests.support.database import database
 def test_deployed_schema_preserves_receipts_and_accepts_current_collection(database, object_store, monkeypatch, tmp_path):
     _, urls, environment = database
     from clio.db import session as db
-    from clio.db.base import Base
     from clio.ingestion.utils.file_observations import find, save
 
     engine = sa.create_engine(make_url(urls['clio']).set(drivername='postgresql+psycopg'),
                               connect_args={'options': '-csearch_path=clio,public'})
     scripts = ScriptDirectory(str(Path(__file__).resolve().parents[2] / 'src/clio/db/migrations'))
+    command = [sys.executable, '-m', 'alembic', '-c',
+               str(Path(__file__).resolve().parents[2] / 'alembic.ini'), 'upgrade']
+    environment = {**environment, 'PYTHONPATH': ''}
     now = datetime(2026, 11, 7, 12, tzinfo=UTC)
     original_id, duplicate_id, derivative_id = uuid4(), uuid4(), uuid4()
     file_ids = [uuid4() for _ in range(7)]
@@ -36,12 +36,9 @@ def test_deployed_schema_preserves_receipts_and_accepts_current_collection(datab
         ('enlil', None, 'netcdf.original', 'noaa.enlil', 'enlil'),
     ]
     try:
+        result = subprocess.run([*command, '20261102_files'], env=environment, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
         with engine.begin() as connection:
-            connection.exec_driver_sql('CREATE SCHEMA clio')
-            context = MigrationContext.configure(connection, opts={'target_metadata': Base.metadata})
-            with Operations.context(context):
-                scripts.get_revision('20261027_file_observation').module.upgrade()
-                scripts.get_revision('20261102_files').module.upgrade()
             for file_id in file_ids:
                 connection.execute(sa.text('INSERT INTO clio.files VALUES (:id,:time,\'argus-private\',:key)'),
                                    dict(id=file_id, time=now, key=str(file_id)))
@@ -67,13 +64,8 @@ def test_deployed_schema_preserves_receipts_and_accepts_current_collection(datab
                 (id,kind,source_product,source_key,received_at,raw_path,sha256)
                 VALUES (:id,'goes','goes.archive','local',:time,'legacy.gz',:checksum)'''),
                 dict(id=uuid4(), time=now, checksum='b'*64))
-            connection.exec_driver_sql('CREATE TABLE clio.alembic_version (version_num varchar(32) PRIMARY KEY)')
-            connection.exec_driver_sql("INSERT INTO clio.alembic_version VALUES ('20261102_files')")
-
-        command = [sys.executable, '-m', 'alembic', '-c',
-                   str(Path(__file__).resolve().parents[2] / 'alembic.ini'), 'upgrade', 'head']
         for _ in range(2):
-            result = subprocess.run(command, env={**environment, 'PYTHONPATH': ''}, capture_output=True, text=True)
+            result = subprocess.run([*command, 'head'], env=environment, capture_output=True, text=True)
             assert result.returncode == 0, result.stdout + result.stderr
 
         monkeypatch.setattr(db, 'get_sync_engine', lambda: engine)
@@ -82,7 +74,7 @@ def test_deployed_schema_preserves_receipts_and_accepts_current_collection(datab
             assert len(records) == 1 and records[0]['source_product'] == source
             assert records[0]['sha256'] == 'a'*64 and records[0]['observed_at'] == now
         with engine.connect() as connection:
-            assert connection.scalar(sa.text('SELECT version_num FROM clio.alembic_version')) == '20261107_event_identities'
+            assert connection.scalar(sa.text('SELECT version_num FROM clio.alembic_version')) == scripts.get_current_head()
             assert connection.scalar(sa.text('SELECT count(*) FROM clio.file_observation')) == 9
             assert connection.scalar(sa.text('SELECT count(*) FROM clio.file_observation WHERE observation IS NULL')) == 3
             assert connection.scalar(sa.text("SELECT raw_path FROM clio.file_observation WHERE source_key='local'")) == 'legacy.gz'
@@ -98,7 +90,8 @@ def test_deployed_schema_preserves_receipts_and_accepts_current_collection(datab
         for minute in range(2):
             record_poll('CME', raw=raw, metadata=metadata, observed_at=now+timedelta(minutes=minute))
             with engine.connect() as connection:
-                assert connection.scalar(sa.text("SELECT count(*) FROM clio.file_observation WHERE observation='donki.CME'")) == 2
+                assert connection.scalar(sa.text("""SELECT count(*) FROM clio.file_observation
+                    WHERE observation='donki.CME' AND source_id IS NOT NULL""")) == 2
                 assert connection.scalar(sa.text("SELECT count(*) FROM clio.file_observation WHERE observation='donki.CME' AND source_id='cme1'")) == 1
     finally:
         engine.dispose()

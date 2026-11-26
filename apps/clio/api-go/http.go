@@ -7,12 +7,13 @@ import (
 	"errors"
 	"log"
 	"math"
-	"math/big"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/a-kryvenko/argus/observationcatalog"
 )
 
 var legacyMetrics = []string{
@@ -25,6 +26,8 @@ type observationReader interface {
 	ready(ctx context.Context) error
 	latest(ctx context.Context, metrics []string) ([]measurement, error)
 	history(ctx context.Context, metrics []string, start, end time.Time, interval, timeBasis string) (numericPoints, error)
+	series(ctx context.Context, query seriesQuery) (map[string]observationcatalog.Series, error)
+	status(ctx context.Context, now time.Time) (map[string]observationStatus, error)
 	files(ctx context.Context, observation string, start, end time.Time) ([]observationFile, error)
 	sdoImages(ctx context.Context, publicBase string) ([]sdoImage, error)
 	eventInputs(ctx context.Context, now time.Time) (eventInputs, error)
@@ -65,6 +68,9 @@ func newHandler(db observationReader, token, publicBase string) http.Handler {
 	for path, handler := range map[string]http.HandlerFunc{
 		"/internal/v1/observations/latest":                   handler.latest,
 		"/internal/v1/observations/history":                  handler.history,
+		"/internal/v1/observations/series":                   handler.series,
+		"/internal/v1/observations/model-inputs":             handler.modelInputs,
+		"/internal/v1/observations/status":                   handler.observationStatus,
 		"/internal/v1/files":                                 handler.files,
 		"/internal/v1/observations/sdo":                      handler.sdo,
 		"/internal/v1/observations/solar-wind-events/inputs": handler.events,
@@ -129,39 +135,18 @@ func (api api) latest(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		points.set(row.observedAt, row.metric, validatedValue(row.metric, row.value))
 	}
-	writeSuccess(w, map[string]any{"points": points.jsonPoints(nil)})
+	writeSuccess(w, map[string]any{"points": points.jsonPoints(nil, false)})
 }
 
 func validatedValue(metric string, number *float64) *float64 {
 	if number == nil || math.IsNaN(*number) || math.IsInf(*number, 0) {
 		return nil
 	}
-	value := *number
-	switch metric {
-	case "s10", "m10", "y10":
+	spec, found := observationcatalog.Find(metric)
+	if !found || len(spec.Products) == 0 || !spec.Signed && *number < 0 || spec.Max != nil && *number > *spec.Max {
 		return nil
-	case "bx", "by", "bz", "dst":
-		// Signed observations accept negative values.
-	default:
-		if value < 0 || (metric == "kp" && value > 9) {
-			return nil
-		}
 	}
 	return number
-}
-
-func observationValue(metric string, number *float64) any {
-	if number == nil || math.IsNaN(*number) || math.IsInf(*number, 0) {
-		return nil
-	}
-	value := *number
-	switch metric {
-	case "kp", "dst", "ap", "f10_7":
-		integer, _ := big.NewFloat(value).Int(nil)
-		return integer
-	default:
-		return value
-	}
 }
 
 func writeSuccess(w http.ResponseWriter, data any) {

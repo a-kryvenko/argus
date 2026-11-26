@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,7 +43,7 @@ type pollDetails struct {
 type pollAttempt struct {
 	ReceivedAt    string  `json:"received_at"`
 	Error         *string `json:"error"`
-	LastSuccessAt string  `json:"last_success_at"`
+	LastSuccessAt *string `json:"last_success_at"`
 }
 
 type arrivalReceipt struct {
@@ -120,9 +119,9 @@ func (db postgres) eventInputs(ctx context.Context, now time.Time) (eventInputs,
 	if err != nil {
 		return eventInputs{}, err
 	}
-	for _, poll := range inputs.Polls {
-		stamp := formatTime(poll.ReceivedAt.Time, false)
-		inputs.LatestAttempts[poll.Endpoint] = pollAttempt{ReceivedAt: stamp, LastSuccessAt: stamp}
+	inputs.LatestAttempts, err = readPollAttempts(ctx, tx, inputs.Polls)
+	if err != nil {
+		return eventInputs{}, err
 	}
 	const eventsQuery = `SELECT details -> 'data' FROM clio.file_observation
 		WHERE observation = ANY($1::varchar[]) AND details ->> 'kind' = 'event'
@@ -136,6 +135,40 @@ func (db postgres) eventInputs(ctx context.Context, now time.Time) (eventInputs,
 		ORDER BY source_id`
 	inputs.EnlilArrivals, err = readEventRows(ctx, tx, arrivalsQuery, nil, parseEnlilArrival)
 	return inputs, err
+}
+
+func readPollAttempts(ctx context.Context, tx pgx.Tx, polls []sourcePoll) (map[string]pollAttempt, error) {
+	attempts := make(map[string]pollAttempt, len(donkiEndpoints))
+	successes := make(map[string]time.Time, len(polls))
+	for _, poll := range polls {
+		successes[poll.Endpoint] = poll.ReceivedAt.Time
+		stamp := formatTime(poll.ReceivedAt.Time, false)
+		attempts[poll.Endpoint] = pollAttempt{ReceivedAt: stamp, LastSuccessAt: &stamp}
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT endpoint, attempted_at, error FROM clio.donki_poll_status
+		WHERE endpoint = ANY($1::varchar[])
+	`, donkiEndpoints)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var endpoint string
+		var timestamp time.Time
+		var failure *string
+		if err := rows.Scan(&endpoint, &timestamp, &failure); err != nil {
+			return nil, err
+		}
+		if timestamp.Before(successes[endpoint]) {
+			continue
+		}
+		attempt := attempts[endpoint]
+		attempt.ReceivedAt = formatTime(timestamp.UTC(), false)
+		attempt.Error = failure
+		attempts[endpoint] = attempt
+	}
+	return attempts, rows.Err()
 }
 
 func readPolls(ctx context.Context, tx pgx.Tx) ([]sourcePoll, error) {
@@ -197,9 +230,7 @@ func readEventRows[T any](ctx context.Context, tx pgx.Tx, query string, observat
 
 func parseSolarWindEvent(data []byte) (solarWindEvent, error) {
 	event := solarWindEvent{SourceIDs: []string{}, ArrivalReceipts: []arrivalReceipt{}}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&event); err != nil {
+	if err := json.Unmarshal(data, &event); err != nil {
 		return event, fmt.Errorf("%w: %v", corruptEvents, err)
 	}
 	if event.EventID == nil || event.AvailableAt == nil || event.SourceIDs == nil || !validReceipts(event.ArrivalReceipts) {
@@ -235,9 +266,7 @@ func parseSolarWindEvent(data []byte) (solarWindEvent, error) {
 
 func parseEnlilArrival(data []byte) (enlilArrival, error) {
 	arrival := enlilArrival{CMEIDs: []string{}, Receipts: []arrivalReceipt{}}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&arrival); err != nil {
+	if err := json.Unmarshal(data, &arrival); err != nil {
 		return arrival, fmt.Errorf("%w: %v", corruptEvents, err)
 	}
 	if arrival.SimulationID == nil || arrival.AvailableAt == nil || arrival.ModelCompletedAt == nil ||

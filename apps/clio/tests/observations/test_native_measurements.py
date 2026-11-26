@@ -27,5 +27,5 @@ def test_receipt_alone_is_not_a_revision():
     where = query.split(' WHERE ')[1]
     assert 'value IS DISTINCT FROM' in where
     assert 'received_at IS DISTINCT FROM' not in where
-    assert 'quality' not in query
+    assert 'quality IS DISTINCT FROM' in where
     assert 'ON CONFLICT ON CONSTRAINT uq_measurement_metric' in query

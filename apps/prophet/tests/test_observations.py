@@ -88,6 +88,42 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
     assert calls[2].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
 
 
+def test_density_forecast_uses_only_available_closed_l1_history(monkeypatch):
+    import io
+    from pathlib import Path
+    import yaml
+    from prophet.services.generation.calculation import CalculationRequest, calculate_product
+
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        response = resource_response(request, stored_inputs().model_dump(mode='json'))
+        payload = response.json()
+        period = payload['data']['n']['points'][0]
+        period['value'] = 2.0
+        payload['data']['n']['points'].extend([
+            {**period, 'observed_at': (NOW-timedelta(hours=2)).isoformat(),
+             'received_at': (NOW+timedelta(seconds=1)).isoformat(), 'value': 45.0},
+            {**period, 'observed_at': NOW.isoformat(), 'value': 60.0},
+        ])
+        return httpx.Response(200, json=payload)
+
+    configure(monkeypatch, handler)
+    inputs = load_inputs('solar-wind-density')
+    assert calls == ['/internal/v1/observations/series']
+    workdir = Path(__file__).resolve().parents[3]
+    registry = yaml.safe_load((workdir / 'configs/models_registry.yaml').read_text())['models']
+    artifact, = calculate_product(CalculationRequest('solar-wind-density', inputs, workdir, registry))
+    frame = pd.read_csv(io.BytesIO(artifact.content))
+    assert artifact.model_info['input_time_basis'] == 'l1'
+    assert artifact.model_info['usable_hours'] == 1
+    assert frame.lead_hours.tolist() == list(range(1, 121))
+    assert frame.n_q50.tolist() == pytest.approx([2.0] * 120)
+    assert frame.n_q10.between(0, frame.n_q50).all()
+    assert frame.n_q90.ge(frame.n_q50).all()
+
+
 def test_goes_failure_does_not_prevent_numeric_forecast(monkeypatch):
     calls = []
 

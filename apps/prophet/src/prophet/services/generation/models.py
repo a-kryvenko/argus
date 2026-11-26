@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -12,15 +13,18 @@ if TYPE_CHECKING:
 
 
 def load_model(service: type[SnapshotService], *, workdir: Path, registry: dict):
-    # Scheduling and storage tests import this module without the model runtime.
-    import joblib
     entry = registry.get(service.registry_name)
     if not entry:
         raise ConfigurationException(f'Not found registry for {service.registry_name}')
-    path = workdir / 'data/models' / (entry['model'] + '.joblib')
+    path = workdir / entry.get('artifact_path', 'data/models/' + entry['model'] + '.joblib')
     if not path.is_file():
         raise ConfigurationException(f'{path} not exists')
     content = path.read_bytes()
     model_info = {'registry_name': service.registry_name, 'model': entry['model'],
                   'sha256': hashlib.sha256(content).hexdigest()}
-    return service(joblib.load(io.BytesIO(content))), model_info
+    if path.suffix == '.json':
+        bundle = json.loads(content)
+    else:
+        import joblib
+        bundle = joblib.load(io.BytesIO(content))
+    return service(bundle), model_info

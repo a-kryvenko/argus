@@ -49,9 +49,6 @@ def proswin_metadata(product, inputs, metadata):
         details.update(identity, sha256=hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest(),
                        model=VERSION, speed_point_model=VERSION,
                        uncertainty='DLinear empirical offsets; blend calibration pending')
-    elif product == 'solar-wind-density':
-        details.update(density_point_model='DLinear + PROSWIN-speed-assisted LightGBM',
-                       uncertainty='NRT 2025 residual q10/q90; DLinear intervals on fallback')
     elif product == 'solar-wind-temperature':
         details.update(temperature_point_model='LightGBM with T/n/v history and PROSWIN speed',
                        uncertainty='Per-head NRT 2025 residual q10/q90')
@@ -82,7 +79,7 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
                 runtime_path=workdir / entry.get('runtime_path', 'data/models/dtm2020'))
             metadata = {'backend': 'forecast_core', 'registry_name': service.registry_name,
                         'issue_time': issue_time.isoformat()}
-        if product in ('solar-wind-speed', 'solar-wind-density', 'solar-wind-temperature'):
+        if product in ('solar-wind-speed', 'solar-wind-temperature'):
             metadata.update(proswin_metadata(product, inputs, metadata))
         result = calculate_snapshot(service, inputs, issue_time=issue_time, model_info=metadata)
         if result.name != model.artifact:

@@ -24,9 +24,9 @@ models:
     metrics: data/metrics/plasma/speed_2026_v3/probability
 
   plasma_density_quantile:
-    model: argus-plasma-density-proswin-blend-v1
-    artifact_path: data/models/argus-plasma-density-proswin-blend-v1.joblib
-    metrics: data/metrics/plasma/density_proswin
+    model: argus-plasma-density-recent-l1-v1
+    artifact_path: configs/models/solar-wind-density.json
+    metrics: data/metrics/plasma/density_recent_l1
     metrics_report: configs/evaluations/solar-wind-density.json
 
   plasma_temperature_quantile:

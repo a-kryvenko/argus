@@ -146,7 +146,7 @@ func newHandler(db reader, token, summaryPath string, densityMaxAge float64, pre
 			detail(w, 404, "Event verification is not available yet")
 			return
 		}
-		if productArtifacts(product) == nil {
+		if productArtifacts(product) == nil || product == geomagneticFastProduct {
 			detail(w, 404, "Unknown forecast product")
 			return
 		}

@@ -83,7 +83,8 @@ func TestGeomagneticMetricsFromSharedModel(t *testing.T) {
 	if err := os.Mkdir(configs, 0700); err != nil {
 		t.Fatal(err)
 	}
-	const registry = "models:\n  geomagnetic_ordinal:\n    metrics_report: configs/geomagnetic-activity.json\n"
+	const registry = "models:\n  geomagnetic_ordinal:\n    metrics_report: configs/geomagnetic-activity.json\n" +
+		"  geomagnetic_fast_l1:\n    metrics_report: configs/geomagnetic-fast-l1.json\n"
 	if err := os.WriteFile(filepath.Join(configs, "models_registry.yaml"), []byte(registry), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -130,6 +131,55 @@ func TestGeomagneticMetricsFromSharedModel(t *testing.T) {
 			series.ByLeadHour[0].BrierScore == nil {
 			t.Errorf("missing scores for Kp >= %.0f: %+v", threshold, series)
 		}
+	}
+	if report.FastL1Evaluation != nil {
+		t.Fatal("the hourly metrics must be available without a fast L1 report")
+	}
+
+	const fast = `{
+		"period": "January–June 2026",
+		"sample": "Matched native three-hour intervals",
+		"notes": ["Simulated delivery delay"],
+		"by_delay": [{
+			"delay_minutes": 15, "targets": 58, "updates": 55, "observed_events": 10,
+			"baseline": {"kp4_brier": 0.176, "kp5_brier": 0.141, "kp6_brier": 0.083, "ap_mae": 20.5,
+				"ap_coverage_80": 0.621, "ap_interval_width_80": 18.3, "alert_threshold": 0.136, "hits": 4, "false_alerts": 0},
+			"candidate": {"kp4_brier": 0.142, "kp5_brier": 0.114, "kp6_brier": 0.067, "ap_mae": 17.0,
+				"ap_coverage_80": 0.897, "ap_interval_width_80": 58.8, "alert_threshold": 0.361, "hits": 4, "false_alerts": 1},
+			"ap_mae_delta_ci95": [-5.52, -0.86], "kp5_brier_delta_ci95": [-0.074, 0.029]
+		}]
+	}`
+	fastFile := filepath.Join(configs, "geomagnetic-fast-l1.json")
+	for _, tc := range []struct {
+		name      string
+		content   string
+		available bool
+	}{
+		{"paired metrics", fast, true},
+		{"invalid target coverage", strings.Replace(fast, `"updates": 55`, `"updates": 59`, 1), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(fastFile, []byte(tc.content), 0600); err != nil {
+				t.Fatal(err)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			var parsed publicforecast.ForecastMetrics
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &parsed) != nil ||
+				parsed.Variables["ap"].Continuous.ByLeadHour[0].Values["mae"] != 5.1 {
+				t.Fatalf("missing hourly metrics: %d %s", response.Code, response.Body)
+			}
+			if (parsed.FastL1Evaluation != nil) != tc.available {
+				t.Fatalf("wrong fast report availability: %s", response.Body)
+			}
+			if tc.available {
+				row := parsed.FastL1Evaluation.ByDelay[0]
+				if row.DelayMinutes != 15 || row.Targets != 58 || row.Updates != 55 || row.Candidate.Kp5Brier != .114 ||
+					row.Baseline.ApMAE != 20.5 || row.Candidate.FalseAlerts != 1 {
+					t.Fatalf("incomplete paired comparison: %+v", row)
+				}
+			}
+		})
 	}
 }
 

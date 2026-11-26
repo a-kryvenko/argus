@@ -39,7 +39,7 @@ export default function MonthlyAccuracy({ product }: { product: ProductConfig })
   const { data, error, retry } = useResource<Verification>(productApiPath(product, '/verification'));
   return <section className={local.monthly} aria-label="Last 30 days average accuracy">
     <h2>Last 30 days average accuracy</h2>
-    <p>Published forecasts compared with hourly observations from Clio, separately by model version and forecast lead time. Lower MAE, RMSE and Brier scores are better.</p>
+    <p>{product.apiTarget === 'geomagnetic-activity' ? 'Scheduled hourly Kp/ap forecasts' : 'Published forecasts'} compared with observations from Clio, separately by model version and forecast lead time. Lower MAE, RMSE and Brier scores are better.</p>
     {!data ? <ResourceState error={error} retry={retry} label="observed forecast accuracy" /> : <>
       <p>{utc(data.start)} – {utc(data.end)} · by forecast valid time</p>
       {!data.groups.length && <p role="status">No verified forecast data available for this period.</p>}

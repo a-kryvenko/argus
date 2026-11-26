@@ -4,6 +4,8 @@
 
 [Kp and ap accuracy](frozen/2026-11-26-kp-ap-v1/README.md) · Paired 48-hour archive replay with L1 inputs.
 
+[Fast L1 Kp/ap accuracy](frozen/2026-11-26-kp-ap-fast-l1-v1/README.md) · Paired archive results for the next full interval after an L1 front detection.
+
 [Solar-wind speed accuracy](frozen/2026-10-21-speed-release-v1/README.md): MAE by forecast lead time, January–June 2026.
 
 [CME correction in solar-wind speed](frozen/2026-10-15-cme-window-release-v1/README.md): original arrival window, 100% peak weight, decay to zero at late arrival +12 h.

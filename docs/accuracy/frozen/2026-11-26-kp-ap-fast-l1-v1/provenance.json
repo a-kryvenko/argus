@@ -1,0 +1,37 @@
+{
+  "snapshot": "2026-11-26-kp-ap-fast-l1-v1",
+  "models": {
+    "fast": {
+      "name": "argus-geomagnetic-fast-l1-v1",
+      "artifact": "configs/models/geomagnetic-fast-l1-v1.json",
+      "sha256": "ce3d47195e32e6e5f26233a07f24647a5091bc5aa0f52a904c5be54cf527205d",
+      "lightgbm_model_sha256": "56c156efab9c4346c715806b5c4486791d324fcd3f3793d09a5b443b68e94623"
+    },
+    "hourly": {
+      "name": "argus-geomagnetic-ordinal-v1",
+      "artifact": "configs/models/geomagnetic-ordinal-v1.json",
+      "sha256": "db808e56fdd73d0a4ad80a0f274ab3ea2b55ed8e5e106bfe045d042f00cd800b",
+      "lightgbm_model_sha256": "1f310e3be2322e35aa918fb49417f7c99eb1a9c451565dff1b336b621e5ac1ed"
+    }
+  },
+  "api_metrics_report": "configs/evaluations/geomagnetic-fast-l1.json",
+  "api_metrics_report_sha256": "f6889119b5b2e609952cd69c7dd7c83b86c909745848a434e92e3db3893f8f5e",
+  "local_evidence_path": "data/experiments/cme-l1-kp-trained-2026-11-26",
+  "evaluation_code": "notebooks/workflows/revalidation/cme_l1_kp_fast_model.py",
+  "evaluation_code_sha256": "455c2fa7e31c90f369346cbf1b186cbffd2e2137474bb85bbcd747720e0392ef",
+  "receipts": "Replay using archived SWPC L1 wind and GFZ Kp/ap, simulated receipt delays of 5, 15 and 30 minutes, and scheduled hourly availability at minute 15.",
+  "fit_selection": "Through 2024 fit. 2025 H1 calibrates probability. 2025 H2 chooses model and alert cutoffs. H1 2026 is evaluated after all choices.",
+  "sources_sha256": {
+    "features.parquet": "c1e18afb076d8c801bef0f7f8e0837df1b27886ec0e1d66fc0fec5e2115e19b8",
+    "reference_2025.parquet": "a6a0e7ce123fd73380233803ef12d200bad1ec276223d91fd64929916dcbdb12",
+    "features_manifest.json": "3ae422c00d81479c3e60ce46716ab5f21cb5c941e19100ac8be8cb955b344447",
+    "reference_2025_manifest.json": "629103b4efc18af7b0e4047e4fe7f1849532401a1815a82f4d04492951aa4924",
+    "evaluation/manifest.json": "ffc62e734a9fd457ddbf48c2a45a8c875ea9e26bd5d5b3916251fa820d3d1f5e",
+    "evaluation/test_forecasts.csv": "ea329865afbe5e1a4aa902fd221f340e991af6253a38a150ab5c44c902522518"
+  },
+  "artifacts_sha256": {
+    "test_scores.csv": "a3b87239fda4780538b803017f5f2735d056994365d0243ba7fb92a11c14ed7e",
+    "paired_deltas.csv": "53ba6d040c1eb9a931233c3746a3b4f5a9874acf218916d9a0087c700b9c6a65",
+    "selection_scores.csv": "6b5c7768a0c688ed4c49be9904e2292c6af8d09130382c28617e90240a5f99a8"
+  }
+}

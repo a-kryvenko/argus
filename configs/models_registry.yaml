@@ -40,6 +40,11 @@ models:
     artifact_path: configs/models/geomagnetic-ordinal-v1.json
     metrics_report: configs/evaluations/geomagnetic-activity.json
 
+  geomagnetic_fast_l1:
+    model: argus-geomagnetic-fast-l1-v1
+    artifact_path: configs/models/geomagnetic-fast-l1-v1.json
+    metrics_report: configs/evaluations/geomagnetic-fast-l1.json
+
   dst_quantile:
     model: argus-dst-revalidated-2026-v1
     metrics: data/metrics/geomagnetic/dst_revalidated_2026_v1

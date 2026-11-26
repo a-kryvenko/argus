@@ -289,6 +289,80 @@ async def test_ordinal_geomagnetic_release_from_clio_to_public_api(recorder_setu
         assert 0 <= ap['q10'] <= ap['q50'] <= ap['q90']
 
 
+async def test_fast_l1_updates_one_prepared_interval_and_preserves_archived_release(recorder_setup, monkeypatch):
+    import asyncio
+
+    from common.schemas.forecast_release import FAST_L1_ARTIFACT, FAST_L1_COLUMNS, FAST_L1_PRODUCT, PREDICTION_COLUMNS
+
+    _, _, config, writer = recorder_setup
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-token')
+    monkeypatch.setattr(common_config, '_config', None)
+    headers = {'Authorization': 'Bearer test-token'}
+    product = 'geomagnetic-activity'
+    issue = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    base = await RunRecorder.begin(product, 'manual', config, writer=writer)
+    for name, values in [('kp_threshold', '.1,.05,.01'), ('ap_quantile', '2,6,16')]:
+        columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
+        rows = [f'{issue.isoformat()},{(issue + timedelta(hours=lead)).isoformat()},{lead},{values}'
+                for lead in range(1, 49)]
+        await base.store(name, ('\n'.join([','.join(columns), *rows]) + '\n').encode(), {}, len(rows), columns)
+    release = await base.finish()
+    archive_path = f'/internal/v1/forecasts/{product}/releases/{release.release_id}'
+    view_path = f'/internal/v1/public-forecasts/{product}'
+
+    with go_server(config.workdir) as (_, address):
+        async with httpx.AsyncClient(base_url=address, headers=headers, trust_env=False) as go:
+            deadline = monotonic() + 8
+            while True:
+                response = await go.get(view_path)
+                if response.status_code != 503 or monotonic() >= deadline:
+                    before = response.raise_for_status().json()
+                    break
+                await asyncio.sleep(.05)
+            archived = ForecastRelease.model_validate((await go.get(archive_path)).raise_for_status().json())
+            assert archived.release_id == release.release_id
+            assert len(before['predictions']) == 48
+
+            fast_issue = datetime.now(UTC)
+            target = (fast_issue.replace(minute=0, second=0, microsecond=0)
+                      + timedelta(hours=3 - fast_issue.hour % 3))
+            remaining = (target - fast_issue).total_seconds()
+            if remaining < 10:
+                await asyncio.sleep(remaining + .01)
+                fast_issue = datetime.now(UTC)
+                target += timedelta(hours=3)
+            fast = await RunRecorder.begin(FAST_L1_PRODUCT, 'scheduled', config, writer=writer)
+            columns = ['issue_time', 'valid_time', *FAST_L1_COLUMNS]
+            content = f"{','.join(columns)}\n{fast_issue.isoformat()},{target.isoformat()},.8,.7,.4,9,32,80\n"
+            await fast.store(FAST_L1_ARTIFACT, content.encode(), {}, 1, columns)
+            assert (await fast.finish()).status == 'published'
+
+            deadline = monotonic() + 8
+            while True:
+                after = (await go.get(view_path)).raise_for_status().json()
+                if after != before:
+                    break
+                assert monotonic() < deadline, after
+                await asyncio.sleep(.05)
+            assert {key: val for key, val in after.items() if key != 'predictions'} == {
+                key: val for key, val in before.items() if key != 'predictions'
+            }
+            expected = next(point for point in before['predictions']
+                            if datetime.fromisoformat(point['valid_time']) == target)
+            assert expected['variables']['kp']['binary'][1]['probability'] == .05
+            assert expected['variables']['ap']['continuous']['q50'] == 6
+            replacement = next(point for point in after['predictions']
+                               if datetime.fromisoformat(point['valid_time']) == target)
+            assert datetime.fromisoformat(replacement['update_issued_at']) == fast_issue
+            assert replacement['lead_hours'] == expected['lead_hours']
+            assert replacement['variables']['kp']['binary'][1]['probability'] == .7
+            assert replacement['variables']['ap']['continuous'] == {'q10': 9, 'q50': 32, 'q90': 80}
+            assert [point for point in after['predictions'] if point is not replacement] == [
+                point for point in before['predictions'] if point is not expected
+            ]
+            assert ForecastRelease.model_validate((await go.get(archive_path)).raise_for_status().json()) == archived
+
+
 async def test_public_forecasts_match_existing_contract_and_refresh(recorder_setup, monkeypatch):
     import asyncio
     import csv

@@ -1,0 +1,119 @@
+{
+  "period": "January–June 2026 (UTC targets)",
+  "sample": "Matched GFZ three-hour intervals ending within six hours of the first update after an L1 trigger.",
+  "notes": [
+    "L1 delivery delays were simulated. Intervals without a usable minute update use the scheduled forecast.",
+    "Alert cutoffs were chosen in July–December 2025 with a 5% false-positive budget on triggered intervals.",
+    "Confidence intervals use paired resampling by calendar week."
+  ],
+  "by_delay": [
+    {
+      "delay_minutes": 5,
+      "targets": 57,
+      "updates": 54,
+      "observed_events": 10,
+      "baseline": {
+        "kp4_brier": 0.1844811789191481,
+        "kp5_brier": 0.14323969323191976,
+        "kp6_brier": 0.08536384809805417,
+        "ap_mae": 20.54385964912281,
+        "ap_coverage_80": 0.631578947368421,
+        "ap_interval_width_80": 18.526315789473685,
+        "alert_threshold": 0.13637561648573168,
+        "hits": 3,
+        "false_alerts": 0
+      },
+      "candidate": {
+        "kp4_brier": 0.1427005726515993,
+        "kp5_brier": 0.11451606754769147,
+        "kp6_brier": 0.06779415141503489,
+        "ap_mae": 17.263157894736842,
+        "ap_coverage_80": 0.8947368421052632,
+        "ap_interval_width_80": 59.578947368421055,
+        "alert_threshold": 0.36123444323601295,
+        "hits": 4,
+        "false_alerts": 1
+      },
+      "ap_mae_delta_ci95": [
+        -5.353881578947368,
+        -0.7058278867102395
+      ],
+      "kp5_brier_delta_ci95": [
+        -0.07660388390696825,
+        0.029091681039253324
+      ]
+    },
+    {
+      "delay_minutes": 15,
+      "targets": 58,
+      "updates": 55,
+      "observed_events": 10,
+      "baseline": {
+        "kp4_brier": 0.17630554285858255,
+        "kp5_brier": 0.14084824406926325,
+        "kp6_brier": 0.08348031780405668,
+        "ap_mae": 20.46551724137931,
+        "ap_coverage_80": 0.6206896551724138,
+        "ap_interval_width_80": 18.32758620689655,
+        "alert_threshold": 0.13637561648573168,
+        "hits": 4,
+        "false_alerts": 0
+      },
+      "candidate": {
+        "kp4_brier": 0.14172099706196575,
+        "kp5_brier": 0.11366252551720313,
+        "kp6_brier": 0.06681458804720403,
+        "ap_mae": 17.03448275862069,
+        "ap_coverage_80": 0.896551724137931,
+        "ap_interval_width_80": 58.793103448275865,
+        "alert_threshold": 0.36123444323601295,
+        "hits": 4,
+        "false_alerts": 1
+      },
+      "ap_mae_delta_ci95": [
+        -5.518993427458617,
+        -0.8636363636363636
+      ],
+      "kp5_brier_delta_ci95": [
+        -0.07439154443920311,
+        0.02862506548991313
+      ]
+    },
+    {
+      "delay_minutes": 30,
+      "targets": 58,
+      "updates": 55,
+      "observed_events": 10,
+      "baseline": {
+        "kp4_brier": 0.17289033182795685,
+        "kp5_brier": 0.14092435473588893,
+        "kp6_brier": 0.08348462535083497,
+        "ap_mae": 20.051724137931036,
+        "ap_coverage_80": 0.6551724137931034,
+        "ap_interval_width_80": 18.224137931034484,
+        "alert_threshold": 0.13637561648573168,
+        "hits": 4,
+        "false_alerts": 0
+      },
+      "candidate": {
+        "kp4_brier": 0.14207336491119477,
+        "kp5_brier": 0.11419762388336073,
+        "kp6_brier": 0.06694315546140553,
+        "ap_mae": 16.982758620689655,
+        "ap_coverage_80": 0.896551724137931,
+        "ap_interval_width_80": 59.39655172413793,
+        "alert_threshold": 0.36123444323601295,
+        "hits": 4,
+        "false_alerts": 1
+      },
+      "ap_mae_delta_ci95": [
+        -5.437547348484848,
+        -0.07117346938775417
+      ],
+      "kp5_brier_delta_ci95": [
+        -0.0741672946737759,
+        0.029436554275185555
+      ]
+    }
+  ]
+}

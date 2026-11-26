@@ -21,11 +21,11 @@
 @media (max-width: 1000px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .summary > div:nth-child(2) { border-right: 0; } .summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); } }
 @media (max-width: 760px) { .summary > div { padding: 14px 12px; } .summary strong { font-size: 25px; } .summary small { display: block; margin: 4px 0 0; } .legend { font-size: 9px; gap: 9px; } .reliabilityPlot { height: 260px; } }
 
-.monthly { padding: 20px; margin: 20px 0 28px; border: 1px solid var(--border); background: #151d26; border-radius: 3px; }
-.monthly h2, .staticHeading { font-size: 17px; color: #d9e6f2; margin: 0 0 12px; }
+.monthly, .fastEvaluation { padding: 20px; margin: 20px 0 28px; border: 1px solid var(--border); background: #151d26; border-radius: 3px; }
+.monthly h2, .fastEvaluation h2, .staticHeading { font-size: 17px; color: #d9e6f2; margin: 0 0 12px; }
 .monthly h3 { font-size: 13px; color: #c8d9e6; margin: 18px 0 10px; }
-.monthly p, .monthly details { font-size: 11px; line-height: 1.7; color: #9eb4c7; margin: 10px 0; }
-.monthly summary { cursor: pointer; }
+.monthly p, .monthly details, .fastEvaluation p, .fastEvaluation details { font-size: 11px; line-height: 1.7; color: #9eb4c7; margin: 10px 0; }
+.monthly summary, .fastEvaluation summary { cursor: pointer; }
 .monthlyGroup { border-top: 1px solid var(--border); margin-top: 18px; }
 .monthlyGroup .summary { margin: 14px 0; }
 .modelTabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0; }

@@ -27,12 +27,15 @@ var products = []struct {
 	{"solar-wind-temperature", []string{"plasma_temperature_quantile"}, ""},
 	{"hmf", []string{"hmf_total_threshold", "hmf_southward_threshold"}, ""},
 	{"solar-radiation", []string{"f10_7_quantile", "s10_quantile", "m10_quantile", "y10_quantile"}, ""},
-	{"geomagnetic-activity", []string{"kp_threshold", "ap_quantile"}, "kp"},
+	{geomagneticProduct, []string{"kp_threshold", "ap_quantile"}, "kp"},
 	{"dst", []string{"dst_quantile"}, ""},
 	{"atmospheric-density", []string{"atmospheric_density"}, "density"},
 }
 
 func productArtifacts(product string) []string {
+	if product == geomagneticFastProduct {
+		return []string{geomagneticFastArtifact}
+	}
 	for _, candidate := range products {
 		if candidate.Name == product {
 			return candidate.Artifacts

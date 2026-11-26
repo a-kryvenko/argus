@@ -9,6 +9,7 @@ import ResourceState from '../../../components/ResourceState';
 import WorkspaceShell from '../../../components/WorkspaceShell';
 import { productApiPath, type ProductConfig } from '../../../forecast/products';
 import type { ForecastMetrics } from '@/app/metrics/_lib/types';
+import FastL1Accuracy from './FastL1Accuracy';
 import MetricChart from './MetricChart';
 import MonthlyAccuracy from './MonthlyAccuracy';
 import ReliabilityChart from './MetricReliability';
@@ -23,8 +24,9 @@ export default function MetricsProduct({ product }: { product: ProductConfig }) 
       <div className={styles.pageHeading}><div><h1>{product.title} metrics</h1><p>Forecast quality by lead hour. Explore errors, threshold scores and probability calibration.</p></div>
         <Link className={styles.headingLink} href={`/forecast/${product.slug}`}>Open forecast<ArrowUpRight size={13} aria-hidden="true" /></Link>
       </div>
+      {data?.fast_l1_evaluation && <FastL1Accuracy evaluation={data.fast_l1_evaluation} />}
       <MonthlyAccuracy product={product} />
-      <h2 className={local.staticHeading}>Model evaluation by lead hour</h2>
+      <h2 className={local.staticHeading}>{data?.fast_l1_evaluation ? 'Hourly model evaluation by lead hour' : 'Model evaluation by lead hour'}</h2>
       {!data ? <ResourceState error={error} retry={retry} label="metrics" /> : <MetricsBoard key={product.slug} product={product} data={data} />}
       <div className={styles.pageFooter}><span>Evaluation scores · not forecast values</span><a href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics data · JSON<ArrowUpRight size={12} aria-hidden="true" /></a></div>
     </main>

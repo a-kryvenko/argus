@@ -132,6 +132,41 @@ test('missing variable can switch to available evaluation without inventing metr
   await expect(page.getByLabel('Threshold metric')).toHaveCount(0);
 });
 
+test('geomagnetic metrics compare hourly and fast L1 scores on the selected archive window', async ({ page }) => {
+  await mock(page);
+  const product = products.find(item => item.slug === 'geomagnetic-activity')!;
+  const data = evaluation(product);
+  const baseline = { kp4_brier: .1763, kp5_brier: .1408, kp6_brier: .0835, ap_mae: 20.47,
+    ap_coverage_80: .621, ap_interval_width_80: 18.33, alert_threshold: .1364, hits: 4, false_alerts: 0 };
+  const candidate = { kp4_brier: .1417, kp5_brier: .1137, kp6_brier: .0668, ap_mae: 17.03,
+    ap_coverage_80: .897, ap_interval_width_80: 58.79, alert_threshold: .3612, hits: 4, false_alerts: 1 };
+  data.fast_l1_evaluation = { period: 'January–June 2026', sample: 'Full native intervals within six hours of an L1 trigger.',
+    notes: ['Cutoffs were selected on 2025 L1 triggers.'],
+    by_delay: [
+      { delay_minutes: 5, targets: 57, updates: 54, observed_events: 10, baseline, candidate },
+      { delay_minutes: 15, targets: 58, updates: 55, observed_events: 10, baseline, candidate, ap_mae_delta_ci95: [-5.52, -.86] },
+      { delay_minutes: 30, targets: 58, updates: 55, observed_events: 10, baseline, candidate: { ...candidate, ap_mae: 16.98 } },
+    ] };
+  await page.route('**/api/v1/forecasts/geomagnetic-activity/metrics', route =>
+    route.fulfill({ json: { success: true, data, error: null } }));
+
+  await page.goto('/metrics/geomagnetic-activity');
+  const fast = page.getByRole('region', { name: 'Fast L1 archive evaluation' });
+  const delay = fast.getByLabel('Simulated L1 data delay');
+  await expect(delay).toHaveValue('15');
+  await expect(fast).toContainText('58 matched 3-hour intervals · 55 fast updates');
+  await expect(fast.getByRole('row').filter({ hasText: 'Kp ≥ 5 Brier score' }).getByRole('cell')).toHaveText(['0.141', '0.114']);
+  await expect(fast.getByRole('row').filter({ hasText: 'False alerts' }).getByRole('cell')).toHaveText(['0', '1']);
+  await fast.getByText('Evaluation notes', { exact: true }).click();
+  await expect(fast).toContainText('-5.52 to -0.86');
+  await delay.selectOption('30');
+  await expect(fast.getByRole('row').filter({ hasText: 'ap mean absolute error' }).getByRole('cell')).toHaveText(['20.47', '16.98']);
+  await delay.selectOption('5');
+  await expect(fast).toContainText('57 matched 3-hour intervals · 54 fast updates');
+  await expect(page.getByRole('region', { name: 'Last 30 days average accuracy' })).toContainText('Scheduled hourly Kp/ap forecasts');
+  await expect(page.getByRole('heading', { name: 'Hourly model evaluation by lead hour' })).toBeVisible();
+});
+
 for (const slug of ['solar-radiation', 'solar-wind-density', 'dst']) test(`${slug} renders continuous metrics and correct forecast link`, async ({ page }) => {
   await mock(page); await page.goto(`/metrics/${slug}`);
   await expect(page.getByRole('region', { name: 'MAE by lead hour' }).locator('.recharts-line-curve')).toBeVisible();

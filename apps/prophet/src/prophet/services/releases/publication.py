@@ -9,7 +9,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from common.schemas.forecast_release import (
-    ForecastArtifact, ForecastRelease, MAX_ARTIFACT_BYTES, PRODUCT_ARTIFACTS,
+    ForecastArtifact, ForecastRelease, MAX_ARTIFACT_BYTES, RELEASE_ARTIFACTS,
 )
 from common.schemas.forecast_status import ForecastPublication
 from prophet.db.session import get_db_session
@@ -41,7 +41,7 @@ async def publish_run(session, run_id):
     query = await session.execute(text("SELECT * FROM forecast_artifact WHERE run_id=:run_id AND status='stored'"), {'run_id': run_id})
     rows = {row['name']: row for row in query.mappings().all()}
     product = run['product']
-    names = PRODUCT_ARTIFACTS[product]
+    names = RELEASE_ARTIFACTS[product]
     if not set(names).issubset(rows):
         raise ValueError(f'Incomplete artifacts for {product}')
     query = await session.execute(text(f'''SELECT r.issue_time, f.started_at, r.run_id
@@ -68,7 +68,7 @@ async def publish_run(session, run_id):
 
 
 async def read_release(product, release_id=None):
-    if product not in PRODUCT_ARTIFACTS:
+    if product not in RELEASE_ARTIFACTS:
         raise ReleaseNotFound(product)
     async with get_db_session() as session, session.begin():
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))

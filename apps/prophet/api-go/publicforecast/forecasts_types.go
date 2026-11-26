@@ -55,16 +55,18 @@ type ForecastMetadata struct {
 }
 
 type ForecastMetrics struct {
-	Evaluation *EvaluationContext         `json:"evaluation" required:"false" allowNull:"true"`
-	Target     string                     `json:"target" doc:"Forecast product identifier; see the endpoint's target list."`
-	Variables  map[string]VariableMetrics `json:"variables" doc:"Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted."`
-	Meta       *ForecastMetadata          `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Units of the reported variables."`
+	Evaluation       *EvaluationContext         `json:"evaluation" required:"false" allowNull:"true"`
+	FastL1Evaluation *FastL1Evaluation          `json:"fast_l1_evaluation,omitempty" required:"false" doc:"Matched archive evaluation for rapid Kp/ap updates after an L1 trigger."`
+	Target           string                     `json:"target" doc:"Forecast product identifier; see the endpoint's target list."`
+	Variables        map[string]VariableMetrics `json:"variables" doc:"Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted."`
+	Meta             *ForecastMetadata          `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Units of the reported variables."`
 }
 
 type ForecastPoint struct {
-	Valid     time.Time                    `json:"valid_time" doc:"Date and time for which the forecast predicts values (ISO 8601)."`
-	Lead      int                          `json:"lead_hours" doc:"Number of hours between forecast issuance (issue_time) and the time being predicted (valid_time)."`
-	Variables map[string]*VariableForecast `json:"variables" doc:"Values keyed by variable name. See the endpoint's product table for the variables and units supported by each target. Only available variables are included; individual forecast points may contain a subset."`
+	Valid          time.Time                    `json:"valid_time" doc:"Date and time for which the forecast predicts values (ISO 8601)."`
+	Lead           int                          `json:"lead_hours" doc:"Number of hours between forecast issuance (issue_time) and the time being predicted (valid_time)."`
+	UpdateIssuedAt *time.Time                   `json:"update_issued_at,omitempty" required:"false" doc:"Issue time of a fast L1 update applied to this Kp/ap interval (ISO 8601)."`
+	Variables      map[string]*VariableForecast `json:"variables" doc:"Values keyed by variable name. See the endpoint's product table for the variables and units supported by each target. Only available variables are included; individual forecast points may contain a subset."`
 }
 
 type ForecastVariableMetadata struct {

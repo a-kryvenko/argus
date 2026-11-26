@@ -30,16 +30,19 @@ type projectionSource interface {
 }
 
 type preparedForecast struct {
-	releaseID string
-	issueTime time.Time
-	body      []byte
+	releaseID   string
+	issueTime   time.Time
+	body        []byte
+	geomagnetic *publicforecast.Forecast
 }
 
 type preparedForecasts struct {
-	source projectionSource
-	mutex  sync.RWMutex
-	latest map[string]preparedForecast
-	synced bool
+	source                projectionSource
+	mutex                 sync.RWMutex
+	latest                map[string]preparedForecast
+	synced                bool
+	fastGeomagnetic       fastGeomagneticRelease // accessed only by the refresh loop
+	geomagneticProjection fastGeomagneticProjection
 }
 
 func newPreparedForecasts(source projectionSource) *preparedForecasts {
@@ -50,6 +53,16 @@ func (p *preparedForecasts) get(product string) (preparedForecast, bool) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	return p.latest[product], p.synced
+}
+
+func (p *preparedForecasts) getAt(product string, now time.Time) (preparedForecast, bool) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+	result := p.latest[product]
+	if product == geomagneticProduct {
+		result.body = p.geomagneticProjection.bodyAt(result, now)
+	}
+	return result, p.synced
 }
 
 func (p *preparedForecasts) set(product string, result preparedForecast) {
@@ -139,6 +152,12 @@ func (p *preparedForecasts) refresh(ctx context.Context) {
 		}
 		return
 	}
+	fastID := ids[geomagneticFastProduct]
+	if p.fastGeomagnetic.id != fastID {
+		p.mutex.Lock()
+		p.geomagneticProjection = fastGeomagneticProjection{}
+		p.mutex.Unlock()
+	}
 	for _, item := range products {
 		target := item.Name
 		if !hasPreparedForecast(target) {
@@ -168,6 +187,41 @@ func (p *preparedForecasts) refresh(ctx context.Context) {
 		}
 		p.set(target, result)
 	}
+	p.refreshGeomagneticProjection(ctx, fastID)
+}
+
+func (p *preparedForecasts) refreshGeomagneticProjection(ctx context.Context, id string) {
+	if p.fastGeomagnetic.id != id {
+		p.fastGeomagnetic = fastGeomagneticRelease{}
+		if id != "" {
+			source, err := p.source.readRelease(ctx, geomagneticFastProduct, id)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Printf("read fast geomagnetic release %s: %v", id, err)
+				}
+				return
+			}
+			result, err := prepareFastGeomagnetic(source)
+			p.fastGeomagnetic = result
+			if err != nil {
+				log.Printf("prepare fast geomagnetic release %s: %v", id, err)
+			}
+		}
+	}
+	base, _ := p.get(geomagneticProduct)
+	p.mutex.RLock()
+	previous := p.geomagneticProjection
+	p.mutex.RUnlock()
+	if previous.baseID == base.releaseID && previous.updateID == p.fastGeomagnetic.id {
+		return
+	}
+	projection, err := projectFastGeomagnetic(base, p.fastGeomagnetic)
+	if err != nil {
+		log.Printf("project fast geomagnetic release %s: %v", id, err)
+	}
+	p.mutex.Lock()
+	p.geomagneticProjection = projection
+	p.mutex.Unlock()
 }
 
 func hasPreparedForecast(target string) bool {
@@ -215,7 +269,13 @@ func prepareForecast(source release) (preparedForecast, error) {
 	if err != nil {
 		return result, err
 	}
+	if source.Product == geomagneticProduct {
+		result.geomagnetic = data
+	}
 	result.body, err = json.Marshal(data)
+	if err != nil {
+		result.geomagnetic = nil
+	}
 	return result, err
 }
 
@@ -254,8 +314,9 @@ func (p *preparedForecasts) serve(densityMaxAge float64) http.HandlerFunc {
 			detail(w, http.StatusNotFound, "Unknown forecast product")
 			return
 		}
-		result, synced := p.get(target)
-		age := time.Since(result.issueTime).Hours()
+		now := time.Now()
+		result, synced := p.getAt(target, now)
+		age := now.Sub(result.issueTime).Hours()
 		if !synced || result.body == nil || (target == densityProduct && (age < 0 || age > densityMaxAge)) {
 			detail(w, http.StatusServiceUnavailable, "Forecast is not ready")
 			return

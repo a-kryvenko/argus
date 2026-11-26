@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/a-kryvenko/argus/apps/prophet/api-go/publicforecast"
 	"github.com/a-kryvenko/argus/observationcatalog"
 )
 
@@ -110,6 +111,19 @@ func TestPublicRoutes(t *testing.T) {
 					}}}}}
 			data["meta"] = document{"variables": document{"v": document{"unit": "km/s"}}}
 			writeJSON(w, 200, data)
+		case "/internal/v1/public-forecasts/geomagnetic-activity":
+			target := issue.Truncate(3 * time.Hour).Add(3 * time.Hour)
+			lead := int(target.Sub(issue) / time.Hour)
+			writeJSON(w, 200, publicforecast.Forecast{
+				Target: "geomagnetic-activity", IssueTime: issue, HorizonHours: lead,
+				AvailableVariables: []string{"kp", "ap"}, Predictions: []*publicforecast.ForecastPoint{{
+					Valid: target, Lead: lead, UpdateIssuedAt: pointer(target.Add(-49*time.Minute - 3*time.Second)),
+					Variables: map[string]*publicforecast.VariableForecast{
+						"kp": {Binary: []publicforecast.BinaryForecast{{Threshold: 5, Probability: .65}}},
+						"ap": {Continuous: &publicforecast.QuantileForecast{Q10: 14, Q50: 48, Q90: 94}},
+					},
+				}},
+			})
 		case "/internal/v1/forecasts/dst/verification":
 			writeJSON(w, 200, document{"product": "dst", "start": issue.Add(-24 * time.Hour), "end": issue, "groups": []document{}})
 		case "/internal/v1/public-forecasts/solar-wind-events":
@@ -290,6 +304,13 @@ func TestPublicRoutes(t *testing.T) {
 		if speed["continuous"].(map[string]any)["q90"] != float64(462) || len(speed["binary"].([]any)) != 3 {
 			t.Fatalf("invalid forecast point: %v", speed)
 		}
+		geomagnetic := responseData[publicforecast.Forecast](t, check("GET", "/forecasts/geomagnetic-activity", "", 200))
+		point := geomagnetic.Predictions[0]
+		if point.UpdateIssuedAt == nil || !point.UpdateIssuedAt.Equal(point.Valid.Add(-49*time.Minute-3*time.Second)) ||
+			point.Variables["ap"].Continuous.Q50 != 48 {
+			t.Fatalf("fast L1 update was not forwarded: %+v", point)
+		}
+		check("GET", "/forecasts/geomagnetic-fast-l1", "", 404)
 		metrics := responseData[document](t, check("GET", "/forecasts/solar-wind-speed/metrics", "", 200))
 		if metrics["meta"] == nil {
 			t.Fatal("metrics metadata was not forwarded")

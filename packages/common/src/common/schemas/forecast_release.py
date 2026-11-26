@@ -3,7 +3,7 @@ import csv
 import hashlib
 import io
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -21,6 +21,10 @@ PRODUCT_ARTIFACTS = {
     'dst': ('dst_quantile',),
     'atmospheric-density': ('atmospheric_density',),
 }
+FAST_L1_PRODUCT = 'geomagnetic-fast-l1'
+FAST_L1_ARTIFACT = 'kp_ap_fast_l1'
+RELEASE_ARTIFACTS = PRODUCT_ARTIFACTS | {FAST_L1_PRODUCT: (FAST_L1_ARTIFACT,)}
+FAST_L1_COLUMNS = ('p_kp_ge_4', 'p_kp_ge_5', 'p_kp_ge_6', 'ap_q10', 'ap_q50', 'ap_q90')
 PREDICTION_COLUMNS = {
     'solar_wind_events': ('event_count', 'detection_count'),
     **{name: tuple(f'{prefix}_q{q}' for q in (10, 50, 90)) for name, prefix in (
@@ -31,6 +35,7 @@ PREDICTION_COLUMNS = {
         ('plasma_speed_threshold', 'v', (450, 500, 600)), ('kp_threshold', 'kp', (4, 5, 6)),
         ('hmf_total_threshold', 'bt', (5, 10, 15)), ('hmf_southward_threshold', 'bs', (5, 10, 15)))},
     'atmospheric_density': ('altitude_km', 'latitude_deg', 'rho_kg_m3', 'rho_lon_p10_kg_m3', 'rho_lon_p90_kg_m3'),
+    FAST_L1_ARTIFACT: FAST_L1_COLUMNS,
 }
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 
@@ -47,7 +52,9 @@ class ForecastArtifact(BaseModel):
         reader = csv.DictReader(io.StringIO(self.csv_text))
         if reader.fieldnames != self.columns or len(set(self.columns)) != len(self.columns):
             raise ValueError('Artifact columns do not match')
-        if not {'issue_time', 'valid_time', 'lead_hours'}.issubset(self.columns):
+        fast_l1 = self.name == FAST_L1_ARTIFACT
+        clock_columns = {'issue_time', 'valid_time'} if fast_l1 else {'issue_time', 'valid_time', 'lead_hours'}
+        if not clock_columns.issubset(self.columns):
             raise ValueError('Artifact time columns are missing')
         predictions = PREDICTION_COLUMNS.get(self.name)
         if predictions is None or not set(predictions).issubset(self.columns):
@@ -57,6 +64,7 @@ class ForecastArtifact(BaseModel):
         cme_speed = None
         speed_background = {}
         integrated_speed = {}
+        fast_targets = set()
         for row in reader:
             if None in row or None in row.values():
                 raise ValueError('Malformed CSV row')
@@ -66,9 +74,18 @@ class ForecastArtifact(BaseModel):
                     raise ValueError('Invalid forecast prediction')
             current = datetime.fromisoformat(row['issue_time'])
             valid = datetime.fromisoformat(row['valid_time'])
-            lead = int(row['lead_hours'])
+            lead = 0 if fast_l1 else int(row['lead_hours'])
             if current.tzinfo is None or valid.tzinfo is None or lead < 0:
                 raise ValueError('Artifact times must be timezone-aware with nonnegative leads')
+            if fast_l1:
+                if (current.utcoffset() != timedelta(0) or valid.utcoffset() != timedelta(0)
+                        or valid.hour % 3 or valid.minute or valid.second or valid.microsecond
+                        or not current <= valid <= current + timedelta(hours=3) or valid in fast_targets):
+                    raise ValueError('Invalid fast L1 target interval')
+                p4, p5, p6, q10, q50, q90 = (float(row[name]) for name in FAST_L1_COLUMNS)
+                if not (1 >= p4 >= p5 >= p6 >= 0 and 0 <= q10 <= q50 <= q90 <= 400):
+                    raise ValueError('Invalid fast L1 Kp/ap distribution')
+                fast_targets.add(valid)
             if self.name == 'plasma_speed_quantile':
                 speed_background[valid] = float(row.get('v_background_q50', row['v_q50']))
                 if 'v_background_q50' in row:
@@ -129,9 +146,11 @@ class ForecastRelease(BaseModel):
     @model_validator(mode='after')
     def check_product(self):
         names = [artifact.name for artifact in self.artifacts]
-        expected = PRODUCT_ARTIFACTS.get(self.product)
+        expected = RELEASE_ARTIFACTS.get(self.product)
         if expected is None or len(names) != len(expected) or set(names) != set(expected):
             raise ValueError('Incomplete product release')
         if any(artifact.issue_time() != self.issue_time for artifact in self.artifacts):
             raise ValueError('Mixed issue times in release')
+        if self.product == FAST_L1_PRODUCT and self.published_at < self.issue_time:
+            raise ValueError('Fast L1 release was published before its issue')
         return self

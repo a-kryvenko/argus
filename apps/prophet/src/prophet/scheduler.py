@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 from datetime import UTC, datetime
+from functools import cache
 from pathlib import Path
 
 from apscheduler.triggers.cron import CronTrigger
@@ -31,12 +32,24 @@ def register_jobs(worker):
     for product in PRODUCTS:
         schedule(f'generation:{product}', ('generation', product),
                  minute='*/5' if product == 'solar-wind-events' else 10)
+    worker.add_job(update_geomagnetic_l1,
+                   CronTrigger(second=20, timezone=worker.scheduler.timezone), id='geomagnetic-fast-l1')
     schedule('summary', ('summary',), minute='*/5')
     schedule('verification', ('verification', 'all'), minute=30, hour='*/6')
     worker.add_job(run_command, CronTrigger(minute='*/5', timezone=worker.scheduler.timezone),
                    id='verification-summary', args=('verification-summary', ('verification-summary',), worker.stop),
                    next_run_time=datetime.now(UTC))
     schedule('cleanup', ('cleanup', '--apply'), minute=45)
+
+
+async def update_geomagnetic_l1():
+    await _fast_l1_runner().poll()
+
+
+@cache
+def _fast_l1_runner():
+    from prophet.services.generation.fast_l1 import FastL1Update
+    return FastL1Update()
 
 
 async def run_command(job_id, command, stop):

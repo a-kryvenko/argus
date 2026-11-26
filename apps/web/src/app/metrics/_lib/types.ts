@@ -13,8 +13,37 @@ export type BinaryMetricsPoint = {
   reliability: ReliabilityPoint[];
 };
 
+type FastL1Scores = {
+  kp4_brier: number;
+  kp5_brier: number;
+  kp6_brier: number;
+  ap_mae: number;
+  ap_coverage_80: number;
+  ap_interval_width_80: number;
+  alert_threshold: number;
+  hits: number;
+  false_alerts: number;
+};
+
+export type FastL1Evaluation = {
+  period: string;
+  sample: string;
+  notes: string[];
+  by_delay: Array<{
+    delay_minutes: number;
+    targets: number;
+    updates: number;
+    observed_events: number;
+    baseline: FastL1Scores;
+    candidate: FastL1Scores;
+    ap_mae_delta_ci95?: [number, number];
+    kp5_brier_delta_ci95?: [number, number];
+  }>;
+};
+
 export type ForecastMetrics = {
   evaluation?: { label: string; period: string; sample: string; notes: string[] } | null;
+  fast_l1_evaluation?: FastL1Evaluation | null;
   target: string;
   meta?: { variables: Record<string, { unit: string }> };
   variables: Record<string, {

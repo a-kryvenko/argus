@@ -43,8 +43,8 @@ class RunRecorder:
 
     @classmethod
     async def begin(cls, product, trigger, config, *, writer, details=None):
-        from prophet.services.generation.products import PRODUCTS
-        if product not in PRODUCTS:
+        from common.schemas.forecast_release import RELEASE_ARTIFACTS
+        if product not in RELEASE_ARTIFACTS:
             raise ValueError('Expected one supported forecast product')
         run_id = uuid4()
         if trigger not in ('manual', 'scheduled'):
@@ -60,7 +60,9 @@ class RunRecorder:
     async def snapshot(self, inputs):
         payload = inputs.model_dump(mode='json')
         from prophet.services.releases.status import input_diagnostics
-        diagnostics = input_diagnostics(inputs)
+        await self.snapshot_payload(payload, input_diagnostics(inputs))
+
+    async def snapshot_payload(self, payload, diagnostics):
         async with transaction(self.writer) as session:
             result = await session.execute(text("""UPDATE forecast_run SET input_snapshot=:payload,input_sha256=:input_sha256,
                 provenance=jsonb_set(provenance,'{input_diagnostics}',:input_diagnostics)

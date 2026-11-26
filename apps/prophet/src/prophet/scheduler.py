@@ -32,8 +32,8 @@ def register_jobs(worker):
     for product in PRODUCTS:
         schedule(f'generation:{product}', ('generation', product),
                  minute='*/5' if product == 'solar-wind-events' else 10)
-    worker.add_job(update_geomagnetic_l1,
-                   CronTrigger(second=20, timezone=worker.scheduler.timezone), id='geomagnetic-fast-l1')
+    worker.add_job(update_fast_l1,
+                   CronTrigger(second=20, timezone=worker.scheduler.timezone), id='fast-l1')
     schedule('summary', ('summary',), minute='*/5')
     schedule('verification', ('verification', 'all'), minute=30, hour='*/6')
     worker.add_job(run_command, CronTrigger(minute='*/5', timezone=worker.scheduler.timezone),
@@ -42,7 +42,7 @@ def register_jobs(worker):
     schedule('cleanup', ('cleanup', '--apply'), minute=45)
 
 
-async def update_geomagnetic_l1():
+async def update_fast_l1():
     await _fast_l1_runner().poll()
 
 

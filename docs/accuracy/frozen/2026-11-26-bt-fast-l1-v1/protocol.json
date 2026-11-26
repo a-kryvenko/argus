@@ -1,0 +1,38 @@
+{
+  "cases": "Keep all archived blind L1 triggers. The most recent initial update wins overlapping targets.",
+  "periods": "Fit 2017–2024, calibrate 2025 H1, select 2025 H2, evaluate H1 2026 after all choices.",
+  "wind_clock": "Native L1 UTC bins. Each target hour begins after issue and ends within six hours. Delay proxies are 5, 15 or 30 minutes after minute closure.",
+  "labels": {
+    "minute_mean": "Arithmetic mean of measured minute Bt and mean of max(-Bz,0), matching active verification.",
+    "hourly_vector": "Norm of the hourly mean magnetic vector and max(-mean Bz,0), matching the active models’ original targets."
+  },
+  "selection": "Minimize mean Brier for 10 and 15 nT on 2025 H2. Calibrated persistence competes as a minimal candidate.",
+  "alerts": "If available, select each model’s alert cutoff on 2025 H2 with 5% false positive budget. Use 0.5 when there are no positive labels for that threshold.",
+  "fallback": "Keep regular forecast when recent native inputs are insufficient.",
+  "catalog": "Catalog associations are used solely for retrospective subgroup scoring.",
+  "catalog_strict_45m": "The detected L1 front is within 45 minutes of the independent L1 catalog entry.",
+  "uncertainty": "Paired resampling of calendar weeks.",
+  "development": {
+    "calibration": {
+      "triggers": 109,
+      "intervals": 508,
+      "feature_ready": 508
+    },
+    "selection": {
+      "triggers": 135,
+      "intervals": 628,
+      "feature_ready": 628
+    },
+    "train": {
+      "triggers": 560,
+      "intervals": 2678,
+      "feature_ready": 2668
+    }
+  },
+  "input_sha256": {
+    "data/experiments/cme-l1-hmf-2026-11-26/features.parquet": "938b87e684d2d572bf0b0c762cd3c1dbf5a8b64f64300e6ec348645a0e6d07ee",
+    "data/experiments/cme-l1-hmf-2026-11-26/reference_forecasts.parquet": "4ef04e935447cd8d6a5d98eeef42e306b37a2f5a1611f51778ff0b01f5205719",
+    "data/experiments/cme-l1-kp-all-triggers-2026-11-26/l1_cases.parquet": "10ab5ab89747a28821e126e2f33925222e6da23479ac0b9e9f077745783724ab"
+  },
+  "code_sha256": "d8afc8a3655a5c02ae4283f30eb42ff39b6bd2f4488174d0808fdb63feca60dc"
+}

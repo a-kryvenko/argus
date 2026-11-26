@@ -1,5 +1,6 @@
 import { captureScreenshot } from "./screenshot";
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { products, type ProductConfig } from '../../src/forecast/products';
 import type { ForecastMetrics } from '../../src/app/metrics/_lib/types';
 
@@ -122,6 +123,35 @@ test('binary-only HMF uses real lead hours, horizon reset and missing threshold 
   await page.getByRole('button', { name: 'BS Southward Bz', exact: true }).click();
   await expect(inspector).toContainText('Southward Bz');
   await expect(page.getByLabel('Continuous metric')).toHaveCount(0);
+});
+
+test('Bt archive metrics compare paired thresholds by data delay and evaluation sample', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mock(page);
+  const archive = new URL('../../../../configs/evaluations/hmf-fast-l1.json', import.meta.url);
+  const data: ForecastMetrics = { target: 'hmf', variables: {}, fast_bt_evaluation: JSON.parse(readFileSync(archive, 'utf8')) };
+  await page.route('**/api/v1/forecasts/hmf/metrics', route =>
+    route.fulfill({ json: { success: true, data, error: null } }));
+
+  await page.goto('/metrics/hmf');
+  const fast = page.getByRole('region', { name: 'Fast L1 Bt archive evaluation' });
+  const delay = fast.getByLabel('Simulated L1 data delay');
+  const cohort = fast.getByLabel('Evaluation sample');
+  const threshold = fast.getByRole('row').filter({ hasText: '≥ 10 nT' });
+  await expect(delay).toHaveValue('15');
+  await expect(cohort).toHaveValue('all_triggers');
+  await expect(fast).toContainText('264 matched one-hour intervals · 264 with fast forecasts');
+  await expect(threshold.getByRole('cell', { name: '0.181 → 0.134', exact: true })).toBeVisible();
+  await cohort.selectOption('catalog_strict_45m');
+  await expect(fast).toContainText('44 matched one-hour intervals');
+  await expect(threshold.getByRole('cell', { name: '0.474 → 0.198', exact: true })).toBeVisible();
+  await delay.selectOption('30');
+  await expect(fast).toContainText('43 matched one-hour intervals');
+  await fast.getByText('Evaluation notes', { exact: true }).click();
+  await expect(fast).toContainText('95% interval');
+  await expect(page.getByRole('region', { name: 'Last 30 days average accuracy' })).toContainText('Scheduled hourly Bt/Bs forecasts');
+  await expect(page.getByRole('heading', { name: /Model evaluation by lead hour/i })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test('missing variable can switch to available evaluation without inventing metrics', async ({ page }) => {

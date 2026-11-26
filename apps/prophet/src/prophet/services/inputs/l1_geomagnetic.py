@@ -12,6 +12,12 @@ WIND_PRODUCTS = {
     'v': 'swpc.rtsw_plasma', 'n': 'swpc.rtsw_plasma',
     'bx': 'swpc.rtsw_mag', 'by': 'swpc.rtsw_mag', 'bz': 'swpc.rtsw_mag', 'bt': 'swpc.rtsw_mag',
 }
+STANDALONE_WIND = {
+    'v': ('plasma_speed', 'plasma_received_at'),
+    'n': ('plasma_density', 'plasma_density_received_at'),
+    'bt': ('mag_bt', 'mag_bt_received_at'),
+    'bz': ('mag_bz', 'mag_bz_received_at'),
+}
 INDEXES = {
     'kp': (10800, timedelta(hours=4)),
     'dst': (3600, timedelta(hours=2)),
@@ -70,7 +76,7 @@ def _usable_index(metric, start, value):
 
 
 def read_l1_wind_history(client, url, token, as_of):
-    """Keep closed L1 vectors and standalone plasma speeds for the travel clock."""
+    """Keep closed L1 vectors plus standalone samples for the rapid forecasts."""
     cutoff = _cutoff(as_of)
     end = cutoff.replace(second=0, microsecond=0)
     start = end - WIND_HISTORY
@@ -97,9 +103,11 @@ def read_l1_wind_history(client, url, token, as_of):
     wind = wind.where(coherent, axis=0).rename_axis(columns=None)
     wind['received_at'] = grouped.received_at.max().reindex(clock).where(coherent)
     wind['spacecraft'] = grouped.spacecraft.first().reindex(clock).where(coherent)
-    plasma = samples.loc[samples.metric.eq('v')].set_index('l1_time')
-    wind['plasma_speed'] = plasma['value'].reindex(clock).astype(float)
-    wind['plasma_received_at'] = plasma['received_at'].reindex(clock)
+    for metric, (value, receipt) in STANDALONE_WIND.items():
+        native = samples.loc[samples.metric.eq(metric)].set_index('l1_time').reindex(clock)
+        wind[value] = native['value'].astype(float)
+        wind[receipt] = native['received_at']
+        wind[f'{value}_spacecraft'] = native['spacecraft']
     return wind
 
 

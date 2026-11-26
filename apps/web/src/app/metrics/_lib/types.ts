@@ -41,9 +41,40 @@ export type FastL1Evaluation = {
   }>;
 };
 
+type FastBtScores = {
+  brier_score: number;
+  average_precision: number | null;
+  alert_threshold: number;
+  hits: number;
+  false_alerts: number;
+};
+
+export type FastBtEvaluation = {
+  period: string;
+  sample: string;
+  notes: string[];
+  cohorts: Array<{
+    id: string;
+    label: string;
+    by_delay: Array<{
+      delay_minutes: number;
+      targets: number;
+      updates: number;
+      thresholds: Array<{
+        threshold: number;
+        observed_events: number;
+        baseline: FastBtScores;
+        candidate: FastBtScores;
+        brier_delta_ci95?: [number, number];
+      }>;
+    }>;
+  }>;
+};
+
 export type ForecastMetrics = {
   evaluation?: { label: string; period: string; sample: string; notes: string[] } | null;
   fast_l1_evaluation?: FastL1Evaluation | null;
+  fast_bt_evaluation?: FastBtEvaluation | null;
   target: string;
   meta?: { variables: Record<string, { unit: string }> };
   variables: Record<string, {

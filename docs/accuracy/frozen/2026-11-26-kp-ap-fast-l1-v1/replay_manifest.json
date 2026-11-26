@@ -1,0 +1,46 @@
+{
+  "periods": "Through 2024 fit. 2025 H1 calibrates probability. 2025 H2 chooses model and alert cutoffs. H1 2026 is evaluated after all choices.",
+  "selection": "Highest Kp >=5 recall under a 5% false positive rate on 2025 H2, then lower Kp >=5 Brier score.",
+  "truth": "Full native three-hour Kp/ap bins beginning at or after a simulated data receipt and ending by +6h.",
+  "fallback": "When minute inputs are insufficient, use the scheduled Kp/ap distribution.",
+  "state_control": "Same training and calibration protocol with only known Kp/Dst and lead. Keep the same input coverage as the fast arm.",
+  "weights": "One release and target per UTC bin, using the latest qualifying blind trigger. No ETA or verified arrival feature.",
+  "calibration": "One monotone logistic map across all 27 ordinal exceedance probabilities. Derive ap from the same ordinal distribution.",
+  "selected_model": "tree_ordinal",
+  "incumbent_alert_threshold": 0.13637561648573168,
+  "selected_alert_threshold": 0.36123444323601295,
+  "state_alert_threshold": 0.3076197409038122,
+  "selection_bins": 132,
+  "development_counts": {
+    "calibration": {
+      "bins": 109,
+      "ready": 102,
+      "storms": 16
+    },
+    "selection": {
+      "bins": 132,
+      "ready": 124,
+      "storms": 18
+    },
+    "train": {
+      "bins": 555,
+      "ready": 499,
+      "storms": 63
+    }
+  },
+  "model_bytes": 102611,
+  "mean_prediction_ms_local_cpu": 0.2565186799984076,
+  "sources_sha256": {
+    "features.parquet": "c1e18afb076d8c801bef0f7f8e0837df1b27886ec0e1d66fc0fec5e2115e19b8",
+    "reference_2025.parquet": "a6a0e7ce123fd73380233803ef12d200bad1ec276223d91fd64929916dcbdb12"
+  },
+  "outputs_sha256": {
+    "model.json": "0cb158fe95bb42156ab0eb7e47f8c41b168905d31e3357f56b0b3a983bd03629",
+    "paired_deltas.csv": "53ba6d040c1eb9a931233c3746a3b4f5a9874acf218916d9a0087c700b9c6a65",
+    "selection_scores.csv": "6b5c7768a0c688ed4c49be9904e2292c6af8d09130382c28617e90240a5f99a8",
+    "state_control.json": "1e44336f57bc0b5f598176652539c983247a1c2459f608026b39b629075b0579",
+    "test_forecasts.csv": "ea329865afbe5e1a4aa902fd221f340e991af6253a38a150ab5c44c902522518",
+    "test_scores.csv": "a3b87239fda4780538b803017f5f2735d056994365d0243ba7fb92a11c14ed7e"
+  },
+  "code_sha256": "455c2fa7e31c90f369346cbf1b186cbffd2e2137474bb85bbcd747720e0392ef"
+}

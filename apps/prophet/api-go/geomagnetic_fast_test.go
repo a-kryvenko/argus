@@ -191,7 +191,7 @@ func TestFastGeomagneticMalformedRelease(t *testing.T) {
 		fastGeomagneticTestRelease(issue, published, target.Add(3*time.Hour)),
 		fastGeomagneticTestRelease(issue, published, target, target),
 	} {
-		if _, err := prepareFastGeomagnetic(item); err == nil {
+		if _, err := geomagneticFastSpec.prepare(item); err == nil {
 			t.Fatalf("invalid input accepted: %+v", item)
 		}
 	}

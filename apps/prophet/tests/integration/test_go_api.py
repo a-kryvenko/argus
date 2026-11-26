@@ -363,6 +363,78 @@ async def test_fast_l1_updates_one_prepared_interval_and_preserves_archived_rele
             assert ForecastRelease.model_validate((await go.get(archive_path)).raise_for_status().json()) == archived
 
 
+async def test_fast_bt_updates_hmf_without_replacing_bs(recorder_setup, monkeypatch):
+    import asyncio
+
+    from common.schemas.forecast_release import FAST_BT_ARTIFACT, FAST_BT_COLUMNS, FAST_BT_PRODUCT, PREDICTION_COLUMNS
+
+    _, _, config, writer = recorder_setup
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-token')
+    monkeypatch.setattr(common_config, '_config', None)
+    headers = {'Authorization': 'Bearer test-token'}
+    base_issue = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    base = await RunRecorder.begin('hmf', 'manual', config, writer=writer)
+    for name, values in [('hmf_total_threshold', '.3,.2,.1'), ('hmf_southward_threshold', '.2,.1,.05')]:
+        columns = ['issue_time', 'valid_time', 'lead_hours', *PREDICTION_COLUMNS[name]]
+        rows = [f'{base_issue.isoformat()},{(base_issue + timedelta(hours=lead)).isoformat()},{lead},{values}'
+                for lead in range(1, 13)]
+        await base.store(name, ('\n'.join([','.join(columns), *rows]) + '\n').encode(), {}, len(rows), columns)
+    release = await base.finish()
+    view_path = '/internal/v1/public-forecasts/hmf'
+    archive_path = f'/internal/v1/forecasts/hmf/releases/{release.release_id}'
+    report_path = 'configs/evaluations/hmf-fast-l1.json'
+    (config.workdir / report_path).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / report_path, config.workdir / report_path)
+    shutil.copyfile(ROOT / 'configs/models_registry.yaml', config.workdir / 'configs/models_registry.yaml')
+
+    with go_server(config.workdir) as (_, address):
+        async with httpx.AsyncClient(base_url=address, headers=headers, trust_env=False) as go:
+            metrics = (await go.get('/internal/v1/public-forecast-metrics/hmf')).raise_for_status().json()
+            assert metrics['fast_bt_evaluation'] == json.loads((ROOT / report_path).read_text())
+            deadline = monotonic() + 8
+            while True:
+                response = await go.get(view_path)
+                if response.status_code != 503 or monotonic() >= deadline:
+                    before = response.raise_for_status().json()
+                    break
+                await asyncio.sleep(.05)
+
+            issue = datetime.now(UTC)
+            hour = issue.replace(minute=0, second=0, microsecond=0)
+            targets = {hour + timedelta(hours=2), hour + timedelta(hours=3)}
+            columns = ['issue_time', 'valid_time', *FAST_BT_COLUMNS]
+            rows = [f'{issue.isoformat()},{target.isoformat()},.8,.5,.3' for target in sorted(targets)]
+            content = '\n'.join([','.join(columns), *rows, ''])
+            fast = await RunRecorder.begin(FAST_BT_PRODUCT, 'scheduled', config, writer=writer)
+            await fast.store(FAST_BT_ARTIFACT, content.encode(), {}, len(rows), columns)
+            assert (await fast.finish()).status == 'published'
+
+            deadline = monotonic() + 8
+            while True:
+                after = (await go.get(view_path)).raise_for_status().json()
+                if after != before:
+                    break
+                assert monotonic() < deadline, after
+                await asyncio.sleep(.05)
+            assert after['issue_time'] == before['issue_time']
+            assert after['horizon_hours'] == before['horizon_hours']
+            for current, expected in zip(after['predictions'], before['predictions'], strict=True):
+                target = datetime.fromisoformat(expected['valid_time'])
+                if target not in targets:
+                    assert current == expected
+                    continue
+                assert current['lead_hours'] == expected['lead_hours']
+                assert current['variables']['bs'] == expected['variables']['bs']
+                assert 'update_issued_at' not in current
+                bt = current['variables']['bt']
+                assert datetime.fromisoformat(bt['update_issued_at']) == issue
+                assert [item['probability'] for item in bt['binary']] == [.8, .5, .3]
+
+            archived = ForecastRelease.model_validate((await go.get(archive_path)).raise_for_status().json())
+            assert archived == await read_release('hmf', release.release_id)
+            assert archived.issue_time == base_issue
+
+
 async def test_public_forecasts_match_existing_contract_and_refresh(recorder_setup, monkeypatch):
     import asyncio
     import csv

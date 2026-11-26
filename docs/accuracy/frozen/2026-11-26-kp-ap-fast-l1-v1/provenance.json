@@ -30,6 +30,8 @@
     "evaluation/test_forecasts.csv": "ea329865afbe5e1a4aa902fd221f340e991af6253a38a150ab5c44c902522518"
   },
   "artifacts_sha256": {
+    "metrics.json": "f6889119b5b2e609952cd69c7dd7c83b86c909745848a434e92e3db3893f8f5e",
+    "replay_manifest.json": "ffc62e734a9fd457ddbf48c2a45a8c875ea9e26bd5d5b3916251fa820d3d1f5e",
     "test_scores.csv": "a3b87239fda4780538b803017f5f2735d056994365d0243ba7fb92a11c14ed7e",
     "paired_deltas.csv": "53ba6d040c1eb9a931233c3746a3b4f5a9874acf218916d9a0087c700b9c6a65",
     "selection_scores.csv": "6b5c7768a0c688ed4c49be9904e2292c6af8d09130382c28617e90240a5f99a8"

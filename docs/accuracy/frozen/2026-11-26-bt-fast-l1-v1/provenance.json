@@ -1,0 +1,31 @@
+{
+  "models": {
+    "fast": {
+      "name": "argus-bt-fast-l1-v1",
+      "artifact": "configs/models/bt-fast-l1-v1.json",
+      "sha256": "9a85890bd7b1804a82f0432a2dd46f4286b098f93d92d780cec2bcf5e6b81d32",
+      "lightgbm_model_sha256": "5f4036af0ba7397b402ab013cb826fb83d482b0ec32141928770f6734be81ad3"
+    },
+    "hourly": {
+      "name": "argus-bt-revalidated-2026-v2",
+      "sha256": "d4af912daf2f19dde9b42ad90971e74c2a9833a4535ab780137727e8b0b1f07e"
+    }
+  },
+  "api_metrics_report": "configs/evaluations/hmf-fast-l1.json",
+  "api_metrics_report_sha256": "3e17afa4eb8aebb5c91c15620684e7b8f966543b03ffa700a9f7ea6d8918b930",
+  "evaluation_code": "notebooks/workflows/revalidation/cme_l1_hmf_model.py",
+  "evaluation_code_sha256": "d8afc8a3655a5c02ae4283f30eb42ff39b6bd2f4488174d0808fdb63feca60dc",
+  "protocol": "data/experiments/cme-l1-hmf-2026-11-26/evaluation/protocol.json",
+  "protocol_sha256": "b75eee6d9b76cf551f6e51dcc61063cf060561af052f4ac00e06e34caaad3f3e",
+  "input_sha256": {
+    "data/experiments/cme-l1-hmf-2026-11-26/features.parquet": "938b87e684d2d572bf0b0c762cd3c1dbf5a8b64f64300e6ec348645a0e6d07ee",
+    "data/experiments/cme-l1-hmf-2026-11-26/reference_forecasts.parquet": "4ef04e935447cd8d6a5d98eeef42e306b37a2f5a1611f51778ff0b01f5205719",
+    "data/experiments/cme-l1-kp-all-triggers-2026-11-26/l1_cases.parquet": "10ab5ab89747a28821e126e2f33925222e6da23479ac0b9e9f077745783724ab"
+  },
+  "reports_sha256": {
+    "metrics.json": "3e17afa4eb8aebb5c91c15620684e7b8f966543b03ffa700a9f7ea6d8918b930",
+    "protocol.json": "b75eee6d9b76cf551f6e51dcc61063cf060561af052f4ac00e06e34caaad3f3e",
+    "scores.csv": "d4f807085098ca5513bee0d918daa673a91ed6981ea24084660902416d105dad",
+    "paired_deltas.csv": "559b33fb3d4a54dfcd0f7a7d4d169343b705343f8638ae517983672c1eac4b4b"
+  }
+}

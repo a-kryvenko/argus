@@ -52,6 +52,11 @@ models:
   hmf_total_threshold:
     model: argus-bt-revalidated-2026-v2
     metrics: data/metrics/hmf/bt_revalidated_2026_v2
+
+  hmf_fast_l1_bt:
+    model: argus-bt-fast-l1-v1
+    artifact_path: configs/models/bt-fast-l1-v1.json
+    metrics_report: configs/evaluations/hmf-fast-l1.json
   
   hmf_southward_threshold:
     model: argus-bs-revalidated-2026-v2

@@ -23,8 +23,13 @@ PRODUCT_ARTIFACTS = {
 }
 FAST_L1_PRODUCT = 'geomagnetic-fast-l1'
 FAST_L1_ARTIFACT = 'kp_ap_fast_l1'
-RELEASE_ARTIFACTS = PRODUCT_ARTIFACTS | {FAST_L1_PRODUCT: (FAST_L1_ARTIFACT,)}
+FAST_BT_PRODUCT = 'hmf-fast-l1'
+FAST_BT_ARTIFACT = 'bt_fast_l1'
+FAST_L1_RELEASES = {FAST_L1_PRODUCT: (FAST_L1_ARTIFACT,), FAST_BT_PRODUCT: (FAST_BT_ARTIFACT,)}
+FAST_INTERVAL_HOURS = {FAST_L1_ARTIFACT: 3, FAST_BT_ARTIFACT: 1}
+RELEASE_ARTIFACTS = PRODUCT_ARTIFACTS | FAST_L1_RELEASES
 FAST_L1_COLUMNS = ('p_kp_ge_4', 'p_kp_ge_5', 'p_kp_ge_6', 'ap_q10', 'ap_q50', 'ap_q90')
+FAST_BT_COLUMNS = ('p_bt_ge_5', 'p_bt_ge_10', 'p_bt_ge_15')
 PREDICTION_COLUMNS = {
     'solar_wind_events': ('event_count', 'detection_count'),
     **{name: tuple(f'{prefix}_q{q}' for q in (10, 50, 90)) for name, prefix in (
@@ -36,6 +41,7 @@ PREDICTION_COLUMNS = {
         ('hmf_total_threshold', 'bt', (5, 10, 15)), ('hmf_southward_threshold', 'bs', (5, 10, 15)))},
     'atmospheric_density': ('altitude_km', 'latitude_deg', 'rho_kg_m3', 'rho_lon_p10_kg_m3', 'rho_lon_p90_kg_m3'),
     FAST_L1_ARTIFACT: FAST_L1_COLUMNS,
+    FAST_BT_ARTIFACT: FAST_BT_COLUMNS,
 }
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
 
@@ -52,8 +58,8 @@ class ForecastArtifact(BaseModel):
         reader = csv.DictReader(io.StringIO(self.csv_text))
         if reader.fieldnames != self.columns or len(set(self.columns)) != len(self.columns):
             raise ValueError('Artifact columns do not match')
-        fast_l1 = self.name == FAST_L1_ARTIFACT
-        clock_columns = {'issue_time', 'valid_time'} if fast_l1 else {'issue_time', 'valid_time', 'lead_hours'}
+        interval = FAST_INTERVAL_HOURS.get(self.name)
+        clock_columns = {'issue_time', 'valid_time'} if interval else {'issue_time', 'valid_time', 'lead_hours'}
         if not clock_columns.issubset(self.columns):
             raise ValueError('Artifact time columns are missing')
         predictions = PREDICTION_COLUMNS.get(self.name)
@@ -68,23 +74,27 @@ class ForecastArtifact(BaseModel):
         for row in reader:
             if None in row or None in row.values():
                 raise ValueError('Malformed CSV row')
-            for column in predictions:
-                value = float(row[column])
+            values = tuple(float(row[column]) for column in predictions)
+            for column, value in zip(predictions, values):
                 if not math.isfinite(value) or (column.startswith('p_') and not 0 <= value <= 1):
                     raise ValueError('Invalid forecast prediction')
             current = datetime.fromisoformat(row['issue_time'])
             valid = datetime.fromisoformat(row['valid_time'])
-            lead = 0 if fast_l1 else int(row['lead_hours'])
+            lead = 0 if interval else int(row['lead_hours'])
             if current.tzinfo is None or valid.tzinfo is None or lead < 0:
                 raise ValueError('Artifact times must be timezone-aware with nonnegative leads')
-            if fast_l1:
+            if interval:
                 if (current.utcoffset() != timedelta(0) or valid.utcoffset() != timedelta(0)
-                        or valid.hour % 3 or valid.minute or valid.second or valid.microsecond
-                        or not current <= valid <= current + timedelta(hours=3) or valid in fast_targets):
+                        or valid.hour % interval or valid.minute or valid.second or valid.microsecond
+                        or not current <= valid <= current + timedelta(hours=6 - interval) or valid in fast_targets):
                     raise ValueError('Invalid fast L1 target interval')
-                p4, p5, p6, q10, q50, q90 = (float(row[name]) for name in FAST_L1_COLUMNS)
-                if not (1 >= p4 >= p5 >= p6 >= 0 and 0 <= q10 <= q50 <= q90 <= 400):
-                    raise ValueError('Invalid fast L1 Kp/ap distribution')
+                p1, p2, p3 = values[:3]
+                if not p1 >= p2 >= p3:
+                    raise ValueError('Invalid fast L1 probability order')
+                if self.name == FAST_L1_ARTIFACT:
+                    q10, q50, q90 = values[3:]
+                    if not 0 <= q10 <= q50 <= q90 <= 400:
+                        raise ValueError('Invalid fast L1 ap quantiles')
                 fast_targets.add(valid)
             if self.name == 'plasma_speed_quantile':
                 speed_background[valid] = float(row.get('v_background_q50', row['v_q50']))
@@ -151,6 +161,6 @@ class ForecastRelease(BaseModel):
             raise ValueError('Incomplete product release')
         if any(artifact.issue_time() != self.issue_time for artifact in self.artifacts):
             raise ValueError('Mixed issue times in release')
-        if self.product == FAST_L1_PRODUCT and self.published_at < self.issue_time:
+        if self.product in FAST_L1_RELEASES and self.published_at < self.issue_time:
             raise ValueError('Fast L1 release was published before its issue')
         return self

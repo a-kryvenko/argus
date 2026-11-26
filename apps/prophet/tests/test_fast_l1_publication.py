@@ -9,7 +9,10 @@ from uuid import uuid4
 import pandas as pd
 import pytest
 
-from common.schemas.forecast_release import FAST_L1_ARTIFACT, FAST_L1_PRODUCT, ForecastArtifact, ForecastRelease
+from common.schemas.forecast_release import (
+    FAST_BT_ARTIFACT, FAST_BT_COLUMNS, FAST_BT_PRODUCT, FAST_L1_ARTIFACT, FAST_L1_PRODUCT,
+    ForecastArtifact, ForecastRelease,
+)
 from common import config
 from prophet.services.generation import fast_l1
 
@@ -25,12 +28,10 @@ def test_fast_l1_publishes_a_joint_exact_time_release_at_most_once(monkeypatch):
             return issue.astimezone(tz)
 
     monkeypatch.setattr(fast_l1, 'datetime', Clock)
-    forecast = SimpleNamespace(
-        trigger_time=trigger,
-        kp=pd.DataFrame({'valid_time': [valid], 'p_kp_ge_4': [.7], 'p_kp_ge_5': [.4], 'p_kp_ge_6': [.2]}),
-        ap=pd.DataFrame({'valid_time': [valid], 'ap_q10': [9], 'ap_q50': [32], 'ap_q90': [80]}),
-    )
-    source = fast_l1.PendingUpdate(issue, forecast, {'as_of': issue.isoformat()}, {'model': 'fast'})
+    frame = pd.DataFrame({'valid_time': [valid], 'p_kp_ge_4': [.7], 'p_kp_ge_5': [.4], 'p_kp_ge_6': [.2],
+                          'ap_q10': [9], 'ap_q50': [32], 'ap_q90': [80]})
+    source = fast_l1.PendingUpdate(FAST_L1_PRODUCT, issue, trigger, frame, {'as_of': issue.isoformat()},
+                                   {'model': 'fast'})
     writer = object()
 
     @asynccontextmanager
@@ -79,15 +80,60 @@ def test_fast_l1_retries_the_original_issue_when_the_writer_is_busy(monkeypatch)
     monkeypatch.setattr(config, 'get_config', lambda: runtime)
     runner = fast_l1.FastL1Update()
     update = object()
-    runner.calculate = Mock(return_value=update)
+    runner.calculate = Mock(return_value=[update])
     runner.publish = AsyncMock(side_effect=[fast_l1.GenerationBusy(), None])
 
     async def check():
         await runner.poll()
-        assert runner.pending is update
+        assert runner.pending == [update]
         await runner.poll()
-        assert runner.pending is None
+        assert runner.pending == []
         runner.calculate.assert_called_once()
         assert runner.publish.await_args_list == [call(runtime, update), call(runtime, update)]
 
     asyncio.run(check())
+
+
+def test_bt_fast_l1_release_accepts_multiple_hourly_targets():
+    issue = datetime(2026, 1, 2, 1, 5, tzinfo=UTC)
+    columns = ['issue_time', 'valid_time', *FAST_BT_COLUMNS]
+    first, last = (issue.replace(minute=0) + timedelta(hours=hours) for hours in (1, 5))
+    rows = [f'{issue.isoformat()},{time.isoformat()},.9,.6,.35' for time in (first, last)]
+    content = '\n'.join([','.join(columns), *rows, ''])
+    artifact = ForecastArtifact(name=FAST_BT_ARTIFACT, sha256=sha256(content.encode()).hexdigest(),
+                                row_count=2, columns=columns, csv_text=content, model_info={})
+    release = ForecastRelease(release_id=uuid4(), run_id=uuid4(), product=FAST_BT_PRODUCT,
+                              published_at=issue, issue_time=issue, artifacts=[artifact])
+    assert release.artifacts[0].row_count == 2
+    late = content.replace(last.isoformat(), (last + timedelta(hours=1)).isoformat())
+    with pytest.raises(ValueError, match='Invalid fast L1 target interval'):
+        ForecastArtifact(name=FAST_BT_ARTIFACT, sha256=sha256(late.encode()).hexdigest(),
+                         row_count=2, columns=columns, csv_text=late, model_info={})
+
+
+def test_bt_fast_calculates_from_shared_wind_even_if_geomagnetic_history_is_unavailable(monkeypatch, tmp_path):
+    issue = datetime(2026, 1, 2, 1, 5, tzinfo=UTC)
+    trigger = SimpleNamespace(trigger_time=issue - timedelta(minutes=5), estimated_arrival=issue + timedelta(minutes=20))
+    frame = pd.DataFrame({'valid_time': [pd.Timestamp(issue).ceil('h')], 'p_bt_ge_5': [.9],
+                          'p_bt_ge_10': [.6], 'p_bt_ge_15': [.35]})
+    wind = Mock(return_value=pd.DataFrame({'bt': [12]}))
+    index_history = Mock(side_effect=RuntimeError('indices unavailable'))
+    bt = SimpleNamespace(forecast_frame=Mock(return_value=frame))
+    monkeypatch.setenv('OBSERVATIONS_URL', 'https://example.test')
+    monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-token')
+    monkeypatch.setattr(fast_l1, 'read_l1_wind_history', wind)
+    monkeypatch.setattr(fast_l1, 'read_l1_geomagnetic_indices', index_history)
+    detect = Mock(return_value=trigger)
+    monkeypatch.setattr(fast_l1, 'find_trigger', detect)
+    monkeypatch.setattr(fast_l1, 'load_model', lambda model, **_: (
+        bt if model is fast_l1.FastL1BtForecaster else object(), {'model': model.registry_name},
+    ))
+    runtime = SimpleNamespace(workdir=tmp_path, models_registry={
+        'models': {'geomagnetic_fast_l1': {}, 'hmf_fast_l1_bt': {}},
+    })
+    updates = fast_l1.FastL1Update().calculate(runtime, issue)
+    assert [item.product for item in updates] == [FAST_BT_PRODUCT]
+    assert updates[0].frame is frame
+    wind.assert_called_once()
+    detect.assert_called_once()
+    index_history.assert_called_once()

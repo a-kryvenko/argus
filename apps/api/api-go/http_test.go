@@ -124,6 +124,19 @@ func TestPublicRoutes(t *testing.T) {
 					},
 				}},
 			})
+		case "/internal/v1/public-forecasts/hmf":
+			target := issue.Add(time.Hour)
+			writeJSON(w, 200, publicforecast.Forecast{
+				Target: "hmf", IssueTime: issue, HorizonHours: 1,
+				AvailableVariables: []string{"bt", "bs"}, Predictions: []*publicforecast.ForecastPoint{{
+					Valid: target, Lead: 1,
+					Variables: map[string]*publicforecast.VariableForecast{
+						"bt": {Binary: []publicforecast.BinaryForecast{{Threshold: 10, Probability: .8}},
+							UpdateIssuedAt: pointer(target.Add(-49*time.Minute - 3*time.Second))},
+						"bs": {Binary: []publicforecast.BinaryForecast{{Threshold: 10, Probability: .1}}},
+					},
+				}},
+			})
 		case "/internal/v1/forecasts/dst/verification":
 			writeJSON(w, 200, document{"product": "dst", "start": issue.Add(-24 * time.Hour), "end": issue, "groups": []document{}})
 		case "/internal/v1/public-forecasts/solar-wind-events":
@@ -227,7 +240,7 @@ func TestPublicRoutes(t *testing.T) {
 		if !strings.Contains(got.Body.String(), `"code":"NOT_FOUND"`) {
 			t.Fatal(got.Body.String())
 		}
-		check("GET", "/forecasts/hmf", "", 503)
+		check("GET", "/forecasts/solar-radiation", "", 503)
 		check("GET", "/observations/history?observations=bz&from=2026-11-24T00:00:00", "", 422)
 		check("POST", "/risks/leo-drag", `{"altitude_km":12}`, 422)
 		check("POST", "/risks/leo-drag", strings.Repeat(" ", (1<<16)+1), 413)
@@ -311,6 +324,15 @@ func TestPublicRoutes(t *testing.T) {
 			t.Fatalf("fast L1 update was not forwarded: %+v", point)
 		}
 		check("GET", "/forecasts/geomagnetic-fast-l1", "", 404)
+		hmf := responseData[publicforecast.Forecast](t, check("GET", "/forecasts/hmf", "", 200))
+		point = hmf.Predictions[0]
+		bt, bs := point.Variables["bt"], point.Variables["bs"]
+		if point.UpdateIssuedAt != nil || bt.UpdateIssuedAt == nil ||
+			!bt.UpdateIssuedAt.Equal(point.Valid.Add(-49*time.Minute-3*time.Second)) ||
+			bt.Binary[0].Probability != .8 || bs.UpdateIssuedAt != nil || bs.Binary[0].Probability != .1 {
+			t.Fatalf("fast L1 Bt update was not forwarded: %+v", point)
+		}
+		check("GET", "/forecasts/hmf-fast-l1", "", 404)
 		metrics := responseData[document](t, check("GET", "/forecasts/solar-wind-speed/metrics", "", 200))
 		if metrics["meta"] == nil {
 			t.Fatal("metrics metadata was not forwarded")

@@ -57,6 +57,7 @@ type ForecastMetadata struct {
 type ForecastMetrics struct {
 	Evaluation       *EvaluationContext         `json:"evaluation" required:"false" allowNull:"true"`
 	FastL1Evaluation *FastL1Evaluation          `json:"fast_l1_evaluation,omitempty" required:"false" doc:"Matched archive evaluation for rapid Kp/ap updates after an L1 trigger."`
+	FastBtEvaluation *FastBtEvaluation          `json:"fast_bt_evaluation,omitempty" required:"false" doc:"Matched archive evaluation for rapid Bt updates after an L1 trigger."`
 	Target           string                     `json:"target" doc:"Forecast product identifier; see the endpoint's target list."`
 	Variables        map[string]VariableMetrics `json:"variables" doc:"Metrics keyed by variable name. See the endpoint's product table for names and units. Variables without available metrics are omitted."`
 	Meta             *ForecastMetadata          `json:"meta,omitempty" required:"false" allowNull:"true" doc:"Units of the reported variables."`
@@ -85,8 +86,9 @@ type ReliabilityPoint struct {
 }
 
 type VariableForecast struct {
-	Continuous *QuantileForecast `json:"continuous" required:"false" allowNull:"true" doc:"Quantile forecast, or null when unavailable or unsupported for this variable."`
-	Binary     []BinaryForecast  `json:"binary" required:"false" doc:"Available threshold probabilities; empty when unavailable or unsupported. Thresholds with missing probabilities are omitted."`
+	Continuous     *QuantileForecast `json:"continuous" required:"false" allowNull:"true" doc:"Quantile forecast, or null when unavailable or unsupported for this variable."`
+	Binary         []BinaryForecast  `json:"binary" required:"false" doc:"Available threshold probabilities; empty when unavailable or unsupported. Thresholds with missing probabilities are omitted."`
+	UpdateIssuedAt *time.Time        `json:"update_issued_at,omitempty" required:"false" doc:"Issue time of a fast L1 update applied to this variable (ISO 8601)."`
 }
 
 type VariableMetrics struct {

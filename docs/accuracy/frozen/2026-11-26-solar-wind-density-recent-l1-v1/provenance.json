@@ -1,0 +1,31 @@
+{
+  "models": {
+    "recent_l1": {
+      "name": "argus-plasma-density-recent-l1-v1",
+      "artifact": "configs/models/solar-wind-density.json",
+      "sha256": "2173a405624c761123021c8cfa914e898744df71fc32e6d5a5953f911e9a9c52"
+    },
+    "previous": {
+      "name": "argus-plasma-density-proswin-blend-v1",
+      "artifact": "data/models/argus-plasma-density-proswin-blend-v1.joblib",
+      "sha256": "b6eb76ce7f48dda8339d49b6eacdb95d4a31ed6630314bd85d71af28a06331c6"
+    }
+  },
+  "evaluation": {
+    "source": "NOAA SWPC HAPI active-plasma-pt1m",
+    "archive_start": "2026-06-01T00:00:00Z",
+    "archive_end": "2026-11-25T23:00:00Z",
+    "hourly_archive_sha256": "3f38193d76462169d5762e80d80ee62184ab114a6ccfe5564bb69f7a0de742e0",
+    "minimum_valid_minutes": 45,
+    "replay_input_hours": 143,
+    "availability": "Native L1 hour close. Historical receipt timestamps are unavailable.",
+    "pairing": "One-to-one on issue time, valid time and lead hour, with identical observed density.",
+    "recent_predictions_sha256": "5926b88493f83672c3c0a70671da108764084616275b71a3ea64517ecf941430",
+    "previous_predictions_sha256": "e84be700f1fd47092a0a5188d09ddcd58fc5b07b7024549845c5f8f2f23ec4a6"
+  },
+  "api_metrics_report": "configs/evaluations/solar-wind-density.json",
+  "artifacts_sha256": {
+    "metrics.json": "38e1f97a757fcc0ce3b45a024b5a239a3c02881882f57f17bd6a467d867a2823",
+    "paired.csv": "234dfa0074e3141360691a206a06e4e015254bee03d5b1e860ac78602d328ff6"
+  }
+}

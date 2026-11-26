@@ -9,6 +9,7 @@ import ResourceState from '../../../components/ResourceState';
 import WorkspaceShell from '../../../components/WorkspaceShell';
 import { productApiPath, type ProductConfig } from '../../../forecast/products';
 import type { ForecastMetrics } from '@/app/metrics/_lib/types';
+import FastBtAccuracy from './FastBtAccuracy';
 import FastL1Accuracy from './FastL1Accuracy';
 import MetricChart from './MetricChart';
 import MonthlyAccuracy from './MonthlyAccuracy';
@@ -19,15 +20,20 @@ import local from './metrics.module.css';
 
 export default function MetricsProduct({ product }: { product: ProductConfig }) {
   const { data, error, retry } = useResource<ForecastMetrics>(productApiPath(product, '/metrics'));
+  const hasFastEvaluation = data?.fast_bt_evaluation || data?.fast_l1_evaluation;
+  const showLeadMetrics = !data?.fast_bt_evaluation || Object.keys(data.variables).length > 0;
   return <WorkspaceShell section="Model performance" contentId="metrics-content" status={error ? 'Metrics unavailable' : data ? 'Model evaluation' : 'Loading metrics'} statusTone={error ? 'warning' : 'neutral'}>
     <main id="metrics-content" className={styles.page}>
-      <div className={styles.pageHeading}><div><h1>{product.title} metrics</h1><p>Forecast quality by lead hour. Explore errors, threshold scores and probability calibration.</p></div>
+      <div className={styles.pageHeading}><div><h1>{product.title} metrics</h1><p>{product.apiTarget === 'hmf' ? 'Bt archive replay and recent hourly forecast accuracy.' : 'Forecast quality by lead hour. Explore errors, threshold scores and probability calibration.'}</p></div>
         <Link className={styles.headingLink} href={`/forecast/${product.slug}`}>Open forecast<ArrowUpRight size={13} aria-hidden="true" /></Link>
       </div>
+      {data?.fast_bt_evaluation && <FastBtAccuracy evaluation={data.fast_bt_evaluation} />}
       {data?.fast_l1_evaluation && <FastL1Accuracy evaluation={data.fast_l1_evaluation} />}
       <MonthlyAccuracy product={product} />
-      <h2 className={local.staticHeading}>{data?.fast_l1_evaluation ? 'Hourly model evaluation by lead hour' : 'Model evaluation by lead hour'}</h2>
-      {!data ? <ResourceState error={error} retry={retry} label="metrics" /> : <MetricsBoard key={product.slug} product={product} data={data} />}
+      {showLeadMetrics && <>
+        <h2 className={local.staticHeading}>{hasFastEvaluation ? 'Hourly model evaluation by lead hour' : 'Model evaluation by lead hour'}</h2>
+        {!data ? <ResourceState error={error} retry={retry} label="metrics" /> : <MetricsBoard key={product.slug} product={product} data={data} />}
+      </>}
       <div className={styles.pageFooter}><span>Evaluation scores · not forecast values</span><a href={`/api/v1${productApiPath(product, '/metrics')}`}>Metrics data · JSON<ArrowUpRight size={12} aria-hidden="true" /></a></div>
     </main>
   </WorkspaceShell>;

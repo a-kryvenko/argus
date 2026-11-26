@@ -33,13 +33,17 @@ const variables: Record<string, string> = {
   hmf_total_threshold: 'bt', hmf_southward_threshold: 'bs',
   f10_7_quantile: 'f10_7', s10_quantile: 's10', m10_quantile: 'm10', y10_quantile: 'y10',
 };
+const forecastScopes: Record<string, string> = {
+  'geomagnetic-activity': 'Scheduled hourly Kp/ap forecasts',
+  hmf: 'Scheduled hourly Bt/Bs forecasts',
+};
 function utc(value: string) { return `${new Date(value).toISOString().slice(0, 16).replace('T', ' ')} UTC`; }
 
 export default function MonthlyAccuracy({ product }: { product: ProductConfig }) {
   const { data, error, retry } = useResource<Verification>(productApiPath(product, '/verification'));
   return <section className={local.monthly} aria-label="Last 30 days average accuracy">
     <h2>Last 30 days average accuracy</h2>
-    <p>{product.apiTarget === 'geomagnetic-activity' ? 'Scheduled hourly Kp/ap forecasts' : 'Published forecasts'} compared with observations from Clio, separately by model version and forecast lead time. Lower MAE, RMSE and Brier scores are better.</p>
+    <p>{forecastScopes[product.apiTarget] ?? 'Published forecasts'} compared with observations from Clio, separately by model version and forecast lead time. Lower MAE, RMSE and Brier scores are better.</p>
     {!data ? <ResourceState error={error} retry={retry} label="observed forecast accuracy" /> : <>
       <p>{utc(data.start)} – {utc(data.end)} · by forecast valid time</p>
       {!data.groups.length && <p role="status">No verified forecast data available for this period.</p>}

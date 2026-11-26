@@ -29,7 +29,7 @@ Generation requires private `forecast-core` and configured models.
 
 Products publish independently; failures retain the previous release.
 Cron runs events and summary every five minutes and regular forecasts hourly at :10.
-The minute L1 detector can update Kp/ap for the next complete three-hour interval. Updated public points include `update_issued_at`. The release and its input snapshot are stored under `geomagnetic-fast-l1`.
+The minute L1 detector can update Kp/ap for the next complete three-hour interval and Bt for complete hourly intervals within six hours. Each update exposes `update_issued_at`. Releases and input snapshots are stored under `geomagnetic-fast-l1` and `hmf-fast-l1`.
 Verification runs every six hours. The worker prepares rolling statistics at startup and every five minutes using `prophet.verification_days` (30 days).
 
 Prophet prepares calibrated GOES indices and reads PROSWIN predictions before freezing the

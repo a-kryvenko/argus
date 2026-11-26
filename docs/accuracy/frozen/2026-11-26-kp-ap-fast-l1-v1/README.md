@@ -12,7 +12,7 @@ January–June 2026 retrospective replay of `argus-geomagnetic-fast-l1-v1` and t
 
 Paired 95% intervals for fast minus hourly are [−0.074, +0.029] for Kp ≥ 5 Brier and [−5.52, −0.86] for ap MAE. The diagnostic Kp ≥ 5 cutoffs were selected in 2025 under a 5% false-positive limit, 13.64% for hourly and 36.12% for fast L1.
 
-[Scores at 5, 15 and 30 minutes](test_scores.csv) · [Paired intervals](paired_deltas.csv) · [Cutoff selection](selection_scores.csv) · [Provenance](provenance.json)
+[API metrics](metrics.json) · [Scores at 5, 15 and 30 minutes](test_scores.csv) · [Paired intervals](paired_deltas.csv) · [Cutoff selection](selection_scores.csv) · [Replay manifest](replay_manifest.json) · [Provenance](provenance.json)
 
 ```sh
 notebooks/.venv/bin/python -m notebooks.workflows.revalidation.cme_l1_kp_fast_model \

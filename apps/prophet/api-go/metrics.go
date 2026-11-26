@@ -44,16 +44,38 @@ func (reports metricReports) read(target string, product publicforecast.Product)
 		}
 		path = reports.models[variable.Artifact].MetricsReport
 	}
-	if path == "" {
+	var report *publicforecast.ForecastMetrics
+	if path != "" {
+		raw, err := reports.readFile(path)
+		if err != nil {
+			return nil, err
+		}
+		report, err = metricsData(raw, target, product)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if target == "hmf" {
+		if fastPath := reports.models["hmf_fast_l1_bt"].MetricsReport; fastPath != "" {
+			fast, err := reports.readFastBt(fastPath)
+			if err != nil {
+				if report == nil {
+					return nil, err
+				}
+				log.Printf("read fast Bt metrics: %v", err)
+			} else {
+				if report == nil {
+					report = &publicforecast.ForecastMetrics{
+						Target: target, Variables: map[string]publicforecast.VariableMetrics{},
+						Meta: publicforecast.Metadata(product, []string{"bt"}),
+					}
+				}
+				report.FastBtEvaluation = fast
+			}
+		}
+	}
+	if report == nil {
 		return nil, errors.New("metrics report is not configured")
-	}
-	raw, err := reports.readFile(path)
-	if err != nil {
-		return nil, err
-	}
-	report, err := metricsData(raw, target, product)
-	if err != nil {
-		return nil, err
 	}
 	if target == "geomagnetic-activity" {
 		if fastPath := reports.models["geomagnetic_fast_l1"].MetricsReport; fastPath != "" {

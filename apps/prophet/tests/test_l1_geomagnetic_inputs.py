@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import pandas as pd
 import pytest
 
 from prophet.services.inputs.l1_geomagnetic import (
@@ -57,11 +58,15 @@ def test_live_l1_solar_wind_uses_only_complete_causal_spacecraft_vectors():
         wind = read_l1_wind_history(client, 'http://clio', 'token', AS_OF)
 
     assert len(wind) == 240 and wind.index.max() == late
-    complete = wind.dropna()
+    complete = wind[[*WIND_PRODUCTS, 'received_at', 'spacecraft', 'plasma_speed', 'plasma_received_at']].dropna()
     assert list(complete.index) == [usable]
     assert complete.loc[usable].to_dict() == dict(v=481.5, n=4.5, bx=-2., by=2., bz=-6., bt=7.,
                                                  received_at=AS_OF, spacecraft='dscovr',
                                                  plasma_speed=481.5, plasma_received_at=end)
+    assert wind.at[mixed, 'mag_bt'] == 7.
+    assert wind.at[mixed, 'mag_bt_spacecraft'] == 'dscovr'
+    assert wind.at[mixed, 'plasma_density'] == 4.5
+    assert pd.isna(wind.at[late, 'mag_bz'])
 
 
 def test_standalone_plasma_speed_keeps_its_own_receipt_clock():

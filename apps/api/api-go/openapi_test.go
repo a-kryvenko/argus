@@ -27,6 +27,11 @@ func TestGeneratedOpenAPIContract(t *testing.T) {
 	}
 	wantPaths, gotPaths := contractObject(want["paths"]), contractObject(got["paths"])
 	gotSchemas := contractObject(contractObject(got["components"])["schemas"])
+	variable := contractObject(gotSchemas["VariableForecast"])
+	update := contractObject(contractObject(variable["properties"])["update_issued_at"])
+	if update["format"] != "date-time" || slices.Contains(contractStrings(variable["required"]), "update_issued_at") {
+		t.Errorf("unexpected variable update timestamp schema: %v", update)
+	}
 	history := contractObject(contractObject(gotPaths["/observations/history"])["get"])
 	timeBasis := contractObject(contractObject(contractParameters(history["parameters"])["query time_basis"])["schema"])
 	if timeBasis["default"] != "l1" || !slices.Equal(contractStrings(timeBasis["enum"]), []string{"l1", "near_earth"}) {

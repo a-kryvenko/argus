@@ -1,0 +1,1562 @@
+{
+  "target": "solar-wind-density",
+  "evaluation": {
+    "label": "Recent L1 density \u00b7 retrospective evaluation",
+    "period": "1 June \u2013 25 November 2026",
+    "sample": "NOAA SWPC primary L1 measurements; hours with \u226545 valid minutes",
+    "notes": [
+      "Blend and intervals calibrated on 2025 OMNI. The 2026 L1 archive was used only for testing.",
+      "Replay assumes completed-hour availability and uses up to 143 hours of input history.",
+      "Strong density excursions remain difficult to predict."
+    ]
+  },
+  "variables": {
+    "n": {
+      "continuous": {
+        "quantiles": [
+          0.1,
+          0.5,
+          0.9
+        ],
+        "by_lead_hour": [
+          {
+            "lead_hours": 1,
+            "values": {
+              "n": 3983,
+              "mae": 0.892592,
+              "rmse": 1.980262,
+              "bias": -0.105101,
+              "coverage_80": 0.808436,
+              "lower_tail": 0.095657,
+              "upper_tail": 0.095908,
+              "interval_width_80": 2.39144,
+              "q10_pinball": 0.193756,
+              "q50_pinball": 0.446296,
+              "q90_pinball": 0.2978
+            }
+          },
+          {
+            "lead_hours": 2,
+            "values": {
+              "n": 3976,
+              "mae": 1.094649,
+              "rmse": 2.325963,
+              "bias": -0.202583,
+              "coverage_80": 0.817153,
+              "lower_tail": 0.10161,
+              "upper_tail": 0.081237,
+              "interval_width_80": 3.123321,
+              "q10_pinball": 0.22087,
+              "q50_pinball": 0.547325,
+              "q90_pinball": 0.380212
+            }
+          },
+          {
+            "lead_hours": 3,
+            "values": {
+              "n": 3970,
+              "mae": 1.258964,
+              "rmse": 2.599239,
+              "bias": -0.205005,
+              "coverage_80": 0.814106,
+              "lower_tail": 0.099748,
+              "upper_tail": 0.086146,
+              "interval_width_80": 3.552534,
+              "q10_pinball": 0.249461,
+              "q50_pinball": 0.629482,
+              "q90_pinball": 0.442054
+            }
+          },
+          {
+            "lead_hours": 4,
+            "values": {
+              "n": 3968,
+              "mae": 1.392059,
+              "rmse": 2.796097,
+              "bias": -0.293399,
+              "coverage_80": 0.818548,
+              "lower_tail": 0.102571,
+              "upper_tail": 0.078881,
+              "interval_width_80": 4.135871,
+              "q10_pinball": 0.264756,
+              "q50_pinball": 0.696029,
+              "q90_pinball": 0.494965
+            }
+          },
+          {
+            "lead_hours": 5,
+            "values": {
+              "n": 3967,
+              "mae": 1.498376,
+              "rmse": 2.96395,
+              "bias": -0.335949,
+              "coverage_80": 0.820267,
+              "lower_tail": 0.102849,
+              "upper_tail": 0.076884,
+              "interval_width_80": 4.544188,
+              "q10_pinball": 0.281246,
+              "q50_pinball": 0.749188,
+              "q90_pinball": 0.544839
+            }
+          },
+          {
+            "lead_hours": 6,
+            "values": {
+              "n": 3964,
+              "mae": 1.581245,
+              "rmse": 3.082404,
+              "bias": -0.377567,
+              "coverage_80": 0.82442,
+              "lower_tail": 0.100908,
+              "upper_tail": 0.074672,
+              "interval_width_80": 4.959723,
+              "q10_pinball": 0.288934,
+              "q50_pinball": 0.790622,
+              "q90_pinball": 0.583882
+            }
+          },
+          {
+            "lead_hours": 7,
+            "values": {
+              "n": 3962,
+              "mae": 1.652007,
+              "rmse": 3.176982,
+              "bias": -0.403061,
+              "coverage_80": 0.822312,
+              "lower_tail": 0.100454,
+              "upper_tail": 0.077234,
+              "interval_width_80": 5.217266,
+              "q10_pinball": 0.296961,
+              "q50_pinball": 0.826004,
+              "q90_pinball": 0.617386
+            }
+          },
+          {
+            "lead_hours": 8,
+            "values": {
+              "n": 3960,
+              "mae": 1.71674,
+              "rmse": 3.264662,
+              "bias": -0.426609,
+              "coverage_80": 0.825253,
+              "lower_tail": 0.100505,
+              "upper_tail": 0.074242,
+              "interval_width_80": 5.481402,
+              "q10_pinball": 0.30393,
+              "q50_pinball": 0.85837,
+              "q90_pinball": 0.649807
+            }
+          },
+          {
+            "lead_hours": 9,
+            "values": {
+              "n": 3960,
+              "mae": 1.774627,
+              "rmse": 3.336271,
+              "bias": -0.450668,
+              "coverage_80": 0.822475,
+              "lower_tail": 0.10101,
+              "upper_tail": 0.076515,
+              "interval_width_80": 5.745178,
+              "q10_pinball": 0.308915,
+              "q50_pinball": 0.887314,
+              "q90_pinball": 0.683376
+            }
+          },
+          {
+            "lead_hours": 10,
+            "values": {
+              "n": 3958,
+              "mae": 1.844186,
+              "rmse": 3.405925,
+              "bias": -0.47625,
+              "coverage_80": 0.81809,
+              "lower_tail": 0.102072,
+              "upper_tail": 0.079838,
+              "interval_width_80": 5.948678,
+              "q10_pinball": 0.313787,
+              "q50_pinball": 0.922093,
+              "q90_pinball": 0.711615
+            }
+          },
+          {
+            "lead_hours": 11,
+            "values": {
+              "n": 3957,
+              "mae": 1.905845,
+              "rmse": 3.469818,
+              "bias": -0.500085,
+              "coverage_80": 0.813242,
+              "lower_tail": 0.104625,
+              "upper_tail": 0.082133,
+              "interval_width_80": 6.154428,
+              "q10_pinball": 0.317476,
+              "q50_pinball": 0.952922,
+              "q90_pinball": 0.738986
+            }
+          },
+          {
+            "lead_hours": 12,
+            "values": {
+              "n": 3957,
+              "mae": 1.96564,
+              "rmse": 3.527899,
+              "bias": -0.523628,
+              "coverage_80": 0.814759,
+              "lower_tail": 0.104372,
+              "upper_tail": 0.080869,
+              "interval_width_80": 6.361305,
+              "q10_pinball": 0.321641,
+              "q50_pinball": 0.98282,
+              "q90_pinball": 0.76207
+            }
+          },
+          {
+            "lead_hours": 13,
+            "values": {
+              "n": 3956,
+              "mae": 2.016468,
+              "rmse": 3.58961,
+              "bias": -0.557467,
+              "coverage_80": 0.816229,
+              "lower_tail": 0.102629,
+              "upper_tail": 0.081143,
+              "interval_width_80": 6.515486,
+              "q10_pinball": 0.325556,
+              "q50_pinball": 1.008234,
+              "q90_pinball": 0.783777
+            }
+          },
+          {
+            "lead_hours": 14,
+            "values": {
+              "n": 3955,
+              "mae": 2.061466,
+              "rmse": 3.644905,
+              "bias": -0.588254,
+              "coverage_80": 0.80885,
+              "lower_tail": 0.105689,
+              "upper_tail": 0.085461,
+              "interval_width_80": 6.672248,
+              "q10_pinball": 0.331531,
+              "q50_pinball": 1.030733,
+              "q90_pinball": 0.802517
+            }
+          },
+          {
+            "lead_hours": 15,
+            "values": {
+              "n": 3955,
+              "mae": 2.097563,
+              "rmse": 3.685447,
+              "bias": -0.616135,
+              "coverage_80": 0.809861,
+              "lower_tail": 0.10493,
+              "upper_tail": 0.085209,
+              "interval_width_80": 6.831099,
+              "q10_pinball": 0.333702,
+              "q50_pinball": 1.048781,
+              "q90_pinball": 0.82087
+            }
+          },
+          {
+            "lead_hours": 16,
+            "values": {
+              "n": 3952,
+              "mae": 2.133417,
+              "rmse": 3.726929,
+              "bias": -0.643504,
+              "coverage_80": 0.811488,
+              "lower_tail": 0.100962,
+              "upper_tail": 0.087551,
+              "interval_width_80": 6.992579,
+              "q10_pinball": 0.335914,
+              "q50_pinball": 1.066709,
+              "q90_pinball": 0.840885
+            }
+          },
+          {
+            "lead_hours": 17,
+            "values": {
+              "n": 3952,
+              "mae": 2.166609,
+              "rmse": 3.765584,
+              "bias": -0.669193,
+              "coverage_80": 0.813006,
+              "lower_tail": 0.097672,
+              "upper_tail": 0.089322,
+              "interval_width_80": 7.156084,
+              "q10_pinball": 0.337396,
+              "q50_pinball": 1.083305,
+              "q90_pinball": 0.859158
+            }
+          },
+          {
+            "lead_hours": 18,
+            "values": {
+              "n": 3953,
+              "mae": 2.189964,
+              "rmse": 3.797419,
+              "bias": -0.695081,
+              "coverage_80": 0.813053,
+              "lower_tail": 0.095624,
+              "upper_tail": 0.091323,
+              "interval_width_80": 7.324933,
+              "q10_pinball": 0.338564,
+              "q50_pinball": 1.094982,
+              "q90_pinball": 0.87453
+            }
+          },
+          {
+            "lead_hours": 19,
+            "values": {
+              "n": 3954,
+              "mae": 2.216752,
+              "rmse": 3.822699,
+              "bias": -0.702384,
+              "coverage_80": 0.81563,
+              "lower_tail": 0.094082,
+              "upper_tail": 0.090288,
+              "interval_width_80": 7.432948,
+              "q10_pinball": 0.339868,
+              "q50_pinball": 1.108376,
+              "q90_pinball": 0.887206
+            }
+          },
+          {
+            "lead_hours": 20,
+            "values": {
+              "n": 3954,
+              "mae": 2.242957,
+              "rmse": 3.842045,
+              "bias": -0.71011,
+              "coverage_80": 0.8174,
+              "lower_tail": 0.093829,
+              "upper_tail": 0.088771,
+              "interval_width_80": 7.541771,
+              "q10_pinball": 0.340666,
+              "q50_pinball": 1.121479,
+              "q90_pinball": 0.896505
+            }
+          },
+          {
+            "lead_hours": 21,
+            "values": {
+              "n": 3952,
+              "mae": 2.268267,
+              "rmse": 3.860671,
+              "bias": -0.717019,
+              "coverage_80": 0.81832,
+              "lower_tail": 0.091599,
+              "upper_tail": 0.090081,
+              "interval_width_80": 7.651686,
+              "q10_pinball": 0.342096,
+              "q50_pinball": 1.134133,
+              "q90_pinball": 0.905551
+            }
+          },
+          {
+            "lead_hours": 22,
+            "values": {
+              "n": 3950,
+              "mae": 2.291045,
+              "rmse": 3.878301,
+              "bias": -0.723419,
+              "coverage_80": 0.818734,
+              "lower_tail": 0.091646,
+              "upper_tail": 0.08962,
+              "interval_width_80": 7.762132,
+              "q10_pinball": 0.343598,
+              "q50_pinball": 1.145522,
+              "q90_pinball": 0.913618
+            }
+          },
+          {
+            "lead_hours": 23,
+            "values": {
+              "n": 3948,
+              "mae": 2.314955,
+              "rmse": 3.896695,
+              "bias": -0.731764,
+              "coverage_80": 0.822442,
+              "lower_tail": 0.088146,
+              "upper_tail": 0.089412,
+              "interval_width_80": 7.873754,
+              "q10_pinball": 0.34493,
+              "q50_pinball": 1.157477,
+              "q90_pinball": 0.921766
+            }
+          },
+          {
+            "lead_hours": 24,
+            "values": {
+              "n": 3948,
+              "mae": 2.339396,
+              "rmse": 3.91753,
+              "bias": -0.739021,
+              "coverage_80": 0.826241,
+              "lower_tail": 0.083333,
+              "upper_tail": 0.090426,
+              "interval_width_80": 7.987116,
+              "q10_pinball": 0.345364,
+              "q50_pinball": 1.169698,
+              "q90_pinball": 0.932892
+            }
+          },
+          {
+            "lead_hours": 25,
+            "values": {
+              "n": 3946,
+              "mae": 2.358428,
+              "rmse": 3.932518,
+              "bias": -0.741939,
+              "coverage_80": 0.825393,
+              "lower_tail": 0.08515,
+              "upper_tail": 0.089458,
+              "interval_width_80": 8.090338,
+              "q10_pinball": 0.346064,
+              "q50_pinball": 1.179214,
+              "q90_pinball": 0.940291
+            }
+          },
+          {
+            "lead_hours": 26,
+            "values": {
+              "n": 3943,
+              "mae": 2.375465,
+              "rmse": 3.946724,
+              "bias": -0.746626,
+              "coverage_80": 0.827542,
+              "lower_tail": 0.081917,
+              "upper_tail": 0.09054,
+              "interval_width_80": 8.190352,
+              "q10_pinball": 0.346471,
+              "q50_pinball": 1.187732,
+              "q90_pinball": 0.948887
+            }
+          },
+          {
+            "lead_hours": 27,
+            "values": {
+              "n": 3942,
+              "mae": 2.3923,
+              "rmse": 3.962831,
+              "bias": -0.751838,
+              "coverage_80": 0.824708,
+              "lower_tail": 0.081684,
+              "upper_tail": 0.093607,
+              "interval_width_80": 8.289033,
+              "q10_pinball": 0.346555,
+              "q50_pinball": 1.19615,
+              "q90_pinball": 0.956862
+            }
+          },
+          {
+            "lead_hours": 28,
+            "values": {
+              "n": 3943,
+              "mae": 2.400659,
+              "rmse": 3.974948,
+              "bias": -0.757525,
+              "coverage_80": 0.829064,
+              "lower_tail": 0.078367,
+              "upper_tail": 0.092569,
+              "interval_width_80": 8.387307,
+              "q10_pinball": 0.346281,
+              "q50_pinball": 1.20033,
+              "q90_pinball": 0.965054
+            }
+          },
+          {
+            "lead_hours": 29,
+            "values": {
+              "n": 3941,
+              "mae": 2.411726,
+              "rmse": 3.989622,
+              "bias": -0.763853,
+              "coverage_80": 0.834306,
+              "lower_tail": 0.074347,
+              "upper_tail": 0.091347,
+              "interval_width_80": 8.48778,
+              "q10_pinball": 0.346445,
+              "q50_pinball": 1.205863,
+              "q90_pinball": 0.973133
+            }
+          },
+          {
+            "lead_hours": 30,
+            "values": {
+              "n": 3942,
+              "mae": 2.420852,
+              "rmse": 4.004551,
+              "bias": -0.77147,
+              "coverage_80": 0.836885,
+              "lower_tail": 0.072806,
+              "upper_tail": 0.090309,
+              "interval_width_80": 8.586272,
+              "q10_pinball": 0.346884,
+              "q50_pinball": 1.210426,
+              "q90_pinball": 0.981525
+            }
+          },
+          {
+            "lead_hours": 31,
+            "values": {
+              "n": 3939,
+              "mae": 2.428231,
+              "rmse": 4.021095,
+              "bias": -0.777634,
+              "coverage_80": 0.835745,
+              "lower_tail": 0.073623,
+              "upper_tail": 0.090632,
+              "interval_width_80": 8.689695,
+              "q10_pinball": 0.347304,
+              "q50_pinball": 1.214116,
+              "q90_pinball": 0.990442
+            }
+          },
+          {
+            "lead_hours": 32,
+            "values": {
+              "n": 3939,
+              "mae": 2.4311,
+              "rmse": 4.031877,
+              "bias": -0.782419,
+              "coverage_80": 0.8426,
+              "lower_tail": 0.06753,
+              "upper_tail": 0.089871,
+              "interval_width_80": 8.790742,
+              "q10_pinball": 0.347405,
+              "q50_pinball": 1.21555,
+              "q90_pinball": 0.997043
+            }
+          },
+          {
+            "lead_hours": 33,
+            "values": {
+              "n": 3939,
+              "mae": 2.432474,
+              "rmse": 4.041517,
+              "bias": -0.788187,
+              "coverage_80": 0.848946,
+              "lower_tail": 0.064483,
+              "upper_tail": 0.08657,
+              "interval_width_80": 8.890923,
+              "q10_pinball": 0.348318,
+              "q50_pinball": 1.216237,
+              "q90_pinball": 1.003878
+            }
+          },
+          {
+            "lead_hours": 34,
+            "values": {
+              "n": 3937,
+              "mae": 2.432942,
+              "rmse": 4.049491,
+              "bias": -0.795224,
+              "coverage_80": 0.85141,
+              "lower_tail": 0.062992,
+              "upper_tail": 0.085598,
+              "interval_width_80": 8.994061,
+              "q10_pinball": 0.349246,
+              "q50_pinball": 1.216471,
+              "q90_pinball": 1.010801
+            }
+          },
+          {
+            "lead_hours": 35,
+            "values": {
+              "n": 3936,
+              "mae": 2.440743,
+              "rmse": 4.05804,
+              "bias": -0.800999,
+              "coverage_80": 0.851118,
+              "lower_tail": 0.062754,
+              "upper_tail": 0.086128,
+              "interval_width_80": 9.098992,
+              "q10_pinball": 0.350071,
+              "q50_pinball": 1.220371,
+              "q90_pinball": 1.018538
+            }
+          },
+          {
+            "lead_hours": 36,
+            "values": {
+              "n": 3935,
+              "mae": 2.443658,
+              "rmse": 4.064731,
+              "bias": -0.804816,
+              "coverage_80": 0.853875,
+              "lower_tail": 0.061753,
+              "upper_tail": 0.084371,
+              "interval_width_80": 9.202496,
+              "q10_pinball": 0.350628,
+              "q50_pinball": 1.221829,
+              "q90_pinball": 1.025272
+            }
+          },
+          {
+            "lead_hours": 37,
+            "values": {
+              "n": 3934,
+              "mae": 2.446685,
+              "rmse": 4.071779,
+              "bias": -0.808472,
+              "coverage_80": 0.852059,
+              "lower_tail": 0.062278,
+              "upper_tail": 0.085663,
+              "interval_width_80": 9.253918,
+              "q10_pinball": 0.350959,
+              "q50_pinball": 1.223342,
+              "q90_pinball": 1.033259
+            }
+          },
+          {
+            "lead_hours": 38,
+            "values": {
+              "n": 3933,
+              "mae": 2.449172,
+              "rmse": 4.076879,
+              "bias": -0.812997,
+              "coverage_80": 0.853293,
+              "lower_tail": 0.062039,
+              "upper_tail": 0.084668,
+              "interval_width_80": 9.306921,
+              "q10_pinball": 0.350583,
+              "q50_pinball": 1.224586,
+              "q90_pinball": 1.038979
+            }
+          },
+          {
+            "lead_hours": 39,
+            "values": {
+              "n": 3931,
+              "mae": 2.451621,
+              "rmse": 4.080198,
+              "bias": -0.816807,
+              "coverage_80": 0.856271,
+              "lower_tail": 0.061053,
+              "upper_tail": 0.082676,
+              "interval_width_80": 9.36135,
+              "q10_pinball": 0.350495,
+              "q50_pinball": 1.22581,
+              "q90_pinball": 1.042516
+            }
+          },
+          {
+            "lead_hours": 40,
+            "values": {
+              "n": 3931,
+              "mae": 2.457265,
+              "rmse": 4.084705,
+              "bias": -0.821979,
+              "coverage_80": 0.857034,
+              "lower_tail": 0.060544,
+              "upper_tail": 0.082422,
+              "interval_width_80": 9.415476,
+              "q10_pinball": 0.35018,
+              "q50_pinball": 1.228633,
+              "q90_pinball": 1.044896
+            }
+          },
+          {
+            "lead_hours": 41,
+            "values": {
+              "n": 3931,
+              "mae": 2.461344,
+              "rmse": 4.084847,
+              "bias": -0.825319,
+              "coverage_80": 0.856271,
+              "lower_tail": 0.060036,
+              "upper_tail": 0.083694,
+              "interval_width_80": 9.468769,
+              "q10_pinball": 0.350401,
+              "q50_pinball": 1.230672,
+              "q90_pinball": 1.044367
+            }
+          },
+          {
+            "lead_hours": 42,
+            "values": {
+              "n": 3930,
+              "mae": 2.466082,
+              "rmse": 4.082688,
+              "bias": -0.828228,
+              "coverage_80": 0.85598,
+              "lower_tail": 0.060051,
+              "upper_tail": 0.083969,
+              "interval_width_80": 9.523062,
+              "q10_pinball": 0.350727,
+              "q50_pinball": 1.233041,
+              "q90_pinball": 1.043012
+            }
+          },
+          {
+            "lead_hours": 43,
+            "values": {
+              "n": 3931,
+              "mae": 2.470575,
+              "rmse": 4.082497,
+              "bias": -0.83055,
+              "coverage_80": 0.854744,
+              "lower_tail": 0.062579,
+              "upper_tail": 0.082676,
+              "interval_width_80": 9.575476,
+              "q10_pinball": 0.35045,
+              "q50_pinball": 1.235287,
+              "q90_pinball": 1.042397
+            }
+          },
+          {
+            "lead_hours": 44,
+            "values": {
+              "n": 3930,
+              "mae": 2.476989,
+              "rmse": 4.090158,
+              "bias": -0.834938,
+              "coverage_80": 0.854962,
+              "lower_tail": 0.062087,
+              "upper_tail": 0.082952,
+              "interval_width_80": 9.631526,
+              "q10_pinball": 0.350832,
+              "q50_pinball": 1.238495,
+              "q90_pinball": 1.046012
+            }
+          },
+          {
+            "lead_hours": 45,
+            "values": {
+              "n": 3929,
+              "mae": 2.481459,
+              "rmse": 4.09983,
+              "bias": -0.839143,
+              "coverage_80": 0.857216,
+              "lower_tail": 0.060321,
+              "upper_tail": 0.082464,
+              "interval_width_80": 9.689105,
+              "q10_pinball": 0.351253,
+              "q50_pinball": 1.24073,
+              "q90_pinball": 1.050725
+            }
+          },
+          {
+            "lead_hours": 46,
+            "values": {
+              "n": 3929,
+              "mae": 2.482654,
+              "rmse": 4.107082,
+              "bias": -0.844246,
+              "coverage_80": 0.856707,
+              "lower_tail": 0.061848,
+              "upper_tail": 0.081446,
+              "interval_width_80": 9.745854,
+              "q10_pinball": 0.351516,
+              "q50_pinball": 1.241327,
+              "q90_pinball": 1.056992
+            }
+          },
+          {
+            "lead_hours": 47,
+            "values": {
+              "n": 3928,
+              "mae": 2.48426,
+              "rmse": 4.114302,
+              "bias": -0.849326,
+              "coverage_80": 0.857179,
+              "lower_tail": 0.062118,
+              "upper_tail": 0.080703,
+              "interval_width_80": 9.804335,
+              "q10_pinball": 0.351776,
+              "q50_pinball": 1.24213,
+              "q90_pinball": 1.062405
+            }
+          },
+          {
+            "lead_hours": 48,
+            "values": {
+              "n": 3927,
+              "mae": 2.483228,
+              "rmse": 4.117849,
+              "bias": -0.853258,
+              "coverage_80": 0.857907,
+              "lower_tail": 0.061879,
+              "upper_tail": 0.080214,
+              "interval_width_80": 9.86335,
+              "q10_pinball": 0.351595,
+              "q50_pinball": 1.241614,
+              "q90_pinball": 1.066943
+            }
+          },
+          {
+            "lead_hours": 49,
+            "values": {
+              "n": 3925,
+              "mae": 2.484427,
+              "rmse": 4.121882,
+              "bias": -0.857526,
+              "coverage_80": 0.856051,
+              "lower_tail": 0.063694,
+              "upper_tail": 0.080255,
+              "interval_width_80": 9.922974,
+              "q10_pinball": 0.351551,
+              "q50_pinball": 1.242213,
+              "q90_pinball": 1.070287
+            }
+          },
+          {
+            "lead_hours": 50,
+            "values": {
+              "n": 3924,
+              "mae": 2.488351,
+              "rmse": 4.1255,
+              "bias": -0.859216,
+              "coverage_80": 0.857034,
+              "lower_tail": 0.064475,
+              "upper_tail": 0.078491,
+              "interval_width_80": 9.98643,
+              "q10_pinball": 0.351,
+              "q50_pinball": 1.244176,
+              "q90_pinball": 1.074145
+            }
+          },
+          {
+            "lead_hours": 51,
+            "values": {
+              "n": 3923,
+              "mae": 2.48981,
+              "rmse": 4.128491,
+              "bias": -0.860677,
+              "coverage_80": 0.857507,
+              "lower_tail": 0.064746,
+              "upper_tail": 0.077747,
+              "interval_width_80": 10.047627,
+              "q10_pinball": 0.351028,
+              "q50_pinball": 1.244905,
+              "q90_pinball": 1.078317
+            }
+          },
+          {
+            "lead_hours": 52,
+            "values": {
+              "n": 3922,
+              "mae": 2.487632,
+              "rmse": 4.129878,
+              "bias": -0.861133,
+              "coverage_80": 0.858491,
+              "lower_tail": 0.064508,
+              "upper_tail": 0.077002,
+              "interval_width_80": 10.109506,
+              "q10_pinball": 0.351661,
+              "q50_pinball": 1.243816,
+              "q90_pinball": 1.080823
+            }
+          },
+          {
+            "lead_hours": 53,
+            "values": {
+              "n": 3922,
+              "mae": 2.484347,
+              "rmse": 4.129366,
+              "bias": -0.863209,
+              "coverage_80": 0.860275,
+              "lower_tail": 0.065273,
+              "upper_tail": 0.074452,
+              "interval_width_80": 10.171737,
+              "q10_pinball": 0.352154,
+              "q50_pinball": 1.242173,
+              "q90_pinball": 1.082455
+            }
+          },
+          {
+            "lead_hours": 54,
+            "values": {
+              "n": 3921,
+              "mae": 2.482303,
+              "rmse": 4.127673,
+              "bias": -0.864036,
+              "coverage_80": 0.86177,
+              "lower_tail": 0.064779,
+              "upper_tail": 0.073451,
+              "interval_width_80": 10.234494,
+              "q10_pinball": 0.352176,
+              "q50_pinball": 1.241151,
+              "q90_pinball": 1.083006
+            }
+          },
+          {
+            "lead_hours": 55,
+            "values": {
+              "n": 3920,
+              "mae": 2.482235,
+              "rmse": 4.127591,
+              "bias": -0.864818,
+              "coverage_80": 0.864796,
+              "lower_tail": 0.065561,
+              "upper_tail": 0.069643,
+              "interval_width_80": 10.297269,
+              "q10_pinball": 0.352587,
+              "q50_pinball": 1.241118,
+              "q90_pinball": 1.086229
+            }
+          },
+          {
+            "lead_hours": 56,
+            "values": {
+              "n": 3920,
+              "mae": 2.479484,
+              "rmse": 4.124619,
+              "bias": -0.864256,
+              "coverage_80": 0.866837,
+              "lower_tail": 0.064541,
+              "upper_tail": 0.068622,
+              "interval_width_80": 10.360636,
+              "q10_pinball": 0.352526,
+              "q50_pinball": 1.239742,
+              "q90_pinball": 1.087841
+            }
+          },
+          {
+            "lead_hours": 57,
+            "values": {
+              "n": 3918,
+              "mae": 2.476388,
+              "rmse": 4.123903,
+              "bias": -0.865303,
+              "coverage_80": 0.867024,
+              "lower_tail": 0.066105,
+              "upper_tail": 0.066871,
+              "interval_width_80": 10.424939,
+              "q10_pinball": 0.35277,
+              "q50_pinball": 1.238194,
+              "q90_pinball": 1.090054
+            }
+          },
+          {
+            "lead_hours": 58,
+            "values": {
+              "n": 3917,
+              "mae": 2.474289,
+              "rmse": 4.123608,
+              "bias": -0.866418,
+              "coverage_80": 0.868777,
+              "lower_tail": 0.064846,
+              "upper_tail": 0.066377,
+              "interval_width_80": 10.48835,
+              "q10_pinball": 0.353027,
+              "q50_pinball": 1.237145,
+              "q90_pinball": 1.093039
+            }
+          },
+          {
+            "lead_hours": 59,
+            "values": {
+              "n": 3916,
+              "mae": 2.471349,
+              "rmse": 4.125097,
+              "bias": -0.867966,
+              "coverage_80": 0.867978,
+              "lower_tail": 0.066139,
+              "upper_tail": 0.065884,
+              "interval_width_80": 10.55233,
+              "q10_pinball": 0.352827,
+              "q50_pinball": 1.235675,
+              "q90_pinball": 1.096779
+            }
+          },
+          {
+            "lead_hours": 60,
+            "values": {
+              "n": 3913,
+              "mae": 2.468669,
+              "rmse": 4.127151,
+              "bias": -0.869716,
+              "coverage_80": 0.86941,
+              "lower_tail": 0.065423,
+              "upper_tail": 0.065167,
+              "interval_width_80": 10.617857,
+              "q10_pinball": 0.352915,
+              "q50_pinball": 1.234335,
+              "q90_pinball": 1.100723
+            }
+          },
+          {
+            "lead_hours": 61,
+            "values": {
+              "n": 3912,
+              "mae": 2.466407,
+              "rmse": 4.127754,
+              "bias": -0.869888,
+              "coverage_80": 0.868865,
+              "lower_tail": 0.066462,
+              "upper_tail": 0.064673,
+              "interval_width_80": 10.61581,
+              "q10_pinball": 0.35306,
+              "q50_pinball": 1.233204,
+              "q90_pinball": 1.100458
+            }
+          },
+          {
+            "lead_hours": 62,
+            "values": {
+              "n": 3911,
+              "mae": 2.462921,
+              "rmse": 4.125235,
+              "bias": -0.869415,
+              "coverage_80": 0.868832,
+              "lower_tail": 0.066991,
+              "upper_tail": 0.064178,
+              "interval_width_80": 10.612198,
+              "q10_pinball": 0.352767,
+              "q50_pinball": 1.23146,
+              "q90_pinball": 1.098036
+            }
+          },
+          {
+            "lead_hours": 63,
+            "values": {
+              "n": 3910,
+              "mae": 2.460845,
+              "rmse": 4.123028,
+              "bias": -0.870061,
+              "coverage_80": 0.869565,
+              "lower_tail": 0.067519,
+              "upper_tail": 0.062916,
+              "interval_width_80": 10.607626,
+              "q10_pinball": 0.352785,
+              "q50_pinball": 1.230423,
+              "q90_pinball": 1.096062
+            }
+          },
+          {
+            "lead_hours": 64,
+            "values": {
+              "n": 3909,
+              "mae": 2.458751,
+              "rmse": 4.119844,
+              "bias": -0.869982,
+              "coverage_80": 0.870299,
+              "lower_tail": 0.067792,
+              "upper_tail": 0.061908,
+              "interval_width_80": 10.602394,
+              "q10_pinball": 0.352936,
+              "q50_pinball": 1.229376,
+              "q90_pinball": 1.09408
+            }
+          },
+          {
+            "lead_hours": 65,
+            "values": {
+              "n": 3908,
+              "mae": 2.454006,
+              "rmse": 4.115487,
+              "bias": -0.869463,
+              "coverage_80": 0.869243,
+              "lower_tail": 0.068066,
+              "upper_tail": 0.062692,
+              "interval_width_80": 10.597481,
+              "q10_pinball": 0.352696,
+              "q50_pinball": 1.227003,
+              "q90_pinball": 1.09199
+            }
+          },
+          {
+            "lead_hours": 66,
+            "values": {
+              "n": 3908,
+              "mae": 2.449213,
+              "rmse": 4.112042,
+              "bias": -0.870289,
+              "coverage_80": 0.870778,
+              "lower_tail": 0.068066,
+              "upper_tail": 0.061157,
+              "interval_width_80": 10.592219,
+              "q10_pinball": 0.352501,
+              "q50_pinball": 1.224607,
+              "q90_pinball": 1.090462
+            }
+          },
+          {
+            "lead_hours": 67,
+            "values": {
+              "n": 3907,
+              "mae": 2.443543,
+              "rmse": 4.105957,
+              "bias": -0.869924,
+              "coverage_80": 0.869209,
+              "lower_tail": 0.069107,
+              "upper_tail": 0.061684,
+              "interval_width_80": 10.58762,
+              "q10_pinball": 0.351926,
+              "q50_pinball": 1.221771,
+              "q90_pinball": 1.088357
+            }
+          },
+          {
+            "lead_hours": 68,
+            "values": {
+              "n": 3906,
+              "mae": 2.440085,
+              "rmse": 4.103707,
+              "bias": -0.869872,
+              "coverage_80": 0.868408,
+              "lower_tail": 0.069892,
+              "upper_tail": 0.0617,
+              "interval_width_80": 10.584316,
+              "q10_pinball": 0.351657,
+              "q50_pinball": 1.220043,
+              "q90_pinball": 1.087311
+            }
+          },
+          {
+            "lead_hours": 69,
+            "values": {
+              "n": 3905,
+              "mae": 2.434332,
+              "rmse": 4.091898,
+              "bias": -0.867392,
+              "coverage_80": 0.869654,
+              "lower_tail": 0.069654,
+              "upper_tail": 0.060691,
+              "interval_width_80": 10.579997,
+              "q10_pinball": 0.35081,
+              "q50_pinball": 1.217166,
+              "q90_pinball": 1.082184
+            }
+          },
+          {
+            "lead_hours": 70,
+            "values": {
+              "n": 3904,
+              "mae": 2.427701,
+              "rmse": 4.084232,
+              "bias": -0.866144,
+              "coverage_80": 0.869621,
+              "lower_tail": 0.069416,
+              "upper_tail": 0.060963,
+              "interval_width_80": 10.57657,
+              "q10_pinball": 0.349939,
+              "q50_pinball": 1.213851,
+              "q90_pinball": 1.078251
+            }
+          },
+          {
+            "lead_hours": 71,
+            "values": {
+              "n": 3903,
+              "mae": 2.422142,
+              "rmse": 4.076988,
+              "bias": -0.866138,
+              "coverage_80": 0.870356,
+              "lower_tail": 0.06969,
+              "upper_tail": 0.059954,
+              "interval_width_80": 10.573082,
+              "q10_pinball": 0.349244,
+              "q50_pinball": 1.211071,
+              "q90_pinball": 1.075321
+            }
+          },
+          {
+            "lead_hours": 72,
+            "values": {
+              "n": 3902,
+              "mae": 2.417396,
+              "rmse": 4.069034,
+              "bias": -0.864184,
+              "coverage_80": 0.871861,
+              "lower_tail": 0.068683,
+              "upper_tail": 0.059457,
+              "interval_width_80": 10.569969,
+              "q10_pinball": 0.348771,
+              "q50_pinball": 1.208698,
+              "q90_pinball": 1.072906
+            }
+          },
+          {
+            "lead_hours": 73,
+            "values": {
+              "n": 3901,
+              "mae": 2.411687,
+              "rmse": 4.060088,
+              "bias": -0.862325,
+              "coverage_80": 0.872853,
+              "lower_tail": 0.068188,
+              "upper_tail": 0.058959,
+              "interval_width_80": 10.555881,
+              "q10_pinball": 0.34821,
+              "q50_pinball": 1.205844,
+              "q90_pinball": 1.069628
+            }
+          },
+          {
+            "lead_hours": 74,
+            "values": {
+              "n": 3900,
+              "mae": 2.408467,
+              "rmse": 4.054642,
+              "bias": -0.86074,
+              "coverage_80": 0.874103,
+              "lower_tail": 0.068205,
+              "upper_tail": 0.057692,
+              "interval_width_80": 10.542636,
+              "q10_pinball": 0.347769,
+              "q50_pinball": 1.204233,
+              "q90_pinball": 1.066416
+            }
+          },
+          {
+            "lead_hours": 75,
+            "values": {
+              "n": 3899,
+              "mae": 2.401235,
+              "rmse": 4.04266,
+              "bias": -0.858122,
+              "coverage_80": 0.87484,
+              "lower_tail": 0.067966,
+              "upper_tail": 0.057194,
+              "interval_width_80": 10.529332,
+              "q10_pinball": 0.347116,
+              "q50_pinball": 1.200618,
+              "q90_pinball": 1.060246
+            }
+          },
+          {
+            "lead_hours": 76,
+            "values": {
+              "n": 3898,
+              "mae": 2.394759,
+              "rmse": 4.032686,
+              "bias": -0.857349,
+              "coverage_80": 0.875321,
+              "lower_tail": 0.067984,
+              "upper_tail": 0.056696,
+              "interval_width_80": 10.51537,
+              "q10_pinball": 0.346428,
+              "q50_pinball": 1.197379,
+              "q90_pinball": 1.056153
+            }
+          },
+          {
+            "lead_hours": 77,
+            "values": {
+              "n": 3897,
+              "mae": 2.389949,
+              "rmse": 4.026008,
+              "bias": -0.856351,
+              "coverage_80": 0.876828,
+              "lower_tail": 0.066461,
+              "upper_tail": 0.05671,
+              "interval_width_80": 10.502689,
+              "q10_pinball": 0.345853,
+              "q50_pinball": 1.194974,
+              "q90_pinball": 1.052747
+            }
+          },
+          {
+            "lead_hours": 78,
+            "values": {
+              "n": 3896,
+              "mae": 2.383893,
+              "rmse": 4.017102,
+              "bias": -0.854254,
+              "coverage_80": 0.877567,
+              "lower_tail": 0.065195,
+              "upper_tail": 0.057238,
+              "interval_width_80": 10.488391,
+              "q10_pinball": 0.34511,
+              "q50_pinball": 1.191946,
+              "q90_pinball": 1.049079
+            }
+          },
+          {
+            "lead_hours": 79,
+            "values": {
+              "n": 3895,
+              "mae": 2.375754,
+              "rmse": 4.007331,
+              "bias": -0.850894,
+              "coverage_80": 0.875481,
+              "lower_tail": 0.067009,
+              "upper_tail": 0.05751,
+              "interval_width_80": 10.476039,
+              "q10_pinball": 0.344466,
+              "q50_pinball": 1.187877,
+              "q90_pinball": 1.046282
+            }
+          },
+          {
+            "lead_hours": 80,
+            "values": {
+              "n": 3894,
+              "mae": 2.36936,
+              "rmse": 4.00244,
+              "bias": -0.848299,
+              "coverage_80": 0.874679,
+              "lower_tail": 0.06831,
+              "upper_tail": 0.057011,
+              "interval_width_80": 10.463763,
+              "q10_pinball": 0.343842,
+              "q50_pinball": 1.18468,
+              "q90_pinball": 1.044885
+            }
+          },
+          {
+            "lead_hours": 81,
+            "values": {
+              "n": 3894,
+              "mae": 2.367892,
+              "rmse": 4.000132,
+              "bias": -0.848837,
+              "coverage_80": 0.873909,
+              "lower_tail": 0.069081,
+              "upper_tail": 0.057011,
+              "interval_width_80": 10.449951,
+              "q10_pinball": 0.343731,
+              "q50_pinball": 1.183946,
+              "q90_pinball": 1.043635
+            }
+          },
+          {
+            "lead_hours": 82,
+            "values": {
+              "n": 3892,
+              "mae": 2.365777,
+              "rmse": 3.9975,
+              "bias": -0.847708,
+              "coverage_80": 0.874872,
+              "lower_tail": 0.068859,
+              "upper_tail": 0.056269,
+              "interval_width_80": 10.439022,
+              "q10_pinball": 0.343451,
+              "q50_pinball": 1.182889,
+              "q90_pinball": 1.042758
+            }
+          },
+          {
+            "lead_hours": 83,
+            "values": {
+              "n": 3891,
+              "mae": 2.361829,
+              "rmse": 3.990763,
+              "bias": -0.846645,
+              "coverage_80": 0.877409,
+              "lower_tail": 0.066821,
+              "upper_tail": 0.05577,
+              "interval_width_80": 10.426772,
+              "q10_pinball": 0.34302,
+              "q50_pinball": 1.180914,
+              "q90_pinball": 1.040048
+            }
+          },
+          {
+            "lead_hours": 84,
+            "values": {
+              "n": 3890,
+              "mae": 2.358167,
+              "rmse": 3.986823,
+              "bias": -0.845023,
+              "coverage_80": 0.880463,
+              "lower_tail": 0.064524,
+              "upper_tail": 0.055013,
+              "interval_width_80": 10.414752,
+              "q10_pinball": 0.342791,
+              "q50_pinball": 1.179083,
+              "q90_pinball": 1.037975
+            }
+          },
+          {
+            "lead_hours": 85,
+            "values": {
+              "n": 3889,
+              "mae": 2.351934,
+              "rmse": 3.977348,
+              "bias": -0.838303,
+              "coverage_80": 0.879403,
+              "lower_tail": 0.065827,
+              "upper_tail": 0.05477,
+              "interval_width_80": 10.404789,
+              "q10_pinball": 0.342115,
+              "q50_pinball": 1.175967,
+              "q90_pinball": 1.035888
+            }
+          },
+          {
+            "lead_hours": 86,
+            "values": {
+              "n": 3888,
+              "mae": 2.347206,
+              "rmse": 3.97151,
+              "bias": -0.833689,
+              "coverage_80": 0.878086,
+              "lower_tail": 0.06713,
+              "upper_tail": 0.054784,
+              "interval_width_80": 10.393927,
+              "q10_pinball": 0.341505,
+              "q50_pinball": 1.173603,
+              "q90_pinball": 1.035549
+            }
+          },
+          {
+            "lead_hours": 87,
+            "values": {
+              "n": 3888,
+              "mae": 2.344038,
+              "rmse": 3.966832,
+              "bias": -0.831811,
+              "coverage_80": 0.877058,
+              "lower_tail": 0.067644,
+              "upper_tail": 0.055298,
+              "interval_width_80": 10.381559,
+              "q10_pinball": 0.341374,
+              "q50_pinball": 1.172019,
+              "q90_pinball": 1.03584
+            }
+          },
+          {
+            "lead_hours": 88,
+            "values": {
+              "n": 3887,
+              "mae": 2.34359,
+              "rmse": 3.969398,
+              "bias": -0.831263,
+              "coverage_80": 0.875225,
+              "lower_tail": 0.070491,
+              "upper_tail": 0.054284,
+              "interval_width_80": 10.370728,
+              "q10_pinball": 0.341309,
+              "q50_pinball": 1.171795,
+              "q90_pinball": 1.037245
+            }
+          },
+          {
+            "lead_hours": 89,
+            "values": {
+              "n": 3886,
+              "mae": 2.341913,
+              "rmse": 3.967721,
+              "bias": -0.832167,
+              "coverage_80": 0.870046,
+              "lower_tail": 0.074884,
+              "upper_tail": 0.055069,
+              "interval_width_80": 10.360195,
+              "q10_pinball": 0.34129,
+              "q50_pinball": 1.170957,
+              "q90_pinball": 1.036683
+            }
+          },
+          {
+            "lead_hours": 90,
+            "values": {
+              "n": 3885,
+              "mae": 2.34008,
+              "rmse": 3.96687,
+              "bias": -0.834121,
+              "coverage_80": 0.870528,
+              "lower_tail": 0.074903,
+              "upper_tail": 0.054569,
+              "interval_width_80": 10.349661,
+              "q10_pinball": 0.341282,
+              "q50_pinball": 1.17004,
+              "q90_pinball": 1.035824
+            }
+          },
+          {
+            "lead_hours": 91,
+            "values": {
+              "n": 3884,
+              "mae": 2.338742,
+              "rmse": 3.968002,
+              "bias": -0.836103,
+              "coverage_80": 0.870752,
+              "lower_tail": 0.07518,
+              "upper_tail": 0.054068,
+              "interval_width_80": 10.339424,
+              "q10_pinball": 0.341458,
+              "q50_pinball": 1.169371,
+              "q90_pinball": 1.034931
+            }
+          },
+          {
+            "lead_hours": 92,
+            "values": {
+              "n": 3883,
+              "mae": 2.338958,
+              "rmse": 3.970258,
+              "bias": -0.839669,
+              "coverage_80": 0.867113,
+              "lower_tail": 0.078032,
+              "upper_tail": 0.054854,
+              "interval_width_80": 10.329558,
+              "q10_pinball": 0.341796,
+              "q50_pinball": 1.169479,
+              "q90_pinball": 1.034082
+            }
+          },
+          {
+            "lead_hours": 93,
+            "values": {
+              "n": 3882,
+              "mae": 2.341888,
+              "rmse": 3.977273,
+              "bias": -0.844514,
+              "coverage_80": 0.864503,
+              "lower_tail": 0.079598,
+              "upper_tail": 0.055899,
+              "interval_width_80": 10.319181,
+              "q10_pinball": 0.342622,
+              "q50_pinball": 1.170944,
+              "q90_pinball": 1.033077
+            }
+          },
+          {
+            "lead_hours": 94,
+            "values": {
+              "n": 3881,
+              "mae": 2.339388,
+              "rmse": 3.969067,
+              "bias": -0.845236,
+              "coverage_80": 0.86421,
+              "lower_tail": 0.080649,
+              "upper_tail": 0.05514,
+              "interval_width_80": 10.308628,
+              "q10_pinball": 0.342979,
+              "q50_pinball": 1.169694,
+              "q90_pinball": 1.027816
+            }
+          },
+          {
+            "lead_hours": 95,
+            "values": {
+              "n": 3880,
+              "mae": 2.337747,
+              "rmse": 3.968069,
+              "bias": -0.846764,
+              "coverage_80": 0.862113,
+              "lower_tail": 0.081959,
+              "upper_tail": 0.055928,
+              "interval_width_80": 10.29873,
+              "q10_pinball": 0.343497,
+              "q50_pinball": 1.168873,
+              "q90_pinball": 1.024983
+            }
+          },
+          {
+            "lead_hours": 96,
+            "values": {
+              "n": 3878,
+              "mae": 2.330573,
+              "rmse": 3.961308,
+              "bias": -0.842915,
+              "coverage_80": 0.862816,
+              "lower_tail": 0.082259,
+              "upper_tail": 0.054925,
+              "interval_width_80": 10.289843,
+              "q10_pinball": 0.343261,
+              "q50_pinball": 1.165287,
+              "q90_pinball": 1.021636
+            }
+          }
+        ]
+      }
+    }
+  }
+}

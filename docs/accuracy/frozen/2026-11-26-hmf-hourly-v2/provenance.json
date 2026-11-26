@@ -1,0 +1,36 @@
+{
+  "models": {
+    "bt": {
+      "registry_name": "hmf_total_threshold",
+      "model": "argus-bt-revalidated-2026-v2",
+      "sha256": "d4af912daf2f19dde9b42ad90971e74c2a9833a4535ab780137727e8b0b1f07e",
+      "artifact": "data/models/argus-bt-revalidated-2026-v2.joblib"
+    },
+    "bs": {
+      "registry_name": "hmf_southward_threshold",
+      "model": "argus-bs-revalidated-2026-v2",
+      "sha256": "33e36d944fa4b95a61fb8da6f540bdeb57611d5a6de1a738cab0821950f41a40",
+      "artifact": "data/models/argus-bs-revalidated-2026-v2.joblib"
+    }
+  },
+  "scores_selection": {
+    "definition": "minute_mean",
+    "model": "current",
+    "excluded_columns": [
+      "updated"
+    ]
+  },
+  "sources_sha256": {
+    "data/experiments/cme-l1-hmf-2026-11-26/evaluation/scores.csv": "783cbf5b3b5a323d3e952bc63f3c42450dafda7375ee8895466bdbcb1e2321c8",
+    "data/experiments/cme-l1-hmf-2026-11-26/evaluation/protocol.json": "b75eee6d9b76cf551f6e51dcc61063cf060561af052f4ac00e06e34caaad3f3e",
+    "data/experiments/cme-l1-hmf-2026-11-26/reference_manifest.json": "23607b3b35b60e7fbfb0ad9d10433cc9308f00c1adee27e6104008011c37d47e",
+    "data/experiments/cme-l1-hmf-2026-11-26/reference_forecasts.parquet": "4ef04e935447cd8d6a5d98eeef42e306b37a2f5a1611f51778ff0b01f5205719",
+    "data/experiments/cme-l1-hmf-2026-11-26/features.parquet": "938b87e684d2d572bf0b0c762cd3c1dbf5a8b64f64300e6ec348645a0e6d07ee",
+    "data/experiments/cme-l1-hmf-2026-11-26/truth_hourly.parquet": "75651587089dcad151b9d503348c33c553d5102711b36f2ff95987d6abcaf246",
+    "notebooks/workflows/revalidation/cme_l1_hmf_reference.py": "707953fc4da3b989e19c522cc790099971c54acf8fcb4a11add3cfae4cdc3aca",
+    "notebooks/workflows/revalidation/cme_l1_hmf_model.py": "d8afc8a3655a5c02ae4283f30eb42ff39b6bd2f4488174d0808fdb63feca60dc"
+  },
+  "reports_sha256": {
+    "scores.csv": "9ff884574873191aa233bda32796fa0b052dbf7863c8ba78f7493a0eaf801ad4"
+  }
+}

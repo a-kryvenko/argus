@@ -282,6 +282,42 @@ clio:
       live_resolution_minutes: 1440
       poll_minutes: 60
       freshness_minutes: 20160
+    xrs_a:
+      sources:
+        live: [goes.xrs]
+        historical: [goes.xrs]
+      backfill_days: 6
+      resolution_minutes: 1
+      live_resolution_minutes: 1
+      poll_minutes: 1
+      freshness_minutes: 10
+    xrs_b:
+      sources:
+        live: [goes.xrs]
+        historical: [goes.xrs]
+      backfill_days: 6
+      resolution_minutes: 1
+      live_resolution_minutes: 1
+      poll_minutes: 1
+      freshness_minutes: 10
+    proton_10mev:
+      sources:
+        live: [goes.protons]
+        historical: [goes.protons]
+      backfill_days: 6
+      resolution_minutes: 5
+      live_resolution_minutes: 5
+      poll_minutes: 5
+      freshness_minutes: 15
+    proton_100mev:
+      sources:
+        live: [goes.protons]
+        historical: [goes.protons]
+      backfill_days: 6
+      resolution_minutes: 5
+      live_resolution_minutes: 5
+      poll_minutes: 5
+      freshness_minutes: 15
     goes:
       sources:
         live: [goes.live]

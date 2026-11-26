@@ -16,6 +16,7 @@ Usage: ./argus <command> (environment: $mode)
   <service> migrate
   <service> migration create -m MESSAGE [--autogenerate] (dev only)
   <service> migration current | history | downgrade REVISION
+  clio observations [--port PORT | --output HTML]
   prophet generation [all|solar-wind-events|solar-wind-speed|solar-wind-density|solar-wind-temperature|geomagnetic-activity|dst|hmf|solar-radiation|atmospheric-density]
   demo [SCENARIO] [--refresh-data] (dev only; default: january-2026)
   prophet summary
@@ -50,6 +51,11 @@ case "${1:-help}" in
 esac
 command="${1:-}"; [[ $# == 0 ]] || shift
 case "$command" in
+    observations)
+        [[ "$service" == clio ]] || fail 'Use ./argus clio observations'
+        clio_python="$root/apps/clio/.venv/bin/python"
+        [[ -x "$clio_python" ]] || fail 'Set up Clio with uv sync --project apps/clio'
+        exec "$clio_python" -m clio.observation_catalog --config "$root/configs/project.yaml" "$@" ;;
     migrate)
         [[ $# == 0 ]] || fail 'Use migration current/history/create/downgrade; migrate applies head'
         exec "$backend" "$service" migrate upgrade head ;;

@@ -28,6 +28,10 @@ Schemas and parameters: `/api/v1/docs`.
 | `/dashboard/*` | Accounts, sessions and current service status |
 | `/ping` | Liveness |
 
+Wind history defaults to NOAA L1 measurement time, with six days of raw retention. Use `time_basis=near_earth&resolution=1h` for the stored NASA OMNI2 archive. Its coverage depends on archive availability and Clio backfill.
+
+Use `observations=xrs_a,xrs_b,proton_10mev,proton_100mev` on either observation endpoint. GOES history accepts up to seven days per request, with six days of backfill and retention. XRS is in W/m² at 1 minute. Integral proton flux is in pfu (protons/cm²/s/sr) at 5 minutes.
+
 Dashboard requests observation/forecast status directly from Clio and Prophet.
 Dashboard status covers observations and forecasts; infrastructure monitoring uses Alloy → external Prometheus/Loki.
 

@@ -27,6 +27,17 @@ func TestGeneratedOpenAPIContract(t *testing.T) {
 	}
 	wantPaths, gotPaths := contractObject(want["paths"]), contractObject(got["paths"])
 	gotSchemas := contractObject(contractObject(got["components"])["schemas"])
+	history := contractObject(contractObject(gotPaths["/observations/history"])["get"])
+	timeBasis := contractObject(contractObject(contractParameters(history["parameters"])["query time_basis"])["schema"])
+	if timeBasis["default"] != "l1" || !slices.Equal(contractStrings(timeBasis["enum"]), []string{"l1", "near_earth"}) {
+		t.Errorf("unexpected wind time basis schema: %v", timeBasis)
+	}
+	current := contractObject(contractObject(gotSchemas["CurrentObservations"])["properties"])
+	for _, metric := range []string{"xrs_a", "xrs_b", "proton_10mev", "proton_100mev"} {
+		if !acceptsNull(current[metric]) {
+			t.Errorf("current observations must expose nullable %s", metric)
+		}
+	}
 	for _, methods := range gotPaths {
 		for _, operation := range contractObject(methods) {
 			for status, reply := range contractObject(contractObject(operation)["responses"]) {

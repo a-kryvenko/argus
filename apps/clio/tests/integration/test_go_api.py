@@ -74,12 +74,15 @@ def test_go_api_contract(go_api):
             assert (check(LATEST, 200, headers=headers))['data']['points'] == []
             with connection.cursor() as cursor:
                 cursor.executemany(
-                    'INSERT INTO clio.measurement (metric, observed_at, value) VALUES (%s, %s, %s)',
+                    'INSERT INTO clio.measurement (metric, observed_at, value, source_product) VALUES (%s, %s, %s, %s)',
                     [
-                        ('v', now, 400.5), ('v', recent, None), ('bz', now, -3.75),
-                        ('dst', now, -12.5), ('f10_7', now, 109.8), ('kp', recent, 10.0),
-                        ('ap', recent, 2.9), ('n', recent, float('inf')), ('t', recent, float('nan')),
-                        ('s10', recent, 100.0), ('s10_81mean', recent, 110.25), ('bt', recent, -1.0),
+                        ('v', now, 400.5, 'swpc.rtsw_plasma'), ('v', recent, None, 'swpc.rtsw_plasma'),
+                        ('v', now + timedelta(hours=1), 999, 'omni.hourly'),
+                        ('bz', now, -3.75, 'swpc.rtsw_mag'), ('dst', now, -12.5, None),
+                        ('f10_7', now, 109.8, None), ('kp', recent, 10.0, None), ('ap', recent, 2.9, None),
+                        ('n', recent, float('inf'), 'swpc.rtsw_plasma'), ('t', recent, float('nan'), 'swpc.rtsw_plasma'),
+                        ('s10', recent, 100.0, None), ('s10_81mean', recent, 110.25, None),
+                        ('bt', recent, -1.0, 'swpc.rtsw_mag'),
                     ],
                 )
             check(LATEST, 401)
@@ -95,6 +98,7 @@ def test_go_api_contract(go_api):
             ]
             assert type(data['data']['points'][0]['dst']) is int
             check_history(check, connection, now, headers)
+            check_explicit_history(check, connection, now, headers)
             check_file_routes(check, connection, now, headers)
             check_events(check, connection, now, headers)
 
@@ -145,6 +149,41 @@ def check_history(check, connection, now, headers):
     check(HISTORY, 503, headers=headers, params={
         'metrics': 'by', 'interval': '1m', 'from': now.isoformat(), 'to': (now + timedelta(days=4)).isoformat(),
     })
+
+
+def check_explicit_history(check, connection, now, headers):
+    current_hour = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    at = min(now - timedelta(days=3), current_hour - timedelta(hours=6))
+    at_iso = at.isoformat().replace('+00:00', 'Z')
+    with connection.cursor() as cursor:
+        cursor.executemany('''INSERT INTO clio.measurement (metric, observed_at, value, source_product)
+            VALUES (%s, %s, %s, %s)''', [
+            ('v', at, 710, 'omni.hourly'), ('bx', at, 3, 'omni.hourly'),
+            ('by', at, -4, 'omni.hourly'), ('bz', at, 12, 'omni.hourly'),
+            ('v', at + timedelta(minutes=1), 400, 'swpc.rtsw_plasma'),
+            ('v', at + timedelta(minutes=36), 520, 'swpc.rtsw_plasma'),
+            ('bt', at + timedelta(minutes=1), 5, 'swpc.rtsw_mag'),
+            ('bt', at + timedelta(minutes=36), 7, 'swpc.rtsw_mag'),
+            ('v', at + timedelta(hours=1), 777, 'omni.hourly'),
+            ('xrs_b', at + timedelta(minutes=3), 2.4e-6, 'goes.xrs'),
+            ('proton_10mev', at + timedelta(minutes=5), 0.312, 'goes.protons'),
+        ])
+    params = {'from': at.isoformat(), 'to': (at + timedelta(hours=2)).isoformat()}
+    native = check(HISTORY, 200, headers=headers,
+                   params={**params, 'metrics': 'v,bt', 'time_basis': 'l1', 'interval': '1h'})['data']
+    assert native == {'time_basis': 'l1', 'interval': '1h', 'points': [{'time': at_iso, 'v': 460, 'bt': 6}]}
+    archive = check(HISTORY, 200, headers=headers,
+                    params={**params, 'metrics': 'v,bt', 'time_basis': 'near_earth', 'interval': '1h'})['data']
+    assert archive == {'time_basis': 'near_earth', 'interval': '1h', 'points': [
+        {'time': at_iso, 'v': 710, 'bt': 13},
+        {'time': (at + timedelta(hours=1)).isoformat().replace('+00:00', 'Z'), 'v': 777, 'bt': None},
+    ]}
+    xrs = check(HISTORY, 200, headers=headers,
+                params={**params, 'metrics': 'xrs_b', 'interval': '1m'})['data']['points']
+    assert [row['xrs_b'] for row in xrs] == [2.4e-6]
+    protons = check(HISTORY, 200, headers=headers,
+                    params={**params, 'metrics': 'proton_10mev', 'interval': '5m'})['data']['points']
+    assert protons == [{'time': (at + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'), 'proton_10mev': 0.312}]
 
 
 def add_file_observation(connection, observation, at, key, *, product='test', source_id=None, details=None):

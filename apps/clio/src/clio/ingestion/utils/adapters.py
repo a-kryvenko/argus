@@ -1,4 +1,5 @@
 """Convert and validate provider records; adapt historical loaders."""
+from functools import cache, partial
 import math
 
 import pandas as pd
@@ -63,6 +64,13 @@ class SOLFSMYHistoryAdapter:
         return clean_records(wide_to_measurements(self.frame), start, end, MEAN_COLUMNS)
 
 
+def _goes_flux_history(product):
+    from clio.providers.goes_flux import fetch_records
+    # One rolling snapshot covers all missing day ranges in this backfill.
+    snapshot = cache(partial(fetch_records, product, historical=True))
+    return WideHistoryAdapter(lambda start, end: snapshot(), PRODUCTS[product].metrics)
+
+
 def historical_adapters():
     from clio.providers.omniweb import OMNIWeb_Loader
     from clio.providers.spdf import SPDF_Loader
@@ -75,4 +83,6 @@ def historical_adapters():
         'gfz.f107': WideHistoryAdapter(load_gfz_f107, ('f10_7',)),
         'celestrak.f107_archive': CelesTrakHistoryAdapter(),
         'solfsmy.means_archive': SOLFSMYHistoryAdapter(),
+        'goes.xrs': _goes_flux_history('goes.xrs'),
+        'goes.protons': _goes_flux_history('goes.protons'),
     }

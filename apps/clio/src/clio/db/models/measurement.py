@@ -12,12 +12,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from clio.db.base import Base
+from clio.ingestion.utils.products import PROTON_METRICS, XRS_METRICS
 
 
 REQUIRED_METRICS = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', 'ap', 'f10_7')
 SOLAR_INDEX_METRICS = ('s10', 'm10', 'y10')
 OBSERVATION_METRICS = (*REQUIRED_METRICS, *SOLAR_INDEX_METRICS)
-MEASUREMENT_METRICS = (*OBSERVATION_METRICS, 'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean')
+MEASUREMENT_METRICS = (*OBSERVATION_METRICS, 'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean',
+                       *XRS_METRICS, *PROTON_METRICS)
 
 INTERVALS = {'kp': timedelta(hours=3), 'ap': timedelta(hours=3), 'dst': timedelta(hours=1)}
 

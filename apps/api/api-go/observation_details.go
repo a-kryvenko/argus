@@ -8,8 +8,28 @@ import (
 	"time"
 )
 
-func (a *api) observationMetadata(metric, interval string) SeriesMetadata {
+func observationMetadata(metric, interval, timeBasis string) SeriesMetadata {
 	const base = "https://services.swpc.noaa.gov"
+	switch metric {
+	case "xrs_a", "xrs_b":
+		label := "XRS-A solar X-ray flux (0.5–4 Å)"
+		if metric == "xrs_b" {
+			label = "XRS-B solar X-ray flux (1–8 Å)"
+		}
+		return SeriesMetadata{Label: label, Unit: "W/m²", Source: "NOAA SWPC GOES XRS",
+			SourceURL: base + "/json/goes/primary/xrays-7-day.json", TimeBasis: "measurement",
+			ResolutionSeconds: 60, Aggregation: pointer("source_1_minute"), GapFilling: pointer("none"),
+			Selection: pointer("NOAA primary GOES"), PollSeconds: pointer(60)}
+	case "proton_10mev", "proton_100mev":
+		label := "Integral proton flux ≥10 MeV"
+		if metric == "proton_100mev" {
+			label = "Integral proton flux ≥100 MeV"
+		}
+		return SeriesMetadata{Label: label, Unit: "pfu", Source: "NOAA SWPC GOES",
+			SourceURL: base + "/json/goes/primary/integral-protons-7-day.json", TimeBasis: "measurement",
+			ResolutionSeconds: 300, Aggregation: pointer("source_5_minute"), GapFilling: pointer("none"),
+			Selection: pointer("NOAA primary GOES"), PollSeconds: pointer(300)}
+	}
 	label := map[string]string{"bx": "Bx", "by": "By", "bz": "Bz", "bt": "Total magnetic field",
 		"v": "Solar wind speed", "n": "Proton density", "t": "Proton temperature",
 		"kp": "Estimated Kp", "dst": "Real-time Dst"}[metric]
@@ -30,10 +50,32 @@ func (a *api) observationMetadata(metric, interval string) SeriesMetadata {
 	if slices.Contains([]string{"bx", "by", "bz", "bt"}, metric) {
 		path = "/json/rtsw/rtsw_mag_1m.json"
 	}
-	aggregation := map[string]string{"1m": "source_1_minute", "5m": "mean", "1h": "normalized_hourly"}[interval]
-	result := SeriesMetadata{Label: label, Unit: unit, Source: "NOAA SWPC RTSW", SourceURL: base + path,
-		TimeBasis: "measurement", ResolutionSeconds: int(resolutionDuration(interval).Seconds()), Location: pointer("L1"),
-		Propagated: pointer(false), Aggregation: &aggregation, Selection: pointer("NOAA active spacecraft")}
+	result := SeriesMetadata{Label: label, Unit: unit, ResolutionSeconds: int(resolutionDuration(interval).Seconds()),
+		GapFilling: pointer("none")}
+	if timeBasis == nearEarthTimeBasis {
+		result.Source = "NASA OMNI2"
+		result.SourceURL = "https://omniweb.gsfc.nasa.gov/omniweb/html/ow_data.html"
+		result.TimeBasis = "near_earth_hour_start"
+		result.Location = pointer("near_earth")
+		result.Propagated = pointer(true)
+		result.Aggregation = pointer("source_hourly_mean")
+		if metric == "bt" {
+			result.Label = "Magnitude of hourly mean magnetic field vector"
+			result.Aggregation = pointer("norm_of_hourly_mean_components")
+		}
+	} else {
+		result.Source = "NOAA SWPC RTSW"
+		result.SourceURL = base + path
+		result.TimeBasis = "measurement"
+		result.Location = pointer("L1")
+		result.Propagated = pointer(false)
+		result.Selection = pointer("NOAA active spacecraft")
+		aggregation := "source_1_minute"
+		if interval != "1m" {
+			aggregation = "mean"
+		}
+		result.Aggregation = &aggregation
+	}
 	if slices.Contains([]string{"bx", "by", "bz"}, metric) {
 		result.CoordinateSystem = pointer("GSM")
 	}
@@ -47,12 +89,18 @@ func indexDataStatus(metric string) string {
 	return "realtime"
 }
 
-func observationCoverage(points []sample, start, end, now time.Time, step time.Duration, intervals bool) Coverage {
+const (
+	sampledCoverage     = "sample_timestamps"
+	aggregateCoverage   = "available_aggregate_windows"
+	overlappingCoverage = "overlapping_intervals"
+)
+
+func observationCoverage(points []sample, start, end, now time.Time, step time.Duration, basis string) Coverage {
 	if now.Before(end) {
 		end = now
 	}
 	first := start.Truncate(step)
-	if !intervals && first.Before(start) {
+	if basis != overlappingCoverage && first.Before(start) {
 		first = first.Add(step)
 	}
 	states := map[time.Time]string{}
@@ -67,6 +115,9 @@ func observationCoverage(points []sample, start, end, now time.Time, step time.D
 	gaps := []Gap{}
 	var expected, usable, missing, invalid int
 	for at := first; end.After(start) && at.Before(end); at = at.Add(step) {
+		if basis == aggregateCoverage && at.Add(step).After(end) {
+			break
+		}
 		expected++
 		reason := states[at]
 		switch reason {
@@ -93,13 +144,6 @@ func observationCoverage(points []sample, start, end, now time.Time, step time.D
 			gaps = append(gaps, Gap{left, right, reason, 1})
 		}
 	}
-	basis := "sample_timestamps"
-	switch {
-	case intervals:
-		basis = "overlapping_intervals"
-	case step != time.Minute:
-		basis = "available_aggregate_windows"
-	}
 	var percent *float64
 	if expected > 0 {
 		percent = pointer(math.RoundToEven(10000*float64(usable)/float64(expected)) / 100)
@@ -113,7 +157,7 @@ func (a *api) observationChanges(ctx context.Context, current map[string][]sampl
 	changes := make(map[string]*float64)
 	wind, indices, hourly := selectedMetrics(selected, windMetrics), selectedMetrics(selected, indexMetrics), selectedMetrics(selected, hourlyMetrics)
 	if metrics := slices.Concat(wind, indices); len(metrics) > 0 {
-		past, err := a.numeric(ctx, "history", metrics, now.Add(-7*time.Hour), now, "1m")
+		past, err := a.numeric(ctx, "history", metrics, now.Add(-7*time.Hour), now, "1m", "")
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +182,7 @@ func (a *api) observationChanges(ctx context.Context, current map[string][]sampl
 		}
 	}
 	if len(hourly) > 0 {
-		past, err := a.numeric(ctx, "history", hourly, now.Add(-48*time.Hour), now.Add(-time.Hour+time.Microsecond), "1m")
+		past, err := a.numeric(ctx, "history", hourly, now.Add(-48*time.Hour), now.Add(-time.Hour+time.Microsecond), "1m", "")
 		if err != nil {
 			return nil, err
 		}

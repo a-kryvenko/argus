@@ -12,6 +12,9 @@ from common.schemas.sdo_browse import CHANNELS as BROWSE_CHANNELS
 if TYPE_CHECKING:
     import pandas as pd
 
+XRS_METRICS = ('xrs_a', 'xrs_b')
+PROTON_METRICS = ('proton_10mev', 'proton_100mev')
+
 
 @dataclass(frozen=True)
 class ObservationDefinition:
@@ -42,6 +45,8 @@ OBSERVATIONS = {
     'f10_7_81mean': ObservationDefinition('sfu', coverage='latest'),
     **{name + '_81mean': ObservationDefinition('sfu', coverage='latest')
        for name in ('s10', 'm10', 'y10')},
+    **{name: ObservationDefinition('W/m²') for name in XRS_METRICS},
+    **{name: ObservationDefinition('pfu') for name in PROTON_METRICS},
     'goes': ObservationDefinition('JSON', kind='file'),
     'gong': ObservationDefinition('FITS', kind='file'),
 }
@@ -71,6 +76,8 @@ PRODUCTS = {
     'celestrak.f107_archive': Product(frozenset({'f10_7', 'f10_7_81mean'}), frozenset({'historical'})),
     'solfsmy.means': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'live'})),
     'solfsmy.means_archive': Product(frozenset({'f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean'}), frozenset({'historical'})),
+    'goes.xrs': Product(frozenset(XRS_METRICS), frozenset({'live', 'historical'}), slot_minutes=1),
+    'goes.protons': Product(frozenset(PROTON_METRICS), frozenset({'live', 'historical'}), slot_minutes=5),
     'goes.live': Product(frozenset({'goes'}), frozenset({'live'}), kind='file', slot_minutes=60),
     'goes.archive': Product(frozenset({'goes'}), frozenset({'historical'}), kind='file', slot_minutes=1440),
     'gong.live': Product(frozenset({'gong'}), frozenset({'live'}), kind='file', slot_minutes=60),
@@ -102,6 +109,8 @@ SOURCE_IDS = {
     'swpc.rtsw_plasma': 'solar_wind_plasma',
     'swpc.kp': 'kp',
     'swpc.dst': 'dst',
+    'goes.xrs': 'goes_xrs',
+    'goes.protons': 'goes_protons',
 }
 
 

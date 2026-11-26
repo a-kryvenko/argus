@@ -12,11 +12,19 @@ import (
 )
 
 var (
-	windMetrics   = []string{"bx", "by", "bz", "bt", "v", "n", "t"}
-	indexMetrics  = []string{"kp", "dst"}
-	hourlyMetrics = []string{"ap", "f10_7", "s10", "m10", "y10"}
-	allMetrics    = slices.Concat(windMetrics, indexMetrics, hourlyMetrics)
-	indexDuration = map[string]time.Duration{"kp": 3 * time.Hour, "dst": time.Hour, "ap": 3 * time.Hour}
+	windMetrics     = []string{"bx", "by", "bz", "bt", "v", "n", "t"}
+	indexMetrics    = []string{"kp", "dst"}
+	hourlyMetrics   = []string{"ap", "f10_7", "s10", "m10", "y10"}
+	xrsMetrics      = []string{"xrs_a", "xrs_b"}
+	protonMetrics   = []string{"proton_10mev", "proton_100mev"}
+	historyDefaults = slices.Concat(windMetrics, indexMetrics, hourlyMetrics)
+	allMetrics      = slices.Concat(historyDefaults, xrsMetrics, protonMetrics)
+	indexDuration   = map[string]time.Duration{"kp": 3 * time.Hour, "dst": time.Hour, "ap": 3 * time.Hour}
+)
+
+const (
+	l1TimeBasis        = "l1"
+	nearEarthTimeBasis = "near_earth"
 )
 
 type sample struct {
@@ -24,12 +32,15 @@ type sample struct {
 	value *float64
 }
 
-func (a *api) numeric(ctx context.Context, resource string, metrics []string, from, to time.Time, interval string) (map[string][]sample, error) {
+func (a *api) numeric(ctx context.Context, resource string, metrics []string, from, to time.Time, interval, timeBasis string) (map[string][]sample, error) {
 	query := url.Values{"metrics": {strings.Join(metrics, ",")}}
 	if resource == "history" {
 		query.Set("from", from.Format(time.RFC3339Nano))
 		query.Set("to", to.Format(time.RFC3339Nano))
 		query.Set("interval", interval)
+		if timeBasis != "" {
+			query.Set(timeBasisParameter, timeBasis)
+		}
 	}
 	raw, _, err := a.request(ctx, a.clio, "GET", "/internal/v1/observations/"+resource, query, nil, 90*time.Second)
 	if err != nil {
@@ -38,10 +49,12 @@ func (a *api) numeric(ctx context.Context, resource string, metrics []string, fr
 	var result struct {
 		Success bool `json:"success"`
 		Data    struct {
-			Points []map[string]json.RawMessage `json:"points"`
+			Points    []map[string]json.RawMessage `json:"points"`
+			TimeBasis string                       `json:"time_basis"`
 		} `json:"data"`
 	}
-	if json.Unmarshal(raw, &result) != nil || !result.Success || result.Data.Points == nil {
+	if json.Unmarshal(raw, &result) != nil || !result.Success || result.Data.Points == nil ||
+		(timeBasis != "" && result.Data.TimeBasis != timeBasis) {
 		return nil, unavailable("Observation service returned an invalid response")
 	}
 	series := make(map[string][]sample, len(metrics))
@@ -67,7 +80,7 @@ func (a *api) numeric(ctx context.Context, resource string, metrics []string, fr
 	return series, nil
 }
 
-func observationSelection(query url.Values) ([]string, error) {
+func observationSelection(query url.Values, defaults []string) ([]string, error) {
 	if values := query[observationsParameter]; len(values) > 0 {
 		selected := []string{}
 		for _, value := range strings.Split(values[len(values)-1], ",") {
@@ -81,7 +94,7 @@ func observationSelection(query url.Values) ([]string, error) {
 		}
 		return selected, nil
 	}
-	return allMetrics, nil
+	return defaults, nil
 }
 
 func selectedMetrics(selected, group []string) []string {
@@ -151,13 +164,21 @@ func (data *CurrentObservations) setSample(metric string, points []sample) {
 		data.M10 = &solar
 	case "y10":
 		data.Y10 = &solar
+	case "xrs_a":
+		data.XRSA = &solar
+	case "xrs_b":
+		data.XRSB = &solar
+	case "proton_10mev":
+		data.Proton10MeV = &solar
+	case "proton_100mev":
+		data.Proton100MeV = &solar
 	}
 }
 
 func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respond func(CurrentObservations)) {
 	w.Header().Set("Cache-Control", "no-store")
 	query := r.URL.Query()
-	selected, err := observationSelection(query)
+	selected, err := observationSelection(query, allMetrics)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -173,7 +194,7 @@ func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respon
 		return
 	}
 	now := time.Now().UTC()
-	current, err := a.numeric(r.Context(), "latest", selected, time.Time{}, time.Time{}, "")
+	current, err := a.numeric(r.Context(), "latest", selected, time.Time{}, time.Time{}, "", "")
 	if err != nil {
 		writeError(w, err)
 		return
@@ -183,7 +204,7 @@ func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respon
 	for _, metric := range selected {
 		data.setSample(metric, current[metric])
 		if meta && !slices.Contains(hourlyMetrics, metric) {
-			series[metric] = a.observationMetadata(metric, "1m")
+			series[metric] = observationMetadata(metric, "1m", l1TimeBasis)
 		}
 	}
 	if len(series) > 0 {
@@ -200,7 +221,7 @@ func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respon
 	respond(data)
 }
 
-func historyQuery(query url.Values, now time.Time) (from, to time.Time, resolution string, limit int, bounded bool, err error) {
+func historyQuery(query url.Values, now time.Time, nearEarthWind bool) (from, to time.Time, resolution string, limit int, bounded bool, err error) {
 	fromInput, toInput := query[fromParameter], query[toParameter]
 	bounded = len(fromInput) > 0 || len(toInput) > 0
 	to = now
@@ -220,6 +241,9 @@ func historyQuery(query url.Values, now time.Time) (from, to time.Time, resoluti
 		return
 	}
 	resolution = defaultResolution
+	if nearEarthWind {
+		resolution = "1h"
+	}
 	if values := query[resolutionParameter]; len(values) > 0 {
 		resolution = values[len(values)-1]
 	}
@@ -229,6 +253,8 @@ func historyQuery(query url.Values, now time.Time) (from, to time.Time, resoluti
 	}
 	if resolution == "auto" {
 		switch {
+		case nearEarthWind:
+			resolution = "1h"
 		case to.Sub(from) <= 6*time.Hour:
 			resolution = "1m"
 		case to.Sub(from) <= 24*time.Hour:
@@ -236,6 +262,10 @@ func historyQuery(query url.Values, now time.Time) (from, to time.Time, resoluti
 		default:
 			resolution = "1h"
 		}
+	}
+	if nearEarthWind && resolution != "1h" {
+		err = invalid("Near-Earth wind history requires resolution=1h or auto")
+		return
 	}
 	limit = defaultObservationLimit
 	if values := query[limitParameter]; len(values) > 0 {
@@ -248,15 +278,17 @@ func historyQuery(query url.Values, now time.Time) (from, to time.Time, resoluti
 }
 
 type historyRead struct {
-	metrics    []string
-	start, end time.Time
-	interval   string
+	metrics      []string
+	start, end   time.Time
+	interval     string
+	timeBasis    string
+	hourlyPoints bool
 }
 
 func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond func(ObservationHistory)) {
 	w.Header().Set("Cache-Control", "no-store")
 	query := r.URL.Query()
-	selected, err := observationSelection(query)
+	selected, err := observationSelection(query, historyDefaults)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -266,15 +298,25 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		writeError(w, err)
 		return
 	}
+	timeBasis := l1TimeBasis
+	if values := query[timeBasisParameter]; len(values) > 0 {
+		timeBasis = values[len(values)-1]
+		if timeBasis != l1TimeBasis && timeBasis != nearEarthTimeBasis {
+			writeError(w, invalid("time_basis must be l1 or near_earth"))
+			return
+		}
+	}
+	wind := selectedMetrics(selected, windMetrics)
 	now := time.Now().UTC()
-	from, to, resolution, limit, bounded, err := historyQuery(query, now)
+	from, to, resolution, limit, bounded, err := historyQuery(query, now, len(wind) > 0 && timeBasis == nearEarthTimeBasis)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	wind := selectedMetrics(selected, windMetrics)
 	indices := selectedMetrics(selected, indexMetrics)
 	hourly := selectedMetrics(selected, hourlyMetrics)
+	xrs := selectedMetrics(selected, xrsMetrics)
+	protons := selectedMetrics(selected, protonMetrics)
 	days := map[string]int{"1m": 7, "5m": 31, "1h": 366}[resolution]
 	if len(wind) > 0 && to.Sub(from) > time.Duration(days)*24*time.Hour {
 		writeError(w, invalid("History interval must be at most "+strconv.Itoa(days)+" days for "+resolution))
@@ -284,11 +326,21 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		writeError(w, invalid("Geomagnetic history interval must be at most 31 days"))
 		return
 	}
+	if (len(xrs) > 0 || len(protons) > 0) && to.Sub(from) > 7*24*time.Hour {
+		writeError(w, invalid("GOES history interval must be at most 7 days"))
+		return
+	}
 	metadata := make(map[string]SeriesMetadata)
 	data := ObservationHistory{From: from, To: to, Series: make(map[string]HistorySeries)}
+	if len(wind) > 0 {
+		data.TimeBasis = &timeBasis
+		data.ResolutionSeconds = pointer(int(resolutionDuration(resolution).Seconds()))
+	}
 	reads := []historyRead{
-		{wind, from, to, resolution},
-		{indices, from.Add(-3 * time.Hour), to, "1m"},
+		{metrics: wind, start: from, end: to, interval: resolution, timeBasis: timeBasis},
+		{metrics: indices, start: from.Add(-3 * time.Hour), end: to, interval: "1m"},
+		{metrics: xrs, start: from, end: to, interval: "1m"},
+		{metrics: protons, start: from, end: to, interval: "5m"},
 	}
 	hourlyFrom := from
 	if !bounded {
@@ -299,7 +351,7 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 			writeError(w, invalid("Use an interval of at most 366 days"))
 			return
 		}
-		reads = append(reads, historyRead{hourly, hourlyFrom, to, "1h"})
+		reads = append(reads, historyRead{metrics: hourly, start: hourlyFrom, end: to, interval: "1h", hourlyPoints: true})
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -314,7 +366,7 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		}
 		results[i] = make(chan result, 1)
 		go func(out chan<- result, read historyRead) {
-			rows, err := a.numeric(ctx, "history", read.metrics, read.start, read.end, read.interval)
+			rows, err := a.numeric(ctx, "history", read.metrics, read.start, read.end, read.interval, read.timeBasis)
 			out <- result{rows, err}
 		}(results[i], read)
 	}
@@ -327,16 +379,17 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 			writeError(w, part.err)
 			return
 		}
-		if i == 2 {
+		read := reads[i]
+		if read.hourlyPoints {
 			data.Points = pointer(hourlyPoints(part.series, hourly, hourlyFrom, to, limit))
 			continue
 		}
-		interval := reads[i].interval
-		step := resolutionDuration(interval)
-		if i == 0 {
-			data.ResolutionSeconds = pointer(int(step.Seconds()))
+		step := resolutionDuration(read.interval)
+		coverageBasis := sampledCoverage
+		if read.timeBasis == l1TimeBasis && step != time.Minute {
+			coverageBasis = aggregateCoverage
 		}
-		for _, metric := range reads[i].metrics {
+		for _, metric := range read.metrics {
 			points := part.series[metric]
 			duration := indexDuration[metric]
 			if duration > 0 {
@@ -352,24 +405,22 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 						IntervalStatus: status, Value: point.value, Quality: quality(point)})
 				}
 				data.Series[metric] = HistorySeries{Index: &IndexHistorySeries{Points: items,
-					Coverage: observationCoverage(points, from, to, now, duration, true), DataStatus: indexDataStatus(metric)}}
+					Coverage: observationCoverage(points, from, to, now, duration, overlappingCoverage), DataStatus: indexDataStatus(metric)}}
 			} else {
 				items := make([]SolarSample, 0, len(points))
 				for _, point := range points {
 					items = append(items, SolarSample{ObservedAt: point.at, Value: point.value, Quality: quality(point)})
 				}
 				data.Series[metric] = HistorySeries{Solar: &SolarHistorySeries{Points: items,
-					Coverage: observationCoverage(points, from, to, now, step, false)}}
+					Coverage: observationCoverage(points, from, to, now, step, coverageBasis)}}
 			}
-			metadata[metric] = a.observationMetadata(metric, interval)
-		}
-		if meta {
-			gapFilling := "none"
-			if interval == "1h" && i == 0 {
-				gapFilling = "normalized"
+			if meta {
+				metadata[metric] = observationMetadata(metric, read.interval, read.timeBasis)
 			}
-			data.Meta = &ObservationMetadata{Series: metadata, GapFilling: &gapFilling}
 		}
+	}
+	if meta && len(metadata) > 0 {
+		data.Meta = &ObservationMetadata{Series: metadata, GapFilling: pointer("none")}
 	}
 	respond(data)
 }

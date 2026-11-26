@@ -34,13 +34,42 @@ func TestPublicRoutes(t *testing.T) {
 		case "/internal/v1/summary":
 			writeJSON(w, 200, document{"observations": document{}, "generated_at": issue})
 		case "/internal/v1/observations/latest", "/internal/v1/observations/history":
-			if r.URL.Query().Get("metrics") == "" {
+			query := r.URL.Query()
+			if query.Get("metrics") == "" {
 				t.Error("missing metrics selection")
 			}
-			success(w, document{"points": []document{
+			data := document{"points": []document{
 				{"time": issue.Add(-time.Hour), "bz": -3, "kp": 2, "ap": 7},
 				{"time": issue, "bz": nil, "kp": 3, "ap": 13},
-			}})
+			}}
+			if query.Get("metrics") != "n" && query.Has("time_basis") {
+				data["time_basis"] = query.Get("time_basis")
+			}
+			switch query.Get("metrics") {
+			case "bz":
+				if query.Get("time_basis") == "near_earth" {
+					if query.Get("interval") != "1h" {
+						t.Errorf("Near-Earth wind resolution: %v", query)
+					}
+					data["points"] = []document{{"time": issue, "bz": -8.25}}
+				}
+			case "xrs_a,xrs_b":
+				if query.Get("interval") != "1m" || query.Has("time_basis") {
+					t.Errorf("GOES XRS request: %v", query)
+				}
+				data["points"] = []document{{"time": issue.Add(time.Minute), "xrs_a": 1.7e-8, "xrs_b": 8.5e-7}}
+			case "proton_10mev,proton_100mev":
+				if query.Get("interval") != "5m" || query.Has("time_basis") {
+					t.Errorf("GOES proton request: %v", query)
+				}
+				data["points"] = []document{{"time": issue.Add(5 * time.Minute), "proton_10mev": 2.5, "proton_100mev": 0.0125}}
+			case "xrs_b,proton_10mev":
+				data["points"] = []document{
+					{"time": issue, "proton_10mev": 2.5},
+					{"time": issue.Add(time.Minute), "xrs_b": 8.5e-7},
+				}
+			}
+			success(w, data)
 		case "/internal/v1/public-forecasts/solar-wind-speed":
 			data := document{"target": "solar-wind-speed", "issue_time": issue, "horizon_hours": 2,
 				"available_variables": []string{"v"}, "cme_speed": nil,
@@ -170,11 +199,61 @@ func TestPublicRoutes(t *testing.T) {
 		query := "/observations/history?observations=bz,kp,ap&resolution=auto&meta=true&from=" +
 			issue.Add(-2*time.Hour).Format(time.RFC3339) + "&to=" + issue.Add(time.Hour).Format(time.RFC3339)
 		history := responseData[map[string]json.RawMessage](t, check("GET", query, "", 200))
-		if string(history["resolution_seconds"]) != "60" || !strings.Contains(string(history["series"]), `"invalid_slots":1`) ||
+		if string(history["time_basis"]) != `"l1"` || string(history["resolution_seconds"]) != "60" ||
+			!strings.Contains(string(history["series"]), `"invalid_slots":1`) ||
 			!strings.Contains(string(history["series"]), `"basis":"overlapping_intervals"`) ||
 			!strings.Contains(string(history["points"]), `"ap":13`) {
 			t.Fatalf("invalid observation history: %s", history)
 		}
+	})
+	t.Run("wind time basis", func(t *testing.T) {
+		bounds := "&from=" + issue.Add(-time.Hour).Format(time.RFC3339) + "&to=" + issue.Add(30*time.Minute).Format(time.RFC3339)
+		const path = "/observations/history?observations=bz&meta=true"
+		near := responseData[ObservationHistory](t, check("GET", path+"&time_basis=near_earth&resolution=auto"+bounds, "", 200))
+		nearMetadata := near.Meta.Series["bz"]
+		if near.TimeBasis == nil || *near.TimeBasis != nearEarthTimeBasis ||
+			nearMetadata.Source != "NASA OMNI2" || nearMetadata.Propagated == nil || !*nearMetadata.Propagated {
+			t.Fatalf("Near-Earth wind provenance: %+v", nearMetadata)
+		}
+		l1 := responseData[struct {
+			Series map[string]SolarHistorySeries `json:"series"`
+			Meta   ObservationMetadata           `json:"meta"`
+		}](t, check("GET", path+"&resolution=1h"+bounds, "", 200))
+		if l1.Meta.Series["bz"].Aggregation == nil || *l1.Meta.Series["bz"].Aggregation != "mean" ||
+			l1.Series["bz"].Coverage.ExpectedSlots != 1 {
+			t.Fatalf("L1 hourly provenance or coverage: %+v", l1)
+		}
+		check("GET", path+"&time_basis=near_earth&resolution=5m"+bounds, "", 422)
+		check("GET", path+"&time_basis="+bounds, "", 422)
+		check("GET", "/observations/history?observations=n", "", 503)
+	})
+	t.Run("GOES XRS and proton flux", func(t *testing.T) {
+		current := responseData[CurrentObservations](t, check("GET", "/observations?observations=xrs_b,proton_10mev&meta=true", "", 200))
+		if current.XRSB == nil || *current.XRSB == nil || *(**current.XRSB).Value != 8.5e-7 ||
+			current.Proton10MeV == nil || *current.Proton10MeV == nil || *(**current.Proton10MeV).Value != 2.5 ||
+			current.Meta.Series["xrs_b"].Unit != "W/m²" || current.Meta.Series["proton_10mev"].Unit != "pfu" {
+			t.Fatalf("invalid current GOES data: %+v", current)
+		}
+		const path = "/observations/history?observations=xrs_a,xrs_b,proton_10mev,proton_100mev&meta=true&resolution=1h"
+		bounds := "&from=" + issue.Format(time.RFC3339) + "&to=" + issue.Add(10*time.Minute).Format(time.RFC3339)
+		history := responseData[struct {
+			Series map[string]SolarHistorySeries `json:"series"`
+			Meta   ObservationMetadata           `json:"meta"`
+		}](t, check("GET", path+bounds, "", 200))
+		for _, tc := range []struct {
+			metric string
+			value  float64
+			step   int
+		}{{"xrs_a", 1.7e-8, 60}, {"xrs_b", 8.5e-7, 60}, {"proton_10mev", 2.5, 300}, {"proton_100mev", 0.0125, 300}} {
+			series := history.Series[tc.metric]
+			if len(series.Points) != 1 || series.Points[0].Value == nil || *series.Points[0].Value != tc.value ||
+				!series.Points[0].ObservedAt.Equal(issue.Add(time.Duration(tc.step)*time.Second)) ||
+				series.Coverage.ResolutionSeconds != tc.step || series.Coverage.Basis != sampledCoverage ||
+				history.Meta.Series[tc.metric].ResolutionSeconds != tc.step {
+				t.Fatalf("%s history: %+v", tc.metric, series)
+			}
+		}
+		check("GET", path+"&from="+issue.Add(-8*24*time.Hour).Format(time.RFC3339), "", 422)
 	})
 	t.Run("forecasts", func(t *testing.T) {
 		compact := responseData[document](t, check("GET", "/forecasts/solar-wind-speed", "", 200))

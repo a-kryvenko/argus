@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 import pandas as pd
 from requests import RequestException
 
-from clio.providers import f107, geomagnetic, solar_wind
+from clio.providers import f107, geomagnetic, goes_flux, solar_wind
 from clio.ingestion.utils.adapters import wide_to_measurements, clean_records
 from clio.ingestion.utils.products import OBSERVATIONS, SOURCE_IDS
 from clio.db.session import get_db_session
@@ -30,6 +30,10 @@ def load_wind(kind, start, now):
 
 def load_geomagnetic(metric, start, now):
     return measurements(geomagnetic.fetch_records(metric), start, now, f'swpc.{metric}')
+
+
+def load_goes_flux(product, start, now):
+    return measurements(goes_flux.fetch_records(product), start, now, product)
 
 
 def measurements(dataset, start, now, product):
@@ -59,6 +63,8 @@ LIVE_LOADERS = {
     'swpc.rtsw_plasma': partial(load_wind, 'plasma'),
     'swpc.kp': partial(load_geomagnetic, 'kp'),
     'swpc.dst': partial(load_geomagnetic, 'dst'),
+    'goes.xrs': partial(load_goes_flux, 'goes.xrs'),
+    'goes.protons': partial(load_goes_flux, 'goes.protons'),
     'swpc.f107': load_f107,
     'celestrak.f107': load_celestrak_f107,
     'solfsmy.means': load_solfsmy_means,

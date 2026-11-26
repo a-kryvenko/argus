@@ -1,6 +1,7 @@
 # Clio
 
 Sources and policies: [project.yaml](../../../configs/project.yaml).
+`./argus clio observations` serves an auto-refreshing table at `http://127.0.0.1:8765`. Use `--output FILE` for an HTML snapshot.
 
 - `sources.live` / `sources.historical`: products in priority order; an empty list disables that mode.
 - `retention_days`: file retention; `backfill_days`: historical recovery window, no longer than retention.

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from clio.db.models.normalized_observation import NormalizedObservation
 
-from clio.ingestion.utils.products import PRODUCTS
+from clio.ingestion.utils.products import PRODUCTS, PROTON_METRICS, XRS_METRICS
 from clio.ingestion.utils.measurements import load_measurements
 from clio.db.models.measurement import REQUIRED_METRICS, SOLAR_INDEX_METRICS, OBSERVATION_METRICS
 from common.schemas.observation import Observation, ObservationPoint
@@ -69,7 +69,9 @@ async def refresh_normalized_observations(
         raise ValueError('now must include a timezone')
     
     since = now - timedelta(days=config.retention.live_days)
-    products = [name for name, product in PRODUCTS.items() if product.kind == 'numeric' and 'live' in product.modes]
+    standalone_metrics = frozenset((*XRS_METRICS, *PROTON_METRICS))
+    products = [name for name, product in PRODUCTS.items()
+                if product.kind == 'numeric' and 'live' in product.modes and product.metrics - standalone_metrics]
     async with get_db_session() as session:
         measurements = await load_measurements(
             session,

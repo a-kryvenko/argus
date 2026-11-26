@@ -67,6 +67,7 @@ const (
 	fromParameter           = "from"
 	toParameter             = "to"
 	resolutionParameter     = "resolution"
+	timeBasisParameter      = "time_basis"
 	targetParameter         = "target"
 	defaultObservationLimit = 24
 	maxObservationLimit     = 168
@@ -91,8 +92,10 @@ func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
 		}),
 		queryParameter(fromParameter, "Start time with timezone.", &huma.Schema{Type: "string", Format: "date-time"}),
 		queryParameter(toParameter, "End time with timezone.", &huma.Schema{Type: "string", Format: "date-time"}),
-		queryParameter(resolutionParameter, "auto: 1m through 6 hours, 5m through 24 hours, otherwise 1h",
+		queryParameter(resolutionParameter, "Solar-wind resolution. For L1, auto selects 1m through 6 hours, 5m through 24 hours and 1h for longer ranges. Near-Earth wind defaults to 1h.",
 			&huma.Schema{Type: "string", Default: defaultResolution, Enum: enumValues(observationResolutions)}),
+		queryParameter(timeBasisParameter, "Solar-wind time basis. l1 uses NOAA spacecraft measurement time. near_earth uses stored hourly NASA OMNI2 observations on the propagated near-Earth time axis and may have gaps.",
+			&huma.Schema{Type: "string", Default: l1TimeBasis, Enum: []any{l1TimeBasis, nearEarthTimeBasis}}),
 		observations,
 	}
 	targets := slices.Sorted(maps.Keys(publicforecast.Products))
@@ -103,10 +106,11 @@ func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
 		Summary: "Ping"}, a.ping)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations", OperationID: "currentObservations",
 		Tags: []string{"observations"}, Summary: "Current observations", Parameters: []*huma.Param{meta, trends, observations},
-		Errors: []int{422, 503}}, a.currentObservations)
+		Description: "Latest available observations, including NOAA L1 solar wind and NOAA primary GOES X-ray and integral proton fluxes.",
+		Errors:      []int{422, 503}}, a.currentObservations)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations/history", OperationID: "observationHistory",
 		Tags: []string{"observations"}, Summary: "Observation history", Parameters: historyParameters, Errors: []int{422, 503},
-		Description: "Selected native series and hourly indices. Missing measurements remain gaps. Times must include a timezone. Wind history is limited to 7 days at 1m, 31 days at 5m and 366 days at 1h. Kp and Dst history is limited to 31 days. The limit parameter applies to hourly index points."}, a.observationHistory)
+		Description: "Missing measurements remain gaps. Times must include a timezone. Wind query ranges are limited to 7 days at 1m, 31 days at 5m and 366 days at 1h. Kp and Dst history is limited to 31 days. GOES history requires an explicit observations selection and accepts ranges of up to 7 days. XRS uses 1-minute samples in W/m². Proton flux uses 5-minute samples in pfu. The limit parameter applies to hourly index points."}, a.observationHistory)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/summary", OperationID: "summary",
 		Tags: []string{"summary"}, Summary: "Get the latest published summary", Errors: []int{503},
 		Description: "Observation groups, chart links and published CME arrival windows."}, a.summary)

@@ -9,6 +9,8 @@ SOURCE_LOCKS = {
     'solar_wind_plasma': 730101,
     'kp': 730110,
     'dst': 730111,
+    'goes_xrs': 730120,
+    'goes_protons': 730121,
 }
 
 FILE_LOCKS = {'sdo-live': 730200, 'sdo-warmup': 730201, 'sdo-browse': 730210,

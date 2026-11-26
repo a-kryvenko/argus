@@ -15,15 +15,16 @@ import (
 	"time"
 )
 
-var metrics = []string{
+var legacyMetrics = []string{
 	"bx", "by", "bz", "v", "n", "t", "kp", "dst", "ap", "f10_7", "s10", "m10", "y10",
 	"f10_7_81mean", "s10_81mean", "m10_81mean", "y10_81mean", "bt",
 }
+var metrics = slices.Concat(legacyMetrics, xrsMetrics, protonMetrics)
 
 type observationReader interface {
 	ready(ctx context.Context) error
 	latest(ctx context.Context, metrics []string) ([]measurement, error)
-	history(ctx context.Context, metrics []string, start, end time.Time, interval string) (numericPoints, error)
+	history(ctx context.Context, metrics []string, start, end time.Time, interval, timeBasis string) (numericPoints, error)
 	files(ctx context.Context, observation string, start, end time.Time) ([]observationFile, error)
 	sdoImages(ctx context.Context, publicBase string) ([]sdoImage, error)
 	eventInputs(ctx context.Context, now time.Time) (eventInputs, error)

@@ -78,7 +78,31 @@ func TestRoutes(t *testing.T) {
 }
 
 func TestGeomagneticMetricsFromSharedModel(t *testing.T) {
-	workdir := filepath.Join("..", "..", "..")
+	workdir := t.TempDir()
+	configs := filepath.Join(workdir, "configs")
+	if err := os.Mkdir(configs, 0700); err != nil {
+		t.Fatal(err)
+	}
+	const registry = "models:\n  geomagnetic_ordinal:\n    metrics_report: configs/geomagnetic-activity.json\n"
+	if err := os.WriteFile(filepath.Join(configs, "models_registry.yaml"), []byte(registry), 0600); err != nil {
+		t.Fatal(err)
+	}
+	const evaluation = `{
+		"target": "geomagnetic-activity",
+		"variables": {
+			"kp": {"binary": [
+				{"threshold": 4, "by_lead_hour": [{"lead_hours": 48, "brier_score": 0.12}]},
+				{"threshold": 5, "by_lead_hour": [{"lead_hours": 48, "brier_score": 0.08}]},
+				{"threshold": 6, "by_lead_hour": [{"lead_hours": 48, "brier_score": 0.04}]}
+			]},
+			"ap": {"continuous": {"quantiles": [0.1, 0.5, 0.9], "by_lead_hour": [
+				{"lead_hours": 48, "values": {"mae": 5.1}}
+			]}}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(configs, "geomagnetic-activity.json"), []byte(evaluation), 0600); err != nil {
+		t.Fatal(err)
+	}
 	models, err := loadModelRegistry(workdir)
 	if err != nil {
 		t.Fatal(err)
@@ -97,12 +121,12 @@ func TestGeomagneticMetricsFromSharedModel(t *testing.T) {
 	}
 	kp, ap := report.Variables["kp"], report.Variables["ap"]
 	if report.Target != "geomagnetic-activity" || len(kp.Binary) != 3 || ap.Continuous == nil ||
-		len(ap.Continuous.ByLeadHour) != 48 || ap.Continuous.ByLeadHour[0].Values["mae"] == nil {
+		len(ap.Continuous.ByLeadHour) != 1 || ap.Continuous.ByLeadHour[0].Values["mae"] != 5.1 {
 		t.Fatalf("missing Kp/ap metrics: %+v", report)
 	}
 	for i, threshold := range []float64{4, 5, 6} {
 		series := kp.Binary[i]
-		if series.Threshold == nil || *series.Threshold != threshold || len(series.ByLeadHour) != 48 ||
+		if series.Threshold == nil || *series.Threshold != threshold || len(series.ByLeadHour) != 1 ||
 			series.ByLeadHour[0].BrierScore == nil {
 			t.Errorf("missing scores for Kp >= %.0f: %+v", threshold, series)
 		}

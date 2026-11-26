@@ -266,8 +266,11 @@ async def test_ordinal_geomagnetic_release_from_clio_to_public_api(recorder_setu
     published = metrics.json()['data']
     assert published['target'] == product
     assert set(published['variables']) == {'kp', 'ap'}
-    assert [item['threshold'] for item in published['variables']['kp']['binary']] == [4, 5, 6]
-    assert len(published['variables']['ap']['continuous']['by_lead_hour']) == 48
+    kp_metrics = published['variables']['kp']['binary']
+    assert [item['threshold'] for item in kp_metrics] == [4, 5, 6]
+    ap_metrics = published['variables']['ap']['continuous']
+    for series in [*kp_metrics, ap_metrics]:
+        assert [row['lead_hours'] for row in series['by_lead_hour']] == list(range(1, 49))
     status.raise_for_status()
     products = ForecastsStatus.model_validate(status.json()).products
     diagnostics = next(item.current_release.input_diagnostics for item in products if item.product == product)

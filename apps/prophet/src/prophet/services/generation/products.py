@@ -54,7 +54,7 @@ PRODUCTS = {
         Model('s10_quantile', 'inference.radiation.daily:DailyS10QuantileFS'),
         Model('m10_quantile', 'inference.radiation.daily:DailyM10QuantileFS'),
         Model('y10_quantile', 'inference.radiation.daily:DailyY10QuantileFS')),
-        ('hourly', 'goes'), requires_normalized=True),
+        ('hourly', 'goes'), ('f107_measurements',), requires_normalized=True),
     'atmospheric-density': Product((Model('atmospheric_density',
         'models.AtmosphericDensityForecastService:AtmosphericDensityForecastService', bundled=False),),
         ('hourly', 'goes')),

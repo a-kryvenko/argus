@@ -8,7 +8,13 @@ export const metadata = { title: 'Model performance' };
 export default function Metrics() {
   return <WorkspaceShell section="Model performance" contentId="metrics-content" status="Evaluation catalog">
     <main id="metrics-content" className={styles.page}>
-      <div className={styles.pageHeading}><div><h1>Model performance</h1><p>Explore forecast quality across lead times, variables and event thresholds.</p></div><Link className={styles.headingLink} href="/forecast">Forecast<ArrowUpRight size={13} aria-hidden="true" /></Link></div>
+      <div className={styles.pageHeading}>
+        <div>
+          <h1>Model performance</h1>
+          <p>Explore forecast quality across lead times, variables and event thresholds.</p>
+        </div>
+        <Link className={styles.headingLink} href="https://github.com/a-kryvenko/argus/tree/master/docs/accuracy">Accuracy Comparision Report<ArrowUpRight size={13} aria-hidden="true" /></Link>
+      </div>
       <div className={styles.catalogHeading}><span><ChartNoAxesCombined size={14} aria-hidden="true" />Evaluation by product</span><span>Errors · threshold scores · calibration</span></div>
       <div className={styles.catalogGrid}>{products.map(product => <Link className={styles.productCard} href={`/metrics/${product.slug}`} key={product.slug}>
 

@@ -70,6 +70,12 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
     results, services = {}, {}
     for model in PRODUCTS[product].models:
         service_class = model.service_class()
+        if model.artifact == 'f10_7_quantile':
+            from prophet.services.generation.f107 import calculate_f107
+            result = calculate_f107(inputs, issue_time=issue_time, workdir=workdir, registry=registry,
+                                   legacy_service=service_class)
+            results[result.name] = result
+            continue
         if model.bundled:
             service, metadata = load_model(service_class, workdir=workdir, registry=registry)
         else:
@@ -94,7 +100,7 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
             result.model_info.update(service.last_status)
         if product == 'atmospheric-density':
             result.model_info.update(service.model_info)
-        if product == 'solar-radiation' and model.artifact != 'f10_7_quantile':
+        if product == 'solar-radiation':
             result.model_info.update(service.model_info)
         results[result.name] = result
         services[result.name] = service

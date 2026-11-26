@@ -63,8 +63,10 @@ models:
     metrics: data/metrics/hmf/bs_revalidated_2026_v2
 
   f10_7_quantile:
-    model: argus-f10_7-q-v1
-    metrics: data/metrics/radiation/f10_7_quantile
+    model: argus-f10-7-daily-v1
+    artifact_path: configs/models/f107-daily-v1.json
+    fallback:
+      model: argus-f10_7-q-v1
 
   # GOES -> SOLFSMY observation calibration; not a forecast model.
   solar_index_calibration:

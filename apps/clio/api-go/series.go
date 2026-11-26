@@ -12,10 +12,11 @@ import (
 )
 
 type seriesQuery struct {
-	metrics   []string
-	from, to  time.Time
-	windStep  time.Duration
-	windBasis string
+	metrics    []string
+	from, to   time.Time
+	windStep   time.Duration
+	windBasis  string
+	receivedBy *time.Time
 }
 
 func (api api) series(w http.ResponseWriter, r *http.Request) {
@@ -40,6 +41,18 @@ func (api api) series(w http.ResponseWriter, r *http.Request) {
 	}
 	if query.Has("time_basis") {
 		read.windBasis = query.Get("time_basis")
+	}
+	if query.Has("received_by") {
+		cutoff, err := time.Parse(time.RFC3339Nano, query.Get("received_by"))
+		if err != nil || read.from.IsZero() {
+			writeError(w, http.StatusUnprocessableEntity, "HTTP_ERROR", "Use RFC3339 received_by with a from/to range")
+			return
+		}
+		cutoff = cutoff.UTC()
+		if now.Before(cutoff) {
+			cutoff = now
+		}
+		read.receivedBy = &cutoff
 	}
 	interval := query.Get("interval")
 	switch interval {
@@ -130,7 +143,8 @@ func (db postgres) series(ctx context.Context, query seriesQuery) (map[string]ob
 	const fields = "metric, observed_at, value, source_product, received_at, quality, spacecraft"
 	const historySQL = "SELECT " + fields + ` FROM clio.measurement
 		WHERE metric = ANY($1::varchar[]) AND source_product = ANY($2::varchar[])
-		  AND observed_at >= $3 AND observed_at < $4 ORDER BY observed_at LIMIT $5`
+		  AND observed_at >= $3 AND observed_at < $4
+		  AND ($6::timestamptz IS NULL OR received_at BETWEEN observed_at AND $6) ORDER BY observed_at LIMIT $5`
 	const latestSQL = `SELECT sample.*
 		FROM unnest($1::varchar[], $2::varchar[]) AS requested(metric, product)
 		CROSS JOIN LATERAL (SELECT ` + fields + ` FROM clio.measurement
@@ -141,7 +155,7 @@ func (db postgres) series(ctx context.Context, query seriesQuery) (map[string]ob
 	if query.from.IsZero() {
 		rows, err = db.pool.Query(ctx, latestSQL, latestMetrics, latestProducts, query.to)
 	} else {
-		rows, err = db.pool.Query(ctx, historySQL, query.metrics, products, left, query.to, maxHistoryRows+1)
+		rows, err = db.pool.Query(ctx, historySQL, query.metrics, products, left, query.to, maxHistoryRows+1, query.receivedBy)
 	}
 	if err != nil {
 		return nil, err
@@ -188,7 +202,12 @@ func (db postgres) series(ctx context.Context, query seriesQuery) (map[string]ob
 			continue
 		}
 		if spec.metric.ID == "f10_7" {
-			at = at.Truncate(24 * time.Hour)
+			day := at.Truncate(24 * time.Hour)
+			// The forecast input series uses the same Penticton noon flux as the daily target.
+			if query.receivedBy != nil && point.SourceProduct == "swpc.f107" && !at.Equal(day.Add(20*time.Hour)) {
+				continue
+			}
+			at = day
 		}
 		byTime := pointsByMetric[id]
 		if byTime == nil {

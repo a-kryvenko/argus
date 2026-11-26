@@ -11,7 +11,8 @@ from common.schemas.solar_wind_events import EventInputs
 from forecast.inputs import ForecastInputs
 from prophet.services.generation.products import PRODUCTS
 from prophet.services.inputs.observations import (
-    apply_solar_measurements, read_geomagnetic_history, read_native_history, read_observations, read_resource,
+    apply_solar_measurements, read_f107_history, read_geomagnetic_history, read_native_history,
+    read_observations, read_resource,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ def read_source(source, as_of, *, inputs=None):
     url, token = os.getenv('OBSERVATIONS_URL'), os.getenv('OBSERVATIONS_SERVICE_TOKEN')
     if not url or not token:
         raise RuntimeError('OBSERVATIONS_URL and OBSERVATIONS_SERVICE_TOKEN are required')
-    timeout = 60 if source == 'events' else 180
+    timeout = {'events': 60, 'f107_measurements': 15}.get(source, 180)
     with httpx.Client(timeout=httpx.Timeout(timeout, connect=10), follow_redirects=False,
                       trust_env=False) as client:
         if source == 'hourly':
@@ -39,6 +40,8 @@ def read_source(source, as_of, *, inputs=None):
             return read_native_history(client, url, token, as_of)
         if source == 'geomagnetic_history':
             return read_geomagnetic_history(client, url, token, as_of)
+        if source == 'f107_measurements':
+            return read_f107_history(client, url, token, as_of)
         if source == 'events':
             response = client.get(url.rstrip('/') + '/internal/v1/observations/solar-wind-events/inputs',
                                   headers={'Authorization': f'Bearer {token}'})
@@ -88,6 +91,8 @@ async def load_product_inputs(product, as_of, cache, *, executor, timeout_second
             inputs.solar_wind_hourly = result
         elif source == 'geomagnetic_history':
             inputs.geomagnetic_history = result
+        elif source == 'f107_measurements':
+            inputs.f107_measurements = result
         elif source == 'events':
             inputs.solar_wind_events = result
             if source in spec.required_inputs:

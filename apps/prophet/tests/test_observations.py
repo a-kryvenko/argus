@@ -52,6 +52,13 @@ def resource_response(request, payload):
             if metric != 'bx':
                 point['received_at'] = (NOW - timedelta(minutes=2)).isoformat()
             data[metric] = {'points': [point], 'time_basis': 'l1', 'aggregation': 'mean', 'resolution_seconds': 3600}
+            if metric == 'f10_7':
+                point['source_product'] = 'swpc.f107'
+                noon = NOW.replace(hour=20) - timedelta(days=1)
+                point['observed_at'] = noon.isoformat()
+                data[metric].update(time_basis='measurement', aggregation='source', resolution_seconds=86400)
+                data[metric]['points'].append({**point, 'observed_at': (noon+timedelta(hours=2)).isoformat(),
+                                               'value': 999.})
     elif resource == 'files':
         data = []
     else:
@@ -82,9 +89,15 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
     point = native['series']['bz']['points'][0]
     assert point['received_at'] == (NOW - timedelta(minutes=2)).isoformat()
     assert point['interval_end'] == NOW and point['count'] == 59
-    assert load_inputs('solar-radiation', shared).as_of == NOW
-    assert [request.url.params['observation'] for request in calls[2:]] == ['goes']
+    radiation = load_inputs('solar-radiation', shared)
+    assert radiation.as_of == NOW
+    assert calls[2].url.params['observation'] == 'goes'
     assert calls[2].url.params['start'] == (NOW-timedelta(days=35)).isoformat()
+    assert calls[3].url.params['received_by'] == NOW.isoformat()
+    assert calls[3].url.params['metrics'] == 'f10_7'
+    assert len(radiation.f107_measurements) == 1
+    assert radiation.f107_measurements[0].received_at == NOW - timedelta(minutes=2)
+    assert len(calls) == 4
 
 
 def test_density_forecast_uses_only_available_closed_l1_history(monkeypatch):

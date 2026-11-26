@@ -1,45 +1,51 @@
-# Forecast accuracy
+# Operational forecast comparison
 
-## Validation methodology
+[Methodology and details](METHODOLOGY.md)
 
-| Period | Use |
-| --- | --- |
-| 2011–2024 | Train models, preprocessing and climatology. Record exceptions. |
-| January–September 2025 | Select architecture, features and hyperparameters, including early stopping. |
-| October–December 2025 | Calibrate probabilities, intervals and ensemble weights. |
-| 2026 | Evaluate frozen models. |
+January–June 2026 replay. **Background** excludes catalogued ICMEs and the following 24 h. **CME arrival** covers the first complete 6 h for L1 metrics and 12 h for geomagnetic indices. Pairs share targets and a cutoff. ENLIL availability is estimated from creation and archive timestamps for CME runs. [ICME catalog](https://spdf.gsfc.nasa.gov/pub/pre_generated_plots/ace/level3/icmetable2.html) · [NOAA WSA–ENLIL archive](https://registry.opendata.aws/noaa-wsa-enlil/)
 
-### Data and execution
+## Wind and geomagnetic activity
 
-- Retain observation versions, SHA-256 hashes, units, quality flags, observation times and receipt times. Label evaluations that assume receipt times as retrospective. [Required observations](../observation-requirements.md)
-- Split by issue time, complete target interval and label availability. Exclude boundary-crossing intervals and missing targets. Use inputs available at issuance and fix input-filling rules before testing.
-- Verify pretrained components’ training cutoffs before claiming compliance. Fit base models through 2024.
-- Audit each model, then train, select, calibrate and check inference parity. Freeze code, data, model parameters and the test plan before scoring. Evaluate each frozen version once and retain prediction–observation pairs and blockers.
-- For JB2008 and DTM2020, prepare drivers and validate the physical models. Apply the same splits to learned corrections. Evaluate atmospheric density and altitude loss separately.
+![Solar Wind MAE at +24h](operational-comparison/wind-mae.svg)
 
-### Metrics
+Speed uses the DLinear fallback with CME correction. Paired 95% intervals favor Argus for background speed and density and include zero at arrival. Temperature compares Argus proton temperature with ENLIL single-fluid temperature.
 
-| Output | Required metrics |
-| --- | --- |
-| Point | MAE, RMSE, bias and skill against persistence and training climatology |
-| Quantiles | q10/q50/q90 pinball loss, 80% coverage, interval width, tail misses and interval score |
-| Probabilities | Brier score and skill, ROC AUC, average precision, reliability and recall/FAR/CSI at P ≥ 0.5 |
-| Atmospheric density | MAE, RMSE, bias, MAPE, log-RMSE, underestimation >30% and upper-bound coverage |
+![ap MAE at +12h/+24h](operational-comparison/ap-mae.svg)
 
-## Current models
+Background ap uses +24 h. Arrival forecasts were issued at least 12 h before the front. NOAA ap is derived from the SWPC Kp bulletin. [SWPC forecast](https://www.swpc.noaa.gov/products/3-day-geomagnetic-forecast) · [Kp and ap definitions](https://kp.gfz.de/en/about-kp)
 
-- [Fast L1 Bt](frozen/2026-11-26-bt-fast-l1-v1/README.md) · [Metrics JSON](frozen/2026-11-26-bt-fast-l1-v1/metrics.json)
-- [Hourly Bt/Bs after L1 detections](frozen/2026-11-26-hmf-hourly-v2/README.md)
-- [Fast L1 Kp/ap](frozen/2026-11-26-kp-ap-fast-l1-v1/README.md) · [Metrics JSON](frozen/2026-11-26-kp-ap-fast-l1-v1/metrics.json)
-- [48-hour Kp/ap](frozen/2026-11-26-kp-ap-v1/README.md)
-- [Solar-wind density](frozen/2026-11-26-solar-wind-density-recent-l1-v1/README.md)
-- [Solar-wind speed](frozen/2026-10-21-speed-release-v1/README.md)
-- [CME correction in solar-wind speed](frozen/2026-10-15-cme-window-release-v1/README.md)
-- [JB2008 / DTM2020 accuracy](ATMOSPHERIC.md)
+**Argus Dst at +24h**
 
-## Earlier evaluations
+| Regime | Pairs | MAE (nT) | 80% interval coverage |
+| --- | ---: | ---: | ---: |
+| Background | 3,429 | 10.26 | 84% |
+| CME arrival | 193 | 22.61 | 56% |
 
-- [October ap/Dst release](frozen/2026-10-15-ap-dst-release-v1/README.md)
-- [October hourly Bt/Bs release](frozen/2026-10-15-imf-release-v1/README.md) · [Test results](frozen/2026-10-15-imf-v2/README.md) · [Bs with GONG](frozen/2026-10-15-imf-gong-v1/README.md)
-- [October 12 plasma evaluation](frozen/2026-10-12-plasma-campaign-v2/README.md)
-- [October 10 six-candidate evaluation](frozen/2026-10-10-revalidation-v1/README.md)
+NOAA Geospace forecasts Dst 30–60 min ahead. No public +24 h archive was found for the replay period. [NOAA Geospace](https://www.spaceweather.gov/products/geospace-geomagnetic-activity-plot)
+
+## Fast updates after L1 detection
+
+![Kp/Bt error at +6h](operational-comparison/threshold-scores-6h.svg)
+
+Complete intervals end within 6 h of issue. Argus assumes a 15-minute receipt delay and alerts at P ≥ 0.5. Brier scores use 0/1 probabilities for NOAA’s SWPC Kp and WSA–ENLIL Bt thresholds. ENLIL omits the ejecta’s internal field. [Fast Bt](frozen/2026-11-26-bt-fast-l1-v1/README.md) · [Fast Kp/ap](frozen/2026-11-26-kp-ap-fast-l1-v1/README.md) · [ENLIL cone model](https://doi.org/10.1088/0067-0049/213/2/21)
+
+ap MAE by +6 h was 17.03 for Argus and 20.22 for NOAA (58 pairs, 95% CI for the difference includes zero). [Threshold scores](operational-comparison/threshold-horizons.csv)
+
+## F10.7
+
+![F10.7 MAE at +24h/+48h](operational-comparison/f107-mae.svg)
+
+The replay uses Penticton measurements from NOAA’s 22:00 UTC bulletin. Paired 95% intervals include zero on both leads. The table shows **Argus / NOAA** MAE in sfu, grouping CME arrivals by UTC date. [NOAA RSGA archive](https://www.ngdc.noaa.gov/stp/space-weather/swpc-products/daily_reports/reports_solar_geophysical_activity/) · [Scores](operational-comparison/f107-scores.csv) · [Provenance](operational-comparison/f107-provenance.json)
+
+| Lead | Background MAE, sfu | Arrival-date MAE, sfu |
+| --- | --- | --- |
+| +24h | 5.50 / 5.95, 121 pairs | 6.94 / 6.81, 16 pairs |
+| +48h | 8.83 / 8.95, 120 pairs | 9.99 / 9.19, 16 pairs |
+
+## CME ETA and other outputs
+
+- **CME ETA.** Argus uses NASA DONKI/WSA–ENLIL. Historical MAE on matched hits was 10.8 h for NASA M2M, 12.8 h for NOAA and 13.7 h for Met Office. [NASA Scoreboard, Table 3](https://doi.org/10.1029/2024SW003951)
+- **Thermospheric density.** In the 2025 GRACE-FO replay at +24 h, JB2008 / DTM2020 with fixed drivers had MAPE 20.3% / 19.4% in background (902 pairs) and 36.1% / 26.8% in the first 12 h after arrival (254 pairs). [Model and observations](ATMOSPHERIC.md)
+- **S10, M10 and Y10.** No paired operational evaluation by regime. [SET data](https://spacewx.com/current-data/)
+
+[Scores and replay sources](operational-comparison/scores.csv)

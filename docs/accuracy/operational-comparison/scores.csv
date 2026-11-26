@@ -1,0 +1,19 @@
+phase,forecast,lead,score,unit,targets,fronts,positives,argus,reference,reference_score,paired_argus_minus_reference_ci95_low,paired_argus_minus_reference_ci95_high,source
+ambient,Wind speed DLinear + CME correction,+24 h,MAE,km/s,293,0,,54.91348092904494,NOAA WSA-ENLIL,74.80993802971943,-34.10539451010668,-7.040194731589768,data/experiments/operational-mode-comparison-2026-11-26/wind_paired_noaa_enlil.csv
+front_0_6,Wind speed DLinear + CME correction,+24 h,MAE,km/s,6,6,,59.66936954698341,NOAA WSA-ENLIL,84.11997240788351,-68.0927299872959,13.223602665575706,data/experiments/operational-mode-comparison-2026-11-26/wind_paired_noaa_enlil.csv
+ambient,Wind speed PROSWIN archive proxy + CME correction,+24 h,MAE,km/s,72,0,,53.80139150798703,NOAA WSA-ENLIL,82.52303873963011,-52.948607500407725,-8.327002169925054,data/experiments/operational-mode-comparison-2026-11-26/wind_paired_noaa_enlil.csv
+ambient,Proton density,+24 h,MAE,cm^-3,275,0,,1.8983726525314448,NOAA WSA-ENLIL,2.786757566315404,-1.5195431666615034,-0.3946372385586616,data/experiments/operational-mode-comparison-2026-11-26/wind_paired_noaa_enlil.csv
+front_0_6,Proton density,+24 h,MAE,cm^-3,6,6,,2.318351946976152,NOAA WSA-ENLIL,1.0014702639253983,-0.6468613059819451,3.3588772813596535,data/experiments/operational-mode-comparison-2026-11-26/wind_paired_noaa_enlil.csv
+ambient,Temperature Argus fallback,+24 h,MAE,K,300,0,,57758.07092530834,NOAA WSA-ENLIL single-fluid T,87265.54206548525,,,data/experiments/operational-mode-comparison-2026-11-26/wind_enlil_native_field_scores.csv
+front_0_6,Temperature Argus fallback,+24 h,MAE,K,7,7,,131023.42490384392,NOAA WSA-ENLIL single-fluid T,156115.18512467848,,,data/experiments/operational-mode-comparison-2026-11-26/wind_enlil_native_field_scores.csv
+front_0_12,ap (3-hour),issue >=12 h before front,MAE,,68,17,,22.808823529411764,NOAA SWPC Kp converted to ap,23.470588235294116,-5.75,5.088235294117647,data/experiments/operational-mode-comparison-2026-11-26/onset_scores.csv
+front_0_6,Proton density,issue >=12 h before front,peak MAE,cm^-3,36,6,,5.0586802851538275,NOAA WSA-ENLIL,2.5853932033824853,,,data/experiments/operational-mode-comparison-2026-11-26/onset_scores.csv
+front_0_6,Wind speed,issue >=12 h before front,peak MAE,km/s,36,6,,73.93309038459671,NOAA WSA-ENLIL,82.11671870050232,,,data/experiments/operational-mode-comparison-2026-11-26/onset_scores.csv
+ambient,ap (3-hour),+24 h,MAE,,282,,,6.59929,NOAA SWPC Kp converted to ap,8.92908,-3.91,-0.91,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt
+ambient,Dst,+24 h,MAE,nT,3429,,,10.258,,,,,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt
+ambient,Dst,+24 h,80% interval coverage,fraction,3429,,,0.843,,,,,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt
+front_0_12,Dst,+24 h,MAE,nT,193,,,22.608,,,,,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt
+front_0_12,Dst,+24 h,80% interval coverage,fraction,193,,,0.56,,,,,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt
+after_L1_detection,ap (3-hour),complete bins after simulated 15 min receipt,mae,,58,,,17.03448275862069,NOAA SWPC Kp converted to ap,20.224137931034484,,,data/experiments/operational-mode-comparison-2026-11-26/onset_fast_scores.csv
+ambient_2025,Thermospheric density JB2008,+24 h,MAPE,%,902,0,,20.331,DTM2020 fixed inputs,19.382,,,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt
+front_0_12_2025,Thermospheric density JB2008,+24 h,MAPE,%,254,11,,36.148,DTM2020 fixed inputs,26.762,,,data/experiments/operational-mode-comparison-2026-11-26/geomagnetic_modes.txt

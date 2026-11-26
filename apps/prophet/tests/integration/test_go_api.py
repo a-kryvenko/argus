@@ -187,6 +187,43 @@ async def asyncio_smoke(binary, address):
     )
 
 
+def test_f107_history_ranks_only_measurements_received_at_cutoff(recorder_database):
+    import psycopg
+    from prophet.services.inputs.observations import read_f107_history
+    from tests.support.clio import clio_server
+    from tests.support.database import database_environment
+
+    _, urls, config = recorder_database
+    observed_at = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0) - timedelta(days=2)
+    first_receipt = observed_at + timedelta(minutes=15)
+    later_receipt = observed_at + timedelta(hours=3)
+    with psycopg.connect(urls['clio']) as db, db.cursor() as cursor:
+        cursor.executemany('''INSERT INTO clio.measurement
+            (metric, observed_at, value, source_product, received_at) VALUES ('f10_7', %s, %s, %s, %s)''', [
+            (observed_at - timedelta(hours=3), 129., 'swpc.f107', observed_at - timedelta(hours=2)),
+            (observed_at, 130., 'swpc.f107', first_receipt),
+            (observed_at + timedelta(hours=2), 132., 'swpc.f107', observed_at + timedelta(hours=2, minutes=5)),
+            (observed_at, 131., 'celestrak.f107', later_receipt),
+        ])
+    token = 'test-observations-token'
+    environment = {**os.environ, **database_environment(urls), 'ARGUS_WORKDIR': str(config.workdir),
+                   'OBSERVATIONS_SERVICE_TOKEN': token}
+    with clio_server(config.workdir, environment) as clio_url, httpx.Client(trust_env=False) as client:
+        before_noon = read_f107_history(client, clio_url, token, observed_at - timedelta(hours=1))
+        earlier = read_f107_history(client, clio_url, token, first_receipt)
+        afternoon = read_f107_history(client, clio_url, token, later_receipt - timedelta(minutes=30))
+        later = read_f107_history(client, clio_url, token, later_receipt)
+
+    assert before_noon == []
+    assert [(item.observed_at, item.received_at, item.source_product, item.value) for item in earlier] == [
+        (observed_at, first_receipt, 'swpc.f107', 130.),
+    ]
+    assert afternoon == earlier
+    assert [(item.observed_at, item.received_at, item.source_product, item.value) for item in later] == [
+        (observed_at, later_receipt, 'celestrak.f107', 131.),
+    ]
+
+
 async def test_ordinal_geomagnetic_release_from_clio_to_public_api(recorder_setup, monkeypatch):
     import psycopg
     import yaml

@@ -1,0 +1,31 @@
+{
+  "model": "argus-f10-7-daily-v1",
+  "artifact": "configs/models/f107-daily-v1.json",
+  "artifact_sha256": "d8636d484f7acacd732b49a7f6a5d52e050ab69d7e9533c0167df18f06a00847",
+  "training": {
+    "source": "https://celestrak.org/SpaceData/SW-All.csv",
+    "series": "Observed unadjusted F10.7 (OBS qualifier only)",
+    "observations_sha256": "3199ce3cdb1a16e3c9299056549cbc1d902766c1c504c9e3235ea0ae47d57334",
+    "fit_years": "2011–2024",
+    "selection": "January–September 2025, least features within 0.10 sfu of minimum MAE per day",
+    "calibration": "October–December 2025, empirical q10/q90 offsets per day"
+  },
+  "reference": "NOAA SWPC RSGA, observed Penticton F10.7 and published day-1/day-2 forecasts",
+  "reference_url": "https://www.ngdc.noaa.gov/stp/space-weather/swpc-products/daily_reports/reports_solar_geophysical_activity/2026/",
+  "evaluation": {
+    "period": "January–June 2026",
+    "availability": "Include only observations published by the matching 22:00 UTC RSGA issue. Use pre-2026 CelesTrak OBS history for December 2025 lags.",
+    "fresh": "Require the issue-date measurement and one forecast per UTC target day and horizon.",
+    "day-D-withheld": "Mask the available issue-date observation on the same target pairs.",
+    "ambient": "Whole UTC days outside Richardson–Cane ICME windows and their following 24-hour guard.",
+    "arrival-calendar-day": "UTC dates containing a Richardson–Cane arrival.",
+    "icme_catalog_url": "https://spdf.gsfc.nasa.gov/pub/pre_generated_plots/ace/level3/icmetable2.html",
+    "uncertainty": "Paired 95% percentile interval over 10,000 seven-UTC-day block bootstrap draws.",
+    "serving_parity": "All 686 replay q10, q50 and q90 rows match the serving implementation to 1e-12 sfu."
+  },
+  "hashes": {
+    "replay_code_sha256": "ed8a2d4679c9be8c5b0336ed82928685236fb9aacb786b45ffc3e44b1f88cc23",
+    "replay_predictions_sha256": "3961cef0049a991732eec6927ff13dfbb0022f42785f525eb4ef2fb8c2753c2e",
+    "scores_sha256": "911671713586ab1d1b2798fdd418955636a55aa29a5bbf215dafb212ac611741"
+  }
+}

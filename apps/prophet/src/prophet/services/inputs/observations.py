@@ -2,9 +2,11 @@
 from datetime import UTC, datetime, timedelta
 from math import isfinite
 
+from pydantic import ValidationError
+
 from common.observationcatalog import METRICS
 from common.schemas.observation import Observation
-from forecast.inputs import GeomagneticHistory
+from forecast.inputs import F107Measurement, GeomagneticHistory
 from forecast.observation_inputs import ObservationInputs
 
 HISTORY_DAYS = 60
@@ -98,6 +100,27 @@ def _usable_value(point):
     value = point.get('value')
     return (isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
             and point.get('quality') in (None, '', 'good', 'unverified'))
+
+
+def read_f107_history(client, url, token, as_of):
+    """Read only native Penticton observations received by the input cutoff."""
+    history = read_series(client.get, url, token, ('f10_7',), received_by=as_of.isoformat(),
+                          **{'from': (as_of-timedelta(days=35)).isoformat(),
+                             'to': (as_of+timedelta(microseconds=1)).isoformat()})
+    series = history.get('f10_7', {})
+    if (series.get('resolution_seconds'), series.get('time_basis'), series.get('aggregation')) != (86400, 'measurement', 'source'):
+        raise ValueError('Expected native Clio F10.7 measurements')
+    points = []
+    for point in series['points']:
+        if not isinstance(point, dict) or not _usable_value(point):
+            continue
+        try:
+            observation = F107Measurement.model_validate(point)
+        except ValidationError:
+            continue
+        if observation.observed_at <= observation.received_at <= as_of:
+            points.append(observation)
+    return points
 
 
 def _hour(stamp):

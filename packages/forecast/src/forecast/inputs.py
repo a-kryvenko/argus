@@ -1,7 +1,8 @@
 """Explicit observation snapshots enriched for forecast calculation."""
+from datetime import UTC, time
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat
+from pydantic import AwareDatetime, BaseModel, Field, FiniteFloat, model_validator
 from forecast.observation_inputs import ObservationInputs
 from common.schemas.solar_wind_events import CoronalHoleFrame, EventInputs
 
@@ -40,6 +41,21 @@ class GeomagneticHistory(BaseModel):
     prior: list[GeomagneticObservationPoint]
 
 
+class F107Measurement(BaseModel):
+    """Daily F10.7 flux at its original measurement and receipt times."""
+
+    observed_at: AwareDatetime
+    received_at: AwareDatetime
+    value: FiniteFloat = Field(gt=0)
+    source_product: Literal['celestrak.f107', 'swpc.f107', 'celestrak.f107_archive']
+
+    @model_validator(mode='after')
+    def validate_penticton_noon(self):
+        if self.source_product == 'swpc.f107' and self.observed_at.astimezone(UTC).time() != time(20):
+            raise ValueError('Expected the Penticton noon F10.7 sample')
+        return self
+
+
 class ForecastInputs(ObservationInputs):
     """Model context enriched after reading observation resources."""
     proswin_predictions: list[ProswinPrediction] = Field(default_factory=list)
@@ -50,3 +66,4 @@ class ForecastInputs(ObservationInputs):
     coronal_holes: CoronalHoleFrame | None = None
     hss_input_status: dict = Field(default_factory=dict)
     geomagnetic_history: GeomagneticHistory | None = None
+    f107_measurements: list[F107Measurement] = Field(default_factory=list)

@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "max_age_days": 3,
+  "days": {
+    "1": {
+      "intercept": 0.050031231231940795,
+      "weights": {
+        "trend3": 0.14488590845300034
+      },
+      "residual_offsets": [
+        -10.65200980804326,
+        9.558776815944952
+      ],
+      "persistence_offsets": [
+        -12.300000000000011,
+        10.499999999999986
+      ]
+    },
+    "2": {
+      "intercept": 0.0811578747630455,
+      "weights": {
+        "trend3": 0.23480071575997727
+      },
+      "residual_offsets": [
+        -17.673085318666814,
+        15.74223949014195
+      ],
+      "persistence_offsets": [
+        -17.72999999999999,
+        20.52
+      ]
+    },
+    "3": {
+      "intercept": 0.008877706080478834,
+      "weights": {
+        "trend": 0.2812175801473705,
+        "trend3": 0.31417892622617816,
+        "week": 0.17614908486446218,
+        "rotation": 0.14508028424234493
+      },
+      "residual_offsets": [
+        -22.904698617355056,
+        21.499749306272115
+      ],
+      "persistence_offsets": [
+        -26.000000000000007,
+        29.119999999999994
+      ]
+    },
+    "4": {
+      "intercept": 0.058558553526506615,
+      "weights": {
+        "trend": 0.21839165782092737,
+        "trend3": 0.611075915069706,
+        "week": 0.5530989735788628,
+        "rotation": 0.27571716675424485
+      },
+      "residual_offsets": [
+        -24.711640803952523,
+        30.64075500291232
+      ],
+      "persistence_offsets": [
+        -34.79000000000001,
+        36.84999999999999
+      ]
+    },
+    "5": {
+      "intercept": -0.7264991810584224,
+      "weights": {
+        "trend": 0.4418386184472209,
+        "week": 0.1387676032913901,
+        "rotation": 0.3219415416068153,
+        "level": -0.09888548515362802
+      },
+      "residual_offsets": [
+        -27.37709020328481,
+        38.89273377478248
+      ],
+      "persistence_offsets": [
+        -38.96,
+        45.07999999999999
+      ]
+    },
+    "6": {
+      "intercept": -0.8462534484300416,
+      "weights": {
+        "trend": 0.5393698620580931,
+        "week": 0.2625798691584212,
+        "rotation": 0.36065628261108806,
+        "level": -0.11277938907824439
+      },
+      "residual_offsets": [
+        -31.549910654026988,
+        47.18335230658711
+      ],
+      "persistence_offsets": [
+        -48.10000000000001,
+        50.800000000000004
+      ]
+    },
+    "7": {
+      "intercept": -0.9347483098910996,
+      "weights": {
+        "trend": 0.5285237476274952,
+        "week": 0.3739551364125659,
+        "rotation": 0.39702866679018134,
+        "level": -0.12431125188439815
+      },
+      "residual_offsets": [
+        -32.4811996922853,
+        51.30932708140026
+      ],
+      "persistence_offsets": [
+        -49.559999999999995,
+        57.56000000000001
+      ]
+    },
+    "8": {
+      "intercept": -1.0011494701934562,
+      "weights": {
+        "trend": 0.5740580636821961,
+        "week": 0.4952797399446666,
+        "rotation": 0.42070304393708147,
+        "level": -0.13218133698602924
+      },
+      "residual_offsets": [
+        -31.290775108219755,
+        56.82713666709466
+      ],
+      "persistence_offsets": [
+        -58.13000000000001,
+        60.86000000000001
+      ]
+    }
+  },
+  "training": {
+    "source": "https://celestrak.org/SpaceData/SW-All.csv",
+    "series": "Observed unadjusted F10.7 (OBS qualifier only)",
+    "observations_sha256": "3199ce3cdb1a16e3c9299056549cbc1d902766c1c504c9e3235ea0ae47d57334",
+    "fit_years": "2011\u20132024",
+    "selection": "January\u2013September 2025, least features within 0.10 sfu of minimum MAE per day",
+    "calibration": "October\u2013December 2025, empirical q10/q90 offsets per day"
+  }
+}

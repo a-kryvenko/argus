@@ -68,7 +68,6 @@ def test_reads_generic_resources_and_owns_history_windows(monkeypatch):
     configure(monkeypatch, handler)
     shared = {}
     assert load_inputs(cache=shared).observations.points[0].v == 420
-    assert load_inputs('geomagnetic-activity', shared).observations.points[0].v == 420
     assert len(calls) == 1
     assert all('as_of' not in request.url.params for request in calls)
     assert calls[0].url.params['from'] == (NOW-timedelta(days=60)).isoformat()
@@ -252,7 +251,6 @@ def mock_models(monkeypatch):
 
 @pytest.mark.parametrize('selection,artifacts', [
     ('solar-wind-speed', ['plasma_speed_quantile', 'plasma_speed_threshold']),
-    ('geomagnetic-activity', ['kp_threshold', 'ap_quantile']),
     ('hmf', ['hmf_total_threshold', 'hmf_southward_threshold']),
     ('dst', ['dst_quantile']),
     ('solar-wind-density', ['plasma_density_quantile']),
@@ -298,7 +296,10 @@ def test_runtime_catalog_selects_explicit_services():
         for model in spec.models:
             service = model.service_class()
             assert service.registry_name == model.artifact
-            assert issubclass(service, (QuantileFS, ProbabilityFS))
+            if model.outputs:
+                assert callable(service.forecast_snapshot)
+            else:
+                assert issubclass(service, (QuantileFS, ProbabilityFS))
             assert service.__module__.startswith('forecast_core.inference.')
 
 

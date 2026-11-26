@@ -1,0 +1,4297 @@
+{
+  "target": "geomagnetic-activity",
+  "evaluation": {
+    "label": "Ordinal Kp and ap · retrospective L1 evaluation",
+    "period": "18 September – 25 November 2026 (UTC targets)",
+    "sample": "Matched three-hour GFZ intervals with complete inputs for both model versions; leads +1…48 h.",
+    "notes": [
+      "GFZ Kp/ap is definitive for September and October and provisional for November in the frozen archive.",
+      "Replay uses assumed archive availability. Actual provider receipt times were unavailable.",
+      "Kp ≥6 occurred in only two target intervals. Threat and Heidke scores use a probability cutoff of 0.5."
+    ]
+  },
+  "variables": {
+    "kp": {
+      "binary": [
+        {
+          "threshold": 4,
+          "operator": "gte",
+          "by_lead_hour": [
+            {
+              "lead_hours": 1,
+              "brier_score": 0.03410744329563112,
+              "roc_auc": 0.9247734330439191,
+              "average_precision": 0.6165324711287403,
+              "threat_score": 0.34375,
+              "heidke_skill_score": 0.4954618259476775,
+              "reliability": [
+                {
+                  "predicted_probability": 0.02029633592861115,
+                  "observed_frequency": 0.014989293361884369
+                },
+                {
+                  "predicted_probability": 0.13641481266751657,
+                  "observed_frequency": 0.17647058823529413
+                },
+                {
+                  "predicted_probability": 0.2403925574557243,
+                  "observed_frequency": 0.23076923076923078
+                },
+                {
+                  "predicted_probability": 0.3300795606328487,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.43820602345849036,
+                  "observed_frequency": 0.42857142857142855
+                },
+                {
+                  "predicted_probability": 0.5677889662366181,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.6687207966591725,
+                  "observed_frequency": 0.6666666666666666
+                },
+                {
+                  "predicted_probability": 0.7275139564909737,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.8017210009321181,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.9371177449827408,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 2,
+              "brier_score": 0.03553993240904446,
+              "roc_auc": 0.9096102836155886,
+              "average_precision": 0.5311467560324876,
+              "threat_score": 0.34375,
+              "heidke_skill_score": 0.4937938478143551,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01959202467223177,
+                  "observed_frequency": 0.01956521739130435
+                },
+                {
+                  "predicted_probability": 0.13571551342147917,
+                  "observed_frequency": 0.17073170731707318
+                },
+                {
+                  "predicted_probability": 0.23379955660349322,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.3400407414734631,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.43228600543700707,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.5523858214438903,
+                  "observed_frequency": 0.8
+                },
+                {
+                  "predicted_probability": 0.6527700268812934,
+                  "observed_frequency": 0.75
+                },
+                {
+                  "predicted_probability": 0.7380843754984344,
+                  "observed_frequency": 0.6666666666666666
+                },
+                {
+                  "predicted_probability": 0.9431224143161654,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 3,
+              "brier_score": 0.03803768638416318,
+              "roc_auc": 0.9121330724070451,
+              "average_precision": 0.49320664755930754,
+              "threat_score": 0.24242424242424243,
+              "heidke_skill_score": 0.3715440732307978,
+              "reliability": [
+                {
+                  "predicted_probability": 0.019983173243003766,
+                  "observed_frequency": 0.01293103448275862
+                },
+                {
+                  "predicted_probability": 0.1409651853096016,
+                  "observed_frequency": 0.2564102564102564
+                },
+                {
+                  "predicted_probability": 0.23775553784407097,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.34574171319460983,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.4357562806366612,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.5541078956211478,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.6773490329354406,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.7492648875295469,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.8566063702357759,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.92950373211766,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 4,
+              "brier_score": 0.039953431920499084,
+              "roc_auc": 0.8981045751633987,
+              "average_precision": 0.45254212880082206,
+              "threat_score": 0.28125,
+              "heidke_skill_score": 0.42178770949720673,
+              "reliability": [
+                {
+                  "predicted_probability": 0.024064154307324632,
+                  "observed_frequency": 0.021929824561403508
+                },
+                {
+                  "predicted_probability": 0.14423048597454688,
+                  "observed_frequency": 0.13636363636363635
+                },
+                {
+                  "predicted_probability": 0.2557878671332531,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.33509456441036134,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.4299025766840998,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.5148321221571148,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.6642290421339853,
+                  "observed_frequency": 0.8
+                },
+                {
+                  "predicted_probability": 0.7446263671648814,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.8055911099968589,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.9183546467134241,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 5,
+              "brier_score": 0.039580147065570156,
+              "roc_auc": 0.9066857103992383,
+              "average_precision": 0.44183866121137216,
+              "threat_score": 0.25,
+              "heidke_skill_score": 0.381597923276608,
+              "reliability": [
+                {
+                  "predicted_probability": 0.025187422791224746,
+                  "observed_frequency": 0.017699115044247787
+                },
+                {
+                  "predicted_probability": 0.13444304932332224,
+                  "observed_frequency": 0.18421052631578946
+                },
+                {
+                  "predicted_probability": 0.23049091302660918,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.3413356508828545,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.43970306328718306,
+                  "observed_frequency": 0.2857142857142857
+                },
+                {
+                  "predicted_probability": 0.55456441117652,
+                  "observed_frequency": 0.75
+                },
+                {
+                  "predicted_probability": 0.6490541138112975,
+                  "observed_frequency": 0.75
+                },
+                {
+                  "predicted_probability": 0.7119180147076039,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.8865098556881641,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.9337668869814867,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 6,
+              "brier_score": 0.04332781907047913,
+              "roc_auc": 0.8869881465517242,
+              "average_precision": 0.3404506059421911,
+              "threat_score": 0.1875,
+              "heidke_skill_score": 0.2979636654022759,
+              "reliability": [
+                {
+                  "predicted_probability": 0.025408368759127126,
+                  "observed_frequency": 0.019693654266958426
+                },
+                {
+                  "predicted_probability": 0.14242308382007304,
+                  "observed_frequency": 0.20512820512820512
+                },
+                {
+                  "predicted_probability": 0.24190953207046506,
+                  "observed_frequency": 0.2222222222222222
+                },
+                {
+                  "predicted_probability": 0.33908693202383844,
+                  "observed_frequency": 0.07692307692307693
+                },
+                {
+                  "predicted_probability": 0.44507471190425696,
+                  "observed_frequency": 0.2
+                },
+                {
+                  "predicted_probability": 0.5621111754490846,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.6765411541803213,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.7380504366996035,
+                  "observed_frequency": 0.6666666666666666
+                },
+                {
+                  "predicted_probability": 0.893193620393396,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.9096177202323185,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 7,
+              "brier_score": 0.04759220555985391,
+              "roc_auc": 0.8701960784313725,
+              "average_precision": 0.29525899561451285,
+              "threat_score": 0.16666666666666666,
+              "heidke_skill_score": 0.26229508196721313,
+              "reliability": [
+                {
+                  "predicted_probability": 0.02723151518723557,
+                  "observed_frequency": 0.02643171806167401
+                },
+                {
+                  "predicted_probability": 0.1445998818672085,
+                  "observed_frequency": 0.16279069767441862
+                },
+                {
+                  "predicted_probability": 0.25833587106989436,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.34709546578303146,
+                  "observed_frequency": 0.16666666666666666
+                },
+                {
+                  "predicted_probability": 0.4133028796897695,
+                  "observed_frequency": 0.2
+                },
+                {
+                  "predicted_probability": 0.5098240296404241,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.6536223114556272,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.7350743555702405,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.8737730942069958,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.9031643835818749,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 8,
+              "brier_score": 0.04669325741012851,
+              "roc_auc": 0.8768774703557313,
+              "average_precision": 0.2974904992202828,
+              "threat_score": 0.11428571428571428,
+              "heidke_skill_score": 0.18405028481634256,
+              "reliability": [
+                {
+                  "predicted_probability": 0.029161685622030867,
+                  "observed_frequency": 0.026905829596412557
+                },
+                {
+                  "predicted_probability": 0.14109643620253123,
+                  "observed_frequency": 0.125
+                },
+                {
+                  "predicted_probability": 0.25079310040923025,
+                  "observed_frequency": 0.17647058823529413
+                },
+                {
+                  "predicted_probability": 0.3473190523224388,
+                  "observed_frequency": 0.2
+                },
+                {
+                  "predicted_probability": 0.4627912266586356,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.5607391059378426,
+                  "observed_frequency": 0.4
+                },
+                {
+                  "predicted_probability": 0.6589666930532703,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.7741508181556604,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.8936685474284003,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 9,
+              "brier_score": 0.050551958595964244,
+              "roc_auc": 0.846932321315623,
+              "average_precision": 0.24162138000489977,
+              "threat_score": 0.08333333333333333,
+              "heidke_skill_score": 0.13347570742124934,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03004258573344011,
+                  "observed_frequency": 0.030837004405286344
+                },
+                {
+                  "predicted_probability": 0.13947334317164747,
+                  "observed_frequency": 0.1282051282051282
+                },
+                {
+                  "predicted_probability": 0.2513745726908641,
+                  "observed_frequency": 0.22727272727272727
+                },
+                {
+                  "predicted_probability": 0.34640316296922435,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.4648586517631987,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.5180332231564021,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.6167316331622344,
+                  "observed_frequency": 0.6666666666666666
+                },
+                {
+                  "predicted_probability": 0.7531719818955077,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.8458138500309273,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 10,
+              "brier_score": 0.05189341378934263,
+              "roc_auc": 0.8343367767285632,
+              "average_precision": 0.22090960370397794,
+              "threat_score": 0.10526315789473684,
+              "heidke_skill_score": 0.16537867078825347,
+              "reliability": [
+                {
+                  "predicted_probability": 0.029581088632003483,
+                  "observed_frequency": 0.030973451327433628
+                },
+                {
+                  "predicted_probability": 0.13685856681231737,
+                  "observed_frequency": 0.14634146341463414
+                },
+                {
+                  "predicted_probability": 0.24685955407998353,
+                  "observed_frequency": 0.15789473684210525
+                },
+                {
+                  "predicted_probability": 0.3526995278774941,
+                  "observed_frequency": 0.23529411764705882
+                },
+                {
+                  "predicted_probability": 0.524279726670702,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.6403722084176853,
+                  "observed_frequency": 0.6
+                },
+                {
+                  "predicted_probability": 0.7979525830586544,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.8113480028039454,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 11,
+              "brier_score": 0.0505297355874556,
+              "roc_auc": 0.8502076014053018,
+              "average_precision": 0.23727890696154133,
+              "threat_score": 0.08333333333333333,
+              "heidke_skill_score": 0.13328106624852998,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03129718705454737,
+                  "observed_frequency": 0.028888888888888888
+                },
+                {
+                  "predicted_probability": 0.1461814059046916,
+                  "observed_frequency": 0.18181818181818182
+                },
+                {
+                  "predicted_probability": 0.2427330375036222,
+                  "observed_frequency": 0.23529411764705882
+                },
+                {
+                  "predicted_probability": 0.34400433551189885,
+                  "observed_frequency": 0.15384615384615385
+                },
+                {
+                  "predicted_probability": 0.44867427995257747,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.5594367649634991,
+                  "observed_frequency": 0.4
+                },
+                {
+                  "predicted_probability": 0.6411627478026225,
+                  "observed_frequency": 0.3333333333333333
+                }
+              ]
+            },
+            {
+              "lead_hours": 12,
+              "brier_score": 0.05055012981611426,
+              "roc_auc": 0.8429475015812777,
+              "average_precision": 0.22672311028649494,
+              "threat_score": 0.08333333333333333,
+              "heidke_skill_score": 0.13347570742124934,
+              "reliability": [
+                {
+                  "predicted_probability": 0.031103149080884043,
+                  "observed_frequency": 0.028888888888888888
+                },
+                {
+                  "predicted_probability": 0.13412744332084509,
+                  "observed_frequency": 0.17073170731707318
+                },
+                {
+                  "predicted_probability": 0.2490429261785773,
+                  "observed_frequency": 0.17857142857142858
+                },
+                {
+                  "predicted_probability": 0.33840023134778263,
+                  "observed_frequency": 0.18181818181818182
+                },
+                {
+                  "predicted_probability": 0.44316183716165475,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.5375064830462958,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.6340918550161724,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.7486262179186481,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 13,
+              "brier_score": 0.050140545563195915,
+              "roc_auc": 0.8369281045751634,
+              "average_precision": 0.22830804766017374,
+              "threat_score": 0.08108108108108109,
+              "heidke_skill_score": 0.12571428571428572,
+              "reliability": [
+                {
+                  "predicted_probability": 0.038106978305860115,
+                  "observed_frequency": 0.023148148148148147
+                },
+                {
+                  "predicted_probability": 0.14323697181558495,
+                  "observed_frequency": 0.16071428571428573
+                },
+                {
+                  "predicted_probability": 0.24175726870164,
+                  "observed_frequency": 0.15
+                },
+                {
+                  "predicted_probability": 0.3479672213115342,
+                  "observed_frequency": 0.16666666666666666
+                },
+                {
+                  "predicted_probability": 0.4404749827938571,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.5413274420434439,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.6503488769570611,
+                  "observed_frequency": 0.75
+                },
+                {
+                  "predicted_probability": 0.703586321382877,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 14,
+              "brier_score": 0.050593862469026155,
+              "roc_auc": 0.8385375494071147,
+              "average_precision": 0.23027928619596544,
+              "threat_score": 0.08571428571428572,
+              "heidke_skill_score": 0.13757039420756234,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03768834334850959,
+                  "observed_frequency": 0.0234192037470726
+                },
+                {
+                  "predicted_probability": 0.14631724599474047,
+                  "observed_frequency": 0.1724137931034483
+                },
+                {
+                  "predicted_probability": 0.23807568212303548,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.35271505899848515,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.43947342247985666,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.5722748951052328,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.6532415317978398,
+                  "observed_frequency": 0.6666666666666666
+                },
+                {
+                  "predicted_probability": 0.7422972485181368,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 15,
+              "brier_score": 0.053194122586075934,
+              "roc_auc": 0.8316888045540797,
+              "average_precision": 0.20864362008560988,
+              "threat_score": 0.08333333333333333,
+              "heidke_skill_score": 0.13347570742124934,
+              "reliability": [
+                {
+                  "predicted_probability": 0.037955861318269696,
+                  "observed_frequency": 0.0234192037470726
+                },
+                {
+                  "predicted_probability": 0.1382854867231749,
+                  "observed_frequency": 0.1864406779661017
+                },
+                {
+                  "predicted_probability": 0.2470382655065525,
+                  "observed_frequency": 0.16
+                },
+                {
+                  "predicted_probability": 0.33979158431875073,
+                  "observed_frequency": 0.15384615384615385
+                },
+                {
+                  "predicted_probability": 0.4474065871694852,
+                  "observed_frequency": 0.1111111111111111
+                },
+                {
+                  "predicted_probability": 0.5552816228929819,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.6894526418536261,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.7456767218838503,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 16,
+              "brier_score": 0.050579124639186075,
+              "roc_auc": 0.8366816655047848,
+              "average_precision": 0.2650172895064756,
+              "threat_score": 0.06060606060606061,
+              "heidke_skill_score": 0.10250911430409608,
+              "reliability": [
+                {
+                  "predicted_probability": 0.044441523980453077,
+                  "observed_frequency": 0.025821596244131457
+                },
+                {
+                  "predicted_probability": 0.14587491108020853,
+                  "observed_frequency": 0.16417910447761194
+                },
+                {
+                  "predicted_probability": 0.25299416356633647,
+                  "observed_frequency": 0.18181818181818182
+                },
+                {
+                  "predicted_probability": 0.35346906575992704,
+                  "observed_frequency": 0.06666666666666667
+                },
+                {
+                  "predicted_probability": 0.44657758737574,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.5470460452714659,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 17,
+              "brier_score": 0.051034274258157986,
+              "roc_auc": 0.835962951133823,
+              "average_precision": 0.24487891561995048,
+              "threat_score": 0.0625,
+              "heidke_skill_score": 0.1085486195808848,
+              "reliability": [
+                {
+                  "predicted_probability": 0.043858213437474904,
+                  "observed_frequency": 0.023809523809523808
+                },
+                {
+                  "predicted_probability": 0.14372925859798585,
+                  "observed_frequency": 0.17391304347826086
+                },
+                {
+                  "predicted_probability": 0.24314999855695998,
+                  "observed_frequency": 0.2
+                },
+                {
+                  "predicted_probability": 0.35239378199992244,
+                  "observed_frequency": 0.0625
+                },
+                {
+                  "predicted_probability": 0.44252186613060074,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.5388647902687569,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.6316722660608588,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 18,
+              "brier_score": 0.05223787378674581,
+              "roc_auc": 0.8109424414927261,
+              "average_precision": 0.20251977085451972,
+              "threat_score": 0.030303030303030304,
+              "heidke_skill_score": 0.0492091388400703,
+              "reliability": [
+                {
+                  "predicted_probability": 0.04425299089231478,
+                  "observed_frequency": 0.026128266033254157
+                },
+                {
+                  "predicted_probability": 0.14051427148511514,
+                  "observed_frequency": 0.13043478260869565
+                },
+                {
+                  "predicted_probability": 0.2468015191581802,
+                  "observed_frequency": 0.28
+                },
+                {
+                  "predicted_probability": 0.3396978193475669,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.4363929919915493,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.5335389436090663,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.6778213592239659,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 19,
+              "brier_score": 0.05098826311731195,
+              "roc_auc": 0.7987581699346405,
+              "average_precision": 0.21596881046246805,
+              "threat_score": 0.03125,
+              "heidke_skill_score": 0.05102040816326531,
+              "reliability": [
+                {
+                  "predicted_probability": 0.043872454127406556,
+                  "observed_frequency": 0.02631578947368421
+                },
+                {
+                  "predicted_probability": 0.13693337590539054,
+                  "observed_frequency": 0.13513513513513514
+                },
+                {
+                  "predicted_probability": 0.24684359129520667,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.3468661867527673,
+                  "observed_frequency": 0.1875
+                },
+                {
+                  "predicted_probability": 0.4401303485651222,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.5489780855340164,
+                  "observed_frequency": 0.3333333333333333
+                }
+              ]
+            },
+            {
+              "lead_hours": 20,
+              "brier_score": 0.051280897751931134,
+              "roc_auc": 0.7962450592885375,
+              "average_precision": 0.2036014718920718,
+              "threat_score": 0.06451612903225806,
+              "heidke_skill_score": 0.11217729038153987,
+              "reliability": [
+                {
+                  "predicted_probability": 0.04383908888735016,
+                  "observed_frequency": 0.026442307692307692
+                },
+                {
+                  "predicted_probability": 0.13635863029232487,
+                  "observed_frequency": 0.125
+                },
+                {
+                  "predicted_probability": 0.23740394716102128,
+                  "observed_frequency": 0.2
+                },
+                {
+                  "predicted_probability": 0.3458774347771385,
+                  "observed_frequency": 0.1875
+                },
+                {
+                  "predicted_probability": 0.43104205892562963,
+                  "observed_frequency": 0.1111111111111111
+                },
+                {
+                  "predicted_probability": 0.5328878641252625,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.637347137949746,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 21,
+              "brier_score": 0.05122067861362517,
+              "roc_auc": 0.801826484018265,
+              "average_precision": 0.18612576931981892,
+              "threat_score": 0.03225806451612903,
+              "heidke_skill_score": 0.05595625872498837,
+              "reliability": [
+                {
+                  "predicted_probability": 0.043637239076784795,
+                  "observed_frequency": 0.021739130434782608
+                },
+                {
+                  "predicted_probability": 0.13864688789670074,
+                  "observed_frequency": 0.1518987341772152
+                },
+                {
+                  "predicted_probability": 0.25512588550776655,
+                  "observed_frequency": 0.16666666666666666
+                },
+                {
+                  "predicted_probability": 0.3519818335869703,
+                  "observed_frequency": 0.15384615384615385
+                },
+                {
+                  "predicted_probability": 0.43577395404440145,
+                  "observed_frequency": 0.2222222222222222
+                },
+                {
+                  "predicted_probability": 0.5180302137305934,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.6986772551262619,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 22,
+              "brier_score": 0.049451005500219046,
+              "roc_auc": 0.821764705882353,
+              "average_precision": 0.21871839945033342,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.04898114262594514,
+                  "observed_frequency": 0.017412935323383085
+                },
+                {
+                  "predicted_probability": 0.13884200122829607,
+                  "observed_frequency": 0.1595744680851064
+                },
+                {
+                  "predicted_probability": 0.2407597405143326,
+                  "observed_frequency": 0.16
+                },
+                {
+                  "predicted_probability": 0.35058984909625235,
+                  "observed_frequency": 0.17647058823529413
+                },
+                {
+                  "predicted_probability": 0.4476019691051245,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 23,
+              "brier_score": 0.049578929780810826,
+              "roc_auc": 0.8243741765480896,
+              "average_precision": 0.22247486572162714,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.04917745173945046,
+                  "observed_frequency": 0.019851116625310174
+                },
+                {
+                  "predicted_probability": 0.14009736429204298,
+                  "observed_frequency": 0.15384615384615385
+                },
+                {
+                  "predicted_probability": 0.24000400638642408,
+                  "observed_frequency": 0.18181818181818182
+                },
+                {
+                  "predicted_probability": 0.34724607638972194,
+                  "observed_frequency": 0.17647058823529413
+                },
+                {
+                  "predicted_probability": 0.45150740949269236,
+                  "observed_frequency": 0.3333333333333333
+                }
+              ]
+            },
+            {
+              "lead_hours": 24,
+              "brier_score": 0.05000024034850245,
+              "roc_auc": 0.8058708414872798,
+              "average_precision": 0.1875761767525568,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.049080910761842844,
+                  "observed_frequency": 0.025
+                },
+                {
+                  "predicted_probability": 0.13832518556976825,
+                  "observed_frequency": 0.13043478260869565
+                },
+                {
+                  "predicted_probability": 0.23644134526010063,
+                  "observed_frequency": 0.17647058823529413
+                },
+                {
+                  "predicted_probability": 0.34961861629066127,
+                  "observed_frequency": 0.07692307692307693
+                },
+                {
+                  "predicted_probability": 0.4632585513115986,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 25,
+              "brier_score": 0.05233040581092653,
+              "roc_auc": 0.8085430001901261,
+              "average_precision": 0.18143729019306082,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.055469524451822357,
+                  "observed_frequency": 0.013368983957219251
+                },
+                {
+                  "predicted_probability": 0.14176729469393481,
+                  "observed_frequency": 0.1504424778761062
+                },
+                {
+                  "predicted_probability": 0.2446249642114163,
+                  "observed_frequency": 0.1891891891891892
+                },
+                {
+                  "predicted_probability": 0.3596875828155776,
+                  "observed_frequency": 0.08333333333333333
+                },
+                {
+                  "predicted_probability": 0.4089829037691082,
+                  "observed_frequency": 0.25
+                }
+              ]
+            },
+            {
+              "lead_hours": 26,
+              "brier_score": 0.05258974471966194,
+              "roc_auc": 0.8091983391887576,
+              "average_precision": 0.17737645178035155,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.05531293347783929,
+                  "observed_frequency": 0.0160857908847185
+                },
+                {
+                  "predicted_probability": 0.14115444901055285,
+                  "observed_frequency": 0.15315315315315314
+                },
+                {
+                  "predicted_probability": 0.2439926368356187,
+                  "observed_frequency": 0.11764705882352941
+                },
+                {
+                  "predicted_probability": 0.3561308979072516,
+                  "observed_frequency": 0.26666666666666666
+                },
+                {
+                  "predicted_probability": 0.434961659532691,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 27,
+              "brier_score": 0.05228887941119899,
+              "roc_auc": 0.8027197975964578,
+              "average_precision": 0.18463680388130663,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.05570871545884344,
+                  "observed_frequency": 0.01891891891891892
+                },
+                {
+                  "predicted_probability": 0.14139101378319446,
+                  "observed_frequency": 0.13333333333333333
+                },
+                {
+                  "predicted_probability": 0.24780992124459655,
+                  "observed_frequency": 0.17142857142857143
+                },
+                {
+                  "predicted_probability": 0.35662777833184955,
+                  "observed_frequency": 0.07142857142857142
+                },
+                {
+                  "predicted_probability": 0.4540670804978658,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 28,
+              "brier_score": 0.05184859804617587,
+              "roc_auc": 0.8041700994993346,
+              "average_precision": 0.20298880285917276,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.05854835394016363,
+                  "observed_frequency": 0.01871657754010695
+                },
+                {
+                  "predicted_probability": 0.14339331456453597,
+                  "observed_frequency": 0.1206896551724138
+                },
+                {
+                  "predicted_probability": 0.243671262413851,
+                  "observed_frequency": 0.22857142857142856
+                },
+                {
+                  "predicted_probability": 0.3454415813493393,
+                  "observed_frequency": 0.07142857142857142
+                },
+                {
+                  "predicted_probability": 0.40298506369522075,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 29,
+              "brier_score": 0.05109866643808335,
+              "roc_auc": 0.7957839262187089,
+              "average_precision": 0.18320129695087747,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.05839786361434923,
+                  "observed_frequency": 0.01871657754010695
+                },
+                {
+                  "predicted_probability": 0.14275979826050483,
+                  "observed_frequency": 0.13513513513513514
+                },
+                {
+                  "predicted_probability": 0.24164274028747143,
+                  "observed_frequency": 0.17142857142857143
+                },
+                {
+                  "predicted_probability": 0.34173041884739414,
+                  "observed_frequency": 0.13333333333333333
+                },
+                {
+                  "predicted_probability": 0.4298780436748268,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 30,
+              "brier_score": 0.05204701294511833,
+              "roc_auc": 0.794876660341556,
+              "average_precision": 0.1824279973345805,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.058854859365292486,
+                  "observed_frequency": 0.018867924528301886
+                },
+                {
+                  "predicted_probability": 0.141407879953844,
+                  "observed_frequency": 0.10084033613445378
+                },
+                {
+                  "predicted_probability": 0.2457356157149021,
+                  "observed_frequency": 0.2972972972972973
+                },
+                {
+                  "predicted_probability": 0.33582077850300684,
+                  "observed_frequency": 0.07692307692307693
+                },
+                {
+                  "predicted_probability": 0.4529165028322993,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 31,
+              "brier_score": 0.0517940759189668,
+              "roc_auc": 0.7910513974269598,
+              "average_precision": 0.20089962216076201,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.058971708632436136,
+                  "observed_frequency": 0.0213903743315508
+                },
+                {
+                  "predicted_probability": 0.14478421777030667,
+                  "observed_frequency": 0.1016949152542373
+                },
+                {
+                  "predicted_probability": 0.24242646390599798,
+                  "observed_frequency": 0.2727272727272727
+                },
+                {
+                  "predicted_probability": 0.3337188342268021,
+                  "observed_frequency": 0.07142857142857142
+                },
+                {
+                  "predicted_probability": 0.42712644243395737,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 32,
+              "brier_score": 0.05087474456538543,
+              "roc_auc": 0.7841897233201582,
+              "average_precision": 0.19662859684422837,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.058952300099945745,
+                  "observed_frequency": 0.021447721179624665
+                },
+                {
+                  "predicted_probability": 0.14314250922059338,
+                  "observed_frequency": 0.10526315789473684
+                },
+                {
+                  "predicted_probability": 0.24485997562536777,
+                  "observed_frequency": 0.2571428571428571
+                },
+                {
+                  "predicted_probability": 0.3263497786033821,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.4268025284019844,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 33,
+              "brier_score": 0.05192002980689549,
+              "roc_auc": 0.7902593295382668,
+              "average_precision": 0.18595168720025781,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.059294168630963796,
+                  "observed_frequency": 0.021621621621621623
+                },
+                {
+                  "predicted_probability": 0.14284454830756352,
+                  "observed_frequency": 0.0975609756097561
+                },
+                {
+                  "predicted_probability": 0.24617390004856574,
+                  "observed_frequency": 0.2571428571428571
+                },
+                {
+                  "predicted_probability": 0.33041908424103783,
+                  "observed_frequency": 0.09090909090909091
+                },
+                {
+                  "predicted_probability": 0.4263011472309802,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 34,
+              "brier_score": 0.05144743137873641,
+              "roc_auc": 0.7937765384371633,
+              "average_precision": 0.2139945513647475,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06084608041543022,
+                  "observed_frequency": 0.024324324324324326
+                },
+                {
+                  "predicted_probability": 0.14378200802741006,
+                  "observed_frequency": 0.08943089430894309
+                },
+                {
+                  "predicted_probability": 0.24472976577850866,
+                  "observed_frequency": 0.2564102564102564
+                },
+                {
+                  "predicted_probability": 0.3308038113827129,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.4130429586760321,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 35,
+              "brier_score": 0.052316461097712236,
+              "roc_auc": 0.7904822740338551,
+              "average_precision": 0.19652164870215078,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.060897045472578105,
+                  "observed_frequency": 0.021621621621621623
+                },
+                {
+                  "predicted_probability": 0.14430580341753568,
+                  "observed_frequency": 0.09243697478991597
+                },
+                {
+                  "predicted_probability": 0.24467364065881342,
+                  "observed_frequency": 0.28205128205128205
+                },
+                {
+                  "predicted_probability": 0.3298460797144299,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.40487289723079123,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 36,
+              "brier_score": 0.05175723083663354,
+              "roc_auc": 0.7771689497716895,
+              "average_precision": 0.15479742329812324,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06140622766615086,
+                  "observed_frequency": 0.02185792349726776
+                },
+                {
+                  "predicted_probability": 0.14014111190902306,
+                  "observed_frequency": 0.10483870967741936
+                },
+                {
+                  "predicted_probability": 0.2387223976887076,
+                  "observed_frequency": 0.19047619047619047
+                },
+                {
+                  "predicted_probability": 0.3378825760919423,
+                  "observed_frequency": 0.125
+                },
+                {
+                  "predicted_probability": 0.41756540111538004,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 37,
+              "brier_score": 0.05163817734017159,
+              "roc_auc": 0.8096732026143791,
+              "average_precision": 0.164575942366744,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06405157028379989,
+                  "observed_frequency": 0.014367816091954023
+                },
+                {
+                  "predicted_probability": 0.14136895606682137,
+                  "observed_frequency": 0.09859154929577464
+                },
+                {
+                  "predicted_probability": 0.2436729805858059,
+                  "observed_frequency": 0.24390243902439024
+                },
+                {
+                  "predicted_probability": 0.3213863507195423,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.4152907083680573,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 38,
+              "brier_score": 0.05383482090874202,
+              "roc_auc": 0.7862024912168637,
+              "average_precision": 0.15157463037705207,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06357888066222035,
+                  "observed_frequency": 0.017391304347826087
+                },
+                {
+                  "predicted_probability": 0.1402106138200761,
+                  "observed_frequency": 0.11428571428571428
+                },
+                {
+                  "predicted_probability": 0.2409169996744957,
+                  "observed_frequency": 0.2
+                },
+                {
+                  "predicted_probability": 0.31827072971097203,
+                  "observed_frequency": 0.1111111111111111
+                },
+                {
+                  "predicted_probability": 0.40780122688576637,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 39,
+              "brier_score": 0.053784275311672215,
+              "roc_auc": 0.7796331435800127,
+              "average_precision": 0.15126981540812806,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06392293565341466,
+                  "observed_frequency": 0.014792899408284023
+                },
+                {
+                  "predicted_probability": 0.13990061397471373,
+                  "observed_frequency": 0.09615384615384616
+                },
+                {
+                  "predicted_probability": 0.24338182955475907,
+                  "observed_frequency": 0.3142857142857143
+                },
+                {
+                  "predicted_probability": 0.33695222256351326,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 40,
+              "brier_score": 0.053480764242006935,
+              "roc_auc": 0.7802775841308067,
+              "average_precision": 0.15248147371226314,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06331933272387581,
+                  "observed_frequency": 0.014925373134328358
+                },
+                {
+                  "predicted_probability": 0.13805834491217703,
+                  "observed_frequency": 0.11320754716981132
+                },
+                {
+                  "predicted_probability": 0.24549387229522393,
+                  "observed_frequency": 0.2222222222222222
+                },
+                {
+                  "predicted_probability": 0.32469311939231255,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.4081578348662444,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 41,
+              "brier_score": 0.05303172529456484,
+              "roc_auc": 0.7702898550724637,
+              "average_precision": 0.13763703386390486,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0637829642251954,
+                  "observed_frequency": 0.01749271137026239
+                },
+                {
+                  "predicted_probability": 0.14025202354685606,
+                  "observed_frequency": 0.11564625850340136
+                },
+                {
+                  "predicted_probability": 0.24379877709300546,
+                  "observed_frequency": 0.19444444444444445
+                },
+                {
+                  "predicted_probability": 0.33442852094810377,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 42,
+              "brier_score": 0.05283493234640675,
+              "roc_auc": 0.778016960208741,
+              "average_precision": 0.13840873504192183,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06446163367515698,
+                  "observed_frequency": 0.01775147928994083
+                },
+                {
+                  "predicted_probability": 0.13818124607497556,
+                  "observed_frequency": 0.09868421052631579
+                },
+                {
+                  "predicted_probability": 0.23580983787205184,
+                  "observed_frequency": 0.23076923076923078
+                },
+                {
+                  "predicted_probability": 0.3285337288064006,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 43,
+              "brier_score": 0.052875343543304254,
+              "roc_auc": 0.7747712418300653,
+              "average_precision": 0.13364268061466422,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06343922009422147,
+                  "observed_frequency": 0.015151515151515152
+                },
+                {
+                  "predicted_probability": 0.1365215926277195,
+                  "observed_frequency": 0.11585365853658537
+                },
+                {
+                  "predicted_probability": 0.2462806573991658,
+                  "observed_frequency": 0.17142857142857143
+                },
+                {
+                  "predicted_probability": 0.3258800654946107,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 44,
+              "brier_score": 0.05222509510958291,
+              "roc_auc": 0.7627014894919405,
+              "average_precision": 0.1253661964354108,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06379186791148714,
+                  "observed_frequency": 0.023809523809523808
+                },
+                {
+                  "predicted_probability": 0.13954686199603283,
+                  "observed_frequency": 0.09554140127388536
+                },
+                {
+                  "predicted_probability": 0.2468595108569249,
+                  "observed_frequency": 0.18181818181818182
+                },
+                {
+                  "predicted_probability": 0.3327332711891903,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 45,
+              "brier_score": 0.05304832742581408,
+              "roc_auc": 0.77058056099152,
+              "average_precision": 0.1296119986421127,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06375663198808013,
+                  "observed_frequency": 0.018292682926829267
+                },
+                {
+                  "predicted_probability": 0.1367070759887267,
+                  "observed_frequency": 0.10909090909090909
+                },
+                {
+                  "predicted_probability": 0.23852344071570342,
+                  "observed_frequency": 0.15789473684210525
+                },
+                {
+                  "predicted_probability": 0.3218828025372918,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 46,
+              "brier_score": 0.053003339526662335,
+              "roc_auc": 0.7669934640522875,
+              "average_precision": 0.13016640176611602,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06345201866432595,
+                  "observed_frequency": 0.018292682926829267
+                },
+                {
+                  "predicted_probability": 0.1383407213275226,
+                  "observed_frequency": 0.10119047619047619
+                },
+                {
+                  "predicted_probability": 0.2452263973525401,
+                  "observed_frequency": 0.17142857142857143
+                },
+                {
+                  "predicted_probability": 0.32400170048844656,
+                  "observed_frequency": 0.1111111111111111
+                }
+              ]
+            },
+            {
+              "lead_hours": 47,
+              "brier_score": 0.05502626896114519,
+              "roc_auc": 0.7491536250399233,
+              "average_precision": 0.1283598772760167,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06299742013879552,
+                  "observed_frequency": 0.021406727828746176
+                },
+                {
+                  "predicted_probability": 0.13798096868706836,
+                  "observed_frequency": 0.0975609756097561
+                },
+                {
+                  "predicted_probability": 0.24083418302902976,
+                  "observed_frequency": 0.19444444444444445
+                },
+                {
+                  "predicted_probability": 0.32868790011143517,
+                  "observed_frequency": 0.1111111111111111
+                }
+              ]
+            },
+            {
+              "lead_hours": 48,
+              "brier_score": 0.055081867632729056,
+              "roc_auc": 0.7383301707779886,
+              "average_precision": 0.11715612367998408,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.06338415292540346,
+                  "observed_frequency": 0.021604938271604937
+                },
+                {
+                  "predicted_probability": 0.1393571887678829,
+                  "observed_frequency": 0.10919540229885058
+                },
+                {
+                  "predicted_probability": 0.23824943876806456,
+                  "observed_frequency": 0.13513513513513514
+                },
+                {
+                  "predicted_probability": 0.32673999932616016,
+                  "observed_frequency": 0.0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "threshold": 5,
+          "operator": "gte",
+          "by_lead_hour": [
+            {
+              "lead_hours": 1,
+              "brier_score": 0.013136189886637641,
+              "roc_auc": 0.9508265327474367,
+              "average_precision": 0.4111704051744702,
+              "threat_score": 0.1,
+              "heidke_skill_score": 0.17682926829268292,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01146156424584832,
+                  "observed_frequency": 0.0056925996204933585
+                },
+                {
+                  "predicted_probability": 0.1467746258176502,
+                  "observed_frequency": 0.8
+                },
+                {
+                  "predicted_probability": 0.24434138847275486,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.39317483247786655,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.6704124407232823,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 2,
+              "brier_score": 0.012233206721862615,
+              "roc_auc": 0.9460227272727273,
+              "average_precision": 0.3337578866169292,
+              "threat_score": 0.1111111111111111,
+              "heidke_skill_score": 0.19519519519519518,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01077662355249895,
+                  "observed_frequency": 0.0057692307692307696
+                },
+                {
+                  "predicted_probability": 0.14703232027263047,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.24129554611404627,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.6235000503800379,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.776285809907103,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 3,
+              "brier_score": 0.013258742492710826,
+              "roc_auc": 0.9418386491557222,
+              "average_precision": 0.22434994535978173,
+              "threat_score": 0.1111111111111111,
+              "heidke_skill_score": 0.19523986612123467,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01133641940202216,
+                  "observed_frequency": 0.009487666034155597
+                },
+                {
+                  "predicted_probability": 0.12854485646611852,
+                  "observed_frequency": 0.14285714285714285
+                },
+                {
+                  "predicted_probability": 0.22580196887210058,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.3302660469529053,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.448603359503173,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.6427605916655529,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 4,
+              "brier_score": 0.013730005180619885,
+              "roc_auc": 0.9170582706766918,
+              "average_precision": 0.21265603805240235,
+              "threat_score": 0.0,
+              "heidke_skill_score": -0.005961251862891207,
+              "reliability": [
+                {
+                  "predicted_probability": 0.014447889992510336,
+                  "observed_frequency": 0.009578544061302681
+                },
+                {
+                  "predicted_probability": 0.1254146560052522,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.24631361047319855,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.3000441483936914,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.4314112479326542,
+                  "observed_frequency": 1.0
+                },
+                {
+                  "predicted_probability": 0.6408993664386557,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 5,
+              "brier_score": 0.015714007385315622,
+              "roc_auc": 0.931056293485136,
+              "average_precision": 0.22800434893935317,
+              "threat_score": 0.0,
+              "heidke_skill_score": -0.0061433447098976105,
+              "reliability": [
+                {
+                  "predicted_probability": 0.015054002735759459,
+                  "observed_frequency": 0.009633911368015413
+                },
+                {
+                  "predicted_probability": 0.14155736029183266,
+                  "observed_frequency": 0.1
+                },
+                {
+                  "predicted_probability": 0.23236489802336938,
+                  "observed_frequency": 0.6
+                },
+                {
+                  "predicted_probability": 0.5531920179891205,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.6908393540380158,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 6,
+              "brier_score": 0.015963130195974513,
+              "roc_auc": 0.9306599832915623,
+              "average_precision": 0.1717759872075315,
+              "threat_score": 0.0,
+              "heidke_skill_score": -0.006086221470836856,
+              "reliability": [
+                {
+                  "predicted_probability": 0.015328284136370426,
+                  "observed_frequency": 0.011428571428571429
+                },
+                {
+                  "predicted_probability": 0.12986077518781405,
+                  "observed_frequency": 0.1111111111111111
+                },
+                {
+                  "predicted_probability": 0.24970498754853446,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.32152960046326573,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.5699839609313625,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.6149902908060764,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 7,
+              "brier_score": 0.016518010814446267,
+              "roc_auc": 0.9016530654948733,
+              "average_precision": 0.138053944774791,
+              "threat_score": 0.0,
+              "heidke_skill_score": -0.006097560975609756,
+              "reliability": [
+                {
+                  "predicted_probability": 0.017136468725429455,
+                  "observed_frequency": 0.013307984790874524
+                },
+                {
+                  "predicted_probability": 0.14074788721296,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.2450070185498687,
+                  "observed_frequency": 0.3333333333333333
+                },
+                {
+                  "predicted_probability": 0.39523941016546965,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.5291322640950014,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.6008258396240489,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 8,
+              "brier_score": 0.016226446120787264,
+              "roc_auc": 0.9055450137044064,
+              "average_precision": 0.14540470811473336,
+              "threat_score": 0.0,
+              "heidke_skill_score": -0.0033695245226506927,
+              "reliability": [
+                {
+                  "predicted_probability": 0.017434039425784635,
+                  "observed_frequency": 0.013435700575815739
+                },
+                {
+                  "predicted_probability": 0.15135179379888852,
+                  "observed_frequency": 0.09090909090909091
+                },
+                {
+                  "predicted_probability": 0.22626236481317538,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.3578413771660292,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.5759635613334018,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 9,
+              "brier_score": 0.01636886982497855,
+              "roc_auc": 0.8922305764411028,
+              "average_precision": 0.10787186476475234,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.017635955114045365,
+                  "observed_frequency": 0.013307984790874524
+                },
+                {
+                  "predicted_probability": 0.1366404460442065,
+                  "observed_frequency": 0.1
+                },
+                {
+                  "predicted_probability": 0.24856481987671059,
+                  "observed_frequency": 0.5
+                },
+                {
+                  "predicted_probability": 0.347585693304702,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.4702696765048375,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 10,
+              "brier_score": 0.016323501946129585,
+              "roc_auc": 0.8725674827369743,
+              "average_precision": 0.10231158763493861,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01791054418281847,
+                  "observed_frequency": 0.013282732447817837
+                },
+                {
+                  "predicted_probability": 0.15286500205910358,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.25125186293711105,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.3910030156272867,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.4114796887468584,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 11,
+              "brier_score": 0.015846038487147236,
+              "roc_auc": 0.8812987560615645,
+              "average_precision": 0.12077289450719413,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01779464968857677,
+                  "observed_frequency": 0.013409961685823755
+                },
+                {
+                  "predicted_probability": 0.1472103578904379,
+                  "observed_frequency": 0.16666666666666666
+                },
+                {
+                  "predicted_probability": 0.2422357625227044,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 12,
+              "brier_score": 0.01596359681147814,
+              "roc_auc": 0.8473266499582289,
+              "average_precision": 0.0948927311531454,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.018124363888320543,
+                  "observed_frequency": 0.013257575757575758
+                },
+                {
+                  "predicted_probability": 0.13306150644002895,
+                  "observed_frequency": 0.125
+                },
+                {
+                  "predicted_probability": 0.21373054004998998,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.3265132966159032,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 13,
+              "brier_score": 0.014363201592426265,
+              "roc_auc": 0.8646616541353384,
+              "average_precision": 0.0992740185414236,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.023362328474130258,
+                  "observed_frequency": 0.011538461538461539
+                },
+                {
+                  "predicted_probability": 0.13355611616325053,
+                  "observed_frequency": 0.07142857142857142
+                },
+                {
+                  "predicted_probability": 0.252144393730595,
+                  "observed_frequency": 0.16666666666666666
+                }
+              ]
+            },
+            {
+              "lead_hours": 14,
+              "brier_score": 0.014579652155163192,
+              "roc_auc": 0.8738162878787878,
+              "average_precision": 0.10187363081813836,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.023090690644651597,
+                  "observed_frequency": 0.011673151750972763
+                },
+                {
+                  "predicted_probability": 0.13264488292329965,
+                  "observed_frequency": 0.058823529411764705
+                },
+                {
+                  "predicted_probability": 0.24060886075051707,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.3392611405355704,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 15,
+              "brier_score": 0.016290433832823383,
+              "roc_auc": 0.8404344193817879,
+              "average_precision": 0.09563792250378472,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.02367754352489224,
+                  "observed_frequency": 0.013409961685823755
+                },
+                {
+                  "predicted_probability": 0.14277218283099438,
+                  "observed_frequency": 0.07142857142857142
+                },
+                {
+                  "predicted_probability": 0.26469218026391184,
+                  "observed_frequency": 0.25
+                },
+                {
+                  "predicted_probability": 0.4021720400432111,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 16,
+              "brier_score": 0.015834260419455008,
+              "roc_auc": 0.8644067796610169,
+              "average_precision": 0.1805715296098978,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.025033416601117183,
+                  "observed_frequency": 0.015209125475285171
+                },
+                {
+                  "predicted_probability": 0.13407139891854714,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.20043469740433942,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 17,
+              "brier_score": 0.01593903028462973,
+              "roc_auc": 0.8737086232342399,
+              "average_precision": 0.13133996382758265,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0250277486923613,
+                  "observed_frequency": 0.01532567049808429
+                },
+                {
+                  "predicted_probability": 0.13069217885630716,
+                  "observed_frequency": 0.07692307692307693
+                },
+                {
+                  "predicted_probability": 0.2376794724420463,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 18,
+              "brier_score": 0.016030595607318458,
+              "roc_auc": 0.8450292397660819,
+              "average_precision": 0.11420964712955066,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.02497877734604746,
+                  "observed_frequency": 0.015209125475285171
+                },
+                {
+                  "predicted_probability": 0.13120041478585087,
+                  "observed_frequency": 0.07142857142857142
+                },
+                {
+                  "predicted_probability": 0.27692143863238194,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 19,
+              "brier_score": 0.014427518799842371,
+              "roc_auc": 0.8282424812030076,
+              "average_precision": 0.16563100118140037,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.024432316348351135,
+                  "observed_frequency": 0.013409961685823755
+                },
+                {
+                  "predicted_probability": 0.12490238390541031,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.2140228250099019,
+                  "observed_frequency": 1.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 20,
+              "brier_score": 0.014602797694585747,
+              "roc_auc": 0.8075284090909091,
+              "average_precision": 0.10332766108036595,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0246783539440366,
+                  "observed_frequency": 0.013461538461538462
+                },
+                {
+                  "predicted_probability": 0.1223894620309905,
+                  "observed_frequency": 0.0
+                },
+                {
+                  "predicted_probability": 0.22176085382243976,
+                  "observed_frequency": 0.5
+                }
+              ]
+            },
+            {
+              "lead_hours": 21,
+              "brier_score": 0.016147662281879242,
+              "roc_auc": 0.8276942355889725,
+              "average_precision": 0.11040625349100941,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.025140310416594702,
+                  "observed_frequency": 0.015180265654648957
+                },
+                {
+                  "predicted_probability": 0.13011388229187854,
+                  "observed_frequency": 0.07692307692307693
+                },
+                {
+                  "predicted_probability": 0.2968058844874925,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 22,
+              "brier_score": 0.015826843939942114,
+              "roc_auc": 0.8459928855409081,
+              "average_precision": 0.18370696973945122,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.026007933512718302,
+                  "observed_frequency": 0.013207547169811321
+                },
+                {
+                  "predicted_probability": 0.11630799402152321,
+                  "observed_frequency": 0.2
+                }
+              ]
+            },
+            {
+              "lead_hours": 23,
+              "brier_score": 0.015912623774402734,
+              "roc_auc": 0.8416613957410921,
+              "average_precision": 0.20707105198567266,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.025653293270538887,
+                  "observed_frequency": 0.013358778625954198
+                },
+                {
+                  "predicted_probability": 0.11661410746333971,
+                  "observed_frequency": 0.16666666666666666
+                }
+              ]
+            },
+            {
+              "lead_hours": 24,
+              "brier_score": 0.015815828092429107,
+              "roc_auc": 0.8464912280701755,
+              "average_precision": 0.1280640233645793,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.026494385610561375,
+                  "observed_frequency": 0.0149812734082397
+                },
+                {
+                  "predicted_probability": 0.11967729299356898,
+                  "observed_frequency": 0.14285714285714285
+                }
+              ]
+            },
+            {
+              "lead_hours": 25,
+              "brier_score": 0.015974577789424068,
+              "roc_auc": 0.882402176187487,
+              "average_precision": 0.13956422230433904,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03172769363642125,
+                  "observed_frequency": 0.015267175572519083
+                },
+                {
+                  "predicted_probability": 0.1163327013693139,
+                  "observed_frequency": 0.0625
+                }
+              ]
+            },
+            {
+              "lead_hours": 26,
+              "brier_score": 0.0160029089621248,
+              "roc_auc": 0.8985873919460258,
+              "average_precision": 0.14245346567527384,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03140063663187292,
+                  "observed_frequency": 0.013513513513513514
+                },
+                {
+                  "predicted_probability": 0.11717169023259065,
+                  "observed_frequency": 0.1111111111111111
+                }
+              ]
+            },
+            {
+              "lead_hours": 27,
+              "brier_score": 0.01590762561785295,
+              "roc_auc": 0.9018379281537177,
+              "average_precision": 0.14310454053006508,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03202393590825725,
+                  "observed_frequency": 0.015209125475285171
+                },
+                {
+                  "predicted_probability": 0.11794666489218203,
+                  "observed_frequency": 0.06666666666666667
+                }
+              ]
+            },
+            {
+              "lead_hours": 28,
+              "brier_score": 0.01606099542830067,
+              "roc_auc": 0.883448420171584,
+              "average_precision": 0.09492651344286686,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.032636690887104934,
+                  "observed_frequency": 0.015209125475285171
+                },
+                {
+                  "predicted_probability": 0.114864374088686,
+                  "observed_frequency": 0.07142857142857142
+                }
+              ]
+            },
+            {
+              "lead_hours": 29,
+              "brier_score": 0.01625214506154386,
+              "roc_auc": 0.8555766392578537,
+              "average_precision": 0.08774748120030666,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03268964501694619,
+                  "observed_frequency": 0.015296367112810707
+                },
+                {
+                  "predicted_probability": 0.11599176789307643,
+                  "observed_frequency": 0.07692307692307693
+                }
+              ]
+            },
+            {
+              "lead_hours": 30,
+              "brier_score": 0.016247390170908378,
+              "roc_auc": 0.8427318295739348,
+              "average_precision": 0.07304913337127199,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.033007514655454984,
+                  "observed_frequency": 0.017013232514177693
+                },
+                {
+                  "predicted_probability": 0.11494857777603884,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 31,
+              "brier_score": 0.0162941745890877,
+              "roc_auc": 0.810420590081607,
+              "average_precision": 0.075257405542039,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.033235078616234426,
+                  "observed_frequency": 0.016981132075471698
+                },
+                {
+                  "predicted_probability": 0.11561030241127601,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 32,
+              "brier_score": 0.0164148204058139,
+              "roc_auc": 0.7992831541218637,
+              "average_precision": 0.0771135135170223,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.033361308867296505,
+                  "observed_frequency": 0.017045454545454544
+                },
+                {
+                  "predicted_probability": 0.11803355581422711,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 33,
+              "brier_score": 0.016272105323456083,
+              "roc_auc": 0.8095238095238094,
+              "average_precision": 0.075516766560139,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.033170665258897614,
+                  "observed_frequency": 0.01694915254237288
+                },
+                {
+                  "predicted_probability": 0.12038505629219225,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 34,
+              "brier_score": 0.016272313730002142,
+              "roc_auc": 0.8005858966310944,
+              "average_precision": 0.08110040823875267,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0338131236799277,
+                  "observed_frequency": 0.016917293233082706
+                },
+                {
+                  "predicted_probability": 0.11691499707035843,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 35,
+              "brier_score": 0.016448976711652567,
+              "roc_auc": 0.7904279991566519,
+              "average_precision": 0.07327794787769557,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03378069549704848,
+                  "observed_frequency": 0.017045454545454544
+                },
+                {
+                  "predicted_probability": 0.11438997244002283,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 36,
+              "brier_score": 0.016459881650443268,
+              "roc_auc": 0.7667084377610693,
+              "average_precision": 0.05923900461164127,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03355552165314329,
+                  "observed_frequency": 0.016981132075471698
+                },
+                {
+                  "predicted_probability": 0.11685074185153654,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 37,
+              "brier_score": 0.016574106443779223,
+              "roc_auc": 0.7706633186859175,
+              "average_precision": 0.06710988032393485,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03656962295622817,
+                  "observed_frequency": 0.015209125475285171
+                },
+                {
+                  "predicted_probability": 0.11631708552254984,
+                  "observed_frequency": 0.07142857142857142
+                }
+              ]
+            },
+            {
+              "lead_hours": 38,
+              "brier_score": 0.016775573985906227,
+              "roc_auc": 0.7649167193759224,
+              "average_precision": 0.061227050144688135,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.036714160287532153,
+                  "observed_frequency": 0.01717557251908397
+                },
+                {
+                  "predicted_probability": 0.11947246669673327,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 39,
+              "brier_score": 0.016642454048899,
+              "roc_auc": 0.7936507936507936,
+              "average_precision": 0.059535863428439015,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03657260159313874,
+                  "observed_frequency": 0.017110266159695818
+                },
+                {
+                  "predicted_probability": 0.11836418879666195,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 40,
+              "brier_score": 0.016665042270771837,
+              "roc_auc": 0.817953546767106,
+              "average_precision": 0.05400205983203072,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.036700866688873804,
+                  "observed_frequency": 0.017045454545454544
+                },
+                {
+                  "predicted_probability": 0.11763072372232487,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 41,
+              "brier_score": 0.0168459581711298,
+              "roc_auc": 0.7986506430529201,
+              "average_precision": 0.04787166714875347,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03674189421781758,
+                  "observed_frequency": 0.017110266159695818
+                },
+                {
+                  "predicted_probability": 0.12119087933307235,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 42,
+              "brier_score": 0.016790246064871443,
+              "roc_auc": 0.7608604845446951,
+              "average_precision": 0.04209602973040134,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03697674321367474,
+                  "observed_frequency": 0.016981132075471698
+                },
+                {
+                  "predicted_probability": 0.12003102690902544,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 43,
+              "brier_score": 0.01676455139601623,
+              "roc_auc": 0.771918811466834,
+              "average_precision": 0.0451144885467395,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.036660354852442366,
+                  "observed_frequency": 0.015180265654648957
+                },
+                {
+                  "predicted_probability": 0.11394770439575293,
+                  "observed_frequency": 0.07692307692307693
+                }
+              ]
+            },
+            {
+              "lead_hours": 44,
+              "brier_score": 0.016939152169719182,
+              "roc_auc": 0.7269660552393,
+              "average_precision": 0.04359550874508305,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0368772508479276,
+                  "observed_frequency": 0.015209125475285171
+                },
+                {
+                  "predicted_probability": 0.11902741453509477,
+                  "observed_frequency": 0.1
+                }
+              ]
+            },
+            {
+              "lead_hours": 45,
+              "brier_score": 0.016812837817554313,
+              "roc_auc": 0.7163742690058479,
+              "average_precision": 0.03931811218327291,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03705716522910365,
+                  "observed_frequency": 0.01694915254237288
+                },
+                {
+                  "predicted_probability": 0.11581140897693569,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 46,
+              "brier_score": 0.016832457394812626,
+              "roc_auc": 0.709353421217828,
+              "average_precision": 0.03982408023629914,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.03676284228401299,
+                  "observed_frequency": 0.015180265654648957
+                },
+                {
+                  "predicted_probability": 0.11057202444005367,
+                  "observed_frequency": 0.07692307692307693
+                }
+              ]
+            },
+            {
+              "lead_hours": 47,
+              "brier_score": 0.016959713866971385,
+              "roc_auc": 0.7191650853889943,
+              "average_precision": 0.04043572373644108,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.037012228524081155,
+                  "observed_frequency": 0.017110266159695818
+                },
+                {
+                  "predicted_probability": 0.1140794819822176,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 48,
+              "brier_score": 0.016736648243414844,
+              "roc_auc": 0.7644110275689222,
+              "average_precision": 0.04336511091269326,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.037609842385742547,
+                  "observed_frequency": 0.016822429906542057
+                },
+                {
+                  "predicted_probability": 0.11653773255024574,
+                  "observed_frequency": 0.0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "threshold": 6,
+          "operator": "gte",
+          "by_lead_hour": [
+            {
+              "lead_hours": 1,
+              "brier_score": 0.00361085337712223,
+              "roc_auc": 0.8838289962825279,
+              "average_precision": 0.17466666666666666,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0026982569993481715,
+                  "observed_frequency": 0.0037105751391465678
+                },
+                {
+                  "predicted_probability": 0.10522444725474968,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 2,
+              "brier_score": 0.0037086326083893505,
+              "roc_auc": 0.9129213483146068,
+              "average_precision": 0.09444444444444444,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0026804439208229242,
+                  "observed_frequency": 0.003738317757009346
+                },
+                {
+                  "predicted_probability": 0.15461882169412938,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 3,
+              "brier_score": 0.0037054945381449172,
+              "roc_auc": 0.8868274582560297,
+              "average_precision": 0.026767330130404943,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.002888388730864994,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 4,
+              "brier_score": 0.003744496353750973,
+              "roc_auc": 0.79182156133829,
+              "average_precision": 0.01319670858562335,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0038718912274174227,
+                  "observed_frequency": 0.0037174721189591076
+                },
+                {
+                  "predicted_probability": 0.10818830461666236,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 5,
+              "brier_score": 0.0037724827444836494,
+              "roc_auc": 0.8314606741573034,
+              "average_precision": 0.01602409638554217,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004138862895473368,
+                  "observed_frequency": 0.003738317757009346
+                },
+                {
+                  "predicted_probability": 0.14148056884904606,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 6,
+              "brier_score": 0.0037230785536367344,
+              "roc_auc": 0.8320964749536178,
+              "average_precision": 0.01592508648455207,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004352824078563406,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 7,
+              "brier_score": 0.0037331549651198987,
+              "roc_auc": 0.8364312267657993,
+              "average_precision": 0.01640683932612522,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004625565728358215,
+                  "observed_frequency": 0.0037105751391465678
+                },
+                {
+                  "predicted_probability": 0.10801236193678501,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 8,
+              "brier_score": 0.0037502328546449816,
+              "roc_auc": 0.8258426966292135,
+              "average_precision": 0.015522691352449762,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0045764873414934435,
+                  "observed_frequency": 0.003738317757009346
+                },
+                {
+                  "predicted_probability": 0.11445295726048828,
+                  "observed_frequency": 0.0
+                }
+              ]
+            },
+            {
+              "lead_hours": 9,
+              "brier_score": 0.003700704461995527,
+              "roc_auc": 0.8534322820037106,
+              "average_precision": 0.018131868131868133,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004736170827373375,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 10,
+              "brier_score": 0.003703307724996616,
+              "roc_auc": 0.8633828996282528,
+              "average_precision": 0.019836328055506138,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004715145086787267,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 11,
+              "brier_score": 0.0037195326413738536,
+              "roc_auc": 0.8305243445692884,
+              "average_precision": 0.015839300886029858,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004602012874761241,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 12,
+              "brier_score": 0.0036847754075173037,
+              "roc_auc": 0.8478664192949907,
+              "average_precision": 0.017487612940833577,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.004635092124475249,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 13,
+              "brier_score": 0.0037014459441165296,
+              "roc_auc": 0.8522304832713754,
+              "average_precision": 0.018160919540229886,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006803602637963832,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 14,
+              "brier_score": 0.0037275234664088924,
+              "roc_auc": 0.8717228464419475,
+              "average_precision": 0.020885028949545078,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0068449573929160335,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 15,
+              "brier_score": 0.003712855314709588,
+              "roc_auc": 0.7625231910946196,
+              "average_precision": 0.011400440471563675,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006906785015231615,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 16,
+              "brier_score": 0.00369844298818396,
+              "roc_auc": 0.8271375464684015,
+              "average_precision": 0.015420023014959722,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006844730408950075,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 17,
+              "brier_score": 0.0037223413322010207,
+              "roc_auc": 0.8473782771535581,
+              "average_precision": 0.018283519786274835,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006860746901464405,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 18,
+              "brier_score": 0.0037007340704377557,
+              "roc_auc": 0.7773654916512059,
+              "average_precision": 0.012266196801301164,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006901586224136196,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 19,
+              "brier_score": 0.0037028150243575944,
+              "roc_auc": 0.8066914498141264,
+              "average_precision": 0.01397907647907648,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006848753447953572,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 20,
+              "brier_score": 0.0037316821334731445,
+              "roc_auc": 0.799625468164794,
+              "average_precision": 0.013626298756600238,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006857674589858218,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 21,
+              "brier_score": 0.0036932844819896078,
+              "roc_auc": 0.8385899814471243,
+              "average_precision": 0.016662057522123894,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006908993097648982,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 22,
+              "brier_score": 0.0036893334102178926,
+              "roc_auc": 0.862453531598513,
+              "average_precision": 0.01950757575757576,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006831610330220101,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 23,
+              "brier_score": 0.0037129659547398153,
+              "roc_auc": 0.8754681647940075,
+              "average_precision": 0.02388888888888889,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006833869869878559,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 24,
+              "brier_score": 0.0036698353248172844,
+              "roc_auc": 0.922077922077922,
+              "average_precision": 0.03357380688124306,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.006867545786229883,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 25,
+              "brier_score": 0.00368675205578452,
+              "roc_auc": 0.9340148698884759,
+              "average_precision": 0.04267744833782569,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009299815265784453,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 26,
+              "brier_score": 0.003709172019236801,
+              "roc_auc": 0.9391385767790262,
+              "average_precision": 0.04290876242095754,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009317017792563005,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 27,
+              "brier_score": 0.0036739351096148707,
+              "roc_auc": 0.9471243042671613,
+              "average_precision": 0.04949944382647386,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009373156835233893,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 28,
+              "brier_score": 0.003683887397376755,
+              "roc_auc": 0.9423791821561338,
+              "average_precision": 0.045,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009467333512564137,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 29,
+              "brier_score": 0.0037059578783580813,
+              "roc_auc": 0.9503745318352059,
+              "average_precision": 0.05208333333333333,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009461109402450546,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 30,
+              "brier_score": 0.003675520521079058,
+              "roc_auc": 0.9461966604823748,
+              "average_precision": 0.04849137931034483,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009512947274957561,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 31,
+              "brier_score": 0.0036819667731313455,
+              "roc_auc": 0.9460966542750929,
+              "average_precision": 0.04805491990846682,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009464549828679003,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 32,
+              "brier_score": 0.003725056278577443,
+              "roc_auc": 0.8848314606741573,
+              "average_precision": 0.026263297872340427,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009441039863337695,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 33,
+              "brier_score": 0.003692193741921362,
+              "roc_auc": 0.8923933209647495,
+              "average_precision": 0.02749266862170088,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009502243891533233,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 34,
+              "brier_score": 0.003692804146173126,
+              "roc_auc": 0.9228624535315985,
+              "average_precision": 0.042483660130718956,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.0096759920093047,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 35,
+              "brier_score": 0.0037419405089099108,
+              "roc_auc": 0.853932584269663,
+              "average_precision": 0.018341952165481578,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009677854847204329,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 36,
+              "brier_score": 0.0037168922328364956,
+              "roc_auc": 0.8172541743970315,
+              "average_precision": 0.014571104932550717,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.009747762628771334,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 37,
+              "brier_score": 0.003736740995317994,
+              "roc_auc": 0.8578066914498141,
+              "average_precision": 0.01868686868686869,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011206349196243557,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 38,
+              "brier_score": 0.003765115833367247,
+              "roc_auc": 0.8408239700374531,
+              "average_precision": 0.01692155196828094,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011196106423874254,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 39,
+              "brier_score": 0.003742535864481216,
+              "roc_auc": 0.7755102040816326,
+              "average_precision": 0.012228441956550713,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011281787241019792,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 40,
+              "brier_score": 0.0037428058162765807,
+              "roc_auc": 0.7946096654275092,
+              "average_precision": 0.013015095879232965,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011166326411219,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 41,
+              "brier_score": 0.0037713589335461608,
+              "roc_auc": 0.7837078651685393,
+              "average_precision": 0.012566137566137565,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.01113638466717718,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 42,
+              "brier_score": 0.0037395973474406725,
+              "roc_auc": 0.7829313543599258,
+              "average_precision": 0.012544547398431933,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011233915744505607,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 43,
+              "brier_score": 0.0037451423297080056,
+              "roc_auc": 0.7788104089219331,
+              "average_precision": 0.012310344827586207,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011166128833000196,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 44,
+              "brier_score": 0.003773482774188253,
+              "roc_auc": 0.7696629213483146,
+              "average_precision": 0.011944731404958678,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011146249971107447,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 45,
+              "brier_score": 0.003738278032543189,
+              "roc_auc": 0.7847866419294991,
+              "average_precision": 0.012650427722198057,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011200060918554378,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            },
+            {
+              "lead_hours": 46,
+              "brier_score": 0.0037433828033570566,
+              "roc_auc": 0.775092936802974,
+              "average_precision": 0.012196747533990936,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011163991345517495,
+                  "observed_frequency": 0.003703703703703704
+                }
+              ]
+            },
+            {
+              "lead_hours": 47,
+              "brier_score": 0.0037726319740612997,
+              "roc_auc": 0.7565543071161048,
+              "average_precision": 0.011392551468887346,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011136289656325437,
+                  "observed_frequency": 0.0037313432835820895
+                }
+              ]
+            },
+            {
+              "lead_hours": 48,
+              "brier_score": 0.0037378279199947076,
+              "roc_auc": 0.7699443413729128,
+              "average_precision": 0.011800254452926208,
+              "threat_score": 0.0,
+              "heidke_skill_score": 0.0,
+              "reliability": [
+                {
+                  "predicted_probability": 0.011182883950832952,
+                  "observed_frequency": 0.0036968576709796672
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "ap": {
+      "continuous": {
+        "quantiles": [
+          0.1,
+          0.5,
+          0.9
+        ],
+        "by_lead_hour": [
+          {
+            "lead_hours": 1,
+            "values": {
+              "n": 540,
+              "mae": 3.8944444444444444,
+              "rmse": 9.696983112364457,
+              "bias": -1.9537037037037037,
+              "coverage_80": 0.9018518518518519,
+              "interval_width_80": 11.785185185185185,
+              "interval_score_80": 20.840740740740742,
+              "lower_tail": 0.03518518518518519,
+              "upper_tail": 0.06296296296296296,
+              "q10_pinball": 0.6812962962962963,
+              "q50_pinball": 1.9472222222222222,
+              "q90_pinball": 1.4027777777777775
+            }
+          },
+          {
+            "lead_hours": 2,
+            "values": {
+              "n": 536,
+              "mae": 3.9720149253731343,
+              "rmse": 9.947530256749925,
+              "bias": -1.9011194029850746,
+              "coverage_80": 0.8955223880597015,
+              "interval_width_80": 11.873134328358208,
+              "interval_score_80": 21.40671641791045,
+              "lower_tail": 0.03917910447761194,
+              "upper_tail": 0.06529850746268656,
+              "q10_pinball": 0.6764925373134328,
+              "q50_pinball": 1.9860074626865671,
+              "q90_pinball": 1.4641791044776118
+            }
+          },
+          {
+            "lead_hours": 3,
+            "values": {
+              "n": 541,
+              "mae": 4.2865064695009245,
+              "rmse": 10.471597003693534,
+              "bias": -1.9611829944547134,
+              "coverage_80": 0.8798521256931608,
+              "interval_width_80": 11.861367837338262,
+              "interval_score_80": 22.157116451016638,
+              "lower_tail": 0.04621072088724584,
+              "upper_tail": 0.07393715341959335,
+              "q10_pinball": 0.7012939001848428,
+              "q50_pinball": 2.1432532347504623,
+              "q90_pinball": 1.5144177449168206
+            }
+          },
+          {
+            "lead_hours": 4,
+            "values": {
+              "n": 540,
+              "mae": 4.390740740740741,
+              "rmse": 10.714216930996145,
+              "bias": -1.9907407407407407,
+              "coverage_80": 0.9074074074074074,
+              "interval_width_80": 13.053703703703704,
+              "interval_score_80": 23.072222222222223,
+              "lower_tail": 0.02962962962962963,
+              "upper_tail": 0.06296296296296296,
+              "q10_pinball": 0.7051851851851854,
+              "q50_pinball": 2.1953703703703704,
+              "q90_pinball": 1.602037037037037
+            }
+          },
+          {
+            "lead_hours": 5,
+            "values": {
+              "n": 536,
+              "mae": 4.494402985074627,
+              "rmse": 10.900756512156091,
+              "bias": -2.0279850746268657,
+              "coverage_80": 0.9029850746268657,
+              "interval_width_80": 13.281716417910447,
+              "interval_score_80": 23.33768656716418,
+              "lower_tail": 0.03731343283582089,
+              "upper_tail": 0.05970149253731343,
+              "q10_pinball": 0.7132462686567165,
+              "q50_pinball": 2.2472014925373136,
+              "q90_pinball": 1.6205223880597013
+            }
+          },
+          {
+            "lead_hours": 6,
+            "values": {
+              "n": 541,
+              "mae": 4.641404805914973,
+              "rmse": 11.149214804543673,
+              "bias": -2.020332717190388,
+              "coverage_80": 0.9001848428835489,
+              "interval_width_80": 13.255083179297596,
+              "interval_score_80": 24.068391866913124,
+              "lower_tail": 0.03512014787430684,
+              "upper_tail": 0.06469500924214418,
+              "q10_pinball": 0.7182994454713494,
+              "q50_pinball": 2.3207024029574863,
+              "q90_pinball": 1.6885397412199628
+            }
+          },
+          {
+            "lead_hours": 7,
+            "values": {
+              "n": 540,
+              "mae": 4.688888888888889,
+              "rmse": 11.35993609789017,
+              "bias": -1.8666666666666667,
+              "coverage_80": 0.8925925925925926,
+              "interval_width_80": 13.533333333333333,
+              "interval_score_80": 25.7,
+              "lower_tail": 0.040740740740740744,
+              "upper_tail": 0.06666666666666667,
+              "q10_pinball": 0.7501851851851852,
+              "q50_pinball": 2.3444444444444446,
+              "q90_pinball": 1.819814814814815
+            }
+          },
+          {
+            "lead_hours": 8,
+            "values": {
+              "n": 536,
+              "mae": 4.684701492537314,
+              "rmse": 11.363810717794042,
+              "bias": -1.998134328358209,
+              "coverage_80": 0.8936567164179104,
+              "interval_width_80": 13.917910447761194,
+              "interval_score_80": 25.597014925373134,
+              "lower_tail": 0.04291044776119403,
+              "upper_tail": 0.06343283582089553,
+              "q10_pinball": 0.7365671641791046,
+              "q50_pinball": 2.342350746268657,
+              "q90_pinball": 1.823134328358209
+            }
+          },
+          {
+            "lead_hours": 9,
+            "values": {
+              "n": 541,
+              "mae": 4.767097966728281,
+              "rmse": 11.438415024052803,
+              "bias": -2.0942698706099816,
+              "coverage_80": 0.8872458410351202,
+              "interval_width_80": 13.914972273567468,
+              "interval_score_80": 26.262476894639555,
+              "lower_tail": 0.04436229205175601,
+              "upper_tail": 0.06839186691312385,
+              "q10_pinball": 0.7410351201478743,
+              "q50_pinball": 2.3835489833641406,
+              "q90_pinball": 1.885212569316081
+            }
+          },
+          {
+            "lead_hours": 10,
+            "values": {
+              "n": 540,
+              "mae": 4.807407407407408,
+              "rmse": 11.516333006904842,
+              "bias": -2.0407407407407407,
+              "coverage_80": 0.8814814814814815,
+              "interval_width_80": 13.785185185185185,
+              "interval_score_80": 26.451851851851853,
+              "lower_tail": 0.046296296296296294,
+              "upper_tail": 0.07222222222222222,
+              "q10_pinball": 0.7412962962962965,
+              "q50_pinball": 2.403703703703704,
+              "q90_pinball": 1.9038888888888887
+            }
+          },
+          {
+            "lead_hours": 11,
+            "values": {
+              "n": 536,
+              "mae": 4.7835820895522385,
+              "rmse": 11.49772852323579,
+              "bias": -2.1156716417910446,
+              "coverage_80": 0.8936567164179104,
+              "interval_width_80": 14.050373134328359,
+              "interval_score_80": 25.84141791044776,
+              "lower_tail": 0.04664179104477612,
+              "upper_tail": 0.05970149253731343,
+              "q10_pinball": 0.7408582089552239,
+              "q50_pinball": 2.3917910447761193,
+              "q90_pinball": 1.843283582089552
+            }
+          },
+          {
+            "lead_hours": 12,
+            "values": {
+              "n": 541,
+              "mae": 4.903881700554528,
+              "rmse": 11.565213312554155,
+              "bias": -2.142329020332717,
+              "coverage_80": 0.8835489833641405,
+              "interval_width_80": 14.197781885397411,
+              "interval_score_80": 26.32347504621072,
+              "lower_tail": 0.04990757855822551,
+              "upper_tail": 0.066543438077634,
+              "q10_pinball": 0.7580406654343809,
+              "q50_pinball": 2.451940850277264,
+              "q90_pinball": 1.8743068391866913
+            }
+          },
+          {
+            "lead_hours": 13,
+            "values": {
+              "n": 540,
+              "mae": 4.82962962962963,
+              "rmse": 11.262359465970741,
+              "bias": -1.6555555555555554,
+              "coverage_80": 0.9092592592592592,
+              "interval_width_80": 15.981481481481481,
+              "interval_score_80": 25.88888888888889,
+              "lower_tail": 0.046296296296296294,
+              "upper_tail": 0.044444444444444446,
+              "q10_pinball": 0.7312962962962963,
+              "q50_pinball": 2.414814814814815,
+              "q90_pinball": 1.8575925925925922
+            }
+          },
+          {
+            "lead_hours": 14,
+            "values": {
+              "n": 536,
+              "mae": 4.852611940298507,
+              "rmse": 11.300756149578612,
+              "bias": -1.6921641791044777,
+              "coverage_80": 0.8992537313432836,
+              "interval_width_80": 16.08582089552239,
+              "interval_score_80": 26.19776119402985,
+              "lower_tail": 0.055970149253731345,
+              "upper_tail": 0.04477611940298507,
+              "q10_pinball": 0.7503731343283583,
+              "q50_pinball": 2.4263059701492535,
+              "q90_pinball": 1.8694029850746265
+            }
+          },
+          {
+            "lead_hours": 15,
+            "values": {
+              "n": 541,
+              "mae": 5.0258780036968576,
+              "rmse": 11.678930267778394,
+              "bias": -1.7726432532347505,
+              "coverage_80": 0.8853974121996303,
+              "interval_width_80": 16.188539741219962,
+              "interval_score_80": 27.630314232902034,
+              "lower_tail": 0.066543438077634,
+              "upper_tail": 0.04805914972273567,
+              "q10_pinball": 0.7852125693160814,
+              "q50_pinball": 2.5129390018484288,
+              "q90_pinball": 1.977818853974122
+            }
+          },
+          {
+            "lead_hours": 16,
+            "values": {
+              "n": 540,
+              "mae": 4.961111111111111,
+              "rmse": 11.607229547905813,
+              "bias": -1.901851851851852,
+              "coverage_80": 0.8981481481481481,
+              "interval_width_80": 17.025925925925925,
+              "interval_score_80": 27.822222222222223,
+              "lower_tail": 0.05925925925925926,
+              "upper_tail": 0.04259259259259259,
+              "q10_pinball": 0.7737037037037038,
+              "q50_pinball": 2.4805555555555556,
+              "q90_pinball": 2.0085185185185184
+            }
+          },
+          {
+            "lead_hours": 17,
+            "values": {
+              "n": 536,
+              "mae": 5.005597014925373,
+              "rmse": 11.655742931430071,
+              "bias": -1.8936567164179106,
+              "coverage_80": 0.8973880597014925,
+              "interval_width_80": 17.097014925373134,
+              "interval_score_80": 27.917910447761194,
+              "lower_tail": 0.05970149253731343,
+              "upper_tail": 0.04291044776119403,
+              "q10_pinball": 0.773320895522388,
+              "q50_pinball": 2.5027985074626864,
+              "q90_pinball": 2.018470149253731
+            }
+          },
+          {
+            "lead_hours": 18,
+            "values": {
+              "n": 541,
+              "mae": 5.1090573012939,
+              "rmse": 11.765892622541463,
+              "bias": -1.900184842883549,
+              "coverage_80": 0.9020332717190388,
+              "interval_width_80": 17.160813308687615,
+              "interval_score_80": 28.25138632162662,
+              "lower_tail": 0.05545286506469501,
+              "upper_tail": 0.04251386321626617,
+              "q10_pinball": 0.76728280961183,
+              "q50_pinball": 2.55452865064695,
+              "q90_pinball": 2.057855822550832
+            }
+          },
+          {
+            "lead_hours": 19,
+            "values": {
+              "n": 540,
+              "mae": 5.088888888888889,
+              "rmse": 11.698844514009192,
+              "bias": -1.8925925925925926,
+              "coverage_80": 0.8981481481481481,
+              "interval_width_80": 17.146296296296295,
+              "interval_score_80": 28.312962962962963,
+              "lower_tail": 0.06111111111111111,
+              "upper_tail": 0.040740740740740744,
+              "q10_pinball": 0.7768518518518519,
+              "q50_pinball": 2.5444444444444443,
+              "q90_pinball": 2.054444444444444
+            }
+          },
+          {
+            "lead_hours": 20,
+            "values": {
+              "n": 536,
+              "mae": 5.132462686567164,
+              "rmse": 11.762973149396919,
+              "bias": -1.8414179104477613,
+              "coverage_80": 0.8973880597014925,
+              "interval_width_80": 17.20149253731343,
+              "interval_score_80": 28.246268656716417,
+              "lower_tail": 0.06716417910447761,
+              "upper_tail": 0.03544776119402985,
+              "q10_pinball": 0.7819029850746269,
+              "q50_pinball": 2.566231343283582,
+              "q90_pinball": 2.042723880597014
+            }
+          },
+          {
+            "lead_hours": 21,
+            "values": {
+              "n": 541,
+              "mae": 5.22735674676525,
+              "rmse": 11.837626029676908,
+              "bias": -1.911275415896488,
+              "coverage_80": 0.8927911275415896,
+              "interval_width_80": 17.258780036968577,
+              "interval_score_80": 28.367837338262476,
+              "lower_tail": 0.066543438077634,
+              "upper_tail": 0.04066543438077634,
+              "q10_pinball": 0.7848428835489835,
+              "q50_pinball": 2.613678373382625,
+              "q90_pinball": 2.0519408502772642
+            }
+          },
+          {
+            "lead_hours": 22,
+            "values": {
+              "n": 540,
+              "mae": 5.188888888888889,
+              "rmse": 11.707072885890629,
+              "bias": -1.974074074074074,
+              "coverage_80": 0.9037037037037037,
+              "interval_width_80": 18.10185185185185,
+              "interval_score_80": 28.175925925925927,
+              "lower_tail": 0.06296296296296296,
+              "upper_tail": 0.03333333333333333,
+              "q10_pinball": 0.7833333333333333,
+              "q50_pinball": 2.5944444444444446,
+              "q90_pinball": 2.0342592592592594
+            }
+          },
+          {
+            "lead_hours": 23,
+            "values": {
+              "n": 536,
+              "mae": 5.1138059701492535,
+              "rmse": 11.706692179733983,
+              "bias": -1.9869402985074627,
+              "coverage_80": 0.9048507462686567,
+              "interval_width_80": 17.98507462686567,
+              "interval_score_80": 28.246268656716417,
+              "lower_tail": 0.06343283582089553,
+              "upper_tail": 0.03171641791044776,
+              "q10_pinball": 0.7869402985074627,
+              "q50_pinball": 2.5569029850746268,
+              "q90_pinball": 2.0376865671641786
+            }
+          },
+          {
+            "lead_hours": 24,
+            "values": {
+              "n": 541,
+              "mae": 5.242144177449168,
+              "rmse": 11.692612641671237,
+              "bias": -2.0295748613678373,
+              "coverage_80": 0.8964879852125693,
+              "interval_width_80": 18.00184842883549,
+              "interval_score_80": 28.537892791127543,
+              "lower_tail": 0.07024029574861368,
+              "upper_tail": 0.033271719038817,
+              "q10_pinball": 0.7990757855822552,
+              "q50_pinball": 2.621072088724584,
+              "q90_pinball": 2.0547134935304987
+            }
+          },
+          {
+            "lead_hours": 25,
+            "values": {
+              "n": 540,
+              "mae": 5.324074074074074,
+              "rmse": 11.745684786810479,
+              "bias": -1.9944444444444445,
+              "coverage_80": 0.9074074074074074,
+              "interval_width_80": 19.996296296296297,
+              "interval_score_80": 29.42222222222222,
+              "lower_tail": 0.05925925925925926,
+              "upper_tail": 0.03333333333333333,
+              "q10_pinball": 0.7994444444444445,
+              "q50_pinball": 2.662037037037037,
+              "q90_pinball": 2.1427777777777774
+            }
+          },
+          {
+            "lead_hours": 26,
+            "values": {
+              "n": 536,
+              "mae": 5.277985074626866,
+              "rmse": 11.738045681369213,
+              "bias": -1.998134328358209,
+              "coverage_80": 0.9085820895522388,
+              "interval_width_80": 20.059701492537314,
+              "interval_score_80": 29.44402985074627,
+              "lower_tail": 0.05783582089552239,
+              "upper_tail": 0.033582089552238806,
+              "q10_pinball": 0.799813432835821,
+              "q50_pinball": 2.638992537313433,
+              "q90_pinball": 2.1445895522388057
+            }
+          },
+          {
+            "lead_hours": 27,
+            "values": {
+              "n": 541,
+              "mae": 5.3622920517560075,
+              "rmse": 11.747576145167415,
+              "bias": -1.9685767097966729,
+              "coverage_80": 0.9075785582255084,
+              "interval_width_80": 20.12569316081331,
+              "interval_score_80": 29.57116451016636,
+              "lower_tail": 0.05730129390018484,
+              "upper_tail": 0.03512014787430684,
+              "q10_pinball": 0.8022181146025879,
+              "q50_pinball": 2.6811460258780038,
+              "q90_pinball": 2.154898336414048
+            }
+          },
+          {
+            "lead_hours": 28,
+            "values": {
+              "n": 540,
+              "mae": 5.364814814814815,
+              "rmse": 11.760338241545417,
+              "bias": -1.9981481481481482,
+              "coverage_80": 0.8981481481481481,
+              "interval_width_80": 20.303703703703704,
+              "interval_score_80": 30.211111111111112,
+              "lower_tail": 0.06481481481481481,
+              "upper_tail": 0.037037037037037035,
+              "q10_pinball": 0.8062962962962963,
+              "q50_pinball": 2.6824074074074074,
+              "q90_pinball": 2.214814814814815
+            }
+          },
+          {
+            "lead_hours": 29,
+            "values": {
+              "n": 536,
+              "mae": 5.389925373134329,
+              "rmse": 11.79053819996255,
+              "bias": -1.9347014925373134,
+              "coverage_80": 0.9011194029850746,
+              "interval_width_80": 20.300373134328357,
+              "interval_score_80": 30.188432835820894,
+              "lower_tail": 0.06529850746268656,
+              "upper_tail": 0.033582089552238806,
+              "q10_pinball": 0.8033582089552239,
+              "q50_pinball": 2.6949626865671643,
+              "q90_pinball": 2.2154850746268653
+            }
+          },
+          {
+            "lead_hours": 30,
+            "values": {
+              "n": 541,
+              "mae": 5.436229205175601,
+              "rmse": 11.836454857175434,
+              "bias": -1.9390018484288354,
+              "coverage_80": 0.8964879852125693,
+              "interval_width_80": 20.499075785582257,
+              "interval_score_80": 30.591497227356747,
+              "lower_tail": 0.06839186691312385,
+              "upper_tail": 0.03512014787430684,
+              "q10_pinball": 0.8086876155268022,
+              "q50_pinball": 2.7181146025878005,
+              "q90_pinball": 2.250462107208872
+            }
+          },
+          {
+            "lead_hours": 31,
+            "values": {
+              "n": 540,
+              "mae": 5.448148148148148,
+              "rmse": 11.867634167800283,
+              "bias": -2.0148148148148146,
+              "coverage_80": 0.9,
+              "interval_width_80": 20.362962962962964,
+              "interval_score_80": 30.455555555555556,
+              "lower_tail": 0.06666666666666667,
+              "upper_tail": 0.03333333333333333,
+              "q10_pinball": 0.8068518518518518,
+              "q50_pinball": 2.724074074074074,
+              "q90_pinball": 2.2387037037037034
+            }
+          },
+          {
+            "lead_hours": 32,
+            "values": {
+              "n": 536,
+              "mae": 5.496268656716418,
+              "rmse": 11.966994410622936,
+              "bias": -1.9365671641791045,
+              "coverage_80": 0.8992537313432836,
+              "interval_width_80": 20.223880597014926,
+              "interval_score_80": 30.42910447761194,
+              "lower_tail": 0.06716417910447761,
+              "upper_tail": 0.033582089552238806,
+              "q10_pinball": 0.8046641791044777,
+              "q50_pinball": 2.748134328358209,
+              "q90_pinball": 2.238246268656716
+            }
+          },
+          {
+            "lead_hours": 33,
+            "values": {
+              "n": 541,
+              "mae": 5.512014787430684,
+              "rmse": 11.948905393838622,
+              "bias": -1.944547134935305,
+              "coverage_80": 0.9020332717190388,
+              "interval_width_80": 20.47134935304991,
+              "interval_score_80": 30.5637707948244,
+              "lower_tail": 0.06284658040665435,
+              "upper_tail": 0.03512014787430684,
+              "q10_pinball": 0.7979667282809613,
+              "q50_pinball": 2.756007393715342,
+              "q90_pinball": 2.258410351201478
+            }
+          },
+          {
+            "lead_hours": 34,
+            "values": {
+              "n": 540,
+              "mae": 5.516666666666667,
+              "rmse": 11.9218908517685,
+              "bias": -1.9314814814814816,
+              "coverage_80": 0.8944444444444445,
+              "interval_width_80": 20.53148148148148,
+              "interval_score_80": 30.716666666666665,
+              "lower_tail": 0.06851851851851852,
+              "upper_tail": 0.037037037037037035,
+              "q10_pinball": 0.8046296296296296,
+              "q50_pinball": 2.7583333333333333,
+              "q90_pinball": 2.267037037037037
+            }
+          },
+          {
+            "lead_hours": 35,
+            "values": {
+              "n": 536,
+              "mae": 5.483208955223881,
+              "rmse": 12.017633188889008,
+              "bias": -1.998134328358209,
+              "coverage_80": 0.8973880597014925,
+              "interval_width_80": 20.60261194029851,
+              "interval_score_80": 30.73320895522388,
+              "lower_tail": 0.06902985074626866,
+              "upper_tail": 0.033582089552238806,
+              "q10_pinball": 0.8067164179104478,
+              "q50_pinball": 2.7416044776119404,
+              "q90_pinball": 2.26660447761194
+            }
+          },
+          {
+            "lead_hours": 36,
+            "values": {
+              "n": 541,
+              "mae": 5.449168207024029,
+              "rmse": 11.937452518994712,
+              "bias": -1.9149722735674677,
+              "coverage_80": 0.9020332717190388,
+              "interval_width_80": 20.741219963031423,
+              "interval_score_80": 30.77818853974122,
+              "lower_tail": 0.06099815157116451,
+              "upper_tail": 0.036968576709796676,
+              "q10_pinball": 0.7898336414048059,
+              "q50_pinball": 2.7245841035120146,
+              "q90_pinball": 2.287985212569316
+            }
+          },
+          {
+            "lead_hours": 37,
+            "values": {
+              "n": 540,
+              "mae": 5.407407407407407,
+              "rmse": 11.87465399106043,
+              "bias": -1.9,
+              "coverage_80": 0.9203703703703704,
+              "interval_width_80": 21.635185185185186,
+              "interval_score_80": 30.524074074074075,
+              "lower_tail": 0.05185185185185185,
+              "upper_tail": 0.027777777777777776,
+              "q10_pinball": 0.7759259259259259,
+              "q50_pinball": 2.7037037037037037,
+              "q90_pinball": 2.276481481481481
+            }
+          },
+          {
+            "lead_hours": 38,
+            "values": {
+              "n": 536,
+              "mae": 5.505597014925373,
+              "rmse": 12.059476362979188,
+              "bias": -2.0167910447761193,
+              "coverage_80": 0.9123134328358209,
+              "interval_width_80": 21.509328358208954,
+              "interval_score_80": 31.28544776119403,
+              "lower_tail": 0.05223880597014925,
+              "upper_tail": 0.03544776119402985,
+              "q10_pinball": 0.7901119402985076,
+              "q50_pinball": 2.7527985074626864,
+              "q90_pinball": 2.3384328358208952
+            }
+          },
+          {
+            "lead_hours": 39,
+            "values": {
+              "n": 541,
+              "mae": 5.530499075785582,
+              "rmse": 12.060230852144748,
+              "bias": -1.933456561922366,
+              "coverage_80": 0.9131238447319778,
+              "interval_width_80": 21.765249537892792,
+              "interval_score_80": 31.506469500924215,
+              "lower_tail": 0.051756007393715345,
+              "upper_tail": 0.03512014787430684,
+              "q10_pinball": 0.7844731977818855,
+              "q50_pinball": 2.765249537892791,
+              "q90_pinball": 2.366173752310536
+            }
+          },
+          {
+            "lead_hours": 40,
+            "values": {
+              "n": 540,
+              "mae": 5.529629629629629,
+              "rmse": 12.078600605723851,
+              "bias": -2.0037037037037035,
+              "coverage_80": 0.9185185185185185,
+              "interval_width_80": 21.72962962962963,
+              "interval_score_80": 31.433333333333334,
+              "lower_tail": 0.04814814814814815,
+              "upper_tail": 0.03333333333333333,
+              "q10_pinball": 0.780925925925926,
+              "q50_pinball": 2.7648148148148146,
+              "q90_pinball": 2.362407407407407
+            }
+          },
+          {
+            "lead_hours": 41,
+            "values": {
+              "n": 536,
+              "mae": 5.531716417910448,
+              "rmse": 12.123201513023412,
+              "bias": -2.0541044776119404,
+              "coverage_80": 0.917910447761194,
+              "interval_width_80": 21.574626865671643,
+              "interval_score_80": 31.611940298507463,
+              "lower_tail": 0.048507462686567165,
+              "upper_tail": 0.033582089552238806,
+              "q10_pinball": 0.7873134328358209,
+              "q50_pinball": 2.765858208955224,
+              "q90_pinball": 2.3738805970149253
+            }
+          },
+          {
+            "lead_hours": 42,
+            "values": {
+              "n": 541,
+              "mae": 5.55822550831793,
+              "rmse": 12.112610864687042,
+              "bias": -1.9685767097966729,
+              "coverage_80": 0.9094269870609981,
+              "interval_width_80": 21.787430683918668,
+              "interval_score_80": 31.842883548983362,
+              "lower_tail": 0.059149722735674676,
+              "upper_tail": 0.031423290203327174,
+              "q10_pinball": 0.8,
+              "q50_pinball": 2.779112754158965,
+              "q90_pinball": 2.3842883548983362
+            }
+          },
+          {
+            "lead_hours": 43,
+            "values": {
+              "n": 540,
+              "mae": 5.568518518518519,
+              "rmse": 12.128555225246403,
+              "bias": -2.001851851851852,
+              "coverage_80": 0.9111111111111111,
+              "interval_width_80": 21.864814814814814,
+              "interval_score_80": 31.58703703703704,
+              "lower_tail": 0.05740740740740741,
+              "upper_tail": 0.03148148148148148,
+              "q10_pinball": 0.7968518518518519,
+              "q50_pinball": 2.7842592592592594,
+              "q90_pinball": 2.3618518518518514
+            }
+          },
+          {
+            "lead_hours": 44,
+            "values": {
+              "n": 536,
+              "mae": 5.5466417910447765,
+              "rmse": 12.154555070228769,
+              "bias": -2.0167910447761193,
+              "coverage_80": 0.914179104477612,
+              "interval_width_80": 21.62313432835821,
+              "interval_score_80": 31.828358208955223,
+              "lower_tail": 0.054104477611940295,
+              "upper_tail": 0.03171641791044776,
+              "q10_pinball": 0.7865671641791045,
+              "q50_pinball": 2.7733208955223883,
+              "q90_pinball": 2.3962686567164178
+            }
+          },
+          {
+            "lead_hours": 45,
+            "values": {
+              "n": 541,
+              "mae": 5.584103512014788,
+              "rmse": 12.144463150447175,
+              "bias": -1.975970425138632,
+              "coverage_80": 0.9001848428835489,
+              "interval_width_80": 21.715341959334566,
+              "interval_score_80": 32.085027726432536,
+              "lower_tail": 0.066543438077634,
+              "upper_tail": 0.033271719038817,
+              "q10_pinball": 0.8110905730129391,
+              "q50_pinball": 2.792051756007394,
+              "q90_pinball": 2.3974121996303137
+            }
+          },
+          {
+            "lead_hours": 46,
+            "values": {
+              "n": 540,
+              "mae": 5.612962962962963,
+              "rmse": 12.167884261752633,
+              "bias": -1.9759259259259259,
+              "coverage_80": 0.8962962962962963,
+              "interval_width_80": 21.796296296296298,
+              "interval_score_80": 32.22222222222222,
+              "lower_tail": 0.07037037037037037,
+              "upper_tail": 0.03333333333333333,
+              "q10_pinball": 0.815,
+              "q50_pinball": 2.8064814814814816,
+              "q90_pinball": 2.4072222222222215
+            }
+          },
+          {
+            "lead_hours": 47,
+            "values": {
+              "n": 536,
+              "mae": 5.611940298507463,
+              "rmse": 12.255824080028116,
+              "bias": -2.093283582089552,
+              "coverage_80": 0.8973880597014925,
+              "interval_width_80": 21.809701492537314,
+              "interval_score_80": 32.593283582089555,
+              "lower_tail": 0.06529850746268656,
+              "upper_tail": 0.03731343283582089,
+              "q10_pinball": 0.8100746268656718,
+              "q50_pinball": 2.8059701492537314,
+              "q90_pinball": 2.449253731343283
+            }
+          },
+          {
+            "lead_hours": 48,
+            "values": {
+              "n": 541,
+              "mae": 5.687615526802218,
+              "rmse": 12.217604945732266,
+              "bias": -2.0314232902033273,
+              "coverage_80": 0.8927911275415896,
+              "interval_width_80": 21.853974121996302,
+              "interval_score_80": 32.482439926062845,
+              "lower_tail": 0.07208872458410351,
+              "upper_tail": 0.03512014787430684,
+              "q10_pinball": 0.821441774491682,
+              "q50_pinball": 2.843807763401109,
+              "q90_pinball": 2.426802218114602
+            }
+          }
+        ]
+      },
+      "binary": []
+    }
+  }
+}

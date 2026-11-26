@@ -8,6 +8,7 @@ class Model:
     artifact: str
     implementation: str | None = None
     bundled: bool = True
+    outputs: tuple[str, ...] = ()
 
     def service_class(self):
         module, name = self.implementation.split(':')
@@ -23,16 +24,15 @@ class Product:
 
     @property
     def artifacts(self) -> tuple[str, ...]:
-        return tuple(model.artifact for model in self.models)
+        return tuple(name for model in self.models for name in (model.outputs or (model.artifact,)))
 
 
 PRODUCTS = {
     'solar-wind-events': Product((Model('solar_wind_events', bundled=False),),
                                 ('events',), ('hourly', 'proswin_cache')),
     'geomagnetic-activity': Product((
-        Model('kp_threshold', 'inference.geomagnetic.kp.lightgbm:LightgbmKpProbabilityFS'),
-        Model('ap_quantile', 'inference.geomagnetic.ap.lightgbm:LightgbmApQuantileFS')),
-        ('hourly',), requires_normalized=True),
+        Model('geomagnetic_ordinal', 'inference.geomagnetic.ordinal:OrdinalGeomagneticForecaster',
+              outputs=('kp_threshold', 'ap_quantile')),), ('geomagnetic_history',)),
     'dst': Product((Model('dst_quantile', 'inference.geomagnetic.dst.lightgbm:LightgbmDstQuantileFS'),),
                    ('hourly',), requires_normalized=True),
     'solar-wind-speed': Product((

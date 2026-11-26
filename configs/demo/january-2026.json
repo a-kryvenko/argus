@@ -5,8 +5,8 @@
     "source_url": "https://swpc-drupal.woc.noaa.gov/news/g4-severe-geomagnetic-storm-levels-reached-19-jan-2026",
     "description": "The severe G4 phase first reached at 19:38 UTC on 19 January, as reported by NOAA SWPC. T0 marks this onset, not the storm peak."
   },
-  "observation_source": "NASA SPDF hourly OMNI2 archive at Earth. Missing target values retained; Kp/Ap are archived three-hour indices, F10.7 is daily. Bt is the magnitude of the hourly mean GSM vector, matching model training. Retrospective revised observations, not original real-time L1 receipts.",
-  "input_source": "NASA OMNI2 closed hours strictly before each issue. Current DLinear+PROSWIN speed and DLinear+PROSWIN-speed-assisted LightGBM density models. PROSWIN uses the full author-preprocessed hourly archive, not NRT images; assumed image-slot+1hour availability, with per-lead fallback. Archived observation timestamps label hour starts, matching the existing demo raw-history contract; revised data and assumed image times are not historical live receipts. Kp/Ap enter after three-hour bins close, F10.7 after day end. IMF uses the OMNI training feature definition. Current revalidated Bt/Bs use hourly history without GONG. S10/M10/Y10 forecasts remain unavailable. January 2026 was previously inspected; this replay is a development case, not an untouched holdout.",
+  "observation_source": "NOAA SWPC native L1 density and GSM field, NASA SPDF hourly OMNI2 speed and indices. Sparse L1 hours remain missing. Observation timestamps mark interval starts.",
+  "input_source": "Closed, unpropagated SWPC L1 hours drive density, IMF and the joint Kp/ap model. Density forecast gaps indicate missing recent L1 inputs. Kp/ap uses archived OMNI2 indices with assumed availability at Kp bin close +1 h, Dst hour start +2 h and F10.7 day start +48 h. Speed uses OMNI2 and the author-preprocessed PROSWIN archive, assumed available at image slot +1 h. This development replay uses revised archives and simulated availability.",
   "products": [
     "solar-wind-speed",
     "solar-wind-density",
@@ -27,19 +27,14 @@
       "training_evidence": "Current frozen speed bundle plus proswin-dlinear-mae-2025-v2 horizon weights fitted on2025; official PROSWIN fold1. No January2026 fitting. Legacy DLinear empirical uncertainty offsets retained. Runtime knots/weights recorded in demo inputs."
     },
     "plasma_density_quantile": {
-      "sha256": "b6eb76ce7f48dda8339d49b6eacdb95d4a31ed6630314bd85d71af28a06331c6",
+      "sha256": "2173a405624c761123021c8cfa914e898744df71fc32e6d5a5953f911e9a9c52",
       "training_end": "2026-01-01T00:00:00Z",
-      "training_evidence": "argus-plasma-density-proswin-blend-v1.json: matching model SHA; hourly heads trained2011-2024, mixture weights and NRT residual intervals fitted on2025. No2026 fitting."
+      "training_evidence": "Recent L1 model: January–September 2025 window and weight selection, October–December 2025 residual quantiles."
     },
-    "kp_threshold": {
-      "sha256": "2e266257238389f5812f0515d8520a74c3812f241a228fb6f15be7acb33c22c8",
+    "geomagnetic_ordinal": {
+      "sha256": "db808e56fdd73d0a4ad80a0f274ab3ea2b55ed8e5e106bfe045d042f00cd800b",
       "training_end": "2026-01-01T00:00:00Z",
-      "training_evidence": "argus-kp-revalidated-2026-v1: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-10-revalidation-v1/kp_threshold/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
-    },
-    "ap_quantile": {
-      "sha256": "972c7106e9a6548e5c3bf32b2ec9c464e2caf8614fb41591b701a035df16b7d7",
-      "training_end": "2026-01-01T00:00:00Z",
-      "training_evidence": "argus-ap-revalidated-2026-v1: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-10-revalidation-v1/ap_quantile/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
+      "training_evidence": "Ordinal Kp distribution and derived ap: 2011–2024 fit, January–September 2025 selection, October–December 2025 calibration."
     },
     "dst_quantile": {
       "sha256": "aeb1803ab9ad05ff6b666fd60895010714dfb8819c3ca3e518dca76b1e6bf0ad",
@@ -60,6 +55,18 @@
       "sha256": "33e36d944fa4b95a61fb8da6f540bdeb57611d5a6de1a738cab0821950f41a40",
       "training_end": "2026-01-01T00:00:00Z",
       "training_evidence": "argus-bs-revalidated-2026-v2: train 2011-2024; selection Jan-Sep 2025; calibration Oct-Dec 2025. Frozen evidence: data/revalidation/frozen/2026-10-15-imf-v2/bs/manifest.json. January 2026 was previously inspected in retrospective tests; this event is not an untouched holdout."
+    }
+  },
+  "l1_archives": {
+    "plasma": {
+      "path": "data/demo/january-2026/swpc-hapi-active-plasma.csv.gz",
+      "sha256": "ddf62b98550a16d8d4f87c114ed7242c3a1276a700c7b71808332ef295c3db2b",
+      "source_url": "https://tlv-swpc.woc.noaa.gov/hapi/data?id=active-plasma-pt1m&time.min=2026-01-08T00:00:00Z&time.max=2026-01-27T00:00:00Z"
+    },
+    "mag": {
+      "path": "data/demo/january-2026/swpc-hapi-active-mag.csv.gz",
+      "sha256": "2d723c8ac216fc63a4b3e112999142e7ac297b3cdf1f9790bdf50795d2d661a2",
+      "source_url": "https://tlv-swpc.woc.noaa.gov/hapi/data?id=active-mag-pt1m&time.min=2026-01-08T00:00:00Z&time.max=2026-01-27T00:00:00Z"
     }
   },
   "proswin_archive": {

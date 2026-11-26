@@ -17,7 +17,7 @@ Publishes forecasts from saved Clio inputs. Cron commands calculate; HTTP serves
 | `solar-wind-speed` | Speed quantiles and threshold probabilities |
 | `solar-wind-density` | Density quantiles |
 | `solar-wind-temperature` | Temperature quantiles |
-| `geomagnetic-activity` | Kp probabilities and Ap quantiles |
+| `geomagnetic-activity` | Kp probabilities and three-hour ap quantiles from one model, +1…48 h |
 | `dst` | Dst quantiles |
 | `hmf` | Total/southward IMF probabilities |
 | `atmospheric-density` | Density grid; JB2008 model background |

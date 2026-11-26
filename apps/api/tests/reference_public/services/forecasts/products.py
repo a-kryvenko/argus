@@ -34,6 +34,12 @@ class Product:
     target: str
     max_horizon_hours: int
     variables: tuple[Variable, ...]
+    metrics_model: str | None = None
+
+    @property
+    def metrics_registry_names(self) -> tuple[str, ...]:
+        primary = (self.metrics_model,) if self.metrics_model else ()
+        return primary + tuple(variable.registry_name for variable in self.variables)
 
 
 PRODUCTS = {
@@ -60,7 +66,7 @@ PRODUCTS = {
     "geomagnetic-activity": Product("geomagnetic-activity", 48, (
         Variable("kp", "kp_threshold", "index", "kp", (4, 5, 6)),
         Variable("ap", "ap_quantile", "index", "ap", quantiles=True),
-    )),
+    ), metrics_model="geomagnetic_ordinal"),
     "dst": Product("dst", 48, (
         Variable("dst", "dst_quantile", "nT", "dst", quantiles=True),
     )),
@@ -192,8 +198,8 @@ def load_forecast(product: Product) -> Forecast:
 
 def load_metrics(product: Product) -> ForecastMetrics:
     config = get_config()
-    for variable in product.variables:
-        report_path = config.models_registry["models"][variable.registry_name].get("metrics_report")
+    for name in product.metrics_registry_names:
+        report_path = config.models_registry["models"].get(name, {}).get("metrics_report")
         if report_path:
             path = config.workdir / report_path
             if not path.is_file():

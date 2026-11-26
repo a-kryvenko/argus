@@ -35,13 +35,10 @@ models:
     metrics: data/metrics/plasma/temperature_proswin
     metrics_report: configs/evaluations/solar-wind-temperature.json
 
-  kp_threshold:
-    model: argus-kp-revalidated-2026-v1
-    metrics: data/metrics/geomagnetic/kp_proba
-
-  ap_quantile:
-    model: argus-ap-revalidated-2026-v1
-    metrics: data/metrics/geomagnetic/ap_revalidated_2026_v1
+  geomagnetic_ordinal:
+    model: argus-geomagnetic-ordinal-v1
+    artifact_path: configs/models/geomagnetic-ordinal-v1.json
+    metrics_report: configs/evaluations/geomagnetic-activity.json
 
   dst_quantile:
     model: argus-dst-revalidated-2026-v1

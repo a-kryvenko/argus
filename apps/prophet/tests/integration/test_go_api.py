@@ -187,6 +187,105 @@ async def asyncio_smoke(binary, address):
     )
 
 
+async def test_ordinal_geomagnetic_release_from_clio_to_public_api(recorder_setup, monkeypatch):
+    import psycopg
+    import yaml
+    from prophet.services.generation.calculation import CalculationRequest, calculate_product
+    from prophet.services.inputs.loader import load_product_inputs
+    from tests.support.clio import clio_server, go_http_server
+    from tests.support.database import database_environment
+
+    _, urls, config, writer = recorder_setup
+    issue = (datetime.now(UTC) - timedelta(hours=3)).replace(minute=0, second=0, microsecond=0)
+    as_of = issue + timedelta(minutes=10)
+    kp_start = issue - timedelta(hours=issue.hour % 3 + 3)
+    previous_day = issue.replace(hour=0) - timedelta(days=1)
+    with psycopg.connect(urls['clio']) as db, db.cursor() as cursor:
+        rows = [(metric, issue - timedelta(minutes=minute), value, source, issue)
+                for minute in range(1, 181)
+                for metric, value, source in (('n', 4., 'swpc.rtsw_plasma'), ('v', 504., 'swpc.rtsw_plasma'),
+                    ('by', 2., 'swpc.rtsw_mag'), ('bz', -6., 'swpc.rtsw_mag'))]
+        rows.extend([
+            ('kp', kp_start, 4.67, 'swpc.kp', issue),
+            ('dst', issue - timedelta(hours=1), -29., 'swpc.dst', issue),
+            ('f10_7', previous_day, 130., 'swpc.f107', previous_day + timedelta(hours=20)),
+        ])
+        cursor.executemany('''INSERT INTO clio.measurement
+            (metric, observed_at, value, source_product, received_at) VALUES (%s,%s,%s,%s,%s)''', rows)
+        cursor.execute('''INSERT INTO clio.normalized_observation
+            (observed_at,bx,by,bz,v,n,t,kp,dst,ap,f10_7,wind_time_basis)
+            VALUES (%s,3,2,-8,530,5,120000,5.33,-22,56,130,'l1')''',
+            (kp_start - timedelta(days=27),))
+
+    monkeypatch.setenv('ARGUS_WORKDIR', str(config.workdir))
+    monkeypatch.setenv('OBSERVATIONS_SERVICE_TOKEN', 'test-observations-token')
+    monkeypatch.setenv('FORECASTS_SERVICE_TOKEN', 'test-forecasts-token')
+    monkeypatch.setattr(common_config, '_config', None)
+    environment = {**os.environ, **database_environment(urls)}
+
+    def executor(target, *args, timeout_seconds, **kwargs):
+        return target(*args, **kwargs)
+
+    with clio_server(config.workdir, environment) as clio_url:
+        monkeypatch.setenv('OBSERVATIONS_URL', clio_url)
+        inputs = await load_product_inputs('geomagnetic-activity', as_of, {}, executor=executor, timeout_seconds=30)
+
+    prior = {point.time: point for point in inputs.geomagnetic_history.prior}
+    assert prior[issue].kp == 4.67
+    assert prior[issue].dst == -29
+    assert prior[issue].bz == -6
+    assert any(point.kp == 5.33 for point in inputs.geomagnetic_history.raw)
+    registry = yaml.safe_load((ROOT / 'configs/models_registry.yaml').read_text())['models']
+    product = 'geomagnetic-activity'
+    artifacts = calculate_product(CalculationRequest(product, inputs, ROOT, registry))
+    assert {artifact.model_info['model'] for artifact in artifacts} == {'argus-geomagnetic-ordinal-v1'}
+    assert len({artifact.model_info['sha256'] for artifact in artifacts}) == 1
+    run = await RunRecorder.begin(product, 'manual', config, writer=writer)
+    await run.snapshot(inputs)
+    for artifact in artifacts:
+        await run.store(artifact.name, artifact.content, artifact.model_info, artifact.row_count, artifact.columns)
+    assert (await run.finish()).status == 'published'
+    assert (await read_release(product)).issue_time == issue
+
+    registry_path = ROOT / 'configs/models_registry.yaml'
+    shutil.copyfile(registry_path, config.workdir / 'configs/models_registry.yaml')
+    evaluation = registry['geomagnetic_ordinal']['metrics_report']
+    (config.workdir / evaluation).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / evaluation, config.workdir / evaluation)
+
+    with go_server(config.workdir) as (_, prophet_url), go_http_server(
+            config.workdir, {**os.environ, 'FORECASTS_URL': prophet_url}, ROOT / 'apps/api/api-go', 'public-api',
+            'PUBLIC_API_HTTP_ADDR', 'Public API listening on ') as public_url:
+        async with httpx.AsyncClient(base_url=public_url, trust_env=False) as client, \
+                   httpx.AsyncClient(base_url=prophet_url, trust_env=False) as prophet:
+            response = await client.get(f'/api/v1/forecasts/{product}')
+            metrics = await client.get(f'/api/v1/forecasts/{product}/metrics')
+            status = await prophet.get('/internal/v1/forecasts/status',
+                                       headers={'Authorization': 'Bearer test-forecasts-token'})
+    metrics.raise_for_status()
+    published = metrics.json()['data']
+    assert published['target'] == product
+    assert set(published['variables']) == {'kp', 'ap'}
+    assert [item['threshold'] for item in published['variables']['kp']['binary']] == [4, 5, 6]
+    assert len(published['variables']['ap']['continuous']['by_lead_hour']) == 48
+    status.raise_for_status()
+    products = ForecastsStatus.model_validate(status.json()).products
+    diagnostics = next(item.current_release.input_diagnostics for item in products if item.product == product)
+    assert diagnostics['issues'] == []
+    assert datetime.fromisoformat(diagnostics['geomagnetic_history']['latest_hour']) == issue
+    assert datetime.fromisoformat(diagnostics['geomagnetic_history']['latest_kp_interval']) == kp_start
+    response.raise_for_status()
+    forecast = response.json()['data']
+    assert set(forecast['available_variables']) == {'kp', 'ap'}
+    assert forecast['horizon_hours'] == 48
+    assert [row['lead_hours'] for row in forecast['predictions']] == list(range(1, 49))
+    for row in forecast['predictions']:
+        variables = row['variables']
+        assert [item['threshold'] for item in variables['kp']['binary']] == [4, 5, 6]
+        ap = variables['ap']['continuous']
+        assert 0 <= ap['q10'] <= ap['q50'] <= ap['q90']
+
+
 async def test_public_forecasts_match_existing_contract_and_refresh(recorder_setup, monkeypatch):
     import asyncio
     import csv

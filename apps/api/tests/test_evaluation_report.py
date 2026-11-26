@@ -65,8 +65,8 @@ def test_registered_reports_match_api_schema():
     import yaml
     registry = yaml.safe_load((ROOT / 'configs/models_registry.yaml').read_text())
     for product in service.PRODUCTS.values():
-        paths = {registry['models'].get(variable.registry_name, {}).get('metrics_report')
-                 for variable in product.variables} - {None}
+        paths = {registry['models'].get(name, {}).get('metrics_report')
+                 for name in product.metrics_registry_names} - {None}
         for path in paths:
             report = service.ForecastMetrics.model_validate_json((ROOT / path).read_text())
             assert report.target == product.target

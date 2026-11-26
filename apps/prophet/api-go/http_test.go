@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/a-kryvenko/argus/apps/prophet/api-go/publicforecast"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -73,6 +74,38 @@ func TestRoutes(t *testing.T) {
 				t.Fatalf("got %d %s, expected %d and JSON", result.Code, result.Body, tc.code)
 			}
 		})
+	}
+}
+
+func TestGeomagneticMetricsFromSharedModel(t *testing.T) {
+	workdir := filepath.Join("..", "..", "..")
+	models, err := loadModelRegistry(workdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newHandler(emptyStore{}, "token", "", 6, nil, metricReports{workdir, models})
+	request := httptest.NewRequest(http.MethodGet, metricsPath+"geomagnetic-activity", nil)
+	request.Header.Set("Authorization", "Bearer token")
+	result := httptest.NewRecorder()
+	handler.ServeHTTP(result, request)
+	if result.Code != http.StatusOK {
+		t.Fatalf("got %d %s", result.Code, result.Body)
+	}
+	var report publicforecast.ForecastMetrics
+	if err := json.Unmarshal(result.Body.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	kp, ap := report.Variables["kp"], report.Variables["ap"]
+	if report.Target != "geomagnetic-activity" || len(kp.Binary) != 3 || ap.Continuous == nil ||
+		len(ap.Continuous.ByLeadHour) != 48 || ap.Continuous.ByLeadHour[0].Values["mae"] == nil {
+		t.Fatalf("missing Kp/ap metrics: %+v", report)
+	}
+	for i, threshold := range []float64{4, 5, 6} {
+		series := kp.Binary[i]
+		if series.Threshold == nil || *series.Threshold != threshold || len(series.ByLeadHour) != 48 ||
+			series.ByLeadHour[0].BrierScore == nil {
+			t.Errorf("missing scores for Kp >= %.0f: %+v", threshold, series)
+		}
 	}
 }
 

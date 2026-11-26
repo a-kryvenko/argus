@@ -1,0 +1,59 @@
+{
+  "snapshot": "2026-11-26-kp-ap-v1",
+  "model": "argus-geomagnetic-ordinal-v1",
+  "model_artifact": "configs/models/geomagnetic-ordinal-v1.json",
+  "model_artifact_sha256": "db808e56fdd73d0a4ad80a0f274ab3ea2b55ed8e5e106bfe045d042f00cd800b",
+  "lightgbm_model_sha256": "1f310e3be2322e35aa918fb49417f7c99eb1a9c451565dff1b336b621e5ac1ed",
+  "trees": 132,
+  "availability": "Retrospective replay with assumed archive receipt delays",
+  "validation_protocol": "argus-revalidation-2026-v1",
+  "demo": {
+    "scenario": "january-2026",
+    "version": "20261126T125404755290Z",
+    "bundle": "data/demo/20261126T125404755290Z.json",
+    "sha256": "76a0887b7b0545da8c3bc07ecbe1610ee8a9df1fd32738e12f14072718184e17"
+  },
+  "l1_cohort": {
+    "targets_start": "2026-09-18T00:00:00Z",
+    "targets_end_exclusive": "2026-11-26T00:00:00Z",
+    "lead_hours": [
+      1,
+      48
+    ],
+    "pairs": 25872,
+    "issue_times": 1662,
+    "target_intervals": 552,
+    "kp_ge_5_target_intervals": 9,
+    "kp_ge_6_target_intervals": 2,
+    "gfz_definitive_pairs": 16675,
+    "gfz_preliminary_pairs": 9197,
+    "sampled_reference_pairs_verified_exactly": 3245
+  },
+  "local_evidence_path": "data/revalidation/frozen/2026-11-26-kp-ap-v1",
+  "evaluation_code": "notebooks/workflows/revalidation/geomagnetic_ordinal.py",
+  "evaluation_code_sha256": "2e74a9a0dc508e4dd588c027f07504f916dfdc09a80c5fc4857467f678d6d33c",
+  "inference_code_sha256": "019e3c59be647e309eda2f74ac985c221801e06cebb660153bcffc115fbebd9a",
+  "plot_code_sha256": "d53f5798e855004ccdcc037085b246e7fe4c3e306857835e6498e123df638d78",
+  "predecessor_sha256": {
+    "data/models/argus-kp-revalidated-2026-v1.joblib": "2e266257238389f5812f0515d8520a74c3812f241a228fb6f15be7acb33c22c8",
+    "data/models/argus-ap-revalidated-2026-v1.joblib": "972c7106e9a6548e5c3bf32b2ec9c464e2caf8614fb41591b701a035df16b7d7"
+  },
+  "sources_sha256": {
+    "l1/gfz.parquet": "6163692d57facbf19787272633855739f38ad91188b021697e93217108d28bd0",
+    "l1/predictions.parquet": "207c273e985da27fde21ccde118c7817b1d714a1e12af6f7b9adff08f73f9dec",
+    "l1/prior.parquet": "20f478d4717ac0b4fd245d2096945d38f35c46f5d8c10dc67e873fe19f898005",
+    "l1/protocol.json": "645b497e8415d13f5d5df8a2bb9136036a65421ecd9667d79cbccbfb0e642b2a",
+    "l1/raw.parquet": "1d09acd44c13786e881d52d5f8a93d1a6b738ea9b8aed721a2fae5ec43bb8c44",
+    "ordinal/freeze.json": "917ae2eb6fe3ee6493e97dfd001d9ae86dbe28359394828b0c67cf2a2384dda0",
+    "ordinal/predictions.parquet": "93c9854f3329850e6a450a639db357f705e6b3d5ecae1e8657507e1307b98c32"
+  },
+  "artifacts_sha256": {
+    "l1_accuracy.svg": "3842a3c0bfa622312ad37c36e7f99d034aa374b28ecd3a13c0ce8bbeee3a2875",
+    "l1_by_lead.csv": "b4f2b36d24473f59efb0e44557b025746b4b646444a2670b37fe150b49932d49",
+    "l1_protocol.json": "645b497e8415d13f5d5df8a2bb9136036a65421ecd9667d79cbccbfb0e642b2a",
+    "l1_sampled_intervals.csv": "b12e73a2091d69745662dc5143f9d93a767f54b26c156f53b728a3a9d2fffe30",
+    "metrics.json": "5b2c57de23eaa14df1287c37f0b1cdc9034925b06418adec0db089a153384315",
+    "omni_by_lead.csv": "17977a1f047e10128c0cdb6c477912d22d6ce572d223d4c67d5bda1db56d8a1c",
+    "omni_noaa_comparison.csv": "1b183f9d07fdfb8bef9336d61a8bd2e89b00ab708ca18040d346968d47cec50d"
+  }
+}

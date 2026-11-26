@@ -1,8 +1,10 @@
 """Forecast-owned history windows over Clio's compact numeric and file resources."""
 from datetime import UTC, datetime, timedelta
+from math import isfinite
 
 from common.observationcatalog import METRICS
 from common.schemas.observation import Observation
+from forecast.inputs import GeomagneticHistory
 from forecast.observation_inputs import ObservationInputs
 
 HISTORY_DAYS = 60
@@ -10,12 +12,16 @@ CORE = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', 'ap', 'f10_7')
 MEANS = ('f10_7_81mean', 's10_81mean', 'm10_81mean', 'y10_81mean')
 WIND = ('bx', 'by', 'bz', 'v', 'n', 't')
 INTEGER_MODEL_METRICS = ('kp', 'dst', 'ap', 'f10_7')
+GEOMAGNETIC_WIND = ('by', 'bz', 'v', 'n')
+GEOMAGNETIC_INDICES = ('kp', 'dst', 'f10_7')
+RECURRENCE_START = timedelta(days=29)
+RECURRENCE_END = timedelta(days=24)
 
 
-def native_hourly(aggregates, as_of):
+def native_hourly(aggregates, as_of, *, metrics=WIND):
     """Adapt Clio's closed L1 windows to the forecast feature contract."""
     series = {}
-    for metric in WIND:
+    for metric in metrics:
         record = aggregates.get(metric, {})
         if (record.get('time_basis'), record.get('aggregation'), record.get('resolution_seconds')) != ('l1', 'mean', 3600):
             raise ValueError(f'Expected hourly L1 aggregates for {metric}')
@@ -53,9 +59,9 @@ def read_series(request, url, token, metrics, **params):
     return data
 
 
-def read_model_inputs(request, url, token, start, end):
+def read_model_inputs(request, url, token, start, end, *, metrics=(*CORE, *MEANS)):
     data = read_resource(request, url, token, '/internal/v1/observations/model-inputs',
-                         metrics=','.join((*CORE, *MEANS)),
+                         metrics=','.join(metrics),
                          **{'from': start.isoformat(), 'to': end.isoformat()})
     if not isinstance(data, dict) or data.get('interval') != '1h' or not isinstance(data.get('points'), list):
         raise ValueError('Expected Clio hourly model inputs')
@@ -86,6 +92,82 @@ def read_native_history(client, url, token, as_of):
     raw = read_series(client.get, url, token, WIND, interval='1h', time_basis='l1',
                       **{'from': (issue - timedelta(hours=168)).isoformat(), 'to': issue.isoformat()})
     return native_hourly(raw, as_of)
+
+
+def _usable_value(point):
+    value = point.get('value')
+    return (isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+            and point.get('quality') in (None, '', 'good', 'unverified'))
+
+
+def _hour(stamp):
+    return stamp.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+
+
+def _kp_start(stamp):
+    hour = _hour(stamp)
+    return stamp == hour and hour.hour % 3 == 0
+
+
+def read_geomagnetic_history(client, url, token, as_of):
+    """Build the ordinal model's feature clock from closed, received observations."""
+    issue = _hour(as_of)
+    recent_start = issue - timedelta(hours=168)
+    aggregate = read_series(client.get, url, token, (*GEOMAGNETIC_WIND, *GEOMAGNETIC_INDICES),
+                            interval='1h', time_basis='l1',
+                            **{'from': recent_start.isoformat(), 'to': issue.isoformat()})
+    recurrence_start, recurrence_end = issue - RECURRENCE_START, issue - RECURRENCE_END
+    recurrence = read_model_inputs(client.get, url, token, recurrence_start, recurrence_end, metrics=('kp',))
+
+    raw = {}
+    for row in recurrence:
+        stamp = datetime.fromisoformat(row['time'])
+        kp = row.get('kp')
+        if recurrence_start <= stamp < recurrence_end and _kp_start(stamp) and kp is not None and 0 <= kp <= 9:
+            raw[stamp] = kp
+
+    prior = {}
+    wind = native_hourly(aggregate, as_of, metrics=GEOMAGNETIC_WIND)
+    for metric, series in wind['series'].items():
+        for point in series['points']:
+            start = datetime.fromisoformat(point['observed_at'])
+            end = point['interval_end']
+            if (recent_start <= start and start == _hour(start) and end <= issue
+                    and 45 <= (point.get('count') or 0) <= 60 and _usable_value(point)):
+                prior.setdefault(end, {})[metric] = point['value']
+
+    for metric, (hours, basis, carry) in {
+        'kp': (3, 'source_interval_start', 3),
+        'dst': (1, 'source_interval_start', 1),
+        'f10_7': (24, 'measurement', 25),
+    }.items():
+        series = aggregate.get(metric, {})
+        contract = (series.get('resolution_seconds'), series.get('time_basis'), series.get('aggregation'))
+        if contract != (hours * 3600, basis, 'source'):
+            raise ValueError(f'Expected native Clio series for {metric}')
+        ends = {}
+        for point in series['points']:
+            receipt = point.get('received_at')
+            if not _usable_value(point) or receipt is None or datetime.fromisoformat(receipt) > as_of:
+                continue
+            stamp = datetime.fromisoformat(point['observed_at'])
+            if (metric == 'kp' and not _kp_start(stamp)) or (metric == 'dst' and stamp != _hour(stamp)):
+                continue
+            start = stamp.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0) if metric == 'f10_7' else stamp
+            end = start + timedelta(hours=hours)
+            if end > issue or stamp > as_of:
+                continue
+            ends[end] = point['value']
+            if metric == 'kp':
+                raw[stamp] = point['value']
+        for end, value in sorted(ends.items()):
+            for offset in range(carry):
+                clock = end + timedelta(hours=offset)
+                if recent_start <= clock <= issue:
+                    prior.setdefault(clock, {})[metric] = value
+
+    return GeomagneticHistory(raw=[{'time': stamp, 'kp': kp} for stamp, kp in sorted(raw.items())],
+                              prior=[{'time': stamp, **values} for stamp, values in sorted(prior.items())])
 
 
 def apply_solar_measurements(inputs, calibrated):

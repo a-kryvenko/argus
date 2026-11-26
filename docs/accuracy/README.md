@@ -2,11 +2,13 @@
 
 **Train through 2024 · select/calibrate in 2025 · test only in 2026.**
 
+[Kp and ap accuracy](frozen/2026-11-26-kp-ap-v1/README.md) · Paired 48-hour archive replay with L1 inputs.
+
 [Solar-wind speed accuracy](frozen/2026-10-21-speed-release-v1/README.md): MAE by forecast lead time, January–June 2026.
 
 [CME correction in solar-wind speed](frozen/2026-10-15-cme-window-release-v1/README.md): original arrival window, 100% peak weight, decay to zero at late arrival +12 h.
 
-[Ap/Dst production models](frozen/2026-10-15-ap-dst-release-v1/README.md): revalidated v1, selected by explicit operator decision accepting accuracy tradeoffs.
+[October ap/Dst release](frozen/2026-10-15-ap-dst-release-v1/README.md): revalidated v1, selected by explicit operator decision accepting accuracy tradeoffs.
 
 [IMF production models](frozen/2026-10-15-imf-release-v1/README.md): Bt/Bs revalidated v2, selected by explicit operator decision. [Test results](frozen/2026-10-15-imf-v2/README.md) · [Bs comparison with restored GONG](frozen/2026-10-15-imf-gong-v1/README.md): original accuracy gates did not pass.
 

@@ -11,7 +11,7 @@
 ```
 
 Requires the research checkout, `notebooks/.venv`, both private cores, installed
-models, a licensed local DTM2020 build and pinned OMNI/GOES/GRACE-C/PROSWIN caches.
+models, a licensed local DTM2020 build and pinned OMNI/SWPC L1/GOES/GRACE-C/PROSWIN caches.
 Supports `january-2026`; cache overrides: `./argus demo --help`.
 Update model hashes and cutoff evidence in `configs/demo/january-2026.json` after model changes.
 

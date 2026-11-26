@@ -34,10 +34,14 @@ func (reports metricReports) serve(w http.ResponseWriter, r *http.Request) {
 
 func (reports metricReports) read(target string, product publicforecast.Product) (*publicforecast.ForecastMetrics, error) {
 	var path string
+	if target == "geomagnetic-activity" {
+		path = reports.models["geomagnetic_ordinal"].MetricsReport
+	}
 	for _, variable := range product.Variables {
-		if path = reports.models[variable.Artifact].MetricsReport; path != "" {
+		if path != "" {
 			break
 		}
+		path = reports.models[variable.Artifact].MetricsReport
 	}
 	if path == "" {
 		return nil, errors.New("metrics report is not configured")

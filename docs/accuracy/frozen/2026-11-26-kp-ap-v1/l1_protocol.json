@@ -1,0 +1,17 @@
+{
+  "target_start": "2026-09-18T00:00Z",
+  "target_end_exclusive": "2026-11-26T00:00Z",
+  "leads": [
+    1,
+    3,
+    6,
+    12,
+    24,
+    48
+  ],
+  "wind": "SWPC HAPI active primary, hourly average of >=45 quality-0 minutes, use after end of hour",
+  "dst": "LiveDst historical Kyoto RT, assume two-hour availability delay",
+  "kp/ap": "GFZ whole-interval value; assume available end plus one hour",
+  "f107": "GFZ observed value, availability assumed +48h",
+  "note": "Retrospective L1 transfer check, exact historical provider receipt timestamps unavailable."
+}

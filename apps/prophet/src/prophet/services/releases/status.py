@@ -10,6 +10,7 @@ NORMALIZED_FIELDS = ('bx', 'by', 'bz', 'v', 'n', 't', 'kp', 'dst', 'ap', 'f10_7'
 
 def input_diagnostics(inputs):
     as_of = inputs.as_of.astimezone(UTC)
+    geomagnetic = inputs.geomagnetic_history
     timestamps = []
     invalid_timestamps = 0
     invalid_values = {name: 0 for name in NORMALIZED_FIELDS}
@@ -35,7 +36,7 @@ def input_diagnostics(inputs):
             'future_count': sum(time > as_of for time in times),
         }
     issues = []
-    if not timestamps and inputs.solar_wind_events is None:
+    if not timestamps and inputs.solar_wind_events is None and geomagnetic is None:
         issues.append('no_aware_normalized_timestamps')
     if invalid_timestamps:
         issues.append('naive_normalized_timestamps')
@@ -47,7 +48,7 @@ def input_diagnostics(inputs):
         issues.append('missing_or_nonfinite_required_values')
     if any(row['future_count'] for row in sources.values()):
         issues.append('future_source_measurements')
-    return {
+    status = {
         'version': 1, 'mode': 'observe', 'as_of': as_of.isoformat(), 'read_at': inputs.read_at.isoformat(),
         'thresholds_configured': False, 'issues': issues,
         'normalized': {
@@ -66,3 +67,13 @@ def input_diagnostics(inputs):
                               'read_at': inputs.solar_wind_events.read_at.isoformat()}
                              if inputs.solar_wind_events else None),
     }
+    if geomagnetic is not None:
+        latest_kp = max((point.time for point in geomagnetic.raw), default=None)
+        latest_hour = max((point.time for point in geomagnetic.prior), default=None)
+        status['geomagnetic_history'] = {
+            'hour_count': len(geomagnetic.prior),
+            'latest_hour': latest_hour.isoformat() if latest_hour else None,
+            'kp_interval_count': len(geomagnetic.raw),
+            'latest_kp_interval': latest_kp.isoformat() if latest_kp else None,
+        }
+    return status

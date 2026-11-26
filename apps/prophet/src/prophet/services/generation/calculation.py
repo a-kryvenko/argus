@@ -62,7 +62,7 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
         from prophet.services.events.speed import calculate_speed
         return calculate(request.inputs, registry=request.registry,
                          speed_calculator=lambda events: calculate_speed(request, events))
-    from forecast.calculation import calculate_snapshot
+    from forecast.calculation import ForecastResult, calculate_snapshot
     from prophet.services.generation.models import load_model
     product, inputs = request.product, request.inputs
     workdir, registry = request.workdir, request.registry
@@ -81,6 +81,12 @@ def calculate_product(request: CalculationRequest) -> list[Artifact]:
                         'issue_time': issue_time.isoformat()}
         if product in ('solar-wind-speed', 'solar-wind-temperature'):
             metadata.update(proswin_metadata(product, inputs, metadata))
+        if model.outputs:
+            frames = service.forecast_snapshot(inputs, issue_time=issue_time)
+            if set(frames) != set(model.outputs):
+                raise ValueError(f'Unexpected output artifacts for {model.artifact}')
+            results.update({name: ForecastResult(name, frames[name], metadata) for name in model.outputs})
+            continue
         result = calculate_snapshot(service, inputs, issue_time=issue_time, model_info=metadata)
         if result.name != model.artifact:
             raise ValueError(f'Expected artifact {model.artifact}, received {result.name}')

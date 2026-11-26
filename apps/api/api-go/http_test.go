@@ -48,6 +48,12 @@ func TestPublicRoutes(t *testing.T) {
 				}
 				series := observationcatalog.Series{ResolutionSeconds: metric.NativeSeconds,
 					TimeBasis: "measurement", Aggregation: "source", Points: []observationcatalog.Point{}}
+				if metric.SourceInterval {
+					series.TimeBasis = "source_interval_start"
+				}
+				if metric.Group == "wind" {
+					series.TimeBasis = l1TimeBasis
+				}
 				switch id {
 				case "bz":
 					series.TimeBasis = l1TimeBasis
@@ -80,7 +86,7 @@ func TestPublicRoutes(t *testing.T) {
 					series.TimeBasis = "source_interval_start"
 					series.Points = []observationcatalog.Point{add(issue.Truncate(3*time.Hour), pointer(2.67), "swpc.kp")}
 				case "ap":
-					series.Points = []observationcatalog.Point{add(issue, pointer(13.0), "swpc.kp")}
+					series.Points = []observationcatalog.Point{add(issue.Truncate(3*time.Hour), pointer(13.0), "swpc.kp")}
 				case "xrs_a":
 					series.Points = []observationcatalog.Point{add(issue.Add(time.Minute), pointer(1.7e-8), "goes.xrs")}
 				case "xrs_b":
@@ -94,7 +100,7 @@ func TestPublicRoutes(t *testing.T) {
 			}
 			success(w, data)
 		case "/internal/v1/public-forecasts/solar-wind-speed":
-			data := document{"target": "solar-wind-speed", "issue_time": issue, "horizon_hours": 2,
+			data := document{"target": "solar-wind-speed", "issue_time": issue, "horizon_hours": 1,
 				"available_variables": []string{"v"}, "cme_speed": nil,
 				"predictions": []document{{"valid_time": issue.Add(time.Hour), "lead_hours": 1,
 					"variables": document{"v": document{
@@ -115,7 +121,14 @@ func TestPublicRoutes(t *testing.T) {
 			report["meta"] = document{"variables": document{}}
 			writeJSON(w, 200, report)
 		case "/internal/v1/public-forecasts/atmospheric-density":
-			density := document{"target": "atmospheric-density", "predictions": make([]document, 49)}
+			points := make([]document, 49)
+			for lead := range points {
+				points[lead] = document{"lead_hours": lead, "valid_time": issue.Add(time.Duration(lead) * time.Hour),
+					"cells": []document{{"altitude_km": 400, "latitude_deg": 0,
+						"rho_kg_m3": 1e-12, "rho_lon_p10_kg_m3": 1e-13, "rho_lon_p90_kg_m3": 1e-11}}}
+			}
+			density := document{"target": "atmospheric-density", "driver_mode": "observed_persistence",
+				"issue_time": issue, "observed_at": issue, "horizon_hours": 48, "predictions": points}
 			density["meta"] = document{"model": "JB2008"}
 			writeJSON(w, 200, density)
 		case "/internal/v1/public-risks/leo-drag":
@@ -269,7 +282,7 @@ func TestPublicRoutes(t *testing.T) {
 	})
 	t.Run("forecasts", func(t *testing.T) {
 		compact := responseData[document](t, check("GET", "/forecasts/solar-wind-speed", "", 200))
-		if compact["meta"] == nil || compact["horizon_hours"] != float64(2) {
+		if compact["meta"] == nil || compact["horizon_hours"] != float64(1) {
 			t.Fatalf("invalid forecast: %v", compact)
 		}
 		points := compact["predictions"].([]any)

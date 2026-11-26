@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def get_db_session():
-    return _get_db_session('api')
+    return _get_db_session('api', keep_connection=False)
 
 async def get_request_db_session() -> AsyncIterator[AsyncSession]:
     async with get_db_session() as session:

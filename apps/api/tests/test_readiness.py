@@ -22,4 +22,7 @@ def test_readiness_checks_storage_and_returns_503_on_failure(monkeypatch, availa
             asyncio.run(healthcheck.ready())
         assert result.value.status_code == 503
         assert 'password' not in result.value.detail
-    assert 'dashboard_user' in str(db.execute.call_args.args[0])
+    statement = str(db.execute.call_args.args[0])
+    for table in ('dashboard_user', 'dashboard_group', 'dashboard_membership',
+                  'dashboard_session', 'dashboard_login_attempt'):
+        assert table in statement

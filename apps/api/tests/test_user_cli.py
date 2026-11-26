@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -16,7 +16,8 @@ def test_user_command_selects_handler(monkeypatch, action, handler, options):
     monkeypatch.setattr(manage_user, '_create', create)
     monkeypatch.setattr(manage_user, '_reset_password', reset_password)
     monkeypatch.setattr(manage_user, 'getpass', lambda _: 'test-password-123')
-    monkeypatch.setattr('common.runtime.run_command', lambda command: command())
+    run_command = Mock(side_effect=lambda command, *, include_request_data: command())
+    monkeypatch.setattr('common.runtime.run_command', run_command)
 
     cli.main(['user', action, 'alice', *options])
 
@@ -27,6 +28,7 @@ def test_user_command_selects_handler(monkeypatch, action, handler, options):
     args, password = selected.call_args.args
     assert args.username == 'alice'
     assert password == 'test-password-123'
+    assert run_command.call_args.kwargs == {'include_request_data': False}
     if action == 'create':
         assert args.group == ['admins', 'readers']
 

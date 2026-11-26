@@ -5,27 +5,34 @@ import httpx
 from fastapi import HTTPException
 from pydantic import TypeAdapter
 
+from api.services.upstream import Reply, UpstreamUnavailable, read_response
 
-def request(method, path, *, body=None, params=None, transport=None):
+PROFILE_LIMIT_BYTES = 8 * 1024 * 1024
+# Leave time to return a response before the dashboard proxy times out at 120 seconds.
+PROFILE_DEADLINE_SECONDS = 110
+
+
+async def request(client: httpx.AsyncClient, method, path, *, body=None, params=None, validation=False) -> Reply:
     url, token = os.getenv('INTELLIGENCE_URL'), os.getenv('INTELLIGENCE_SERVICE_TOKEN')
     if not url or not token:
         raise HTTPException(503, 'Intelligence service is not configured')
     try:
-        with httpx.Client(timeout=httpx.Timeout(180, connect=10), follow_redirects=False,
-                          trust_env=False, transport=transport) as client:
-            return client.request(method, url.rstrip('/') + path,
-                headers={'Authorization': f'Bearer {token}'}, params=params,
-                json=body.model_dump(mode='json') if body is not None else None)
-    except httpx.HTTPError:
+        return await read_response(
+            client, method, url, path, token, deadline=PROFILE_DEADLINE_SECONDS, max_bytes=PROFILE_LIMIT_BYTES,
+            accepted=(200, 201, 422) if validation else (200, 201), params=params,
+            body=body.model_dump(mode='json') if body is not None else None,
+        )
+    except UpstreamUnavailable:
         raise HTTPException(503, 'Intelligence service is unavailable') from None
 
 
-def profile_response(response, response_type):
+def profile_response(response: Reply, response_type):
     if response.status_code in (404, 409):
         raise HTTPException(response.status_code, 'Spacecraft not found' if response.status_code == 404
                             else 'Profile changed, paused or assessment running. Reload and try again.')
+    if response.status_code not in (200, 201):
+        raise HTTPException(503, 'Intelligence service is unavailable')
     try:
-        response.raise_for_status()
         return TypeAdapter(response_type).validate_json(response.content)
-    except (httpx.HTTPError, ValueError):
+    except ValueError:
         raise HTTPException(503, 'Intelligence service is unavailable') from None

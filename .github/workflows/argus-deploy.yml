@@ -93,14 +93,17 @@ jobs:
             --project "$PROJECT_PATH" \
             --group test \
             "${extras[@]}"
+          if [[ "$PROJECT_PATH" == apps/api ]]; then
+            uv sync --locked --project apps/clio
+          fi
       
       - name: Run TESTS_PATH
         if: matrix.project != ''
         shell: bash
         run: |
           args=()
-          if [[ "$PROJECT_PATH" == apps/clio ]]; then
-            test_container="clio-test-postgres"
+          if [[ "$PROJECT_PATH" == apps/clio || "$PROJECT_PATH" == apps/api ]]; then
+            test_container="${PROJECT_PATH##*/}-test-postgres"
             docker run --rm --detach --name "$test_container" --publish 127.0.0.1::5432 \
               --env POSTGRES_PASSWORD=clio-test postgres:17-alpine > /dev/null
             trap 'docker stop "$test_container" > /dev/null' EXIT
@@ -125,6 +128,9 @@ jobs:
             -rs \
             "$TESTS_PATH" \
             "${args[@]}"
+          if [[ "$PROJECT_PATH" == apps/api ]]; then
+            "$PROJECT_PATH/.venv/bin/python" "$TESTS_PATH/integration/verify_dashboard.py"
+          fi
 
   validate_deployment:
     needs: plan

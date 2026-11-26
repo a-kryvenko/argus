@@ -3,12 +3,14 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
-from api.services.authentication import hash_password, verify_password, current_user
+from api.services.authentication import Principal, current_user, hash_password, verify_password
 from api.db.session import get_request_db_session
 from api.routers.dashboard import router, users
+from api.schemas.dashboard import UserUpdate
+from api.services.dashboard_users import update_user
 
 
 def test_password_hashes_are_salted_and_verified():
@@ -18,6 +20,27 @@ def test_password_hashes_are_salted_and_verified():
     assert verify_password('correct horse battery staple', one)
     assert not verify_password('incorrect password', one)
     assert not verify_password('anything', 'malformed')
+
+
+def test_identity_lookup_releases_the_transaction_before_the_handler():
+    request = Request({'type': 'http', 'headers': [(b'cookie', b'argus_session=test-session')]})
+    db = AsyncMock()
+    db.execute.return_value = Mock(one_or_none=Mock(return_value=(1, 'reader', True)))
+    assert asyncio.run(current_user(request, db)) == Principal(1, 'reader', True)
+    db.rollback.assert_awaited_once()
+
+
+def test_reapplying_the_same_memberships_keeps_sessions():
+    db = AsyncMock()
+    db.scalar.return_value = Principal(2, 'reader', True)
+    db.scalars.return_value = Mock(all=Mock(return_value=['readers']))
+    db.execute.return_value = [(2, SimpleNamespace(name='readers', permissions=['read']))]
+    result = asyncio.run(update_user(
+        db, Principal(1, 'admin', True), 2, UserUpdate(groups=['readers', 'readers']), None))
+    assert result['groups'] == ['readers']
+    db.add_all.assert_not_called()
+    assert all(call.args[0].is_select for call in db.execute.call_args_list)
+    db.commit.assert_awaited_once()
 
 
 def test_users_page_loads_all_groups_in_one_query():
@@ -82,3 +105,17 @@ def test_empty_origin_configuration_fails_closed(monkeypatch):
     app.dependency_overrides[get_request_db_session] = lambda: AsyncMock()
     with TestClient(app) as client:
         assert client.post('/dashboard/logout').status_code == 403
+
+
+def test_dashboard_origin_is_shared_with_the_application(monkeypatch):
+    monkeypatch.setenv('DASHBOARD_ORIGINS', 'https://old.example')
+    app = FastAPI()
+    app.state.dashboard_origins = frozenset({'https://dashboard.example'})
+    app.include_router(router)
+    app.dependency_overrides[get_request_db_session] = lambda: AsyncMock()
+    with TestClient(app) as client:
+        assert client.post('/dashboard/logout', headers={'Origin': 'https://old.example'}).status_code == 403
+        result = client.post('/dashboard/logout', headers={'Origin': 'https://dashboard.example'})
+        assert result.status_code == 200
+        cookie = result.headers['set-cookie']
+        assert 'Max-Age=0' in cookie and 'HttpOnly' in cookie and 'SameSite=strict' in cookie

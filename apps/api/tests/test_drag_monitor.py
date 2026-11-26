@@ -1,4 +1,6 @@
+import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -7,17 +9,20 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from api.services.authentication import current_user
 from api.db.session import get_request_db_session
+from api.services.upstream import intelligence_client
 from api.routers import drag_monitor
+from api.services.intelligence import profiles as profile_transport
 
 
 def test_session_owner_and_write_origin(monkeypatch):
     app = FastAPI()
     app.include_router(drag_monitor.router)
+    app.dependency_overrides[intelligence_client] = lambda: None
     async def no_database():
-        yield None
+        yield SimpleNamespace(rollback=AsyncMock())
     app.dependency_overrides[get_request_db_session] = no_database
     calls = []
-    monkeypatch.setattr(drag_monitor, 'request', lambda *args, **kwargs: calls.append((args, kwargs)) or [])
+    monkeypatch.setattr(drag_monitor, 'request', AsyncMock(side_effect=lambda _, *a, **k: calls.append((a, k)) or []))
     with TestClient(app) as client:
         assert client.get('/dashboard/drag-monitor').status_code == 401
         app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=7)
@@ -53,8 +58,12 @@ def test_transport_sanitizes_errors(monkeypatch, upstream, expected):
         assert request.url.path == '/internal/v1/drag-monitor/7'
         assert request.headers['Authorization'] == 'Bearer test-token'
         return httpx.Response(upstream, json={'detail': 'secret upstream content'})
+    async def forward():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            return await drag_monitor.request(client, 'GET', 7, '', list)
+
     with pytest.raises(HTTPException) as raised:
-        drag_monitor.request('GET', 7, '', list, transport=httpx.MockTransport(respond))
+        asyncio.run(forward())
     assert raised.value.status_code == expected
     assert 'secret' not in raised.value.detail
 
@@ -62,5 +71,31 @@ def test_transport_sanitizes_errors(monkeypatch, upstream, expected):
 def test_transport_contract_check(monkeypatch):
     monkeypatch.setenv('INTELLIGENCE_URL', 'http://internal')
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
+    async def forward():
+        transport = httpx.MockTransport(lambda _: httpx.Response(200, json=['bad']))
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await drag_monitor.request(client, 'GET', 7, '', list[int])
+
     with pytest.raises(HTTPException):
-        drag_monitor.request('GET', 7, '', list[int], transport=httpx.MockTransport(lambda _: httpx.Response(200, json=['bad'])))
+        asyncio.run(forward())
+
+
+def test_transport_bounds_streamed_profile_body(monkeypatch):
+    monkeypatch.setenv('INTELLIGENCE_URL', 'http://internal')
+    monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
+    monkeypatch.setattr(profile_transport, 'PROFILE_LIMIT_BYTES', 64)
+
+    class Body(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b' ' * 40
+            yield b' ' * 40
+            yield b'[]'
+
+    async def forward():
+        transport = httpx.MockTransport(lambda _: httpx.Response(200, stream=Body()))
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await drag_monitor.request(client, 'GET', 7, '', list)
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(forward())
+    assert raised.value.status_code == 503

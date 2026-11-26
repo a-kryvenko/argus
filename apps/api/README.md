@@ -1,45 +1,19 @@
 # API
 
-Public HTTP, dashboard authentication and account management.
-
-## Dataflow
-
-- **Input:** Client requests; Clio observations, Prophet forecasts, Intelligence advisories and static metrics.
-- **Output:** HTTP data responses, dashboard sessions, profiles, history, events and monitoring.
-
-## Endpoints
-
-Paths below are relative to `/api/v1` at the proxy; direct Uvicorn omits that prefix.
-Schemas and parameters: `/api/v1/docs`.
+Both services use `/api/v1`. Public Go API schemas are at `/api/v1/docs`.
 
 | Path | Purpose |
 | --- | --- |
-| `/summary` | Prepared Prophet summary with observations, risks and public S3 chart URLs |
-| `/sdo/images/{name}` | Immutable AIA JPEG/WebP variants; `summary.sdo_images` maps channels to asset IDs |
-| `/observations` | Latest measurements with individual timestamps; `trends=true` adds observed changes |
-| `/observations/history` | History with sample provenance and aggregate coverage |
-| `/observations/catalog` | Metric identifiers, units, native cadence and products |
-| `/forecasts/{target}` | Published forecast |
-| `/forecasts/{target}/metrics` | Static evaluation metrics |
-| `/forecasts/{target}/verification` | Rolling observed accuracy |
-| `/forecasts/atmospheric-density` | Density grid |
-| `/forecasts/solar-wind-events` | [Solar events](../../docs/solar-wind-events.md) |
-| `/dashboard/density-advisory/*` | [Owned profiles, assessments and journal](../../docs/density-advisory.md) |
-| `/risks/leo-drag` | [Experimental calculator](../../docs/leo-drag.md) |
-| `/dashboard/*` | Accounts, sessions and current service status |
-| `/ping` | Liveness |
+| `/observations` | Latest measurements and optional `trends=true` |
+| `/observations/history` | History with provenance and aggregate coverage |
+| `/observations/catalog` | Units, native cadence and sources |
+| `/summary` | Published summary with S3 image URLs |
+| `/forecasts/{target}` | Published forecasts, metrics and verification |
+| `/risks/leo-drag` | [LEO drag calculator](../../docs/leo-drag.md) |
+| `/dashboard/*` | Python API for accounts, monitoring and saved assessments |
 
-Wind history defaults to NOAA L1 measurement time, with six days of raw retention. Use `time_basis=near_earth&resolution=1h` for the stored NASA OMNI2 archive. Its coverage depends on archive availability and Clio backfill.
+Wind defaults to L1 time. Use `time_basis=near_earth&resolution=1h` for stored OMNI2 history. L1 raw retention and GOES backfill are six days. GOES history accepts up to seven days per request.
 
-Use `observations=xrs_a,xrs_b,proton_10mev,proton_100mev` on either observation endpoint. GOES history accepts up to seven days per request, with six days of backfill and retention. XRS is in W/m² at 1 minute. Integral proton flux is in pfu (protons/cm²/s/sr) at 5 minutes.
-
-Dashboard requests observation/forecast status directly from Clio and Prophet.
-Dashboard status covers observations and forecasts; infrastructure monitoring uses Alloy → external Prometheus/Loki.
-
-Missing artifacts return 503.
-Summary is prepared by Prophet; API forwards the response.
-Summary CME: Earth arrivals only, at most 7 days old; retained until arrival window end (or arrival time) plus `cme_grace_hours` (24 by default).
-Summary `risk_level`: 0 green, 1 yellow, 2 orange, 3 red, 4 crimson; maximum absolute current/future value. No data or configured levels yields 0.
-Missing measurements remain null/gaps; history timestamps require a timezone.
+Dashboard cookie-authenticated writes and CORS use `DASHBOARD_ORIGINS`.
 
 [Setup](../../README_DEPLOY.md#local-development) · [Commands](../../docs/commands.md)

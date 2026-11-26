@@ -34,7 +34,7 @@ async def _create(args, password):
     from common.db.session import dispose_engine
     from api.db.session import get_db_session
     from api.schemas.dashboard import UserCreate
-    from api.services.authentication import create_user
+    from api.services.dashboard_users import create_user
 
     try:
         async with get_db_session() as db:
@@ -45,20 +45,13 @@ async def _create(args, password):
 
 
 async def _reset_password(args, password):
-    from sqlalchemy import select, delete
     from common.db.session import dispose_engine
     from api.db.session import get_db_session
-    from api.db.models.dashboard import User, Session
-    from api.services.authentication import hash_password
+    from api.services.dashboard_users import reset_password
 
     try:
         async with get_db_session() as db:
-            user = await db.scalar(select(User).where(User.username == args.username.lower()).with_for_update())
-            if user is None:
-                raise ValueError('User not found')
-            user.password_hash = hash_password(password)
-            await db.execute(delete(Session).where(Session.user_id == user.id))
-            await db.commit()
+            await reset_password(db, args.username.lower(), password)
             print('Password reset; all sessions revoked')
     finally:
         await dispose_engine()

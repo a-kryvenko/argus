@@ -21,6 +21,7 @@ const (
 	sampledCoverage     = "sample_timestamps"
 	aggregateCoverage   = "available_aggregate_windows"
 	overlappingCoverage = "overlapping_intervals"
+	dailyCoverage       = "utc_days"
 )
 
 func observationCoverage(points []sample, start, end, now time.Time, step time.Duration, basis string) Coverage {
@@ -28,16 +29,18 @@ func observationCoverage(points []sample, start, end, now time.Time, step time.D
 		end = now
 	}
 	first := start.Truncate(step)
-	if basis != overlappingCoverage && first.Before(start) {
+	if basis != overlappingCoverage && basis != dailyCoverage && first.Before(start) {
 		first = first.Add(step)
 	}
 	states := map[time.Time]string{}
 	for _, point := range points {
-		at := point.ObservedAt.Truncate(step)
+		at := point.ObservedAt.UTC().Truncate(step)
 		if point.Value != nil {
 			states[at] = "usable"
 		} else if point.Quality == "flagged" && states[at] != "usable" {
 			states[at] = "invalid"
+		} else if states[at] == "" {
+			states[at] = "missing"
 		}
 	}
 	gaps := []Gap{}
@@ -46,8 +49,13 @@ func observationCoverage(points []sample, start, end, now time.Time, step time.D
 		if basis == aggregateCoverage && at.Add(step).After(end) {
 			break
 		}
-		expected++
 		reason := states[at]
+		// A daily publication can have any timestamp in its UTC calendar day.
+		// Only complete days can be declared missing on cadence alone.
+		if basis == dailyCoverage && reason == "" && (at.Before(start) || at.Add(step).After(end)) {
+			continue
+		}
+		expected++
 		switch reason {
 		case "usable":
 			usable++
@@ -83,49 +91,47 @@ func observationCoverage(points []sample, start, end, now time.Time, step time.D
 
 func (a *api) observationChanges(ctx context.Context, current map[string]observationcatalog.Series, selected []string, now time.Time) (map[string]*float64, error) {
 	changes := make(map[string]*float64)
-	wind, indices, hourly := selectedMetrics(selected, windMetrics), selectedMetrics(selected, indexMetrics), selectedMetrics(selected, hourlyMetrics)
+	wind := selectedMetrics(selected, windMetrics)
+	var indices, daily []string
+	for _, metric := range selected {
+		if indexDuration[metric] > 0 {
+			indices = append(indices, metric)
+		} else if slices.Contains(hourlyMetrics, metric) {
+			daily = append(daily, metric)
+		}
+	}
 	if metrics := slices.Concat(wind, indices); len(metrics) > 0 {
 		past, err := a.numeric(ctx, metrics, now.Add(-7*time.Hour), now, "1m", "")
 		if err != nil {
 			return nil, err
 		}
 		for _, metric := range wind {
-			changes[metric] = windChange(past[metric].Points, now, a.freshness[metric])
+			changes[metric] = nil
+			if latest := current[metric].Points; len(latest) > 0 {
+				changes[metric] = windChange(latest[len(latest)-1], past[metric].Points, now, a.freshness[metric])
+			}
 		}
 		for _, metric := range indices {
 			changes[metric] = nil
 			latest := current[metric].Points
-			points := past[metric].Points
-			if len(latest) == 0 || len(points) == 0 || latest[len(latest)-1].Value == nil ||
-				now.Sub(latest[len(latest)-1].ObservedAt.Add(indexDuration[metric])) > a.freshness[metric] {
-				continue
-			}
-			point := points[len(points)-1]
-			for i := len(points) - 1; i >= 0; i-- {
-				if !points[i].ObservedAt.After(now.Add(-time.Hour)) {
-					changes[metric] = valueChange(point, points[i])
-					break
-				}
+			if len(latest) > 0 {
+				changes[metric] = intervalChange(latest[len(latest)-1], past[metric].Points, now,
+					indexDuration[metric], a.freshness[metric])
 			}
 		}
 	}
-	if len(hourly) > 0 {
-		past, err := a.numeric(ctx, hourly, now.Add(-48*time.Hour), now.Add(-time.Hour+time.Microsecond), "1m", "")
+	if len(daily) > 0 {
+		past, err := a.numeric(ctx, daily, now.Add(-48*time.Hour), now.Add(-time.Hour+time.Microsecond), "1m", "")
 		if err != nil {
 			return nil, err
 		}
-		for _, metric := range hourly {
+		for _, metric := range daily {
 			changes[metric] = nil
-			if len(current[metric].Points) == 0 {
+			latest, rows := current[metric].Points, past[metric].Points
+			if len(latest) == 0 || len(rows) == 0 || now.Sub(latest[len(latest)-1].ObservedAt) > a.freshness[metric] {
 				continue
 			}
-			rows := past[metric].Points
-			for i := len(rows) - 1; i >= 0; i-- {
-				if rows[i].Value != nil {
-					changes[metric] = valueChange(current[metric].Points[len(current[metric].Points)-1], rows[i])
-					break
-				}
-			}
+			changes[metric] = valueChange(latest[len(latest)-1], rows[len(rows)-1])
 		}
 	}
 	return changes, nil
@@ -135,26 +141,43 @@ func valueChange(current, previous sample) *float64 {
 	if current.Value == nil || previous.Value == nil {
 		return nil
 	}
-	return pointer(roundChange(*current.Value - *previous.Value))
+	return roundChange(*current.Value - *previous.Value)
 }
 
-func windChange(points []sample, now time.Time, freshness time.Duration) *float64 {
-	if len(points) == 0 {
+func intervalChange(current sample, points []sample, now time.Time, duration, freshness time.Duration) *float64 {
+	if current.Value == nil || now.Sub(current.ObservedAt.Add(duration)) > freshness {
 		return nil
 	}
-	last := points[len(points)-1]
+	reference := now.Add(-time.Hour)
+	if !current.ObservedAt.After(reference) && current.ObservedAt.Add(duration).After(reference) {
+		return pointer(0.0)
+	}
+	for i := len(points) - 1; i >= 0; i-- {
+		point := points[i]
+		if !point.ObservedAt.After(reference) {
+			if point.ObservedAt.Add(duration).After(reference) {
+				return valueChange(current, point)
+			}
+			break
+		}
+	}
+	return nil
+}
+
+func windChange(last sample, points []sample, now time.Time, freshness time.Duration) *float64 {
 	if last.Value == nil || now.Sub(last.ObservedAt) > freshness {
 		return nil
 	}
-	var recent, previous float64
-	var recentCount, previousCount int
+	recent, recentCount := *last.Value, 1
+	var previous float64
+	var previousCount int
 	for _, point := range points {
 		if point.Value == nil {
 			continue
 		}
 		age := last.ObservedAt.Sub(point.ObservedAt)
 		switch {
-		case age >= 0 && age < 5*time.Minute:
+		case age > 0 && age < 5*time.Minute:
 			recent += *point.Value
 			recentCount++
 		case age >= time.Hour && age < 65*time.Minute:
@@ -162,13 +185,16 @@ func windChange(points []sample, now time.Time, freshness time.Duration) *float6
 			previousCount++
 		}
 	}
-	if recentCount == 0 || previousCount == 0 {
+	if previousCount == 0 {
 		return nil
 	}
-	return pointer(roundChange(recent/float64(recentCount) - previous/float64(previousCount)))
+	return roundChange(recent/float64(recentCount) - previous/float64(previousCount))
 }
 
-func roundChange(value float64) float64 {
+func roundChange(value float64) *float64 {
+	if math.IsInf(value, 0) || math.IsNaN(value) {
+		return nil
+	}
 	rounded, _ := strconv.ParseFloat(strconv.FormatFloat(value, 'f', 3, 64), 64)
-	return rounded
+	return &rounded
 }

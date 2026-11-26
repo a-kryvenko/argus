@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Credentials(BaseModel):
@@ -17,6 +17,8 @@ class UserCreate(Credentials):
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
     active: bool | None = None
     groups: list[str] | None = Field(default=None, max_length=50)
     password: str | None = Field(default=None, min_length=12, max_length=256)

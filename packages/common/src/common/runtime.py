@@ -4,7 +4,7 @@ import os
 from common.config import get_config
 
 
-def setup_sentry():
+def setup_sentry(*, include_request_data: bool = True):
     import sentry_sdk
     from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.integrations.excepthook import ExcepthookIntegration
@@ -14,14 +14,16 @@ def setup_sentry():
         # Logging and the final traceback must not report the same failure again.
         sentry_sdk.init(
             dsn=os.getenv('SENTRY_COLLECT_POINT'),
-            send_default_pii=True,
+            send_default_pii=include_request_data,
+            max_request_body_size='medium' if include_request_data else 'never',
+            include_local_variables=include_request_data,
             integrations=[LoggingIntegration(event_level=None)],
             disabled_integrations=[ExcepthookIntegration()],
         )
 
 
-def run_command(command):
-    setup_sentry()
+def run_command(command, *, include_request_data: bool = True):
+    setup_sentry(include_request_data=include_request_data)
     try:
         return command()
     except Exception as exc:

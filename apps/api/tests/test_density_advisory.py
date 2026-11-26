@@ -1,4 +1,6 @@
+import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 import httpx
 import pytest
@@ -6,6 +8,7 @@ from fastapi import FastAPI,HTTPException
 from fastapi.testclient import TestClient
 from api.services.authentication import current_user
 from api.db.session import get_request_db_session
+from api.services.upstream import intelligence_client
 from api.routers import density_advisory
 from api.routers.density_advisory import request
 
@@ -13,10 +16,12 @@ from api.routers.density_advisory import request
 def test_session_ownership_origin_and_exact_source_routes(monkeypatch):
     app=FastAPI()
     app.include_router(density_advisory.router)
-    async def no_database(): yield None
+    app.dependency_overrides[intelligence_client] = lambda: None
+    async def no_database():
+        yield SimpleNamespace(rollback=AsyncMock())
     app.dependency_overrides[get_request_db_session]=no_database
     calls=[]
-    monkeypatch.setattr(density_advisory,'request',lambda *a,**k:calls.append((a,k)) or [])
+    monkeypatch.setattr(density_advisory,'request',AsyncMock(side_effect=lambda _, *a, **k: calls.append((a, k)) or []))
     base='/dashboard/density-advisory'
     with TestClient(app) as client:
         assert client.get(base).status_code==401
@@ -51,8 +56,12 @@ def test_density_transport_paths_and_sanitized_errors(monkeypatch,status,expecte
         assert req.url.path=='/internal/v1/density-advisory/7'
         assert req.headers['Authorization']=='Bearer test-token'
         return httpx.Response(status,json={'detail':'secret upstream error'})
+    async def forward():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            return await request(client, 'GET', 7, '', list)
+
     with pytest.raises(HTTPException) as raised:
-        request('GET',7,'',list,transport=httpx.MockTransport(respond))
+        asyncio.run(forward())
     assert raised.value.status_code==expected
     assert 'secret' not in raised.value.detail
 
@@ -67,8 +76,12 @@ def test_density_validation_errors_describe_spacecraft_and_hide_upstream_inputs(
     monkeypatch.setenv('INTELLIGENCE_URL', 'http://internal')
     monkeypatch.setenv('INTELLIGENCE_SERVICE_TOKEN', 'test-token')
     transport = httpx.MockTransport(lambda req: httpx.Response(422, json={'detail': detail}))
+    async def forward():
+        async with httpx.AsyncClient(transport=transport) as client:
+            return await request(client, 'POST', 7, '', dict)
+
     with pytest.raises(HTTPException) as raised:
-        request('POST', 7, '', dict, transport=transport)
+        asyncio.run(forward())
     assert raised.value.status_code == 422
     assert raised.value.detail.startswith(expected)
     assert 'secret' not in raised.value.detail and 'trajectory' not in raised.value.detail
@@ -78,9 +91,10 @@ def test_density_validation_errors_describe_spacecraft_and_hide_upstream_inputs(
 def test_spacecraft_writes_need_orbit_but_no_trajectory(monkeypatch, method):
     app = FastAPI()
     app.include_router(density_advisory.router)
+    app.dependency_overrides[intelligence_client] = lambda: None
     app.dependency_overrides[current_user] = lambda: SimpleNamespace(id=7)
     calls = []
-    monkeypatch.setattr(density_advisory, 'request', lambda *a, **k: calls.append((a, k)) or {})
+    monkeypatch.setattr(density_advisory, 'request', AsyncMock(side_effect=lambda _, *a, **k: calls.append((a, k)) or {}))
     url = '/dashboard/density-advisory'
     if method == 'PUT':
         url += f'/{uuid4()}?revision=1'

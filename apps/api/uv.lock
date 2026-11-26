@@ -61,6 +61,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "anyio" },
     { name = "common" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -82,6 +83,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2" },
+    { name = "anyio", specifier = ">=4,<5" },
     { name = "common", editable = "../../packages/common" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28,<1" },

@@ -109,8 +109,8 @@ _SERVICES_TESTS = {
             + _PACKAGES_TESTS["common"],
     "clio": ["apps/clio/tests"]
             + _PACKAGES_TESTS["common"],
-    "clio-api": [],
-    "public-api": [],
+    "clio-api": ["apps/api/tests"],
+    "public-api": ["apps/api/tests"],
     "prophet-api": [],
     "prophet": ["apps/prophet/tests"]
             + _PACKAGES_TESTS["common"]

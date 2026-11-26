@@ -45,14 +45,49 @@ func (a *api) leoDrag(w http.ResponseWriter, r *http.Request, respond func(Publi
 		writeError(w, invalid("Invalid orbit or drag parameters"))
 		return
 	}
-	raw, status, err := a.request(r.Context(), a.intelligence, "POST", "/internal/v1/public-risks/leo-drag", nil, body, 90*time.Second)
+	raw, status, err := a.request(r.Context(), a.intelligence, "POST", "/internal/v1/public-risks/leo-drag", nil, body, 90*time.Second, dragResponseLimit)
 	if status == 422 {
 		writeError(w, invalid("Orbit is outside the available grid or the fixed-orbit approximation (maximum decay 1000 m)"))
 		return
 	}
-	if err != nil {
-		writeError(w, unavailable("Impact service or atmospheric density is not ready"))
-		return
+	respondPublication(w, respond, raw, err, "Impact service or atmospheric density is not ready",
+		func(assessment LeoDragAssessment) bool {
+			return sameDragInput(assessment.Inputs, input) && validDragAssessment(assessment)
+		})
+}
+
+func sameDragInput(result, request LeoDragRequest) bool {
+	if result.Horizon != request.Horizon {
+		return false
 	}
-	respond(Published[LeoDragAssessment]{raw})
+	for _, pair := range [][2]*float64{
+		{result.Altitude, request.Altitude}, {result.Inclination, request.Inclination},
+		{result.Mass, request.Mass}, {result.Area, request.Area}, {result.Coefficient, request.Coefficient},
+	} {
+		if pair[0] == nil || pair[1] == nil || *pair[0] != *pair[1] {
+			return false
+		}
+	}
+	if request.Thresholds == nil {
+		return result.Thresholds == nil
+	}
+	return result.Thresholds != nil && *result.Thresholds == *request.Thresholds
+}
+
+func validDragAssessment(assessment LeoDragAssessment) bool {
+	start := assessment.StartTime
+	horizon := assessment.Inputs.Horizon
+	if start.IsZero() || !start.Equal(assessment.Source.IssueTime) || start.After(assessment.ComputedAt) ||
+		!assessment.EndTime.Equal(start.Add(time.Duration(horizon)*time.Hour)) ||
+		len(assessment.Predictions) != horizon+1 || assessment.MeanDensityKgM3 <= 0 {
+		return false
+	}
+	for lead, point := range assessment.Predictions {
+		if point.LeadHours != lead || !point.ValidTime.Equal(start.Add(time.Duration(lead)*time.Hour)) ||
+			point.MeanDensityKgM3 <= 0 {
+			return false
+		}
+	}
+	last := assessment.Predictions[horizon]
+	return last.DeltaVLossMS == assessment.DeltaVLossMS && last.EstimatedAltitudeLossM == assessment.EstimatedAltitudeLossM
 }

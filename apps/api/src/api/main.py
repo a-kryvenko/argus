@@ -1,88 +1,100 @@
 from contextlib import asynccontextmanager
-import time
+from time import perf_counter
 
 import sentry_sdk
 from common.config import get_config
+from common.db.session import dispose_engine
 from common.runtime import setup_sentry
+from common.schemas.response import error_response
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.routers.dashboard import router as dashboard_router
-from common.db.session import dispose_engine
-from api.routers.drag_monitor import router as drag_monitor_router
 from api.routers.density_advisory import router as density_advisory_router
+from api.routers.drag_monitor import router as drag_monitor_router
 from api.routers.healthcheck import router as healthcheck_router
-from common.schemas.response import error_response
+from api.services.authentication import dashboard_origins
+from api.services.upstream import upstream_client
 
-config = get_config()
+
+PREFIX = '/api/v1'
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(application: FastAPI):
+    setup_sentry(include_request_data=False)
     try:
-        yield
+        async with upstream_client() as intelligence, upstream_client(max_connections=16) as monitoring:
+            application.state.intelligence_client = intelligence
+            application.state.monitoring_client = monitoring
+            yield
     finally:
         await dispose_engine()
 
-setup_sentry()
 
-app = FastAPI(
-    title="ARGUS SUNWATCH Dashboard",
-    debug=config.debug,
-    lifespan=lifespan,
-    openapi_url=None,
-)
-
-if not config.debug:
-    @app.exception_handler(Exception)
-    async def unhandled_exception_handler(request: Request, exc: Exception):
-        sentry_sdk.capture_exception(exc)
-
-        return JSONResponse(
-            content=error_response(
-                code="INTERNAL_ERROR",
-                msg="Something went wrong..."
-            ).model_dump(exclude_none=True),
-            status_code=500,
-        )
-
-@app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    code = {
-        404: "NOT_FOUND",
-        503: "NOT_READY",
-    }.get(exc.status_code, "HTTP_ERROR")
+def failure(status: int, code: str, message: str, headers=None):
     return JSONResponse(
-        content=error_response(
-            code=code,
-            msg=exc.detail
-        ).model_dump(exclude_none=True),
-        status_code=exc.status_code,
+        error_response(code=code, msg=message).model_dump(exclude_none=True),
+        status_code=status,
+        headers=headers,
     )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
-router = APIRouter(prefix="/api/v1")
-router.include_router(dashboard_router)
-router.include_router(drag_monitor_router)
-router.include_router(density_advisory_router)
-router.include_router(healthcheck_router)
-app.include_router(router, include_in_schema=False)
+def create_app() -> FastAPI:
+    debug = get_config().debug
+    application = FastAPI(
+        title='ARGUS SUNWATCH Dashboard',
+        debug=debug,
+        lifespan=lifespan,
+        openapi_url=None,
+    )
+    application.state.dashboard_origins = tuple(dashboard_origins())
+
+    @application.exception_handler(StarletteHTTPException)
+    async def http_error(_: Request, exc: StarletteHTTPException):
+        code = {404: 'NOT_FOUND', 503: 'NOT_READY'}.get(exc.status_code, 'HTTP_ERROR')
+        message = exc.detail if isinstance(exc.detail, str) else 'Request failed'
+        return failure(exc.status_code, code, message, exc.headers)
+
+    @application.exception_handler(RequestValidationError)
+    async def invalid_request(_: Request, __: RequestValidationError):
+        return failure(422, 'INVALID_INPUT', 'Request fields are invalid')
+
+    @application.middleware('http')
+    async def response_headers(request: Request, call_next):
+        start = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            if debug:
+                raise
+            sentry_sdk.capture_exception(exc)
+            response = failure(500, 'INTERNAL_ERROR', 'Internal server error')
+        response.headers['X-Process-Time'] = str(perf_counter() - start)
+        path = request.url.path
+        if path == f'{PREFIX}/dashboard' or path.startswith(f'{PREFIX}/dashboard/'):
+            response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=application.state.dashboard_origins,
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*'],
+        expose_headers=['Retry-After'],
+    )
+
+    router = APIRouter(prefix=PREFIX)
+    router.include_router(dashboard_router)
+    router.include_router(drag_monitor_router)
+    router.include_router(density_advisory_router)
+    router.include_router(healthcheck_router)
+    application.include_router(router)
+    return application
 
 
-@app.middleware("http")
-async def add_processing_time_header(request: Request, call_next):
-    start_time = time.perf_counter()
-    response = await call_next(request)
-    response.headers["X-Process-Time"] = str(time.perf_counter() - start_time)
-    if request.url.path.startswith('/dashboard') or '/dashboard/' in request.url.path:
-        response.headers['Cache-Control'] = 'no-store'
-    return response
+app = create_app()

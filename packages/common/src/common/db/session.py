@@ -79,7 +79,11 @@ def _get_session_factory(service: str) -> async_sessionmaker[AsyncSession]:
 
 
 @asynccontextmanager
-async def get_db_session(service: str) -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session(service: str, *, keep_connection: bool = True) -> AsyncGenerator[AsyncSession, None]:
+    if not keep_connection:
+        async with _get_session_factory(service)() as session:
+            yield session
+        return
     # Keep one connection across commits until the session context exits.
     async with _get_engine(service).connect() as connection:
         async with _get_session_factory(service)(bind=connection) as session:

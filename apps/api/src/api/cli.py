@@ -35,9 +35,9 @@ def main(argv=None):
     if args.command == 'user':
         from common.runtime import run_command
         if args.action == 'create':
-            return run_command(lambda: create(args))
+            return run_command(lambda: create(args), include_request_data=False)
         if args.action == 'reset-password':
-            return run_command(lambda: reset_password(args))
+            return run_command(lambda: reset_password(args), include_request_data=False)
 
     if args.command == 'serve':
         import uvicorn

@@ -15,7 +15,7 @@ type Coverage struct {
 	Percent           *float64  `json:"percent" nullable:"true"`
 	ResolutionSeconds int       `json:"resolution_seconds"`
 	EvaluatedTo       time.Time `json:"evaluated_to"`
-	Basis             string    `json:"basis" enum:"overlapping_intervals,sample_timestamps,available_aggregate_windows"`
+	Basis             string    `json:"basis" enum:"overlapping_intervals,sample_timestamps,available_aggregate_windows,utc_days"`
 	Gaps              []Gap     `json:"gaps"`
 }
 

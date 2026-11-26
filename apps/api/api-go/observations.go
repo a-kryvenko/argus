@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"slices"
@@ -36,46 +34,6 @@ const (
 	l1TimeBasis        = "l1"
 	nearEarthTimeBasis = "near_earth"
 )
-
-type sample = observationcatalog.Point
-
-func (a *api) numeric(ctx context.Context, metrics []string, from, to time.Time, interval, timeBasis string) (map[string]observationcatalog.Series, error) {
-	query := url.Values{"metrics": {strings.Join(metrics, ",")}}
-	if !from.IsZero() {
-		query.Set("from", from.Format(time.RFC3339Nano))
-		query.Set("to", to.Format(time.RFC3339Nano))
-		query.Set("interval", interval)
-	}
-	if timeBasis != "" {
-		query.Set(timeBasisParameter, timeBasis)
-	}
-	raw, _, err := a.request(ctx, a.clio, "GET", "/internal/v1/observations/series", query, nil, 90*time.Second)
-	if err != nil {
-		return nil, unavailable("Observation service is unavailable")
-	}
-	var result struct {
-		Success bool                                 `json:"success"`
-		Data    map[string]observationcatalog.Series `json:"data"`
-	}
-	if json.Unmarshal(raw, &result) != nil || !result.Success || result.Data == nil {
-		return nil, unavailable("Observation service returned an invalid response")
-	}
-	for _, metric := range metrics {
-		series := result.Data[metric]
-		if series.Points == nil || series.ResolutionSeconds <= 0 || series.TimeBasis == "" ||
-			(timeBasis != "" && slices.Contains(windMetrics, metric) && series.TimeBasis != timeBasis) {
-			return nil, unavailable("Observation service returned an invalid series")
-		}
-		var previous time.Time
-		for _, point := range series.Points {
-			if point.ObservedAt.IsZero() || !point.ObservedAt.After(previous) {
-				return nil, unavailable("Observation service returned an invalid series")
-			}
-			previous = point.ObservedAt
-		}
-	}
-	return result.Data, nil
-}
 
 func observationSelection(query url.Values, defaults []string) ([]string, error) {
 	if values := query[observationsParameter]; len(values) > 0 {
@@ -193,7 +151,6 @@ func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respon
 		writeError(w, err)
 		return
 	}
-	now := time.Now().UTC()
 	current, err := a.numeric(r.Context(), selected, time.Time{}, time.Time{}, "", l1TimeBasis)
 	if err != nil {
 		writeError(w, err)
@@ -204,7 +161,7 @@ func (a *api) currentObservations(w http.ResponseWriter, r *http.Request, respon
 		data.setSample(metric, current[metric])
 	}
 	if trends {
-		changes, err := a.observationChanges(r.Context(), current, selected, now)
+		changes, err := a.observationChanges(r.Context(), current, selected, time.Now().UTC())
 		if err != nil {
 			writeError(w, err)
 			return
@@ -293,7 +250,6 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		writeError(w, err)
 		return
 	}
-	indices := selectedMetrics(selected, indexMetrics)
 	hourly := selectedMetrics(selected, hourlyMetrics)
 	xrs := selectedMetrics(selected, xrsMetrics)
 	protons := selectedMetrics(selected, protonMetrics)
@@ -302,7 +258,7 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		writeError(w, invalid("History interval must be at most "+strconv.Itoa(days)+" days for "+resolution))
 		return
 	}
-	if len(indices) > 0 && to.Sub(from) > 31*24*time.Hour {
+	if len(selectedMetrics(selected, indexMetrics)) > 0 && to.Sub(from) > 31*24*time.Hour {
 		writeError(w, invalid("Geomagnetic history interval must be at most 31 days"))
 		return
 	}
@@ -363,6 +319,8 @@ func (a *api) observationHistory(w http.ResponseWriter, r *http.Request, respond
 		coverageBasis := sampledCoverage
 		if result.Aggregation == "mean" {
 			coverageBasis = aggregateCoverage
+		} else if step == 24*time.Hour {
+			coverageBasis = dailyCoverage
 		}
 		points := result.Points
 		items := make([]SolarSample, 0, len(points))

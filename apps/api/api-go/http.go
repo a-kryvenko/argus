@@ -15,7 +15,14 @@ import (
 )
 
 const prefix = "/api/v1"
-const maxUpstreamBody = 192 << 20
+
+const (
+	latestResponseLimit  = 64 << 10
+	historyResponseLimit = 64 << 20
+	densityResponseLimit = 32 << 20
+	reportResponseLimit  = 4 << 20
+	dragResponseLimit    = 256 << 10
+)
 
 type apiError struct {
 	Code    string `json:"code"`
@@ -173,7 +180,7 @@ func booleanQuery(query url.Values, name string) (bool, error) {
 	}
 }
 
-func (a *api) request(ctx context.Context, upstream upstream, method, path string, query url.Values, body []byte, timeout time.Duration) (json.RawMessage, int, error) {
+func (a *api) request(ctx context.Context, upstream upstream, method, path string, query url.Values, body []byte, timeout time.Duration, limit int64) (json.RawMessage, int, error) {
 	if upstream.url == "" || upstream.token == "" {
 		return nil, 0, errors.New("upstream is not configured")
 	}
@@ -199,9 +206,15 @@ func (a *api) request(ctx context.Context, upstream upstream, method, path strin
 	if response.StatusCode != 200 {
 		return nil, response.StatusCode, fmt.Errorf("upstream returned %d", response.StatusCode)
 	}
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maxUpstreamBody+1))
-	if err != nil || len(raw) > maxUpstreamBody || !json.Valid(raw) {
-		return nil, response.StatusCode, errors.New("invalid upstream response")
+	if response.ContentLength > limit {
+		return nil, response.StatusCode, errors.New("upstream response exceeds size limit")
+	}
+	raw, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if err != nil {
+		return nil, response.StatusCode, err
+	}
+	if int64(len(raw)) > limit {
+		return nil, response.StatusCode, errors.New("upstream response exceeds size limit")
 	}
 	return raw, response.StatusCode, nil
 }

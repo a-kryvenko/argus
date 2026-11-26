@@ -84,7 +84,7 @@ func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
 	observations := queryParameter(observationsParameter, "Comma-separated observations: "+strings.Join(allMetrics, ","), &huma.Schema{Type: "string"})
 	minLimit, maxLimit := float64(1), float64(maxObservationLimit)
 	historyParameters := []*huma.Param{
-		queryParameter(limitParameter, "Maximum number of hourly index points.", &huma.Schema{
+		queryParameter(limitParameter, "Maximum number of rows in the background index points array.", &huma.Schema{
 			Type: "integer", Default: defaultObservationLimit, Minimum: &minLimit, Maximum: &maxLimit,
 		}),
 		queryParameter(fromParameter, "Start time with timezone.", &huma.Schema{Type: "string", Format: "date-time"}),
@@ -107,7 +107,7 @@ func (a *api) publicRoutes(mux *http.ServeMux, spec *huma.OpenAPI) {
 		Errors:      []int{422, 503}}, a.currentObservations)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations/history", OperationID: "observationHistory",
 		Tags: []string{"observations"}, Summary: "Observation history", Parameters: historyParameters, Errors: []int{422, 503},
-		Description: "Missing measurements remain gaps. Times must include a timezone. Wind query ranges are limited to 7 days at 1m, 31 days at 5m and 366 days at 1h. Kp and Dst history is limited to 31 days. GOES history requires an explicit observations selection and accepts ranges of up to 7 days. XRS uses 1-minute samples in W/m². Proton flux uses 5-minute samples in pfu. The limit parameter applies to hourly index points."}, a.observationHistory)
+		Description: "Missing measurements remain gaps. Times must include a timezone. Wind query ranges are limited to 7 days at 1m, 31 days at 5m and 366 days at 1h. Kp and Dst history is limited to 31 days. GOES history requires an explicit observations selection and accepts ranges of up to 7 days. XRS uses 1-minute samples in W/m². Proton flux uses 5-minute samples in pfu. The limit parameter applies to the background index points array."}, a.observationHistory)
 	publicRoute(mux, spec, huma.Operation{Method: http.MethodGet, Path: "/observations/catalog", OperationID: "observationCatalog",
 		Tags: []string{"observations"}, Summary: "Observation catalog",
 		Description: "Metric identifiers, units, native cadence and live products."},
@@ -195,15 +195,13 @@ func publicRoute[T any](mux *http.ServeMux, spec *huma.OpenAPI, op huma.Operatio
 	})
 }
 
-// Published retains the original JSON from a producing service while checking
-// its known fields against the same Go type used for public documentation.
+// Published retains the original JSON from a producing service after its
+// typed publication checks.
 type Published[T any] struct{ raw json.RawMessage }
 
 func (p Published[T]) MarshalJSON() ([]byte, error) { return p.raw.MarshalJSON() }
 
 func (Published[T]) Schema(registry huma.Registry) *huma.Schema { return schemaFor[T](registry) }
-
-func (p Published[T]) decode(data *T) error { return json.Unmarshal(p.raw, data) }
 
 func forecastDescription(targets []string) string {
 	var text strings.Builder
